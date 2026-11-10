@@ -260,9 +260,25 @@ tbody tr:hover { background: var(--accent-wash); }
 .swatch.nearly-out, .meter > .nearly-out { background: var(--fail); }
 .swatch.waits { background: var(--muted); border-style: dashed; }
 .swatch { display: inline-block; width: 12px; height: 10px; margin-right: 5px; vertical-align: -1px; }
+/* The week's pace (f9-29): a dashed hazard post with a small flag, so it never reads as the mark,
+   the stretch used beyond it hazard-striped, and a plate with a striped edge (as .lane-label) */
+.meter > .pace { inset: -6px auto -6px 1px; width: 0; border-left: 2px dashed var(--hazard);
+  background: none; z-index: 2; }
+.meter > .pace::before { content: ""; position: absolute; top: -1px; left: -2px; width: 8px; height: 6px;
+  background: var(--hazard); clip-path: polygon(0 0, 100% 50%, 0 100%); }
+.swatch.over-pace, .meter > .over-pace {
+  background: repeating-linear-gradient(135deg, var(--hazard) 0 4px, var(--hazard-ink) 4px 8px); }
+.swatch.pace { width: 0; height: 14px; border-left: 2px dashed var(--hazard); margin: 0 9px 0 4px; vertical-align: -3px; }
+.stop-plate { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; margin-top: 6px;
+  padding: 5px 10px 6px 16px; background: var(--plate); border: 1px solid var(--rule); position: relative; font-size: 13px; }
+.stop-plate::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 5px;
+  background: repeating-linear-gradient(135deg, var(--hazard) 0 4px, var(--hazard-ink) 4px 8px); }
+.stop-plate b { font: 700 12px var(--display); text-transform: uppercase; letter-spacing: .1em; color: var(--hazard); }
+.stop-plate small { color: var(--ink-2); flex-basis: 100%; }
+.held { color: var(--hazard); font-family: var(--mono); font-size: 12.5px; }
 #allowance .legend { margin: 0 0 10px; }
 .allow { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 8px; }
-.allow > div { min-width: 180px; }
+.allow > div { min-width: 180px; flex: 1 1 180px; }
 .allow .line { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; margin-bottom: 4px; flex-wrap: wrap; }
 .allow .line small { color: var(--muted); }
 .allow .cards-on { flex-basis: 100%; justify-content: flex-start; color: var(--ink-2); }

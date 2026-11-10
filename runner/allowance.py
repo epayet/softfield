@@ -131,6 +131,31 @@ def lead_goes_at(window: Window, cost: float, now: datetime) -> datetime | None:
     return start + window.length * max(0.0, min(reached, 1 - SWEEP))
 
 
+def elapsed_share(window: Window, now: datetime) -> float | None:
+    """How much of a fixed ``window`` has gone by (0 to 1), or None for a rolling window or one
+    with no reset known."""
+    if window.kind == "rolling" or window.resets_at is None:
+        return None
+    return min(max((now - (window.resets_at - window.length)) / window.length, 0.0), 1.0)
+
+
+def in_sweep(window: Window, now: datetime) -> bool:
+    """Is ``window`` a fixed one in its last 10%?"""
+    elapsed = elapsed_share(window, now)
+    return elapsed is not None and elapsed >= 1 - SWEEP - EPS
+
+
+def pace_line(window: Window, now: datetime) -> float | None:
+    """Today's pace line of a fixed ``window``, in its capacity's unit: ``share × min(1, elapsed
+    + MARGIN)`` (ADR 25), ``share`` being its capacity less its reserve. None for a rolling
+    window, one with no reset known or no capacity yet. The last 10% has a cap, not a line:
+    ``_check`` and the dashboard both read this."""
+    elapsed = elapsed_share(window, now)
+    if elapsed is None or window.capacity is None:
+        return None
+    return window.capacity * (1 - window.reserve) * min(1.0, elapsed + MARGIN)
+
+
 def resting(window: Window, now: datetime) -> bool:
     """Is ``window`` resting after a refusal?"""
     return window.cooldown_until is not None and now < window.cooldown_until
@@ -235,20 +260,20 @@ def _check(
             (cap - need) / capacity,
             f"{used}, {_side(ok)} its cap of {cap / capacity:.0%}{note}",
         )
-    elapsed = min(max((now - (window.resets_at - window.length)) / window.length, 0.0), 1.0)
-    if whole_sweep and elapsed >= 1 - SWEEP - EPS:
+    sweeping = in_sweep(window, now)
+    if whole_sweep and sweeping:
         ok = need <= capacity + EPS and window.used < capacity - EPS
         word = "under" if ok else "at"
         text = f"{used}, in its last 10%, {word} its cap of 100%"
         return ok, (capacity - need) / capacity, text
-    if elapsed >= 1 - SWEEP - EPS:
+    if sweeping:
         headroom = (share - need) / capacity
         if need <= share + EPS:
             return True, headroom, f"{used}, in its sweep, under {share / capacity:.0%}"
         if not window.measured and not window.reserve:
             return True, headroom, f"{used}, in its sweep, past its learned capacity until refused"
         return False, headroom, f"{used}, in its sweep, over {share / capacity:.0%}"
-    line = share * min(1.0, elapsed + MARGIN)
+    line = pace_line(window, now) or 0.0
     ok = need <= line + EPS
     return (
         ok,

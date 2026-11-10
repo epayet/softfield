@@ -9,7 +9,7 @@ allowance, savings for the current milestone and the Claude spend chart.
 import json
 import sqlite3
 from collections.abc import Collection, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any, TypedDict
 from urllib.parse import quote
@@ -19,14 +19,15 @@ from fastapi.responses import HTMLResponse
 
 from factory_dashboard import queries
 from factory_dashboard.app import Db, Now, Project, ago, factory_status, render
-from runner import loop, metrics
+from runner import allowance, loop, metrics
 from runner.requests import CHANGE, PLANT, RESERVE, owners_words
-from runner.state import load_state
+from runner.state import State, load_state
 from runner.tasks import milestone_order, short_key
 
 if TYPE_CHECKING:
     from factory_dashboard.board import Board  # board.py imports from here
     from factory_dashboard.coming import DeskItem  # coming.py imports from here
+    from runner.config import Config
 
 router = APIRouter()
 
@@ -672,7 +673,7 @@ def agent_allowances(conn: sqlite3.Connection, now: datetime) -> list[WindowAllo
         "Claude",
         [
             ("five_hour", "5-hour window", FIVE_HOUR_MARK, "kept for you from here"),
-            ("seven_day", "week", WEEK_MARK, "reserve kept for the lead from here"),
+            ("seven_day", "week", WEEK_MARK, "reserve kept for planning and reviews from here"),
         ],
         now,
     )
@@ -702,10 +703,9 @@ class Switch:
     asked: str | None  # "on" or "off": the owner's latest request the runner hasn't taken
 
 
-def reserve_switches(conn: sqlite3.Connection, project: str, now: datetime) -> dict[str, Switch]:
-    """Each Claude window's switch, by allowance window, from the runner's state.json (in the
-    config's ``runs_dir``, found as ``line._config`` finds the config): no config or no file
-    and both are off. A switch asked for shows at once (owner, 2026-10-07)."""
+def _runner_state(conn: sqlite3.Connection, project: str) -> tuple["Config | None", State | None]:
+    """The project's config and the runner's state.json (in the config's ``runs_dir``, found as
+    ``line._config`` finds the config): None for each that can't be read."""
     from factory_dashboard.line import _config  # line.py imports LIVE from here
 
     config = _config(conn, project)
@@ -713,6 +713,13 @@ def reserve_switches(conn: sqlite3.Connection, project: str, now: datetime) -> d
         state = load_state(config.runs_dir / "state.json") if config else None
     except (OSError, ValueError):  # unreadable: shown off, as the runner's own would be lost
         state = None
+    return config, state
+
+
+def reserve_switches(conn: sqlite3.Connection, project: str, now: datetime) -> dict[str, Switch]:
+    """Each Claude window's switch, by allowance window, from the runner's state.json: no config
+    or no file and both are off. A switch asked for shows at once (owner, 2026-10-07)."""
+    _, state = _runner_state(conn, project)
     asked = {
         row["subject"]: row["value"]
         for row in conn.execute(
@@ -730,6 +737,100 @@ def reserve_switches(conn: sqlite3.Connection, project: str, now: datetime) -> d
             until = f"{ends + timedelta(hours=loop.USE_RESERVE_HOURS):%a %H:%M}"
         switches[window] = Switch(name, loop.SWITCHES[name], until, asked.get(name))
     return switches
+
+
+@dataclass(frozen=True)
+class WeekPace:
+    """What the week meter says about the pace that holds lead tickets back (F9, f9-29)."""
+
+    state: str  # "on" pace, "over" it, or "last" hours (the last 10% of the week)
+    post: float | None  # today's pace line, 0..1: the post; None in the last hours
+    used: float  # 0..1: the stretch past ``post`` is hazard-striped
+    pace: str  # "33%"
+    until: str | None  # "Sun 8 Nov 04:00": when lead tickets go on again, or the reset
+    full: bool = False  # in the last hours with the week all used
+
+
+@dataclass(frozen=True)
+class ClaudePace:
+    """The week's pace, and the words a held lead ticket's row carries."""
+
+    week: WeekPace | None
+    row: str | None  # "waits for Claude's week pace until about Sun 04:00", None: not held
+
+
+def _day_time(at: datetime) -> str:
+    at = at.astimezone()
+    return f"{at:%a} {at.day} {at:%b %H:%M}"
+
+
+def claude_pace(conn: sqlite3.Connection, project: str, now: datetime) -> ClaudePace:
+    """Claude's week pace as the runner decides it: the windows from the latest readings and
+    refusals with their reserves (the config's, else the marks above), the owner's levers from
+    state.json, and ``allowance.lead_hold``, ``pace_line`` and ``lead_goes_at`` for every
+    answer, so the page can't disagree with the pick."""
+    config, state = _runner_state(conn, project)
+    kept = {
+        "seven_day": config.claude_reserve if config else 1 - WEEK_MARK,
+        "five_hour": config.five_hour_reserve if config else 1 - FIVE_HOUR_MARK,
+    }
+    refusals = metrics.refusals(conn, queries.LEAD_PREFIX)
+    windows = [
+        loop._rested(replace(w, reserve=kept.get(w.name, 0.0)), refusals, now)
+        for w in loop._windows_from(metrics.latest_readings(conn, queries.LEAD_PREFIX), now)
+    ]
+    reserves = {
+        name
+        for name, switch in (("seven_day", loop.WEEK), ("five_hour", loop.FIVE_HOUR))
+        if state is not None and loop.switch_on(state, switch, now)
+    }
+    cost = loop.LEAD_COST
+    week = next((w for w in windows if w.name == "seven_day"), None)
+    pace: WeekPace | None = None
+    if week is not None and week.name not in reserves and not allowance.resting(week, now):
+        line = allowance.pace_line(week, now)
+        capacity = week.capacity or 1.0
+        used = week.used / capacity
+        if allowance.in_sweep(week, now):
+            ends = week.resets_at
+            pace = WeekPace(
+                "last",
+                None,
+                used,
+                "",
+                _day_time(ends) if ends else None,
+                full=week.used >= capacity - allowance.EPS,
+            )
+        elif line is not None:
+            held = allowance.lead_hold(loop.CLAUDE, [week], cost, now) is not None
+            goes = allowance.lead_goes_at(week, cost, now) if held else None
+            pace = WeekPace(
+                "over" if held else "on",
+                min(line / capacity, 1.0),
+                used,
+                f"{line / capacity:.0%}",
+                _day_time(goes) if goes else None,
+            )
+    holding = [
+        w
+        for w in loop._passing_over(dispatch_windows(windows, reserves), now)
+        if allowance.lead_hold(loop.CLAUDE, [w], cost, now, reserves=reserves)
+    ]
+    row = None
+    if holding:
+        all_ends = [allowance.lead_goes_at(w, cost, now) for w in holding]
+        known = [e for e in all_ends if e is not None]
+        until = f" until about {max(known).astimezone():%a %H:%M}" if known else ""
+        by_week = any(w.name == "seven_day" and not allowance.resting(w, now) for w in holding)
+        row = f"waits for {'Claude' + chr(39) + 's week pace' if by_week else 'Claude'}{until}"
+    return ClaudePace(pace, row)
+
+
+def dispatch_windows(windows: list[allowance.Window], reserves: Collection[str]) -> Any:
+    """The runner's `Windows` for what `loop._passing_over` reads."""
+    from runner import dispatch
+
+    return dispatch.Windows(windows, None, reserves)
 
 
 def spend_chart(conn: sqlite3.Connection, project: str) -> dict[str, list[str] | list[float]]:
@@ -861,6 +962,7 @@ def _live_context(
             key = f"{p.name}/{oid}"
             notice["title"] = f"{p.name}: {notice['title']}"
             notice_data[key] = notice
+    pace = claude_pace(conn, project, now)
     return {
         "needs": needs,
         "desk_items": items[:3],
@@ -880,6 +982,8 @@ def _live_context(
         "allowance": agent_allowances(conn, now),
         "switches": reserve_switches(conn, project, now),
         "reserve_cards": reserve_cards,  # named under them (F172 D6)
+        "pace": pace.week,  # the week meter's post and plate (f9-29)
+        "lead_holds": pace.row,  # what a held lead ticket's row says
     }
 
 

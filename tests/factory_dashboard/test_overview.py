@@ -591,13 +591,17 @@ def test_each_allowance_row_shows_its_own_reading_and_reset(allowance_client):
     """f2-13: the latest reading per window (Opus's, written after Sonnet's), each in its row;
     a later day's reset gives its date."""
     rows = allowance_client.get("/").text
-    assert allowance_rows(rows) == {
+    found = allowance_rows(rows)
+    # the week is over today's pace line (f9-29): its plate follows the reserve's words
+    week = re.sub(r" Over pace lead tickets wait until about .*$", "", found["claude-seven_day"])
+    assert {**found, "claude-seven_day": week} == {
         "claude-five_hour": "Claude 5-hour window: 80% resets at 17:00 read at 12:00"
         " kept for you from here",
         "claude-seven_day": "Claude week: 20% resets on Oct 9 12:00 read at 12:00"
-        " reserve kept for the lead from here",
+        " reserve kept for planning and reviews from here",
         "copilot-month": "Copilot month: 2% resets on Nov 1 12:00 read at 12:00",
     }
+    assert found["claude-seven_day"] != week
 
 
 def test_the_local_model_has_no_allowance_row(allowance_client):
@@ -981,8 +985,131 @@ def test_a_mark_has_a_title_equal_to_its_label(allowance_client):
     )
     assert marks == [
         ("claude-five_hour", "kept for you from here"),
-        ("claude-seven_day", "reserve kept for the lead from here"),
+        ("claude-seven_day", "reserve kept for planning and reviews from here"),
     ]
+
+
+def pace_client(db_path: Path, used: float, resets_in: timedelta):
+    """``allowance_client`` with Claude's week read at ``used``, resetting in ``resets_in``, and
+    a lead ticket and a developer's ready (f9-29)."""
+    from fastapi.testclient import TestClient
+
+    from factory_dashboard.app import create_app, get_now
+    from tests.factory_dashboard.conftest import write_allowance
+
+    conn = metrics.open_db(db_path)
+    try:
+        write_allowance(conn)
+        metrics.add_usage_event(
+            conn,
+            OPUS,
+            NOW.isoformat(),
+            "reading",
+            window="seven_day",
+            value=used,
+            resets_at=(NOW + resets_in).isoformat(),
+        )
+        project = metrics.upsert_project(conn, PROJECT)
+        f1 = metrics.upsert_milestone(conn, project, "f1")
+        metrics.upsert_ticket(
+            conn, project, "f1-07-lead", milestone_id=f1, kind="lead", state="ready", title="Lead."
+        )
+    finally:
+        conn.close()
+    app = create_app(db_path, PROJECT)
+    app.dependency_overrides[get_now] = lambda: NOW
+    return TestClient(app, base_url="http://127.0.0.1:8765")
+
+
+def week_window(used: float, resets_in: timedelta):
+    from runner.allowance import WEEK, Window
+
+    return Window("seven_day", "fixed", WEEK, NOW + resets_in, 1.0, used, 0.3, measured=True)
+
+
+def _queue_rows(html: str) -> list[str]:
+    queue = re.search(r'<section[^>]*\bid="queue"[^>]*>(.*?)</section>', html, re.S)
+    assert queue
+    items = re.findall(r"<li[^>]*>(.*?)</li>", queue.group(1), re.S)
+    return [" ".join(unescape(re.sub(r"<[^>]+>", " ", i)).split()) for i in items]
+
+
+def _meter(html: str) -> str:
+    found = re.search(
+        r'<div id="allow-claude-seven_day">(.*?)(?=<div id="allow-|</section>)', html, re.S
+    )
+    assert found
+    return found[1]
+
+
+def test_over_pace_the_week_shows_the_post_the_stripes_and_the_plate(db_path):
+    """f9-29: 65% used at a pace line of 33%: lead tickets wait until the line catches up."""
+    from runner.allowance import lead_goes_at
+
+    resets_in = timedelta(days=4, hours=16)
+    html = pace_client(db_path, 0.65, resets_in).get("/").text
+    meter = _meter(html)
+    assert 'class="pace" style="left:33%"' in meter
+    assert 'class="over-pace" style="left:33%;width:32%"' in meter
+    goes = lead_goes_at(week_window(0.65, resets_in), 0.0, NOW)
+    found = re.search(r"stop-plate.*", meter, re.S)
+    assert goes is not None and found
+    until = goes.astimezone()
+    plate = " ".join(re.sub(r"<[^>]+>", " ", found[0]).split())
+    assert (
+        f"Over pace lead tickets wait until about {until:%a} {until.day} {until:%b %H:%M}" in plate
+    )
+    assert "developers, planning, reviews and the fast lane go on · today's pace 33%" in plate
+    assert "on pace" not in meter
+
+
+def test_on_pace_the_week_shows_the_post_and_on_pace_but_no_plate(db_path):
+    html = pace_client(db_path, 0.30, timedelta(days=4, hours=16)).get("/").text
+    meter = _meter(html)
+    assert 'class="pace" style="left:33%"' in meter
+    assert "over-pace" not in meter and "stop-plate" not in meter
+    assert "on pace · today's 33%" in " ".join(re.sub(r"<[^>]+>", " ", meter).split())
+
+
+def test_in_the_last_hours_the_plate_says_the_reserve_is_open_and_there_is_no_post(db_path):
+    html = pace_client(db_path, 0.72, timedelta(hours=10)).get("/").text
+    meter = _meter(html)
+    text = " ".join(re.sub(r"<[^>]+>", " ", meter).split())
+    assert 'class="pace"' not in meter and "over-pace" not in meter
+    assert "Last hours lead tickets may use the whole reserve, until" in text
+    assert "what's left at the reset is lost" in text
+
+
+def test_in_the_last_hours_a_full_week_says_everything_waits_for_the_reset(db_path):
+    meter = _meter(pace_client(db_path, 1.0, timedelta(hours=10)).get("/").text)
+    text = " ".join(re.sub(r"<[^>]+>", " ", meter).split())
+    assert "Last hours everything waits for the reset" in text
+
+
+def test_the_weeks_lever_on_draws_neither_post_nor_plate(db_path, tmp_path):
+    client = allowance_client_with(db_path, tmp_path, {"week": "2026-10-02T09:30:00+00:00"})
+    meter = _meter(client.get("/").text)
+    assert 'class="pace"' not in meter and "stop-plate" not in meter
+
+
+def test_a_held_lead_row_says_it_waits_for_the_weeks_pace_and_a_developers_does_not(db_path):
+    from runner.allowance import lead_goes_at, lead_hold
+
+    resets_in = timedelta(days=4, hours=16)
+    window = week_window(0.65, resets_in)
+    assert lead_hold("claude", [window], 0.0, NOW) is not None
+    goes = lead_goes_at(window, 0.0, NOW)
+    assert goes is not None
+    until = goes.astimezone()
+    rows = _queue_rows(pace_client(db_path, 0.65, resets_in).get("/").text)
+    lead = next(r for r in rows if "f1-07-lead" in r)
+    assert f"waits for Claude's week pace until about {until:%a %H:%M}" in lead
+    assert not any("week pace" in r for r in rows if "f1-07-lead" not in r)
+
+
+def test_a_lead_row_under_the_line_says_nothing(db_path):
+    rows = _queue_rows(pace_client(db_path, 0.30, timedelta(days=4, hours=16)).get("/").text)
+    assert not any("week pace" in r for r in rows)
 
 
 def test_savings_are_for_the_current_milestone(client):

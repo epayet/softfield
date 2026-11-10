@@ -25,6 +25,13 @@
       </div>
       <div class="meter">
         <span class="{{ fill }}" style="width:{{ '%.0f' | format((a.value or 0) * 100) }}%"></span>
+        {% set wp = pace if a.label == "Claude" and a.window == "seven_day" and not no_data else none %}
+        {% if wp and wp.state == "over" %}
+        <span class="over-pace" style="left:{{ '%.0f' | format(wp.post * 100) }}%;width:{{ '%.0f' | format(([wp.used - wp.post, 0] | max) * 100) }}%"></span>
+        {% endif %}
+        {% if wp and wp.post is not none %}
+        <span class="pace" style="left:{{ '%.0f' | format(wp.post * 100) }}%" title="today's pace: {{ wp.pace }}"></span>
+        {% endif %}
         {% if a.mark is not none %}
         <span class="mark" style="left:{{ '%.0f' | format(a.mark * 100) }}%" title="{{ a.mark_label }}"></span>
         {% endif %}
@@ -41,10 +48,18 @@
         {% if a.mark_label %}
         <small>{{ a.mark_label }}</small>
         {% endif %}
+        {% if wp and wp.state == "on" %}
+        <small>on pace · today's {{ wp.pace }}</small>
+        {% endif %}
         {% if sw and sw.until %}
         <small class="until">on until {{ sw.until }}</small>
         {% endif %}
       </div>
+      {% if wp and wp.state == "over" %}
+      <div class="stop-plate"><b>Over pace</b><span>lead tickets wait until about <span class="until">{{ wp.until or "the reset" }}</span></span><small>developers, planning, reviews and the fast lane go on · today's pace {{ wp.pace }}</small></div>
+      {% elif wp and wp.state == "last" %}
+      <div class="stop-plate"><b>Last hours</b>{% if wp.full %}<span>everything waits for the reset<span class="until"> {{ wp.until }}</span></span>{% else %}<span>lead tickets may use the whole reserve, until <span class="until">{{ wp.until }}</span></span><small>what's left at the reset is lost</small>{% endif %}</div>
+      {% endif %}
     </div>
     {# once, under Claude's last meter: the cards in the fast lane (F172 D6, D8), and on their way (F192 D4) #}
     {% if reserve_cards and a.label == "Claude" and (loop.nextitem is none or loop.nextitem.label != "Claude") %}
@@ -58,7 +73,9 @@
     <span><i class="swatch under-mark"></i>green: under the mark</span>
     <span><i class="swatch past-mark"></i>yellow: past the mark</span>
     <span><i class="swatch nearly-out"></i>red: above 95%</span>
-    <span>the mark: the factory stops here; the rest of the window is the owner's</span>
+    <span>the mark: lead tickets stop here until the week's last hours. On the week, planning and reviews go on past it; on the 5-hour window, the rest is the owner's</span>
+    <span><i class="swatch pace"></i>dashed yellow post: today's pace; lead tickets start only under it</span>
+    <span><i class="swatch over-pace"></i>striped: used beyond today's pace; lead tickets wait until the post catches up</span>
     <span><span class="lever mini" aria-hidden="true" style="min-height:0"><span class="slot"><span class="knob"></span></span></span>
       use reserve: let the factory work past the mark; on lasts 24 hours, then turns itself off</span>
     <span><span class="lever mini" aria-hidden="true" aria-checked="true" style="min-height:0"><span class="slot" style="background:repeating-linear-gradient(135deg,var(--hazard) 0 5px,var(--hazard-ink) 5px 10px)"><span class="knob" style="left:24px"></span></span></span>

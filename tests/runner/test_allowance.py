@@ -11,9 +11,11 @@ from runner.allowance import (
     Window,
     answer,
     expected_cost,
+    in_sweep,
     lead_goes_at,
     lead_hold,
     learn,
+    pace_line,
     reserve_only,
     window_shape,
 )
@@ -103,6 +105,27 @@ def test_lead_goes_at_says_when_the_week_lets_a_lead_ticket_go(used, goes):
     if used < 1:
         assert lead_hold("claude", [claude_week(used)], 0.0, at + timedelta(seconds=1)) is None
         assert lead_hold("claude", [claude_week(used)], 0.0, at - HOUR) is not None
+
+
+@pytest.mark.parametrize(
+    ("used", "now", "line"),
+    [
+        (0.20, WEEK_START, 0.7 / 7),  # the start of the week: a day's margin
+        (0.20, LINE_33, 0.7 * (2.3 / 7 + 1 / 7)),
+        (0.20, THURSDAY, 0.7 * (3 / 7 + 1 / 7)),
+    ],
+)
+def test_pace_line_is_the_line_check_decides_with(used, now, line):
+    assert pace_line(claude_week(used), now) == pytest.approx(line)
+    assert answer("claude", [claude_week(line - 0.01)], 0.0, now).ok
+    refused = answer("claude", [claude_week(line + 0.01)], 0.0, now)
+    assert not refused.ok and f"over its pace line of {line:.0%}" in refused.reason
+
+
+def test_pace_line_has_none_for_rolling_windows_and_the_last_10_is_a_sweep():
+    assert pace_line(claude_five_hour(0.5, LINE_33), LINE_33) is None
+    assert not in_sweep(claude_week(0.5), LINE_33)
+    assert in_sweep(claude_week(0.5), LAST_10)
 
 
 def test_lead_goes_at_a_resting_window_says_its_rest():
