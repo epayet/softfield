@@ -657,7 +657,7 @@ def _agent_allowances(
                 mark=mark,
                 mark_label=mlabel,
                 reset_label=_reset_label(resets, now) if resets and status is None else None,
-                read_label=_read_label(read_at, now) if read_at and status is None else None,
+                read_label=_read_label(read_at, now) if read_at else None,
                 status=status,
             )
         )

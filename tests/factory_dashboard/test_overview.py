@@ -641,7 +641,37 @@ def test_a_reading_past_its_reset_says_reset_since_with_no_percentage(serve, db_
     finally:
         conn.close()
     row = allowance_rows(client.get("/").text)["claude-five_hour"]
-    assert row == "Claude 5-hour window reset since, no new reading kept for you from here"
+    assert row == (
+        "Claude 5-hour window reset since, no new reading"
+        " read on Oct 1 10:00 kept for you from here"
+    )
+
+
+def test_a_stale_reading_still_shows_its_read_timestamp(serve, db_path):
+    """A reading past its reset still shows when it was taken (f89-03)."""
+    from runner import metrics
+
+    client = serve()
+    conn = metrics.open_db(db_path)
+    try:
+        conn.execute(
+            "DELETE FROM usage_events WHERE kind = 'reading' AND agent LIKE 'claude-%'"
+            " AND \"window\" = 'five_hour'",
+        )
+        metrics.add_usage_event(
+            conn,
+            OPUS,
+            "2026-10-01T10:00:00+00:00",
+            "reading",
+            window="five_hour",
+            value=0.5,
+            resets_at="2026-10-01T15:00:00+00:00",
+        )
+    finally:
+        conn.close()
+    row = allowance_rows(client.get("/").text)["claude-five_hour"]
+    assert "read on Oct 1 10:00" in row
+    assert "reset since, no new reading" in row
 
 
 @pytest.fixture
