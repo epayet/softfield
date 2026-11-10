@@ -27,3 +27,12 @@ The picture to build is `.softfield/cards/f207-mockup/in-short.html`, Proposed (
 - a proposal with a `tldr` shows it in the plate under the page's header, above a mock-up's frame when there is one; one without has no plate and no empty space
 - on a phone (390 px) the plate stays in place while ◀ ▶ step through the points
 - the listed `tests:` pass, and fail without the change
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: stopped)
+attempts: 3
+tokens: 1187051
+logs: .softfield/var/runs/20261106-011143/f207-02-in-short-on-the-pages
+```
