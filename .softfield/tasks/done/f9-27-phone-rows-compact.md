@@ -27,3 +27,10 @@ Read in `factory_dashboard/static/factory.js` `rows`, `drawPhone` (`PHONE_HEIGHT
 - each row still links to its milestone (f9-03)
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
