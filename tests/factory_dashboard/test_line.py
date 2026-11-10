@@ -1205,7 +1205,8 @@ def test_a_phone_draws_every_station_with_its_crates_and_belts(page, line_client
     assert phone_drawn(page, "[data-station]", "station") == [s["id"] for s in doc["stations"]]
     planting = page.locator('svg#floor-phone [data-station="planting"] text').all_text_contents()
     assert planting[0] == "PLANTING"
-    assert phone_drawn(page, "[data-row]", "row") == [r["key"] for r in doc["field"]["rows"]]
+    busiest = sorted(doc["field"]["rows"], key=lambda r: (-r["running"], -r["ready"]))
+    assert phone_drawn(page, "[data-row]", "row") == [r["key"] for r in busiest]
     assert phone_drawn(page, "[data-queue-crate]", "queueCrate") == [
         c["ticket"] for c in doc["queue"]
     ]
@@ -1776,6 +1777,87 @@ def test_a_planted_row_with_null_title_says_its_key_alone(page, line_client):
     assert name is not None
     assert name.startswith("F1")
     assert " · " not in name
+
+
+def plant_rows(page, count: int) -> list[str]:
+    """Draw the phone floor again with ``count`` planted rows (f1, f2, …; the busier the later),
+    returning their keys."""
+    keys = page.evaluate(
+        """(count) => {
+            const el = document.getElementById('factory-line');
+            const cur = JSON.parse(el.textContent);
+            cur.field.rows = Array.from({ length: count }, (_, n) => ({
+                key: `f${n + 1}`, title: `Row ${n + 1}`, done: n, total: 9,
+                ready: n, running: n === count - 1 ? 1 : 0,
+            }));
+            el.textContent = JSON.stringify(cur);
+            document.dispatchEvent(new CustomEvent('htmx:load', { detail: { elt: document } }));
+            return cur.field.rows.map((r) => r.key);
+        }""",
+        count,
+    )
+    return list(keys)
+
+
+FIELD_HEIGHT = "svg#floor-phone rect.field-plot"
+QUEUE_TOP = 'svg#floor-phone [data-station="queue"] path'
+
+
+def page_top(page, selector: str) -> float:
+    """The top of the first match from the top of the page, whatever the scroll."""
+    return float(
+        page.eval_on_selector(selector, "e => e.getBoundingClientRect().top + window.scrollY")
+    )
+
+
+def user_height(page, selector: str) -> float:
+    return float(page.locator(selector).first.get_attribute("height"))
+
+
+def test_phone_rows_show_the_three_busiest_and_a_toggle_opens_the_rest(page, line_client):
+    """f9-27: at 390 px with 5 planted rows the field is at most 300 tall and shows 3 rows
+    (running first, then the most ready) with "Show all 5"; the toggle opens all five, every
+    station below moves down without overlap, and a refresh keeps it open."""
+    from tests.layout import layout_problems
+
+    open_line(page, line_client, PHONE)
+    plant_rows(page, 5)
+    assert phone_drawn(page, "[data-row]", "row") == ["f5", "f4", "f3"]
+    assert user_height(page, FIELD_HEIGHT) <= 300
+    toggle = page.locator("svg#floor-phone [data-rows-toggle]")
+    assert toggle.locator("text").text_content() == "Show all 5"
+    bars = page.locator("svg#floor-phone [data-row] .bar-fill")
+    assert bars.count() == 3
+    closed_top = page_top(page, QUEUE_TOP)
+    assert layout_problems(page) == []
+
+    toggle.click()
+    assert phone_drawn(page, "[data-row]", "row") == ["f5", "f4", "f3", "f2", "f1"]
+    assert toggle.locator("text").text_content() != "Show all 5"
+    assert page_top(page, QUEUE_TOP) > closed_top + 40
+    assert layout_problems(page) == []
+    found = page.eval_on_selector("svg#floor-phone", LABELS)
+    for n, label in enumerate(found["labels"]):
+        assert inside(label["box"], found["floor"]), label
+        if label["frame"] is not None:
+            assert inside(label["box"], label["frame"]), label
+        for other in found["labels"][n + 1 :]:
+            assert not overlaps(label["box"], other["box"]), (label, other)
+
+    plant_rows(page, 5)  # the 5 s refresh draws the document again
+    assert len(phone_drawn(page, "[data-row]", "row")) == 5
+    page.locator("svg#floor-phone [data-rows-toggle]").click()
+    assert len(phone_drawn(page, "[data-row]", "row")) == 3
+    assert page.locator("svg#floor-phone [data-rows-toggle] text").text_content() == "Show all 5"
+
+
+def test_phone_rows_link_to_their_milestone_and_three_or_fewer_have_no_toggle(page, line_client):
+    open_line(page, line_client, PHONE)
+    plant_rows(page, 3)
+    assert phone_drawn(page, "[data-row]", "row") == ["f3", "f2", "f1"]
+    assert page.locator("svg#floor-phone [data-rows-toggle]").count() == 0
+    href = page.locator('svg#floor-phone a:has([data-row="f3"])').get_attribute("href")
+    assert href is not None and href.startswith("/milestones/f3")
 
 
 def test_a_working_machine_blinks_three_lights_and_an_idle_one_none(page, line_client):

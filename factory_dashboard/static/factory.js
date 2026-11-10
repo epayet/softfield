@@ -454,23 +454,65 @@
     "merged→reviewers": { path: "M340 1360 L351 1360 L351 868 L340 868", at: [338, 1252], end: true, back: true, thin: true, short: true },
   };
 
+  // f9-27: the phone's planted rows, one line each: name, bar, "done/total". The busiest three
+  // (running, then most ready) unless `open`; a toggle beside the footer shows or hides the
+  // rest. Returns the station's height; the field and everything below shift by its difference
+  // from the 262 the stations below were placed for.
+  const PHONE_ROWS = { y: 176, shown: 3, step: 22, was: 262 };
+
+  function phoneRows(svg, doc, count, open) {
+    const all = [...doc.field.rows].sort((a, b) => (b.running - a.running) || (b.ready - a.ready));
+    const list = open ? all : all.slice(0, PHONE_ROWS.shown);
+    const x = 16, y = PHONE_ROWS.y, w = 326, h = 34 + Math.max(list.length, 1) * PHONE_ROWS.step + 20;
+    const g = station(svg, "rows");
+    add(g, "rect", { x, y, width: w, height: h, class: "soil" });
+    text(g, x + 10, y + 22, "PLANTED ROWS", "head");
+    const query = project_query();
+    list.forEach((row, n) => {
+      const top = y + 40 + n * PHONE_ROWS.step;
+      const link = make_link(g, `/milestones/${row.key}${query}`);
+      add(link, "title", {}, `Go to ${row.key.toUpperCase()} milestone`);
+      const r = add(link, "g", { "data-row": row.key });
+      text(r, x + 10, top, cut(row.key.toUpperCase() + (row.title ? ` · ${row.title}` : ""), 16), "name");
+      add(r, "rect", { x: x + 130, y: top - 8, width: 150, height: 7, class: "bar-bg" });
+      add(r, "rect", { x: x + 130, y: top - 8, width: row.total ? (150 * row.done) / row.total : 0, height: 7, class: "bar-fill" });
+      text(r, x + w - 10, top, `${row.done}/${row.total}`, "dim", { "text-anchor": "end" });
+    });
+    const queued = doc.field.rows.reduce((sum, row) => sum + row.ready, 0);
+    text(g, x + 10, y + h - 12, `${plural(count.rows, "row feeds", "rows feed")} ${plural(queued, "ticket", "tickets")} ↓`, "dim");
+    if (all.length > PHONE_ROWS.shown) {
+      const t = add(g, "g", { "data-rows-toggle": "", tabindex: "0", role: "button" });
+      add(t, "rect", { x: x + w - 104, y: y + h - 28, width: 94, height: 20, class: "tile" });
+      text(t, x + w - 57, y + h - 14, open ? "Show fewer" : `Show all ${all.length}`, "name", { "text-anchor": "middle" });
+    }
+    return h;
+  }
+
+  let rowsOpen = false;  // the toggle's state, kept across the 5 s refresh
+
   function drawPhone(floor, doc) {
-    floor.setAttribute("viewBox", `0 0 358 ${PHONE_HEIGHT}`);
     const svg = document.createElementNS(NS, "svg");  // drawn aside, then morphed into `floor`
     soil(svg, "soil-phone");
     const count = Object.fromEntries(doc.stations.map((s) => [s.id, s.count]));
-    add(svg, "rect", { x: 6, y: 8, width: 346, height: 438, class: "field-plot" });
+    const plot = add(svg, "rect", { x: 6, y: 8, class: "field-plot" });
     text(svg, 16, 28, "THE FIELD", "head");
     seeds(svg, doc, count, 16, 44, 150, true);
     planting(svg, count, 196, 48, 140, 98);
-    rows(svg, doc, count, 16, 176, 326, 262, 50, "↓");
-    queue(svg, doc, 99, 492, 160, 100, PHONE_QUEUE);
-    machines(svg, doc, PHONE_AREAS);
-    checks(svg, 134, 1196, 90, 110);
-    merged(svg, doc, count, 26, 1336, 314, 96, 5);
-    ripe(svg, doc, count, 26, 1462, 314, 120);
-    stash(svg, doc, count, 26, 1612, 314, 120, 5);
-    doc.belts.forEach((b) => belt(svg, b, PHONE_BELTS));
+    const h = phoneRows(svg, doc, count, rowsOpen);
+    const dy = h - PHONE_ROWS.was;  // what the rows gained (or lost) against the stations below
+    plot.setAttribute("width", 346);
+    plot.setAttribute("height", PHONE_ROWS.y + h);
+    floor.setAttribute("viewBox", `0 0 358 ${PHONE_HEIGHT + dy}`);
+    const top = ["seeds→planting", "planting→rows"];  // the belts that stay in the field
+    doc.belts.filter((b) => top.includes(b.id)).forEach((b) => belt(svg, b, PHONE_BELTS));
+    const below = add(svg, "g", { "data-below": "", transform: `translate(0 ${dy})` });
+    queue(below, doc, 99, 492, 160, 100, PHONE_QUEUE);
+    machines(below, doc, PHONE_AREAS);
+    checks(below, 134, 1196, 90, 110);
+    merged(below, doc, count, 26, 1336, 314, 96, 5);
+    ripe(below, doc, count, 26, 1462, 314, 120);
+    stash(below, doc, count, 26, 1612, 314, 120, 5);
+    doc.belts.filter((b) => !top.includes(b.id)).forEach((b) => belt(below, b, PHONE_BELTS));
     morph(floor, svg);
   }
 
@@ -495,13 +537,19 @@
 
   let drawn = null;  // the live document last drawn, and on which floor; null: draw it again
 
+  function toggleRows() {  // f9-27: the phone's planted rows, three or all
+    rowsOpen = !rowsOpen;
+    drawn = null;
+    if (shownDoc) drawFloor(shownDoc);
+  }
+
   function drawAll(root) {
     const block = root.querySelector ? root.querySelector("#factory-line") : null;
     const svg = document.getElementById("floor");
     const phone = document.getElementById("floor-phone");
     if (replaying || !(block && svg && phone)) return;  // a replay holds the floor
     const doc = JSON.parse(block.textContent);
-    const now = JSON.stringify([narrow(), { ...doc, at: null }]);  // `at` alone draws nothing
+    const now = JSON.stringify([narrow(), rowsOpen, { ...doc, at: null }]);  // `at` alone draws nothing
     if (now === drawn) return;
     drawn = now;
     drawFloor(doc);
@@ -787,6 +835,7 @@
     const merged = e.target.closest("[data-merged]");
     if (merged) { showCard(merged.dataset.merged); return; }
     if (e.target.closest("[data-seeds]")) { showSeeds(); return; }
+    if (e.target.closest("[data-rows-toggle]")) { toggleRows(); return; }
     const card = document.getElementById("crate-card");
     if (card && !card.hidden && !card.contains(e.target)) hideCard();
   });
@@ -801,6 +850,7 @@
     const merged = e.target.closest("[data-merged]");
     if (merged) { e.preventDefault(); showCard(merged.dataset.merged); }
     if (e.target.closest("[data-seeds]")) { e.preventDefault(); showSeeds(); }
+    if (e.target.closest("[data-rows-toggle]")) { e.preventDefault(); toggleRows(); }
   });
 
   drawAll(document);
