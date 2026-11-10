@@ -1,6 +1,6 @@
 # Milestone F191: The fast lane goes first under softfield run too, escalations included
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** ready · **Priority:** 0 · **Area:** factory
 > Planted by the owner on 2026-10-29.
 
 ## Notes

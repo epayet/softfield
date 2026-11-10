@@ -5,7 +5,7 @@ difficulty: 4
 depends_on: []
 agent: lead
 area: factory
-priority: 2
+priority: 5
 files:
   - .softfield/cards/
 tests:

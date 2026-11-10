@@ -1,6 +1,6 @@
 # Milestone F232: A plant waits 2 minutes before it becomes a card, so it can still be edited
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** ready · **Priority:** 0 · **Area:** factory
 > Planted by the owner on 2026-11-06.
 
 ## Notes

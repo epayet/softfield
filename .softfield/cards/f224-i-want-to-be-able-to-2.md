@@ -1,6 +1,6 @@
 # Milestone F224: Approve a plan to go first in line, in the fast lane
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** ready · **Priority:** 2 · **Area:** factory
 > Planted by the owner on 2026-11-05.
 
 ## Notes

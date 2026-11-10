@@ -1,6 +1,6 @@
 # Milestone F179: Sonnet as the lead on easy tickets: how it does, what it saves, in reports
 
-> **State:** ready · **Priority:** 4 · **Area:** factory
+> **State:** ready · **Priority:** 7 · **Area:** factory
 > Planted by the owner on 2026-10-28.
 
 ## Notes
