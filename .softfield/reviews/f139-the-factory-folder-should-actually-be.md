@@ -1,5 +1,7 @@
 # Review: F139, the folder is `.softfield`
 
+- **Status:** done, signed off by the owner on 2026-11-10.
+
 ## Sign-off sheet
 
 ### 1. What changed

@@ -1,6 +1,7 @@
 # Milestone F139: Projects keep Softfield's files in .softfield, not .factory
 
-> **State:** ready · **Priority:** 0 · **Area:** factory · **Fast lane:** yes
+> **State:** done · **Priority:** 0 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-10. Base: git tag `f139-the-factory-folder-should-actually-be-start`. Report: [`.softfield/reviews/f139-the-factory-folder-should-actually-be.md`](../reviews/f139-the-factory-folder-should-actually-be.md).
 > Planted by the owner on 2026-10-15.
 
 ## Notes
