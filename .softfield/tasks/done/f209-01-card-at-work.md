@@ -41,3 +41,9 @@ attempts: 3
 tokens: 490923
 logs: .softfield/var/runs/20261106-011143/f209-01-card-at-work
 ```
+
+```yaml
+# --- runner ---
+result: done
+finished_by: lead
+```
