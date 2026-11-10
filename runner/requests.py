@@ -819,6 +819,9 @@ def _approve_plan(
     put_back: dict[str, str] = {}
     drafted: list[tuple[str, str]] = []
     if planned and branch is not None:
+        # a note main merged into the card while the plan was drafted is kept with it, not refused
+        if planner.merged_tree(repo, branch) is None and loop.catch_up_plan(git, branch, thread):
+            git.checkout(loop.MAIN)
         changes = _drafts(git, branch)
         if (refused := _outside(branch, changes, thread, replan, running)) is not None:
             return refused

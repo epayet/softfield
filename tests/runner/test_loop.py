@@ -8072,15 +8072,86 @@ def _projects(*names, paused=()):
 
 
 def _turns(jobs, restart_on=None):
-    """A fake turn: ``jobs`` maps (project, "queued" | "ticket") to whether it runs one."""
-    calls = []
+    """A fake turn: ``jobs`` maps (project, "lane" | "queued" | "ticket") to whether it runs
+    one. The lane pass (F235 D1) is recorded in ``turn.lanes``, the others in ``calls``."""
+    calls: list[tuple[str, str]] = []
+    lanes: list[tuple[str, str]] = []
 
-    def turn(s, take_tickets=True, once=False):
-        kind = "ticket" if take_tickets else "queued"
-        calls.append((s.name, kind))
+    def turn(s, take_tickets=True, once=False, lane_only=False):
+        kind = "lane" if lane_only else "ticket" if take_tickets else "queued"
+        (lanes if lane_only else calls).append((s.name, kind))
         return (s.name, kind) == restart_on, jobs.get((s.name, kind), False)
 
+    turn.lanes = lanes  # type: ignore[attr-defined]
     return turn, calls
+
+
+def test_every_projects_fast_lane_goes_before_any_queued_job():
+    """F235 D1 (ADR 35 item 2): on 2026-11-09 seven planner replies ran before f139-03, in the
+    fast lane, and took the 5-hour window. A lane ticket in the second project goes before a
+    planner job in the first."""
+    turn, calls = _turns({("coucou", "lane"): True, ("softfield", "queued"): True})
+    assert loop.project_round(_projects("softfield", "coucou"), turn) == (False, True)
+    assert turn.lanes == [("softfield", "lane"), ("coucou", "lane")]
+    assert calls == []
+
+
+def test_with_no_lane_job_the_round_runs_the_queued_jobs_then_a_ticket():
+    turn, calls = _turns({("softfield", "ticket"): True})
+    assert loop.project_round(_projects("softfield", "coucou"), turn) == (False, True)
+    assert turn.lanes == [("softfield", "lane"), ("coucou", "lane")]
+    assert calls == [("softfield", "queued"), ("coucou", "queued"), ("softfield", "ticket")]
+
+
+def test_a_pause_skips_the_lane_pass_and_the_planning_still_goes():
+    """ADR 35 item 5: pausing is how the owner gets their replies first."""
+    turn, calls = _turns({("softfield", "lane"): True, ("coucou", "queued"): True})
+    paused = _projects("softfield", "coucou", paused=("coucou",))
+    assert loop.project_round(paused, turn) == (False, True)
+    assert turn.lanes == []
+    assert calls == [("softfield", "queued"), ("coucou", "queued")]
+
+
+def _lane_queue(repo: Path, monkeypatch, ran: list[str]) -> loop.Session:
+    """A planner reply queued beside `_lane_session`'s tickets; what runs is recorded in ``ran``."""
+    s: loop.Session
+    s, _ = _lane_session(repo, monkeypatch)
+    loop.enqueue(s, dispatch.PLANNER, "general", "the owner's message")
+    assert [row.kind for row in loop.open_rows(s)] == [dispatch.PLANNER]
+    monkeypatch.setattr(loop, "run_task", _merge_any(repo, ran))
+
+    def run_queued(s, row, escalate):
+        ran.append(row.kind)
+        raise _Ran  # the row stays open: stop the queue here
+
+    monkeypatch.setattr(loop, "run_queued", run_queued)
+    return s
+
+
+class _Ran(Exception):
+    """A queued job was started."""
+
+
+def test_the_lane_pass_runs_the_lane_ticket_not_the_queued_planner_reply(repo, monkeypatch):
+    ran: list[str] = []
+    s = _lane_queue(repo, monkeypatch, ran)
+    assert loop.work_queue(s, reviews=True, wait=False, once=True, lane_only=True) is False
+    assert ran == ["f20-01-dep"]  # what the lane's ticket waits for is in the lane
+    loop.close_session(s)
+
+
+def test_the_lane_pass_with_no_lane_ticket_runs_nothing(repo, monkeypatch):
+    ran: list[str] = []
+    s = _lane_queue(repo, monkeypatch, ran)
+    for path in (repo / ".softfield" / "tasks" / "ready").glob("f*-*.md"):
+        if path.stem in {"f9-01-lane", "f20-01-dep"}:
+            path.unlink()
+    assert loop.work_queue(s, reviews=True, wait=False, once=True, lane_only=True) is False
+    assert ran == []
+    with pytest.raises(_Ran):  # the queued pass, after it, takes the reply
+        loop.work_queue(s, reviews=True, wait=False, take_tickets=False)
+    assert ran == ["planner"]
+    loop.close_session(s)
 
 
 def test_every_projects_queued_jobs_go_before_any_ticket():
@@ -8442,3 +8513,22 @@ def test_a_held_push_is_a_desk_item_and_goes_when_it_clears(repo, tmp_path, monk
 def test_a_project_with_no_origin_pushes_nothing(repo, monkeypatch):
     monkeypatch.setattr("runner.push.push_signed_off", lambda *a, **k: pytest.fail("pushed"))
     loop.check_push(loop.open_session(_config(repo)))
+
+
+def test_both_added_keeps_each_sides_added_lines_ours_first():
+    text = "a\n<<<<<<< ours\nnote\n||||||| base\n=======\nplan\n>>>>>>> theirs\nb\n"
+    assert loop.both_added(text) == "a\nnote\nplan\nb\n"
+
+
+def test_both_added_refuses_a_conflict_on_a_line_the_base_held():
+    text = "<<<<<<< ours\na queue\n||||||| base\none queue\n=======\ntwo queues\n>>>>>>> theirs\n"
+    assert loop.both_added(text) is None
+
+
+def test_both_added_refuses_an_unfinished_conflict():
+    assert loop.both_added("<<<<<<< ours\nnote\n||||||| base\n=======\nplan\n") is None
+
+
+def test_both_added_puts_theirs_first_when_asked():
+    text = "<<<<<<< plan\nplan\n||||||| base\n=======\nnote\n>>>>>>> main\n"
+    assert loop.both_added(text, theirs_first=True) == "note\nplan\n"

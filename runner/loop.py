@@ -1902,6 +1902,65 @@ def _catch_up(s: Session, branch: str) -> bool:
     return True
 
 
+def catch_up_plan(git: Git, branch: str, card: str) -> bool:
+    """Merge main into the card's plan branch, staying on it (f6 D4). A clash only in the card's
+    own doc, where each conflict is text both sides added at one place (a note main merged in, the
+    plan's new sections), keeps both, main's first: before this, every merged note left its plan
+    refused for good (F210, F211, F231, F235 on 2026-11-09). False, back on main with the branch
+    as it was, on any other clash."""
+    git.checkout(branch)
+    doc = milestone_file(git.repo, "cards", full_key(git.repo, card))
+    name, email = RUNNER_AUTHOR.removesuffix(">").split(" <")
+    who = ("-c", f"user.name={name}", "-c", f"user.email={email}")
+    message = with_trailers(f"runner: merge {MAIN} into {branch}", agent=RUNNER_AGENT)
+    try:
+        git.run(*who, "-c", "merge.conflictStyle=diff3", "merge", "-q", "--no-verify",
+                "--no-edit", "-m", message, MAIN)  # fmt: skip
+        return True
+    except GitError:
+        pass
+    rel = doc.relative_to(git.repo).as_posix()
+    unmerged = git.run("diff", "--name-only", "--diff-filter=U").split()
+    # merging main into the branch, git's "theirs" is main
+    text = doc.read_text(encoding="utf-8") if unmerged == [rel] else ""
+    both = both_added(text, theirs_first=True) if text else None
+    if both is None:
+        git.run("merge", "--abort", check=False)
+        git.checkout(MAIN)
+        return False
+    doc.write_text(both, encoding="utf-8")
+    git.run("add", "--", rel)
+    git.run(*who, "commit", "-q", "--no-verify", "--no-edit")
+    return True
+
+
+def both_added(text: str, theirs_first: bool = False) -> str | None:
+    """A file with diff3 conflict marks, each conflict settled as both sides' lines, ours first
+    unless ``theirs_first``; None when a conflict changed a line its base held (then both edits
+    can't stand)."""
+    out: list[str] = []
+    sides: dict[str, list[str]] = {"ours": [], "theirs": []}
+    part = ""  # "", then "ours", "base", "theirs" inside a conflict
+    for line in text.splitlines(keepends=True):
+        if line.startswith("<<<<<<< ") and part == "":
+            part = "ours"
+        elif line.startswith("||||||| ") and part == "ours":
+            part = "base"
+        elif line.rstrip("\r\n") == "=======" and part == "base":
+            part = "theirs"
+        elif line.startswith(">>>>>>> ") and part == "theirs":
+            first, then = ("theirs", "ours") if theirs_first else ("ours", "theirs")
+            out += sides[first] + sides[then]
+            sides, part = {"ours": [], "theirs": []}, ""
+        elif part == "base":
+            return None
+        elif part:
+            sides[part].append(line)
+        else:
+            out.append(line)
+    return None if part else "".join(out)
+
+
 def _start_attempt(s: Session, branch: str, reset: str) -> str:
     """Put the ticket's branch in place for its next attempt: its work so far, caught up with
     main, unless ``reset`` (why) asks for main itself. Returns why it was reset, if it was."""
@@ -4560,7 +4619,7 @@ def _plan_branch(s: Session, branch: str) -> bool:
     if not _has_branch(s.git, branch):
         s.git.run("checkout", "-q", "-b", branch, MAIN)
         return True
-    if not _catch_up(s, branch):
+    if not catch_up_plan(s.git, branch, branch.removeprefix("plan/")):
         s.report.notes.append(f"{branch} clashes with {MAIN}: the planner drafted on it as it is.")
         s.git.checkout(branch)
     return False
@@ -5506,6 +5565,7 @@ def work_queue(
     reviews: bool = False,
     take_tickets: bool = True,
     wait: bool = True,
+    lane_only: bool = False,
 ) -> bool:
     """Work through .softfield/tasks/ready (one milestone's, if given) and the queued jobs their
     runs
@@ -5531,6 +5591,8 @@ def work_queue(
     ``once``, it stops after one ticket and the jobs that ticket queued.
 
     For `run_projects` (ADR 30 item 6): without ``take_tickets`` it runs only the queued jobs;
+    with ``lane_only`` (F235 D1) only the fast lane, its tickets and the directions and
+    escalations about them, so the round can run every project's lane before any queued job;
     without ``wait`` it never holds or sleeps here (for Claude's reset, the owner's pause or
     nothing to run) but returns, so the next project can go.
 
@@ -5570,9 +5632,12 @@ def work_queue(
             if take_tickets
             else None
         )
+        lane = reserve_cards(s.repo, ready)  # the fast lane (ADR 35)
+        if lane_only:  # the round's first pass (F235 D1): nothing but the lane
+            rows = [r for r in rows if r.kind in dispatch.GOES_WITH and r.subject in lane]
+            task = task if task is not None and task.id in lane else None
         tickets = [] if task is None else [_dispatch_ticket(s, task, ready)]
         paused_by_owner = s.state.owner_pause is not None
-        lane = reserve_cards(s.repo, ready)  # the fast lane (ADR 35)
         job = dispatch.pick(
             rows, tickets, dispatch.Windows(), now(), paused=paused_by_owner, first=lane
         )
@@ -5687,14 +5752,21 @@ type Turn = Callable[..., tuple[bool, bool]]  # one project's turn: (restart, it
 
 def project_round(sessions: Sequence[Session], turn: Turn) -> tuple[bool, bool]:
     """One round of `run_projects`, the projects in the owner's order: first every project's
-    queued jobs (the owner's planning replies, directions, checkpoints, escalations: they never
-    wait behind another project's ticket), then one ticket from the first project that has one
-    it can run; while the owner pauses, no ticket. Returns (restart, a job ran)."""
+    fast lane (ADR 35 item 2, F235 D1: its lane tickets, and the directions and escalations
+    about them), then every project's queued jobs (the owner's planning replies, directions,
+    checkpoints, escalations: they never wait behind another project's ticket), then one ticket
+    from the first project that has one it can run. While the owner pauses, no lane and no
+    ticket (ADR 35 item 5): the planning replies still go. Returns (restart, a job ran)."""
+    held = any(s.state.owner_pause is not None for s in sessions)
+    for s in [] if held else sessions:
+        restart, ran = turn(s, lane_only=True, once=True)
+        if restart or ran:
+            return restart, ran
     for s in sessions:
         restart, ran = turn(s, take_tickets=False)
         if restart or ran:
             return restart, ran
-    if any(s.state.owner_pause is not None for s in sessions):  # a pause holds every project
+    if held:  # a pause holds every project
         return False, False
     for s in sessions:
         restart, ran = turn(s, once=True)

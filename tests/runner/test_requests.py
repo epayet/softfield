@@ -940,6 +940,50 @@ def test_a_plan_that_clashes_with_main_is_refused_and_main_is_unchanged(repo):
     assert not Path(repo, git(repo, "rev-parse", "--git-path", "SQUASH_MSG").strip()).exists()
 
 
+def test_a_note_main_merged_into_the_card_while_its_plan_was_drafted_is_kept_and_approved(repo):
+    """2026-11-09: F237's note was merged into F235's card on main while F235's plan added its
+    sections at the same place, the doc's end, and every Approve was refused as a clash (F210,
+    F211 and F231 too). Both are kept, main's note first, and the plan is approved."""
+    _card(repo)
+    doc = repo / ".softfield" / "cards" / "f7-one-queue.md"
+    _plan(
+        repo,
+        {
+            ".softfield/tasks/later/f7-01-a.md": _ticket("f7-01-a"),
+            ".softfield/cards/f7-one-queue.md": CARD + "\n## Decisions\n- D1 one queue.\n",
+        },
+    )
+    doc.write_text(CARD + "\n### From F9: two queues (merged by the lead)\nWhy two?\n")
+    git(repo, "commit", "-q", "-am", "F9 merged into F7 by the lead")
+    asked = _ask(repo, "approve_plan", "f7")
+    _apply(repo)
+    assert _request(repo, asked)[1] == "approved plan/f7: queued f7-01-a"
+    text = doc.read_text()
+    assert "<<<<<<<" not in text and "|||||||" not in text and ">>>>>>>" not in text
+    assert text.index("Why two?") < text.index("- D1 one queue.")
+    assert milestone.card("f7-one-queue", text).state == "ready"
+    assert git(repo, "branch", "--show-current").strip() == "main"
+    assert git(repo, "status", "--porcelain") == ""
+    assert git(repo, "branch", "--list", "plan/f7") == ""
+
+
+def test_a_card_line_both_sides_changed_still_clashes_and_leaves_the_branch_as_it_was(repo):
+    _card(repo)
+    doc = repo / ".softfield" / "cards" / "f7-one-queue.md"
+    _plan(repo, {".softfield/cards/f7-one-queue.md": CARD.replace("one queue", "two queues")})
+    tip = git(repo, "rev-parse", "plan/f7")
+    doc.write_text(CARD.replace("one queue", "a queue") + "\nA note.\n")
+    git(repo, "commit", "-q", "-am", "the owner's edit")
+    head = git(repo, "rev-parse", "HEAD")
+    asked = _ask(repo, "approve_plan", "f7")
+    _apply(repo)
+    assert _request(repo, asked)[1] == "plan/f7 clashes with main: not approved"
+    assert git(repo, "rev-parse", "HEAD") == head
+    assert git(repo, "rev-parse", "plan/f7") == tip
+    assert git(repo, "branch", "--show-current").strip() == "main"
+    assert git(repo, "status", "--porcelain") == ""
+
+
 def test_a_ticket_with_a_bare_path_refuses_the_approval_with_the_problem_named(repo):
     _card(repo)
     _plan(
