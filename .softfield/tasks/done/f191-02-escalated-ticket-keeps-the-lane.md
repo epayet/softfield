@@ -25,3 +25,10 @@ On 2026-10-29, 20:12 to 20:30, four planner jobs ran before the escalations of t
 - The same escalation of a card not in the lane keeps today's place.
 - `softfield run --dry-run` lists it in the lane, as the run takes it.
 - `reserve_cards` returns what it does today (`test_reserve_cards_follows_the_ready_tickets_only` passes unchanged).
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
