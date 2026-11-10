@@ -32,3 +32,12 @@ In the developer's view, an at-work slot keeps its frame and full strength, what
 - in the developer's view, a card with a developer at work has the blue frame and head at full strength (computed `opacity` 1, in a browser test as in `tests/factory_dashboard/test_line.py`), on `dev-can`, `dev-waits` and `dev-none` slots alike
 - in the developer's view, a card with the lead at work keeps its orange frame at full strength too
 - the listed `tests:` pass, and fail without the change
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: stopped)
+attempts: 3
+tokens: 490923
+logs: .softfield/var/runs/20261106-011143/f209-01-card-at-work
+```
