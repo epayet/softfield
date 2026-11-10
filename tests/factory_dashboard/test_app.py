@@ -4116,3 +4116,145 @@ def test_the_picker_form_action_follows_the_page(client, path, expected_action):
     action = re.search(r'action="([^"]*)"', form[0])
     assert action, f"no action on the form on {path}"
     assert action[1] == expected_action, f"{path}: action {action[1]} != {expected_action}"
+
+
+# --- f225-01: switch follows the theme (f225) ----------------------------------------------------
+
+_HAZARD_INK = "rgb(26, 20, 5)"
+
+
+@pytest.mark.parametrize("size", [DISPLAY, PHONE], ids=["display", "phone"])
+def test_night_switch_knob_stays_at_top_with_disagreeing_aria(page, client, size):
+    """f225-01: in night theme, with aria-checked set by hand to false, the knob stays at the
+    top of the plate and the moon stays lit."""
+    page.set_viewport_size(size)
+
+    def route(r):
+        url = r.request.url.removeprefix(ORIGIN)
+        path = url.split("?", 1)[0]
+        if path.startswith("/static/"):
+            r.fulfill(path=str(STATIC / path.removeprefix("/static/")))
+        else:
+            r.fulfill(body=client.get(url).text, content_type="text/html; charset=utf-8")
+
+    page.route(f"{ORIGIN}/**", route)
+    page.emulate_media(color_scheme="dark", reduced_motion="reduce")
+    page.goto(ORIGIN + "/")
+    page.wait_for_selector("#theme-btn", state="visible", timeout=REFRESH)
+    # Set aria-checked to false (disagreeing with the dark theme)
+    page.evaluate("document.getElementById('theme-btn').setAttribute('aria-checked', 'false')")
+    knob = page.locator("#theme-btn .knob")
+    top = knob.evaluate("el => parseFloat(getComputedStyle(el).top)")
+    assert top < 5, f"knob top {top} should be near top in dark theme"
+    # Moon stays lit with --hazard-ink colour
+    moon_color = page.locator("#theme-btn .moon").evaluate("el => getComputedStyle(el).color")
+    assert moon_color == _HAZARD_INK, f"moon color {moon_color} != {_HAZARD_INK}"
+    # Sun must NOT be lit
+    sun_color = page.locator("#theme-btn .sun").evaluate("el => getComputedStyle(el).color")
+    assert sun_color != _HAZARD_INK, "sun should not be lit in night theme"
+
+
+@pytest.mark.parametrize("size", [DISPLAY, PHONE], ids=["display", "phone"])
+def test_light_switch_knob_stays_at_bottom_with_disagreeing_aria(page, client, size):
+    """f225-01: in light theme, with aria-checked set by hand to true, the knob stays at the
+    bottom and the sun stays lit."""
+    page.set_viewport_size(size)
+
+    def route(r):
+        url = r.request.url.removeprefix(ORIGIN)
+        path = url.split("?", 1)[0]
+        if path.startswith("/static/"):
+            r.fulfill(path=str(STATIC / path.removeprefix("/static/")))
+        else:
+            r.fulfill(body=client.get(url).text, content_type="text/html; charset=utf-8")
+
+    page.route(f"{ORIGIN}/**", route)
+    page.emulate_media(color_scheme="light", reduced_motion="reduce")
+    page.goto(ORIGIN + "/")
+    page.wait_for_selector("#theme-btn", state="visible", timeout=REFRESH)
+    # Set aria-checked to true (disagreeing with the light theme)
+    page.evaluate("document.getElementById('theme-btn').setAttribute('aria-checked', 'true')")
+    knob = page.locator("#theme-btn .knob")
+    top = knob.evaluate("el => parseFloat(getComputedStyle(el).top)")
+    # Knob should be well below the dark theme position (top: 2px)
+    assert top > 10, f"knob top {top} should be in light theme position"
+    # Sun stays lit with --hazard-ink colour
+    sun_color = page.locator("#theme-btn .sun").evaluate("el => getComputedStyle(el).color")
+    assert sun_color == _HAZARD_INK, f"sun color {sun_color} != {_HAZARD_INK}"
+    # Moon must NOT be lit
+    moon_color = page.locator("#theme-btn .moon").evaluate("el => getComputedStyle(el).color")
+    assert moon_color != _HAZARD_INK, "moon should not be lit in light theme"
+
+
+def test_night_page_load_starts_no_transitionrun(page, client):
+    """f225-01: loading a page in the night theme starts no transitionrun on the knob."""
+    page.set_viewport_size(DISPLAY)
+
+    # Listen for transition events before the page loads
+    page.add_init_script("""
+        window._knobEvents = [];
+        document.addEventListener('transitionrun', function(e) {
+            if (e.target.classList.contains('knob')) window._knobEvents.push(e.propertyName);
+        });
+    """)
+
+    def route(r):
+        url = r.request.url.removeprefix(ORIGIN)
+        path = url.split("?", 1)[0]
+        if path.startswith("/static/"):
+            r.fulfill(path=str(STATIC / path.removeprefix("/static/")))
+        else:
+            r.fulfill(body=client.get(url).text, content_type="text/html; charset=utf-8")
+
+    page.route(f"{ORIGIN}/**", route)
+    page.emulate_media(color_scheme="dark")
+    page.goto(ORIGIN + "/")
+    page.wait_for_selector("#theme-btn", state="visible", timeout=REFRESH)
+    page.wait_for_load_state("load")
+    knob_events = page.evaluate("window._knobEvents")
+    assert not knob_events, f"the knob slid on load: {knob_events}"
+
+
+def test_pressing_switch_starts_transitionrun_and_moves_knob(page, client):
+    """f225-01: pressing the switch still starts a transitionrun on the knob, and the knob
+    ends on the other side."""
+    page.set_viewport_size(DISPLAY)
+
+    # The knob's own slide only: "run" when it starts, "end" when it is over.
+    page.add_init_script("""
+        window._knobEvents = [];
+        for (const kind of ['transitionrun', 'transitionend']) {
+            document.addEventListener(kind, function(e) {
+                if (e.target.classList.contains('knob') && e.propertyName === 'top') {
+                    window._knobEvents.push(kind);
+                }
+            });
+        }
+    """)
+
+    def route(r):
+        url = r.request.url.removeprefix(ORIGIN)
+        path = url.split("?", 1)[0]
+        if path.startswith("/static/"):
+            r.fulfill(path=str(STATIC / path.removeprefix("/static/")))
+        else:
+            r.fulfill(body=client.get(url).text, content_type="text/html; charset=utf-8")
+
+    page.route(f"{ORIGIN}/**", route)
+    page.emulate_media(color_scheme="dark")
+    page.goto(ORIGIN + "/")
+    page.wait_for_selector("#theme-btn", state="visible", timeout=REFRESH)
+    assert page.evaluate("document.documentElement.getAttribute('data-theme')") == "dark"
+    knob = page.locator("#theme-btn .knob")
+    assert knob.evaluate("el => parseFloat(getComputedStyle(el).top)") == 2
+    page.evaluate("window._knobEvents = []")
+
+    page.locator("#theme-btn").click()
+    assert page.evaluate("document.documentElement.getAttribute('data-theme')") == "light"
+    # Read the place only once the slide is over, not halfway through it.
+    page.wait_for_function("window._knobEvents.includes('transitionend')", timeout=REFRESH)
+    assert page.evaluate("window._knobEvents")[0] == "transitionrun"
+    # The light place is `calc(100% - 17px)` of the plate's inside (its border excluded).
+    inside = page.locator("#theme-btn .plate").evaluate("el => el.clientHeight")
+    top = knob.evaluate("el => parseFloat(getComputedStyle(el).top)")
+    assert top == inside - 17, f"knob top {top}, plate inside {inside}"

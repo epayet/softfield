@@ -145,8 +145,9 @@ button:disabled { cursor: default; }
 .theme-switch svg { width: 12px; height: 12px; position: relative; z-index: 1; color: var(--muted); }
 .theme-switch .knob { position: absolute; left: 2px; right: 2px; top: 2px; height: 15px; border-radius: 2px;
     background: var(--hazard); box-shadow: inset 0 -2px 0 rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.35); }
-.theme-switch[aria-checked="false"] .knob { top: calc(100% - 17px); }
-.theme-switch[aria-checked="true"] .moon, .theme-switch[aria-checked="false"] .sun { color: var(--hazard-ink); }
+:root[data-theme="light"] .theme-switch .knob { top: calc(100% - 17px); }
+:root[data-theme="dark"] .theme-switch .moon { color: var(--hazard-ink); }
+:root[data-theme="light"] .theme-switch .sun { color: var(--hazard-ink); }
 @media (prefers-reduced-motion: no-preference) { .theme-switch .knob { transition: top .18s ease-out; } }
 nav.tabs { display: flex; flex-wrap: wrap; justify-self: start; border-top: 1px solid var(--rule);
   border-left: 1px solid var(--rule); }
@@ -426,7 +427,7 @@ tr.few .gauge { opacity: .35; }
    .theme-switch { grid-area: 1 / 4; width: 44px; height: 44px; }  /* a thumb's target, like the dot */
    .theme-switch .plate { height: 40px; }
    .theme-switch .knob { height: 17px; }
-   .theme-switch[aria-checked="false"] .knob { top: calc(100% - 19px); }
+   :root[data-theme="light"] .theme-switch .knob { top: calc(100% - 19px); }
   .factory-status .dot-btn, .factory-status .sign { width: 44px; height: 44px; }
   .factory-status .words { display: none; }
   .bar-top.show-words .factory-status .words, .factory-status .words.fail { display: block; position: absolute; top: 100%; right: 0;
