@@ -32,3 +32,10 @@ Read `_check` in `runner/allowance.py` (a fixed window's pace line: `share * min
 - over pace, a lead ticket's row in Next in line says "waits for Claude's week pace until about …", the same as `lead_hold`'s answer; a developer's row doesn't
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
