@@ -4923,6 +4923,7 @@ def run_planner(s: Session, row: dispatch.Queued) -> None:
         ),
         resume=found["session_id"] or None,
         title=f"planning: {row.reason}",
+        web=True,  # ADR 33
     )
     milestone = "" if thread == planner.GENERAL else full_key(s.repo, thread)
     new = branch is not None and _plan_branch(s, branch)

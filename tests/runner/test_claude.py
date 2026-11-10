@@ -175,6 +175,27 @@ def test_a_spec_becomes_the_same_allowed_tools_as_todays_jobs(spec, today):
     assert len(set(tools)) == len(tools)
 
 
+def test_a_web_job_gets_the_web_tools_and_reads_only_the_repo_and_the_live_docs(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr("runner.claude.config.HOME", tmp_path / "home")
+    repo = tmp_path / "repo"
+    tools = allowed_tools(JobSpec("planner", "", 1, commands=GIT_READ_COMMANDS, web=True), repo)
+    assert "WebSearch" in tools
+    assert "WebFetch" in tools
+    assert not {"Read", "Glob", "Grep"} & set(tools)
+    for tool in ("Read", "Glob", "Grep"):
+        assert f"{tool}(/{repo.resolve()}/**)" in tools
+        assert f"{tool}(/{(tmp_path / 'home' / 'docs').resolve()}/**)" in tools
+    assert "Bash(git log:*)" in tools
+
+
+def test_a_job_without_the_web_keeps_its_tools(tmp_path):
+    tools = allowed_tools(JobSpec("review", "", 1), tmp_path)
+    assert tools == _READ
+    assert not [t for t in tools if t.startswith("Web")]
+
+
 def _adapter_run(tmp_path, spec: JobSpec, model: str = "opus") -> JobResult:
     agent = Agent("claude-opus", "claude", model, rating=9)
     return ADAPTER.run(agent, spec, tmp_path, tmp_path / "log", NOW)

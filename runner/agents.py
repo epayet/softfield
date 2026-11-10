@@ -54,6 +54,8 @@ class JobSpec:
     writable: tuple[Path, ...] = ()
     # The factory's context (ADR 41 item 2): the system prompt where the harness has one
     system: str = ""
+    # ADR 33: web search and fetch; reads then narrow to the repo and the live docs (Claude only)
+    web: bool = False
 
     @property
     def read_only(self) -> bool:

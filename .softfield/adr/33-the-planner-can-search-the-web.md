@@ -29,5 +29,8 @@
 - What it reads from the web goes to Claude like the rest of its work. A search costs tokens like any read.
 - What remains reachable after a trick: the repo (no secrets in it), the metrics database through `look` (the owner's threads and ratings, read-only), and drafts on the card's plan branch, which wait for the owner's Approve. The process environment already carries no API keys (`STRIPPED_ENV`).
 
+## Settled
+- **Rule form (2026-11-10):** built as `Read(//abs/path/**)`, `Glob(…)` and `Grep(…)` for the repo and the live docs, Claude Code's documented form. The building session could not run `claude -p`, so it is **not yet probed**: a read in the repo must work and `~/.ssh` be refused. If no form scopes reads, drop to `WebSearch` only.
+
 ## Later
 - **ADR 15's offers watch** can reuse `web=True` when it is built.

@@ -29,10 +29,30 @@ READ_TOOLS = ("Read", "Glob", "Grep")
 EDIT_ANYWHERE = ("Edit", "Write")
 
 
-def allowed_tools(spec: JobSpec) -> tuple[str, ...]:
-    """A spec's tools as `--allowedTools`: reads, its edit globs, its command prefixes."""
+WEB_TOOLS = ("WebSearch", "WebFetch")
+
+
+def web_reads(folders: Iterable[Path]) -> tuple[str, ...]:
+    """Reads scoped to folders, for a job with the web (ADR 33 item 2).
+
+    Claude Code's documented form for an absolute path is `Tool(//abs/path/**)`, and the
+    Read rule covers Glob and Grep too. NOT PROBED with claude -p (2026-11-10): the session
+    that wrote this could not run it. Probe it (a read in the repo works, `~/.ssh` is
+    refused) and amend this comment with the result."""
+    return tuple(
+        f"{tool}(/{folder.resolve().as_posix()}/**)" for folder in folders for tool in READ_TOOLS
+    )
+
+
+def allowed_tools(spec: JobSpec, repo: Path | None = None) -> tuple[str, ...]:
+    """A spec's tools as `--allowedTools`: reads, its edit globs, its command prefixes. With
+    ``spec.web``: the web tools, and reads only in ``repo`` (the job's folder) and the live docs."""
     edits = EDIT_ANYWHERE if ANY in spec.edit else tuple(f"Edit({glob})" for glob in spec.edit)
-    return (*READ_TOOLS, *edits, *(f"Bash({command}:*)" for command in spec.commands))
+    commands = tuple(f"Bash({command}:*)" for command in spec.commands)
+    if not spec.web:
+        return (*READ_TOOLS, *edits, *commands)
+    folders = [repo or Path.cwd(), config.HOME / "docs"]
+    return (*WEB_TOOLS, *web_reads(folders), *edits, *commands)
 
 
 @dataclass(frozen=True)
@@ -443,7 +463,7 @@ class ClaudeAdapter:
         job = ClaudeJob(
             spec.role,
             spec.prompt,
-            allowed_tools(spec),
+            allowed_tools(spec, repo),
             model=agent.model,
             system=spec.system,
             on_progress=on_progress,
