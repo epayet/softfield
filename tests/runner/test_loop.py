@@ -8154,6 +8154,25 @@ def test_the_lane_pass_with_no_lane_ticket_runs_nothing(repo, monkeypatch):
     loop.close_session(s)
 
 
+def test_the_queued_pass_runs_one_job_then_gives_the_lane_its_turn(repo, monkeypatch):
+    """F235 D1, 2026-11-10: the queued pass ran eight old directions and the escalations they
+    queued, one after another, from 02:29 to past 08:00, and f139-03 in the fast lane never
+    got a turn. One queued job, then the round starts again with the lane."""
+    ran: list[str] = []
+    s = _lane_queue(repo, monkeypatch, ran)
+    loop.enqueue(s, dispatch.PLANNER, "f9", "a second reply")
+
+    def run_queued(s, row, escalate):
+        if ran:
+            raise _Ran  # a second job in the same pass
+        ran.append(row.subject)
+
+    monkeypatch.setattr(loop, "run_queued", run_queued)
+    assert loop.work_queue(s, reviews=True, wait=False, take_tickets=False) is False
+    assert ran == ["general"]
+    loop.close_session(s)
+
+
 def test_every_projects_queued_jobs_go_before_any_ticket():
     """ADR 30 item 6: the owner's planning reply in the second project doesn't wait behind the
     first project's ticket."""

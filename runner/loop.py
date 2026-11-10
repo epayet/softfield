@@ -5590,7 +5590,8 @@ def work_queue(
     (F53 D1). Without ``escalate``, no escalation is queued or run. With
     ``once``, it stops after one ticket and the jobs that ticket queued.
 
-    For `run_projects` (ADR 30 item 6): without ``take_tickets`` it runs only the queued jobs;
+    For `run_projects` (ADR 30 item 6): without ``take_tickets`` it runs one queued job, so
+    the round asks the fast lane again before the next;
     with ``lane_only`` (F235 D1) only the fast lane, its tickets and the directions and
     escalations about them, so the round can run every project's lane before any queued job;
     without ``wait`` it never holds or sleeps here (for Claude's reset, the owner's pause or
@@ -5682,6 +5683,8 @@ def work_queue(
             s.picks += 1
             if _new_code(s, code):  # the job just merged into Softfield: its code, now
                 return True
+            if not take_tickets:  # one queued job a round: the fast lane goes next (F235 D1)
+                return False
             continue
         with doing(s, task.id):
             rec = run_task(s, task)
