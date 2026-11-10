@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F210 mock-up: one box per card, and one path through it</title>
+<style>
+  /* The dashboard's own tokens (factory_dashboard/static/dashboard.css), dark mode */
+  :root {
+    --floor: #12161b; --bay: #181e25; --plate: #1f2730; --grid: #222b34; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+    --hazard: #f2b10a; --hazard-ink: #1a1405; --opus: #ff9640; --qwen: #8ccf62; --good: #5fd17a;
+    --display: "Chakra Petch", "Bahnschrift", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--floor); color: var(--fg); font: 15px/1.5 var(--body); padding: 20px; }
+  h1 { font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 4px; }
+  p.lede { color: var(--ink-2); max-width: 820px; margin: 0 0 8px; }
+  a { color: inherit; text-decoration: none; }
+  .switch { display: inline-flex; margin: 12px 0 16px; border: 1px solid var(--rule); }
+  .switch button { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 10px 18px;
+    background: var(--bay); color: var(--muted); border: 0; cursor: pointer; }
+  .switch button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+  .versions { display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start; }
+  .version { width: 400px; max-width: 100%; display: flex; flex-direction: column; gap: 16px; }
+  .version > h3 { font: 600 13px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 0; }
+  .where { font: 600 11px var(--mono); color: var(--muted); margin: 0 0 4px; }
+  .new { outline: 1px dashed var(--good); outline-offset: 2px; }   /* what this card changes */
+  .note { color: var(--good); font: 11.5px var(--mono); margin: 2px 0 0; }
+  .legend { color: var(--ink-2); font-size: 13px; margin: 0; }
+  [hidden] { display: none !important; }
+  @media (min-width: 880px) { .version[hidden] { display: flex !important; } .switch { display: none; } }
+
+  /* ---- the desk as drawn on main (planning.html, dashboard.css's f81-04 classes) ---- */
+  .desk { background: var(--bay); border: 1px solid var(--rule); padding: 0 14px 12px; }
+  .desk > h2 { margin: 0 -14px 10px; padding: 8px 14px; background: var(--plate); border-bottom: 1px solid var(--rule); font: 600 14px var(--display); letter-spacing: .1em; text-transform: uppercase; }
+  .desk-group { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid var(--grid); }
+  .desk-group:last-child { margin-bottom: 0; padding-bottom: 0; border-bottom: 0; }
+  .group-head { margin: 0; font: 600 11px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--c, var(--muted)); display: flex; align-items: center; gap: 8px; }
+  .group-head::before { content: ""; width: 10px; height: 2px; background: var(--hazard); }
+  .desk-item { display: flex; flex-direction: column; padding: 7px 9px 7px 12px; background: var(--plate); border: 1px solid var(--rule); border-left: 3px solid var(--ink-2); color: var(--fg); min-height: 44px; }
+  .desk-title { font-size: 14px; }
+  .desk-words { font: 11.5px var(--mono); color: var(--muted); }
+  .desk-item.on-its-way-item { border: 1px dashed var(--hazard); }
+  .on-its-way-item .desk-words { color: var(--hazard); }
+  .parts { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0 2px; }
+  .parts > .part { font: 600 10.5px var(--mono); letter-spacing: .06em; text-transform: uppercase; padding: 1px 6px; background: var(--bay); color: var(--ink-2); border: 1px solid var(--rule); }
+  .part-arrow { color: var(--muted); }
+  .more { font: 11.5px var(--mono); color: var(--muted); }
+
+  /* ---- proposed: a card's box, its corner ticks in plain ink, its proposals inside ---- */
+  .box { position: relative; background: var(--plate); border: 1px solid var(--rule); border-left: 3px solid var(--ink-2); }
+  .box::before, .box::after { content: ""; position: absolute; width: 8px; height: 8px; border-color: var(--ink-2); border-style: solid; }
+  .box::before { top: -1px; right: -1px; border-width: 2px 2px 0 0; }
+  .box::after { bottom: -1px; right: -1px; border-width: 0 2px 2px 0; }
+  .box > a { display: block; padding: 7px 9px 6px 12px; min-height: 44px; }
+  .box .head { display: flex; gap: 8px; align-items: baseline; }
+  .box .key { font: 600 11px var(--display); letter-spacing: .08em; color: var(--ink-2); border: 1px solid var(--rule); padding: 0 5px; flex: none; }
+  .box .desk-words { display: block; margin-top: 2px; }
+  .box .props { display: flex; flex-wrap: wrap; gap: 4px; padding: 0 9px 8px 12px; align-items: center; }
+  .prop { font: 600 10.5px var(--mono); letter-spacing: .04em; text-transform: uppercase; color: var(--fg); background: var(--bay);
+    border: 1px solid var(--rule); padding: 0 8px; min-height: 32px; display: inline-flex; align-items: center; }
+  .prop small { color: var(--muted); font-weight: 400; margin-left: 5px; }
+  .box.way { border: 1px dashed var(--hazard); }
+  .box.way .desk-words { color: var(--hazard); }
+  .box.way .prop { border-style: dashed; border-color: var(--hazard); color: var(--ink-2); }
+
+  /* ---- a card's page, as drawn (templates/thread.html, proposal.html) ---- */
+  .page { display: flex; flex-direction: column; gap: 8px; }
+  .trail { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .trail .step { display: inline-flex; align-items: center; min-height: 44px; padding: 0 12px; font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; border: 1px solid var(--rule); background: var(--plate); }
+  .trail .step.next { border-color: var(--hazard); color: var(--hazard); }
+  .trail .count { font: 12px var(--mono); color: var(--muted); text-align: center; }
+  .head-plate { background: var(--bay); border: 1px solid var(--rule); border-left: 6px solid var(--hazard); padding: 10px 14px; }
+  .head-plate b { font: 700 16px/1.2 var(--display); letter-spacing: .03em; text-transform: uppercase; display: block; }
+  .reply { background: var(--bay); border: 1px solid var(--opus); padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+  .reply .stamp { font: 600 12px var(--mono); color: var(--opus); }
+  .point { background: var(--plate); border: 1px solid var(--rule); padding: 8px 10px; font-size: 14px; display: flex; gap: 8px; }
+  .point > b { font: 700 13px var(--mono); color: var(--muted); }
+  .reply-box { background: var(--bay); border: 1px solid var(--rule); padding: 10px 12px; font-size: 13px; color: var(--muted); }
+  .fake-area { height: 44px; background: var(--floor); border: 1px solid var(--rule); margin-top: 4px; }
+  .fold { font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding: 8px 0; }
+  .aside-panel { background: var(--bay); border: 1px solid var(--rule); padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+  .aside-panel h4 { margin: 0; font: 600 14px var(--display); letter-spacing: .08em; text-transform: uppercase; }
+  .proposal { background: var(--plate); border: 1px solid var(--rule); border-top: 3px solid var(--opus); padding: 8px 10px; }
+  .proposal span { font: 600 11px var(--mono); color: var(--muted); display: block; }
+  .proposal b { font-size: 14px; }
+
+  /* ---- proposed: the card's steps, the same strip on both pages ---- */
+  .steps { background: var(--bay); border: 1px solid var(--rule); position: relative; }
+  .steps::before { content: ""; display: block; height: 5px; background: repeating-linear-gradient(135deg, var(--hazard) 0 7px, var(--hazard-ink) 7px 14px); }
+  .steps h4 { margin: 0; padding: 7px 10px 0; font: 600 11px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-2); }
+  .steps ol { list-style: none; margin: 0; padding: 6px 10px 10px; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+  .steps li { display: contents; }
+  .steps a { display: inline-flex; flex-direction: column; justify-content: center; min-height: 44px; padding: 2px 10px; font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--fg); background: var(--plate); border: 1px solid var(--rule); }
+  .steps a small { font: 400 10.5px var(--mono); letter-spacing: 0; text-transform: none; color: var(--muted); }
+  .steps a[aria-current] { background: var(--hazard); color: var(--hazard-ink); border-color: var(--hazard); }
+  .steps a[aria-current] small { color: var(--hazard-ink); }
+  .steps .unsent small { color: var(--hazard); }
+  .steps i { font-style: normal; color: var(--muted); }
+</style>
+</head>
+<body>
+<h1>F210: one box per card, and one path through it</h1>
+<p class="lede">The real desk on 2026-11-09, as main draws it now: 5 conversations and 5 proposals, and they are the same 5 cards. Proposed: each card is one box. Inside a card, its conversation and its proposals are one strip of steps, always conversation, mock-up, plan, and Next walks through them before going to the next card. Lower down, F211's card (Open plans survive a card's closing) shows it.</p>
+<div class="switch" role="group" aria-label="Which version">
+  <button type="button" data-show="today" aria-pressed="false">Today</button>
+  <button type="button" data-show="proposed" aria-pressed="true">Proposed</button>
+</div>
+
+<div class="versions">
+
+<!-- Today: copied from factory_dashboard/templates/planning.html, thread.html and proposal.html on main -->
+<div class="version" data-version="today" hidden>
+  <h3>Today</h3>
+  <section class="desk">
+    <h2>Your desk · 11</h2>
+    <div class="desk-group">
+      <h3 class="group-head" style="--c: var(--qwen)">To sign off · 1</h3>
+      <a class="desk-item" href="#"><span class="desk-title">Real before and after pictures of the changed pages when you sign a card off</span><span class="desk-words">reviewed · waits for your sign-off</span></a>
+    </div>
+    <div class="desk-group">
+      <h3 class="group-head" style="--c: var(--hazard)">Your answers wanted · 5</h3>
+      <a class="desk-item" href="#"><span class="desk-title">I suspect we might need to increase the timeouts as the…</span><span class="desk-words">the lead replied 17 s ago</span></a>
+      <a class="desk-item" href="#"><span class="desk-title">Open plans survive a card's closing, and new ideas don't join a planned card</span><span class="desk-words">the lead replied 3.7 days ago</span></a>
+      <a class="desk-item" href="#"><span class="desk-title">The fast lane goes first under softfield run too, escalations included</span><span class="desk-words">the lead replied 3.7 days ago</span></a>
+      <a class="desk-item" href="#"><span class="desk-title">Each project gets its own card letter, and the factory/product area goes</span><span class="desk-words">the lead replied 4 days ago</span></a>
+      <a class="desk-item" href="#"><span class="desk-title">review rounds until you sign off</span><span class="desk-words">the lead replied 5.3 days ago</span></a>
+      <a class="desk-item on-its-way-item" href="#"><span class="desk-title">One box per card on the desk, and one reading path through its proposals</span><span class="desk-words">the lead is writing this reply</span></a>
+    </div>
+    <div class="desk-group">
+      <h3 class="group-head" style="--c: var(--opus)">Proposals to review · 5</h3>
+      <a class="desk-item" href="#"><span class="desk-title">F65: a comment dashes the sign-off row, one row per card</span><span class="parts"><span class="part">replan</span><span class="part"><span class="part-arrow">→ </span>mock-up</span></span><span class="desk-words">6 key points</span></a>
+      <a class="desk-item on-its-way-item" href="#"><span class="desk-title">F210 mock-up: one box per card, and one path through it</span><span class="desk-words">being revised · the lead is writing this reply</span></a>
+      <a class="desk-item" href="#"><span class="desk-title">F133: each project has its own series letter, and the area goes</span><span class="desk-words">7 key points</span></a>
+      <a class="desk-item" href="#"><span class="desk-title">F191: a Claude limit never stops the factory, and the fast lane really goes first</span><span class="desk-words">10 key points</span></a>
+      <a class="desk-item" href="#"><span class="desk-title">F211: closed threads stay closed, and open plans survive a sign-off, in five tickets</span><span class="parts"><span class="part">mock-up</span><span class="part"><span class="part-arrow">→ </span>plan</span></span><span class="desk-words">13 key points</span></a>
+      <a class="desk-item" href="#"><span class="desk-title">F71: faster test gates, then browser tests on a fake clock</span><span class="desk-words">5 key points</span></a>
+    </div>
+  </section>
+
+  <div class="page">
+    <p class="where">/planning/f211, a card's conversation</p>
+    <div class="trail"><span class="step">‹ Previous</span><span class="count">3 of 11 waiting for you</span><span class="step next">Next ›</span></div>
+    <p class="legend">Next goes to another card's conversation. This card's proposals are 10 of 11, seven presses on.</p>
+    <div class="head-plate"><b>Open plans survive a card's closing, and new ideas don't join a planned card</b></div>
+    <div class="reply">
+      <span class="stamp">The lead · 2026-11-05 23:34</span>
+      <div class="point"><b>1</b><span>Nothing to renumber or drop</span></div>
+      <div class="point"><b>2</b><span>One update: a kept plan keeps its card's area</span></div>
+      <span class="more">… 1 more point</span>
+    </div>
+    <div class="reply-box">Anything else? A question, a new thought<div class="fake-area"></div></div>
+    <div class="fold">Earlier in this thread (8)</div>
+    <div class="fold">Remove seed</div>
+    <div class="fold">Archive</div>
+    <div class="aside-panel">
+      <h4>Proposals from this card</h4>
+      <a class="proposal" href="#"><span>MOCKUP · open</span><b>A plan still open: Sign off warns, Archive only names it</b></a>
+      <a class="proposal" href="#"><span>PLAN · open</span><b>F211: closed threads stay closed, and open plans survive a sign-off, in five tickets</b></a>
+    </div>
+    <p class="legend">On a phone the proposals sit last, under Archive.</p>
+  </div>
+</div>
+
+<!-- Proposed -->
+<div class="version" data-version="proposed">
+  <h3>Proposed</h3>
+  <section class="desk">
+    <h2>Your desk · <span class="new">6</span></h2>
+    <div class="desk-group">
+      <h3 class="group-head" style="--c: var(--qwen)">To sign off · 1</h3>
+      <a class="desk-item" href="#"><span class="desk-title">Real before and after pictures of the changed pages when you sign a card off</span><span class="desk-words">reviewed · waits for your sign-off</span></a>
+    </div>
+    <div class="desk-group new">
+      <h3 class="group-head" style="--c: var(--hazard)">Your answers wanted · 5</h3>
+      <div class="box">
+        <a href="#"><span class="head"><span class="key">F71</span><span class="desk-title">I suspect we might need to increase the timeouts as the…</span></span>
+          <span class="desk-words">the lead replied 17 s ago · 5 key points</span></a>
+        <div class="props"><a class="prop" href="#">replan<small>5</small></a></div>
+      </div>
+      <div class="box">
+        <a href="#"><span class="head"><span class="key">F211</span><span class="desk-title">Open plans survive a card's closing, and new ideas don't join a planned card</span></span>
+          <span class="desk-words">the lead replied 3.7 days ago · 13 key points</span></a>
+        <div class="props"><a class="prop" href="#">mock-up<small>6</small></a><a class="prop" href="#">plan<small>7</small></a></div>
+      </div>
+      <div class="box">
+        <a href="#"><span class="head"><span class="key">F191</span><span class="desk-title">The fast lane goes first under softfield run too, escalations included</span></span>
+          <span class="desk-words">the lead replied 3.7 days ago · 10 key points</span></a>
+        <div class="props"><a class="prop" href="#">plan<small>10</small></a></div>
+      </div>
+      <div class="box">
+        <a href="#"><span class="head"><span class="key">F133</span><span class="desk-title">Each project gets its own card letter, and the factory/product area goes</span></span>
+          <span class="desk-words">the lead replied 4 days ago · 7 key points</span></a>
+        <div class="props"><a class="prop" href="#">plan<small>7</small></a></div>
+      </div>
+      <div class="box">
+        <a href="#"><span class="head"><span class="key">F65</span><span class="desk-title">review rounds until you sign off</span></span>
+          <span class="desk-words">the lead replied 5.3 days ago · 6 key points</span></a>
+        <div class="props"><a class="prop" href="#">mock-up<small>2</small></a><a class="prop" href="#">replan<small>4</small></a></div>
+      </div>
+      <div class="box way">
+        <a href="#"><span class="head"><span class="key">F210</span><span class="desk-title">One box per card on the desk, and one reading path through its proposals</span></span>
+          <span class="desk-words">the lead is writing this reply</span></a>
+        <div class="props"><a class="prop" href="#">mock-up<small>4</small></a><a class="prop" href="#">plan<small>8</small></a></div>
+      </div>
+    </div>
+    <div class="note">"Proposals to review" is gone. 11 becomes 6: 1 to sign off, 5 cards. F210's box is dashed: your message waits for the lead.</div>
+  </section>
+
+  <div class="page">
+    <p class="where">/planning/f211, a card's conversation</p>
+    <div class="trail new"><span class="step">‹ Previous</span><span class="count">3 of 6 waiting for you</span><span class="step next">Next: mock-up ›</span></div>
+    <p class="note">Always the same order: conversation, ADR if there is one, mock-up, plan. Next stays inside the card until its last step, then goes to the next card.</p>
+    <div class="head-plate"><b>Open plans survive a card's closing, and new ideas don't join a planned card</b></div>
+    <div class="reply">
+      <span class="stamp">The lead · 2026-11-05 23:34</span>
+      <div class="point"><b>1</b><span>Nothing to renumber or drop</span></div>
+      <div class="point"><b>2</b><span>One update: a kept plan keeps its card's area</span></div>
+      <span class="more">… 1 more point</span>
+    </div>
+    <nav class="steps new" aria-label="This card's steps">
+      <h4>This card's steps</h4>
+      <ol>
+        <li><a href="#" aria-current="page" class="unsent">Conversation<small>2 comments not sent</small></a></li>
+        <li><i>→</i><a href="#">Mock-up<small>open · 6 points</small></a></li>
+        <li><i>→</i><a href="#">Plan<small>open · 7 points</small></a></li>
+      </ol>
+    </nav>
+    <p class="note">The aside moves here, right under the reply and above Send, on a phone too. Comments you typed wait for you when you come back.</p>
+    <div class="reply-box">Anything else? A question, a new thought<div class="fake-area"></div></div>
+    <div class="fold">Earlier in this thread (8)</div>
+    <div class="fold">Remove seed</div>
+    <div class="fold">Archive</div>
+  </div>
+
+  <div class="page">
+    <p class="where">/planning/f211/proposals/…, the card's plan</p>
+    <div class="trail new"><span class="step">‹ Mock-up</span><span class="count">3 of 6 waiting for you</span><span class="step next">Next ›</span></div>
+    <div class="head-plate">
+      <span style="font: 600 12px var(--mono); color: var(--muted)">Proposed by the lead</span>
+      <b>Review F211: closed threads stay closed, and open plans survive a sign-off, in five tickets</b>
+    </div>
+    <nav class="steps new" aria-label="This card's steps">
+      <h4>This card's steps</h4>
+      <ol>
+        <li><a href="#" class="unsent">Conversation<small>2 comments not sent</small></a></li>
+        <li><i>→</i><a href="#">Mock-up<small>open · 6 points</small></a></li>
+        <li><i>→</i><a href="#" aria-current="page">Plan<small>open · 7 points</small></a></li>
+      </ol>
+    </nav>
+    <p class="note">The same strip replaces the review's tabs; F207's In short plate, when the proposal has one, comes under it. Approve plan and Send back stay on this page, as today. The plan is this card's last step, so Next goes to the next card, F191.</p>
+    <div class="point"><b>1</b><span>The first key point of the plan</span></div>
+    <span class="more">… the other key points, what approving changes, your review</span>
+  </div>
+  <p class="legend"><span class="new" style="padding: 0 4px">Dashed green</span> marks what changes. Tap a box for its conversation, or a proposal inside it to go straight there. "13 key points" is the box's total, and the small number on a proposal is its own. While your message waits for the lead, the whole box is dashed orange and isn't counted (F210 here). A proposal on its way is dashed, and the box stays counted until all of them are. The corner ticks and the strip's hazard stripes are ornament: they say nothing about status.</p>
+</div>
+</div>
+
+<script>
+  function showVersion(button) {
+    document.querySelectorAll(".switch button").forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
+    document.querySelectorAll("[data-version]").forEach((v) => { v.hidden = v.dataset.version !== button.dataset.show; });
+  }
+  document.querySelectorAll(".switch button").forEach((button) => {
+    button.addEventListener("click", () => showVersion(button));
+  });
+</script>
+</body>
+</html>
