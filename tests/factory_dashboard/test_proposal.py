@@ -539,6 +539,20 @@ def test_a_plan_with_its_branch_shows_its_changes_too(planning, db_path, serve, 
     assert "resumes the line" not in html
 
 
+def test_a_plan_that_clashes_with_main_says_what_to_press_instead_of_its_files(
+    planning, db_path, serve, checkout
+):
+    """F139-F1: a clashing branch's diff is everything since it left main (2,137 files)."""
+    _replanned(checkout)
+    (checkout / ".softfield/tasks/ready/f7-01-a.md").write_text("main's a, changed again")
+    git(checkout, "commit", "-q", "-am", "main moves on")
+    _write(db_path, lambda conn: _review(conn, planning, "f7", _REVIEW_PLAN))
+    html = _review_page(serve(), "/planning/f7/proposals/plan")
+    section = html.split('id="plan-changes"', 1)[1].split("</section>", 1)[0]
+    assert "plan/f7 clashes with main: press Refresh against main on its page" in _text(section)
+    assert 'class="plan-change"' not in section and "softfield " not in section
+
+
 # --- old-path resolved mockup (f165-01) -------------------------------------------------------
 
 

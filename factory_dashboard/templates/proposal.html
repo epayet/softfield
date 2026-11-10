@@ -59,7 +59,12 @@
     </div>
     {% with deck = key_points %}{% include "_partials/deck_nav.html" %}{% endwith %}
 
-    {% if changes %}
+    {% if clash %}
+    <section id="plan-changes" class="panel">
+      <h2>What approving changes</h2>
+      <p class="clash">{{ clash }}</p>
+    </section>
+    {% elif changes %}
     <section id="plan-changes" class="panel">
       <h2>What approving changes</h2>
       <span>Each file the plan branch adds, changes, sets aside (moves to .softfield/tasks/later/) or removes. Tap one for its text.</span>

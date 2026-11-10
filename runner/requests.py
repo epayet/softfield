@@ -720,6 +720,41 @@ def _replace_put_back(git: Git, put_back: Mapping[str, str]) -> None:
             git.run("rm", "-q", "-f", "--", mine)
 
 
+def clash_words(branch: str) -> str:
+    """What a plan branch that clashes with main asks of the owner (F139-F1): its planner job
+    rebuilds it on main."""
+    return f"{branch} clashes with {loop.MAIN}: press Refresh against main on its page"
+
+
+def plan_clash(repo: Path, thread: str) -> str | None:
+    """``clash_words`` when the card's plan branch exists and clashes with main, for its page."""
+    try:
+        branch = planner.plan_branch(planner.thread_key(thread))
+    except planner.PlannerError:
+        return None
+    if branch is None or not _has_branch(Git(repo), branch):
+        return None
+    return None if planner.merged_tree(repo, branch) is not None else clash_words(branch)
+
+
+def _clash_settles(git: Git, branch: str, put_back: Mapping[str, str]) -> bool:
+    """Whether ``branch`` merges with main, or clashes only on tickets ``_settle_clash`` takes."""
+    if planner.merged_tree(Path(git.repo), branch) is not None:
+        return True
+    # exit 1 on a clash: the tree's id, then each clashing path
+    out = git.run(
+        "merge-tree",
+        "--write-tree",
+        "--name-only",
+        "--no-messages",
+        loop.MAIN,
+        branch,
+        check=False,
+    )
+    clashing = set(out.splitlines()[1:]) - {""}
+    return bool(clashing) and clashing <= set(put_back)
+
+
 def _settle_clash(git: Git, put_back: Mapping[str, str]) -> bool:
     """A squash that stopped on conflicts: true when every one is a ticket in ``put_back``, now
     taken as the branch wrote it."""
@@ -823,6 +858,12 @@ def _approve_plan(
         if planner.merged_tree(repo, branch) is None and loop.catch_up_plan(git, branch, thread):
             git.checkout(loop.MAIN)
         changes = _drafts(git, branch)
+        if replan:
+            put_back = _put_back(git, branch, changes, thread, running)
+        # a clash lists everything since the branch left main (F139-F1): its planner job
+        # rebuilds it; one ``_settle_clash`` takes is approved (f170 D2)
+        if not _clash_settles(git, branch, put_back):
+            return clash_words(branch)
         if (refused := _outside(branch, changes, thread, replan, running)) is not None:
             return refused
         if (refused := _owners_marks(git, branch, changes)) is not None:
@@ -832,8 +873,6 @@ def _approve_plan(
         added, changed, aside = _ready_changes(repo, changes)
         if replan:
             brought = _brought_back(repo, changes, thread)
-        if replan:
-            put_back = _put_back(git, branch, changes, thread, running)
         # a blocked ticket brought back to later/ stays there, set aside (ADR 29 item 3)
         aside += sorted(
             back

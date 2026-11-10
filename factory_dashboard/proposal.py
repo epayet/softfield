@@ -24,6 +24,7 @@ from factory_dashboard.planning import (
 from factory_dashboard.thread import _KIND_COLOR, _has_proposals, _proposals, _standing
 from runner import metrics
 from runner.planner import draft, plan_changes
+from runner.requests import plan_clash
 from runner.tasks import split_frontmatter
 
 router = APIRouter()
@@ -53,10 +54,16 @@ class PlanChange:
     difficulty: str = ""  # a ticket's difficulty, as its frontmatter gives it
 
 
+def _plan_clash(repo: Path | None, thread: str, kind: str) -> str | None:
+    """What to press when a ``plan`` or ``replan``'s branch clashes with main (F139-F1): its
+    diff would be everything since it left main, so it shows in place of the changes."""
+    return plan_clash(repo, thread) if repo is not None and kind in ("plan", "replan") else None
+
+
 def _plan_changes(repo: Path | None, thread: str, kind: str) -> list[PlanChange]:
     """What approving a ``plan`` or ``replan`` changes (f6-24), each with its text from the
-    branch; none for another kind, or with no plan branch."""
-    if repo is None or kind not in ("plan", "replan"):
+    branch; none for another kind, with no plan branch, or one that clashes (``_plan_clash``)."""
+    if repo is None or kind not in ("plan", "replan") or _plan_clash(repo, thread, kind):
         return []
     found = []
     for change in plan_changes(repo, thread):
@@ -176,6 +183,7 @@ def proposal_review(
             "mockup_gone": mockup_gone,
             "adr_waits": waits,
             "changes": _plan_changes(repo, thread, kind),
+            "clash": _plan_clash(repo, thread, kind),
             "word_color": _WORD_COLOR,
             "standing": _standing(conn, project_id, thread, proposal, lead, _known_cards(repo)),
             "trail": desk_trail(conn, project, now, request.url.path),

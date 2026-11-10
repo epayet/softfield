@@ -4620,9 +4620,54 @@ def _plan_branch(s: Session, branch: str) -> bool:
         s.git.run("checkout", "-q", "-b", branch, MAIN)
         return True
     if not catch_up_plan(s.git, branch, branch.removeprefix("plan/")):
-        s.report.notes.append(f"{branch} clashes with {MAIN}: the planner drafted on it as it is.")
-        s.git.checkout(branch)
+        if kept := _rebuild(s.git, branch):
+            s.report.notes.append(
+                f"{branch} clashed with {MAIN}: rebuilt on it from its own commits,"
+                f" its old tip kept as {kept}."
+            )
+        else:
+            s.report.notes.append(
+                f"{branch} clashes with {MAIN}: the planner drafted on it as it is."
+            )
+            s.git.checkout(branch)
     return False
+
+
+# The commit F139 gave each plan branch that left main before its move (F139-F1): main has the
+# move already, so a rebuild leaves it out.
+F139_MOVE = "F139: this branch's folder moves to .softfield"
+
+
+def _rebuild(git: Git, branch: str) -> str:
+    """A plan branch that clashes with main, rebuilt on main from its own commits, oldest first
+    (F139-F1): merges and F139's move left out, its drafts under .factory/ carried to their new
+    folder, and where a draft and main both changed a line, the draft's wins. The branch moves
+    only when every commit replays, checked out, its old tip kept as ``superseded/plan-<card>``,
+    which is returned; otherwise "", on main, with the branch and main as they were."""
+    log = git.run("log", "--reverse", "--no-merges", "--format=%H%x1f%s", f"{MAIN}..{branch}")
+    commits = [
+        sha
+        for sha, _, subject in (line.partition("\x1f") for line in log.splitlines())
+        if subject != F139_MOVE
+    ]
+    name, email = RUNNER_AUTHOR.removesuffix(">").split(" <")
+    git.run("checkout", "-q", "--detach", MAIN)
+    for sha in commits:
+        try:
+            git.run(
+                *("-c", f"user.name={name}", "-c", f"user.email={email}"),
+                *("-c", "merge.directoryRenames=true"),
+                *("cherry-pick", "--allow-empty", "--keep-redundant-commits", "-X", "theirs", sha),
+            )
+        except GitError:
+            git.run("cherry-pick", "--abort", check=False)
+            git.run("reset", "-q", "--hard", check=False)
+            git.checkout(MAIN)
+            return ""
+    kept = f"superseded/{branch.replace('/', '-')}"
+    git.run("branch", "-f", kept, branch)
+    git.run("checkout", "-q", "-B", branch)
+    return kept
 
 
 def _commit_drafts(s: Session, thread: str, branch: str, subject: str, new: bool) -> dict[str, str]:

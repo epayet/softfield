@@ -6,7 +6,8 @@ import os
 import sqlite3
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from types import SimpleNamespace
+from typing import Any, cast
 
 import pytest
 
@@ -934,10 +935,92 @@ def test_a_plan_that_clashes_with_main_is_refused_and_main_is_unchanged(repo):
     head = git(repo, "rev-parse", "HEAD")
     asked = _ask(repo, "approve_plan", "f7")
     _apply(repo)
-    assert _request(repo, asked)[1] == "plan/f7 clashes with main: not approved"
+    assert _request(repo, asked)[1] == CLASHES
     _main_unchanged(repo, head)
     assert not (repo / ".softfield" / "tasks" / "later" / "f7-01-a.md").exists()
     assert not Path(repo, git(repo, "rev-parse", "--git-path", "SQUASH_MSG").strip()).exists()
+
+
+CLASHES = "plan/f7 clashes with main: press Refresh against main on its page"
+F139_MOVE = "F139: this branch's folder moves to .softfield"
+DRAFTED_CARD = CARD + "- The plan, drafted.\n"
+
+
+def _move(repo: Path, moves: dict[str, str], subject: str) -> None:
+    for old, new in moves.items():
+        (repo / new).parent.mkdir(parents=True, exist_ok=True)
+        git(repo, "mv", old, new)
+    git(repo, "commit", "-q", "-m", subject)
+
+
+def clashing_plan(repo: Path, *, replayable: bool = True) -> None:
+    """F7's plan branch as plan/f133 was on 2026-11-03: a draft commit under .factory/, then
+    F139's move as one commit, while main moved the folder too, finished a ticket the branch's
+    move put in ready/, and changed the card (``replayable``) or removed it. Back on main."""
+    old = {
+        ".factory/cards/f7-one-queue.md": CARD,
+        ".factory/tasks/ready/f5-01-x.md": _ticket("f5-01-x"),
+        ".factory/tasks/later/f3-09-old.md": _ticket("f3-09-old"),
+    }
+    for rel, text in old.items():
+        (repo / rel).parent.mkdir(parents=True, exist_ok=True)
+        (repo / rel).write_text(text)
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "the factory's folder, before F139")
+    moved = {rel: rel.replace(".factory/", ".softfield/") for rel in old}
+    git(repo, "checkout", "-q", "-b", "plan/f7")
+    (repo / ".factory" / "cards" / "f7-one-queue.md").write_text(DRAFTED_CARD)
+    (repo / ".factory" / "tasks" / "later" / "f7-01-a.md").write_text(_ticket("f7-01-a"))
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "planner f7#1: drafts (by Claude)")
+    _move(
+        repo,
+        {**moved, ".factory/tasks/later/f7-01-a.md": ".softfield/tasks/later/f7-01-a.md"},
+        F139_MOVE,
+    )
+    git(repo, "checkout", "-q", "main")
+    _move(repo, moved, "F139: the factory's folder moves to .softfield")
+    ready = ".softfield/tasks/ready/f5-01-x.md"
+    _move(repo, {ready: ready.replace("/ready/", "/done/")}, "f5-01-x done")
+    card = repo / ".softfield" / "cards" / "f7-one-queue.md"
+    if replayable:
+        card.write_text(CARD.replace("one queue", "one queue, kept"))
+        git(repo, "commit", "-q", "-am", "the owner's edit")
+    else:
+        git(repo, "rm", "-q", "--", str(card.relative_to(repo)))
+        git(repo, "commit", "-q", "-m", "F7's card goes")
+
+
+def _planner_job_starts(repo: Path) -> list[str]:
+    """``loop._plan_branch``, as a planner job on F7 starts; its session report's notes."""
+    report = SimpleNamespace(notes=[])
+    loop._plan_branch(cast(loop.Session, SimpleNamespace(git=Git(repo), report=report)), "plan/f7")
+    git(repo, "checkout", "-q", "main")
+    return list(report.notes)
+
+
+def test_a_clashing_plan_is_refused_before_its_files_are_listed(repo):
+    """Its diff falls back to everything since it left main: thousands of files on F133."""
+    clashing_plan(repo)
+    head = git(repo, "rev-parse", "HEAD")
+    asked = _ask(repo, "approve_plan", "f7")
+    _apply(repo)
+    assert _request(repo, asked)[1] == CLASHES
+    assert git(repo, "rev-parse", "HEAD") == head
+    assert requests.plan_clash(repo, "f7") == CLASHES
+
+
+def test_a_clashing_plan_its_planner_job_rebuilt_is_approved(repo):
+    clashing_plan(repo)
+    assert "rebuilt" in " ".join(_planner_job_starts(repo))
+    assert requests.plan_clash(repo, "f7") is None
+    asked = _ask(repo, "approve_plan", "f7")
+    _apply(repo)
+    assert _request(repo, asked)[1] == "approved plan/f7: queued f7-01-a"
+    assert (repo / ".softfield" / "tasks" / "ready" / "f7-01-a.md").is_file()
+    card = (repo / ".softfield" / "cards" / "f7-one-queue.md").read_text()
+    assert "one queue, kept" in card and "- The plan, drafted." in card
+    assert git(repo, "ls-files", ".factory") == ""  # nothing at the old folder's paths
 
 
 def test_a_note_main_merged_into_the_card_while_its_plan_was_drafted_is_kept_and_approved(repo):
@@ -977,7 +1060,7 @@ def test_a_card_line_both_sides_changed_still_clashes_and_leaves_the_branch_as_i
     head = git(repo, "rev-parse", "HEAD")
     asked = _ask(repo, "approve_plan", "f7")
     _apply(repo)
-    assert _request(repo, asked)[1] == "plan/f7 clashes with main: not approved"
+    assert _request(repo, asked)[1] == CLASHES
     assert git(repo, "rev-parse", "HEAD") == head
     assert git(repo, "rev-parse", "plan/f7") == tip
     assert git(repo, "branch", "--show-current").strip() == "main"
@@ -2711,7 +2794,7 @@ def test_a_replan_cannot_replace_the_running_ticket_try_again_put_back(repo):
     state.in_flight = {"ticket": "f7-03-c"}
     asked = _ask(repo, "approve_plan", "f7")
     _apply(repo, state, LATER_ON)
-    assert "not approved" in str(_request(repo, asked)[1])
+    assert _request(repo, asked)[1] == CLASHES  # a clash `_settle_clash` won't take
     assert git(repo, "rev-parse", "HEAD") == head
     assert git(repo, "status", "--porcelain", "--untracked-files=all") == ""
 

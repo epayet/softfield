@@ -27,6 +27,7 @@ from runner import (
     local_model,
     loop,
     metrics,
+    planner,
     prompts,
     ratings,
 )
@@ -40,6 +41,7 @@ from runner.review import Finding
 from runner.state import State, load_state, save_state
 from runner.tasks import load_dir, parse_task
 from tests.runner.conftest import git, write_task
+from tests.runner.test_requests import clashing_plan
 
 
 def _config(repo: Path) -> Config:
@@ -6128,6 +6130,41 @@ def test_a_planner_jobs_drafts_land_on_the_cards_plan_branch_never_on_main(
     assert git(repo, "branch", "--list", "plan/general") == ""
     [reply, *_] = [m for m in _messages(repo) if m["author"] == "lead"]
     assert json.loads(str(reply["proposals"])) == [proposal]
+
+
+def test_a_planner_job_rebuilds_a_plan_branch_that_clashes_with_main(repo, fake_model, monkeypatch):
+    """F139-F1: plan/f133 and four others left main before F139's move and got it as one
+    commit; merged with main they clashed, so nothing could repair or approve them."""
+    clashing_plan(repo)
+    old_tip = git(repo, "rev-parse", "plan/f7").strip()
+    _plan_message(repo, "f7", "Refresh it.")
+    _planner_replies(monkeypatch, ['Here.\n```json\n{"points": []}\n```'], [])
+    report = _run(repo)
+    assert git(repo, "rev-parse", "superseded/plan-f7").strip() == old_tip
+    assert planner.merged_tree(repo, "plan/f7") is not None  # merges cleanly with main
+    assert [(c.path, c.word) for c in planner.plan_changes(repo, "f7")] == [
+        (".softfield/cards/f7-one-queue.md", "changed"),
+        (".softfield/tasks/later/f7-01-a.md", "added"),
+    ]
+    subjects = git(repo, "log", "--format=%s", "main..plan/f7").splitlines()
+    assert subjects == ["planner f7#1: drafts (by Claude)"]  # F139's commit left out
+    assert [n for n in report.notes if "plan/f7" in n and "rebuilt" in n]
+    assert git(repo, "branch", "--show-current").strip() == "main"
+
+
+def test_a_plan_branch_that_wont_replay_is_left_as_it_was(repo, fake_model, monkeypatch):
+    clashing_plan(repo, replayable=False)
+    tips = {ref: git(repo, "rev-parse", ref).strip() for ref in ("plan/f7", "main")}
+    _plan_message(repo, "f7", "Refresh it.")
+    _planner_replies(monkeypatch, ['Here.\n```json\n{"points": []}\n```'], [])
+    report = _run(repo)
+    assert git(repo, "rev-parse", "plan/f7").strip() == tips["plan/f7"]
+    # main only gained the runner's own commits: none of the replayed draft
+    assert not (repo / ".softfield" / "tasks" / "later" / "f7-01-a.md").exists()
+    assert git(repo, "merge-base", "--is-ancestor", tips["main"], "main") == ""
+    assert git(repo, "branch", "--list", "superseded/*") == ""
+    assert "plan/f7 clashes with main: the planner drafted on it as it is." in report.notes
+    assert git(repo, "status", "--porcelain") == ""
 
 
 def test_a_card_job_that_drafts_nothing_leaves_no_plan_branch(repo, fake_model, monkeypatch):
