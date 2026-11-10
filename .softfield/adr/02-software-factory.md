@@ -766,6 +766,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** the ticket said "leave the template as it is" and the developer added an empty spacer to it anyway; the runner's "changed files outside `files:`" note flagged it, but no checkpoint ran. A Done when about the side not changed ("the count still updates on a wide screen") got no test: the developer tests what changes and skips what must stay.
 - **Decisions affected:** none.
 
+### F9 (2026-11-10): line polish ([review](../reviews/f9-line-polish.md))
+
+- **Q1:** the longest-lived card so far: planned 2026-10-04, its last lead tickets (f9-29, f9-27) built 2026-11-10. About 28 developer tickets, nine of them fix tickets from 36 checkpoint findings; three lead tickets (f9-01 Opus, f9-29 and f9-27 Sonnet, all first time); three Opus escalations (f9-08, f9-30, f9-25). Review round 1: one should-fix the checkpoints missed (the Milestones page sorted not-started cards by key; fixed by the review), two nits fixed, two test-only fix tickets (f9-35, f9-36).
+- **Q3:** Qwen about 34 hours of model, 13 of them in failed or timed-out attempts; see the review's numbers for dollars.
+- **Q5:** see the review's numbers.
+- **Anything else:** the checkpoints did their job on this card: all 36 findings were real, and the chains they started (phone title ×3, phone belts ×3) were each about placement on a phone or the floor's SVG, F3's lesson again. The one real bug no checkpoint caught was a sort whose test cases also sorted by key: a test that can't tell the right rule from a wrong one passes review by eye.
+- **Decisions affected:** none.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.

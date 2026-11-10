@@ -102,6 +102,26 @@ def test_not_started_ordered_by_priority(milestones_client):
     )
 
 
+def test_not_started_follow_their_priority_not_their_key(milestones_client, db_path):
+    """F9 review: the sort ran before the rows had their priority, so the not started went by
+    key, and F3 before F5 held by chance. F9 (priority 1) goes before F3 (2) and F5 (10)."""
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        metrics.upsert_milestone(
+            conn, project, "f9", title="F9 milestone", state="idea", status="ready", priority=1
+        )
+    finally:
+        conn.close()
+    page = milestones_client.get("/milestones").text
+    keys = [
+        re.sub(r"<[^>]+>", " ", cells[0]).strip()
+        for row in re.findall(r"<tr>(.*?)</tr>", page, re.S)
+        if (cells := re.findall(r"<t[hd][^>]*>(.*?)</t[hd]>", row, re.S))
+    ]
+    assert keys.index("F9") < keys.index("F3") < keys.index("F5")
+
+
 def test_milestone_with_no_tickets_shows_dashes(milestones_client):
     html = milestones_client.get("/milestones").text
     # Find the F2 row's text

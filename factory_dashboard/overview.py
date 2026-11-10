@@ -641,7 +641,7 @@ def _agent_allowances(
     windows: list[tuple[str, str, float | None, str | None]],
     now: datetime,
 ) -> list[WindowAllowance]:
-    """One agent group's rows (Claude, Copilot, Ollama), from its latest reading per window.
+    """One agent group's rows (Claude, Copilot), from its latest reading per window.
 
     ``windows`` is a list of (window_key, display_label, mark_or_None, mark_label_or_None).
     """

@@ -238,8 +238,9 @@ def milestone_rows(
                 )
             )
 
-    # Merge and sort: in progress → not started → done.
-    all_rows: list[MilestoneRow] = [*with_data, *no_data_rows]
+    # Merge and sort: in progress → not started → done. The priorities first: the not started
+    # sort by them, and a row has none until ``_with_priorities`` gives it.
+    all_rows = _with_priorities(conn, project, [*with_data, *no_data_rows])
 
     def _ip_key(r: MilestoneRow) -> tuple[int, float, str]:
         mid = milestone_ids.get(r.key)
@@ -263,13 +264,11 @@ def milestone_rows(
     not_started = [r for r in all_rows if r.key in not_started_keys]
     done = [r for r in all_rows if r.key in done_keys]
 
-    result = (
+    return (
         sorted(in_progress, key=_ip_key)
         + sorted(not_started, key=_ns_key)
         + sorted(done, key=_done_key)
     )
-
-    return _with_priorities(conn, project, result)
 
 
 def _rate_chart(

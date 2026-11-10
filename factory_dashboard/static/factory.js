@@ -360,7 +360,8 @@
     text(g, x + 14, y + 22, `MERGED TODAY · ${count.merged}`, "head");
     doc.merged.slice(-6).forEach((crate, i) => {
       const cx = x + 14 + (i % cols) * 56, cy = y + 34 + Math.floor(i / cols) * 28;
-      const c = add(g, "g", { "data-merged": crate.ticket, "data-crate": crate.ticket });
+      const c = add(g, "g", { "data-merged": crate.ticket, "data-crate": crate.ticket,
+        tabindex: "0", role: "button" });
       add(c, "title", {}, `${crate.ticket}: ${crate.title || ""}`);
       add(c, "rect", { x: cx, y: cy, width: 50, height: 22, class: `crate ${crate.kind}` });
       text(c, cx + 25, cy + 15, short(crate.ticket), "on", { "text-anchor": "middle" });
@@ -828,12 +829,10 @@
     cardCrate = null;
   }
 
-  // One listener on the floor wrapper finds the [data-crate] or [data-merged] clicked
+  // One listener on the floor wrapper finds the [data-crate] (merged crates included) clicked
   document.addEventListener("click", (e) => {
     const crate = e.target.closest("[data-crate]");
-    if (crate) { showCard(crate.dataset.crate); return; }
-    const merged = e.target.closest("[data-merged]");
-    if (merged) { showCard(merged.dataset.merged); return; }
+    if (crate) { showCard(crate.dataset.crate); return; }  // a merged crate is a [data-crate] too
     if (e.target.closest("[data-seeds]")) { showSeeds(); return; }
     if (e.target.closest("[data-rows-toggle]")) { toggleRows(); return; }
     const card = document.getElementById("crate-card");
@@ -847,8 +846,6 @@
     if (e.key !== "Enter") return;
     const crate = e.target.closest("[data-crate]");
     if (crate) { e.preventDefault(); showCard(crate.dataset.crate); }
-    const merged = e.target.closest("[data-merged]");
-    if (merged) { e.preventDefault(); showCard(merged.dataset.merged); }
     if (e.target.closest("[data-seeds]")) { e.preventDefault(); showSeeds(); }
     if (e.target.closest("[data-rows-toggle]")) { e.preventDefault(); toggleRows(); }
   });
