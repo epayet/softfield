@@ -37,3 +37,9 @@ attempts: 3
 tokens: 3341923
 logs: .softfield/var/runs/20261106-011143/f225-01-switch-follows-the-theme
 ```
+
+```yaml
+# --- runner ---
+result: done
+finished_by: lead
+```
