@@ -29,3 +29,12 @@ Read `.softfield/cards/f230-cards-in-the-queue-wrap-words.md` ("Why it happens",
 - the existing tests in `tests/factory_dashboard/test_overview.py` pass unchanged
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 3
+duration_s: 2778
+gate_failures: ['no-changes', 'mypy']
+tokens: 5234270
+```
