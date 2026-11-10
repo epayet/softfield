@@ -35,3 +35,12 @@ Read `.softfield/cards/f228-loading-the-overview-page-is-slow.md` ("What happens
 - `/` and `/live` show the same page as before for the same database and clock: the existing tests in `tests/factory_dashboard/test_overview.py` pass unchanged
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: ruff)
+attempts: 3
+tokens: 3800695
+logs: .softfield/var/runs/20261106-011143/f228-02-one-floor-per-request
+```
