@@ -76,11 +76,19 @@ def test_a_fixture_reply_with_7_points_shows_each_point(planning, db_path, serve
     assert "7 points · 0 comments" in text
 
 
-def test_a_reply_with_points_folds_its_text_and_one_without_shows_it(planning, db_path, serve):
-    """F41 D2, D3: the points carry everything, so the text waits in a closed "Full reply"
-    above them; a reply with no points (its block broken) shows its text open, and one with
-    points but no text has neither a fold nor an empty line. The owner's never folds."""
-    _write(db_path, lambda conn: _seven_points(conn, planning))
+# F207 D4: a lead's text with points over 400 characters still folds under "Full reply"
+_LONG = "The whole reasoning, at length. " + "Each point weighed against the code. " * 11
+assert len(_LONG) > 400
+
+
+def test_a_reply_with_points_opens_short_text_folds_long_and_one_without_shows_it(
+    planning, db_path, serve
+):
+    """F207 D4 and F41 D2, D3, in the earlier messages as in the latest: a reply with points
+    and short text shows it in an open In short plate above them; one with long text keeps it
+    in a closed "Full reply"; a reply with no points (its block broken) shows its text open;
+    one with points but no text has neither. The owner's never folds."""
+    _write(db_path, lambda conn: _seven_points(conn, planning))  # its text is short
 
     def later(conn: sqlite3.Connection) -> None:
         f6 = metrics.planner_thread(conn, planning, "f6", NOW.isoformat())["id"]
@@ -89,20 +97,140 @@ def test_a_reply_with_points_folds_its_text_and_one_without_shows_it(planning, d
             conn, f6, "lead", _at(timedelta(minutes=10)), "Sorry.\n\n(no json block.)"
         )
         metrics.add_planner_message(
+            conn, f6, "lead", _at(timedelta(minutes=7)), _LONG, points=_SEVEN_POINTS[:2]
+        )
+        metrics.add_planner_message(
             conn, f6, "lead", _at(timedelta(minutes=5)), "", points=_SEVEN_POINTS[:1]
         )
 
     _write(db_path, later)
     html = _thread(serve(), "f6")
+    earlier = html.split('<details id="earlier">', 1)[1]
+    [plate] = re.findall(r'<div class="in-short">(.*?)</div>', html, re.S)
+    assert _text(plate) == "In short Here's each point with my answer."
+    assert plate in earlier
+    with_plate = earlier.split('<div class="in-short">', 1)[1].split("</article>", 1)[0]
+    assert 'class="deck"' in with_plate  # its points follow the plate, in the same message
     [fold] = re.findall(r'<details class="full-reply"[^>]*>(.*?)</details>', html, re.S)
     assert "open" not in html.split('<details class="full-reply"', 1)[1].split(">", 1)[0]
-    assert _text(fold) == "Full reply Here's each point with my answer."
+    assert _text(fold) == f"Full reply {_LONG.strip()}"
+    assert fold in earlier
     folded = html.split('class="full-reply"', 1)[1].split("</article>", 1)[0]
     assert 'class="deck"' in folded  # its points follow the fold, in the same message
-    assert "Sorry." not in fold and "(no json block.)" in _text(html)
-    assert "Why so?" not in fold and "Why so?" in _text(html)
-    assert html.count('class="full-reply"') == 1  # the owner's, the broken and the textless
+    assert "Sorry." not in fold + plate and "(no json block.)" in _text(html)
+    assert "Why so?" not in fold + plate and "Why so?" in _text(html)
     assert '<p class="said"></p>' not in html
+
+
+def test_a_lead_with_points_and_short_text_shows_an_in_short_plate(planning, db_path, serve):
+    """F207 D4: the latest lead message with points and text of 400 characters shows that text,
+    links and all, in an open plate labelled "In short" above its points, with no fold."""
+    text = "See /planning/f42 first. " + "x" * 375
+    assert len(text) == 400
+    _write(
+        db_path,
+        lambda conn: metrics.add_planner_message(
+            conn,
+            metrics.planner_thread(conn, planning, "f6", _at(timedelta(hours=5)))["id"],
+            "lead",
+            _at(timedelta(minutes=5)),
+            text,
+            points=_SEVEN_POINTS[:1],
+        ),
+    )
+    html = _thread(serve(), "f6")
+    message = html.split('<article class="message lead-message">', 1)[1].split("</article>")[0]
+    [plate] = re.findall(r'<div class="in-short">(.*?)</div>', message, re.S)
+    assert _text(plate) == f"In short {text}"
+    assert '<a href="/planning/f42?' in plate  # drawn with text_html: its links stay
+    assert message.index('class="in-short"') < message.index('class="deck"')
+    assert "full-reply" not in html
+
+
+def test_a_lead_with_points_and_long_text_keeps_the_fold(planning, db_path, serve):
+    """F207 D4: one with points and text of 401 characters keeps the closed "Full reply" fold
+    and has no plate."""
+    text = "y" * 401
+    _write(
+        db_path,
+        lambda conn: metrics.add_planner_message(
+            conn,
+            metrics.planner_thread(conn, planning, "f6", _at(timedelta(hours=5)))["id"],
+            "lead",
+            _at(timedelta(minutes=5)),
+            text,
+            points=_SEVEN_POINTS[:1],
+        ),
+    )
+    html = _thread(serve(), "f6")
+    assert "in-short" not in html
+    [fold] = re.findall(r'<details class="full-reply"[^>]*>(.*?)</details>', html, re.S)
+    assert "open" not in html.split('<details class="full-reply"', 1)[1].split(">", 1)[0]
+    assert _text(fold) == f"Full reply {text}"
+
+
+def test_a_lead_with_points_but_no_text_has_neither_plate_nor_fold(planning, db_path, serve):
+    """F207: one with points and no text has neither; the points show alone."""
+    _write(
+        db_path,
+        lambda conn: metrics.add_planner_message(
+            conn,
+            metrics.planner_thread(conn, planning, "f6", _at(timedelta(hours=5)))["id"],
+            "lead",
+            _at(timedelta(minutes=5)),
+            "",
+            points=_SEVEN_POINTS[:1],
+        ),
+    )
+    html = _thread(serve(), "f6")
+    assert re.search(r'<div class="in-short">', html) is None
+    assert re.search(r'<details class="full-reply"', html) is None
+    assert '<p class="said"></p>' not in html
+
+
+def test_a_lead_without_points_shows_text_as_before(planning, db_path, serve):
+    """F207: one with no points shows its text as before, with no plate."""
+    _write(
+        db_path,
+        lambda conn: metrics.add_planner_message(
+            conn,
+            metrics.planner_thread(conn, planning, "f6", _at(timedelta(hours=5)))["id"],
+            "lead",
+            _at(timedelta(minutes=5)),
+            "Just a plain message with no points at all.",
+        ),
+    )
+    html = _thread(serve(), "f6")
+    assert re.search(r'<div class="in-short">', html) is None
+    assert "Just a plain message with no points at all." in _text(html)
+
+
+def test_the_in_short_plate_stays_in_place_on_a_phone(page, planning, db_path, serve):
+    """F207: on a phone (390 px) the plate stays in place while ◀ ▶ step through the points."""
+    _write(
+        db_path,
+        lambda conn: metrics.add_planner_message(
+            conn,
+            metrics.planner_thread(conn, planning, "f6", _at(timedelta(hours=5)))["id"],
+            "lead",
+            _at(timedelta(minutes=5)),
+            "Short enough to show in the plate above the points.",
+            points=_SEVEN_POINTS,
+        ),
+    )
+    page.set_viewport_size(PHONE)
+    _open(page, serve(), "/planning/f6")
+    plate = page.locator(".in-short")
+    said = "Short enough to show in the plate above the points."
+    assert plate.inner_text().split() == f"IN SHORT {said}".split()
+    before = plate.bounding_box()
+    assert before and before["x"] >= 0 and before["x"] + before["width"] <= PHONE["width"]
+    following = page.locator(".deck-arrows button").all()[1]
+    following.click()
+    assert _shown(page, "li.point") == ["2"]
+    following.click()
+    assert _shown(page, "li.point") == ["3"]
+    assert plate.is_visible() and plate.bounding_box() == before
 
 
 def test_the_proposals_column_shows_each_proposal_open_or_answered(planning, db_path, serve):
@@ -1301,18 +1429,19 @@ def test_a_lead_point_links_cards_and_tickets_and_names_what_the_lead_left_bare(
 def test_the_leads_text_and_the_runners_link_but_the_owners_stays_plain(
     planning, db_path, serve, checkout
 ):
-    """The lead's text with points (under Full reply) and without, and the runner's message,
+    """The lead's text with points (in In short, F207) and without, and the runner's message,
     link and name the same; the owner's message shows F42 and ``<b>`` as plain text."""
     _numbers_thread(db_path, planning, checkout)
     html = _thread(serve(), "f6")
     said = re.findall(r'<p class="said">(.*?)</p>', html, re.S)
+    said += re.findall(r'<div class="in-short">\s*<b>In short</b>\s*<p>(.*?)</p>', html, re.S)
     linked = [s for s in said if s.startswith(_F42_LINK)]
-    assert len(linked) == 3  # the latest reply's Full reply, the plain reply, the runner's
+    assert len(linked) == 3  # the latest reply's In short, the plain reply, the runner's
     for s in linked:
         for named in _NAMED:
             assert named in s, named
-    fold = html.split('<details class="full-reply"', 1)[1].split("</details>", 1)[0]
-    assert _F42_LINK in fold
+    plate = html.split('<div class="in-short">', 1)[1].split("</div>", 1)[0]
+    assert _F42_LINK in plate
     runner = html.split('class="message runner-message"', 1)[1].split("</article>", 1)[0]
     assert _F42_LINK in runner
     assert '<p class="said">Is F42 &lt;b&gt;done&lt;/b&gt;?</p>' in html

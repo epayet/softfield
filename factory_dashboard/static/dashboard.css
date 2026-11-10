@@ -644,6 +644,12 @@ tr.few .gauge { opacity: .35; }
 .proposal-page #settled { margin: 0; font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-2); }
 .proposal-page #next-steps ol { margin: 0; padding-left: 18px; font-size: 14px; display: flex; flex-direction: column; gap: 4px; }
 
+/* "In short" plate (F207): above the points on a thread, under the header on a proposal page */
+:is(.thread-page, .proposal-page) .in-short { position: relative; background: var(--plate); clip-path: var(--notch); padding: 10px 14px 12px 20px; display: flex; flex-direction: column; gap: 4px; }
+:is(.thread-page, .proposal-page) .in-short::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 8px; background: var(--stripe); }
+:is(.thread-page, .proposal-page) .in-short > b { font: 700 12px var(--display); letter-spacing: .12em; text-transform: uppercase; color: var(--ink-2); }
+:is(.thread-page, .proposal-page) .in-short > p { margin: 0; font-size: 16px; line-height: 1.45; color: var(--fg); }
+
 /* The planning room on a phone (f6-10): deck.js shows one point of each .deck at a time; its
    .deck-nav holds a dot per point (marked where there's a comment) and ◀ ▶. .dock keeps Send
    in view at the bottom; .dock-host lets the review's dock leave its aside, which a sticky

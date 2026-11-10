@@ -61,6 +61,7 @@ from runner.tasks import full_key, milestone_file, short_key
 router = APIRouter()
 
 REVISING = "being revised"  # F100: an open proposal while the owner's message waits for the lead
+IN_SHORT_MAX = 400  # F207 D4: a lead's text with points up to this long opens in the plate
 
 # Each proposal kind's colour, a token from dashboard.css
 _KIND_COLOR = {
@@ -83,6 +84,12 @@ class Message:
     id: int = 0  # a waiting message's request: what a change names (F14 D1)
     change: Change | None = None  # a waiting message's open change: on its way, no more edits
     text_html: str | None = None  # the lead's or the runner's text as linked HTML (F37 D3)
+
+    @property
+    def in_short(self) -> bool:
+        """F207 D4: a message with points whose text is short enough shows it open, in the
+        In short plate; a longer one folds under "Full reply" (F41 D2)."""
+        return bool(self.points and self.text) and len(self.text) <= IN_SHORT_MAX
 
 
 @dataclass(frozen=True)

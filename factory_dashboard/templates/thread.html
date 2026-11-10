@@ -105,8 +105,14 @@
     {% else %}
     <article class="message lead-message">
       <span class="stamp lead">The lead · {{ msg.at | local("%Y-%m-%d %H:%M") }}</span>
-      {# F41 D2, D3: with points, the text folds (the points say it all); without, it's all there is #}
-      {% if msg.points and msg.text %}
+      {# F207 D4: with points, short text opens in the In short plate above them; longer text
+         folds (F41 D2); without points, the text is all there is (F41 D3) #}
+      {% if msg.in_short %}
+      <div class="in-short">
+        <b>In short</b>
+        <p>{{ msg.text_html | safe }}</p>
+      </div>
+      {% elif msg.points and msg.text %}
       <details class="full-reply">
         <summary class="fold">Full reply</summary>
         <p class="said">{{ msg.text_html | safe }}</p>

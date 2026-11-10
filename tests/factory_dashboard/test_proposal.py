@@ -797,3 +797,54 @@ def test_old_path_adr_shows_no_accept_adr_when_file_missing_on_main(
     assert 'id="accept-adr"' not in html
     assert 'id="send-back"' in html
     assert 'id="reject"' in html
+
+
+# --- "In short" plate on the proposal page (F207) ----------------------------------------------
+
+
+_TLDR = "Approving queues seven tickets: the desk first, then the threads."
+
+
+def test_a_proposal_with_tldr_shows_the_plate_under_the_header(planning, db_path, serve):
+    """F207 D5: a proposal with a ``tldr`` shows it in the In short plate right under the
+    page's header, before the key points; the other proposal, without one, has no plate."""
+    plan = {**_REVIEW_PLAN, "tldr": _TLDR}
+    _write(db_path, lambda conn: _review(conn, planning, "f6", _REVIEW_ADR, plan))
+    client = serve()
+    html = _review_page(client, "/planning/f6/proposals/plan")
+    [plate] = re.findall(r'<div class="in-short">(.*?)</div>', html, re.S)
+    assert _text(plate) == f"In short {_TLDR}"
+    after_header = html.split('<header class="card-head"', 1)[1].split("</header>", 1)[1]
+    assert after_header.lstrip().startswith('<div class="in-short">')
+    assert after_header.index("in-short") < after_header.index("Desk first")
+    assert "in-short" not in _review_page(client, "/planning/f6/proposals/adr-20")
+
+
+def test_a_mockups_plate_sits_above_its_frame(planning, db_path, serve, checkout):
+    """F207 D5: on a mock-up's review the plate comes before the frame and its link."""
+    _f6_mockup_review(db_path, planning, checkout)
+    mockup = {**_REVIEW_MOCKUP, "tldr": "The desk, with the threads under it."}
+    _write(db_path, lambda conn: _review(conn, planning, "f6", mockup))
+    html = _review_page(serve(), "/planning/f6/proposals/mockup")
+    assert 'id="mockup"' in html
+    plate = html.index('<div class="in-short">')
+    assert plate < html.index('class="mockup-link"') < html.index('<iframe id="mockup"')
+    assert "The desk, with the threads under it." in html[plate : html.index('<iframe id="')]
+
+
+def test_the_proposal_plate_stays_in_place_on_a_phone(page, planning, db_path, serve):
+    """F207: on a phone (390 px) the plate stays in place while ▶ steps through the key
+    points."""
+    adr = {**_REVIEW_ADR, "tldr": _TLDR}
+    _write(db_path, lambda conn: _review(conn, planning, "f6", adr))
+    page.set_viewport_size(PHONE)
+    _open(page, serve(), "/planning/f6/proposals/adr-20")
+    plate = page.locator(".in-short")
+    assert plate.inner_text().split() == f"IN SHORT {_TLDR}".split()
+    before = plate.bounding_box()
+    assert before and before["x"] >= 0 and before["x"] + before["width"] <= PHONE["width"]
+    shown = page.locator(".key-point:visible")
+    first = shown.inner_text()
+    page.locator(".deck-arrows button").all()[1].click()
+    assert shown.count() == 1 and shown.inner_text() != first
+    assert plate.is_visible() and plate.bounding_box() == before

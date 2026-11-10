@@ -25,6 +25,14 @@
       {% endif %}
     </header>
 
+    {# F207 D5: a proposal's tldr, open under the header, above a mock-up's frame; none, no plate #}
+    {% if proposal.tldr %}
+    <div class="in-short">
+      <b>In short</b>
+      <p>{{ proposal.tldr }}</p>
+    </div>
+    {% endif %}
+
     {% if mockup %}
     <a class="mockup-link" href="{{ mockup }}{{ q }}" target="_blank" rel="noopener">Open the mock-up</a>
     <iframe id="mockup" src="{{ mockup }}{{ q }}" sandbox="allow-scripts" title="{{ proposal.title }}" loading="lazy"></iframe>
