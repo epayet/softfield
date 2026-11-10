@@ -26,3 +26,12 @@ f89-does-allowance-refresh-at-the-beginning-C1881-2: Read timestamps disappear f
 - what each finding describes no longer holds, and a test shows it
 - the listed `tests:` pass, and fail without the change
 - all gates pass
+
+```yaml
+# --- runner ---
+result: done
+attempts: 3
+duration_s: 860
+gate_failures: ['all-tests', 'stopped']
+tokens: 23868
+```
