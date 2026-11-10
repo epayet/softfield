@@ -6097,7 +6097,8 @@ def test_a_planner_jobs_drafts_land_on_the_cards_plan_branch_never_on_main(
 
     monkeypatch.setattr(claude, "run_claude", run_claude)
     report = _run(repo)
-    reads = ("Bash(git diff:*)", "Bash(git log:*)", "Bash(git show:*)")
+    # ADR 33: no `git diff`, whose --no-index reads any file, beside the web
+    reads = ("Bash(git log:*)", "Bash(git show:*)")
     edits = tuple(
         f"Edit({glob})"
         for glob in (
@@ -6119,6 +6120,10 @@ def test_a_planner_jobs_drafts_land_on_the_cards_plan_branch_never_on_main(
     assert on == "main" and general[-len(talks) :] == talks  # the general thread only talks
     assert not [tool for tool in general if tool.startswith(("Edit", "Write", "Bash(git checkout"))]
     assert check not in general
+    # ADR 33: every planner job has the web, and reads scoped instead of anywhere
+    for _, tools in seen:
+        assert {"WebSearch", "WebFetch"} <= set(tools)
+        assert not {"Read", "Glob", "Grep"} & set(tools)
     assert git(repo, "branch", "--show-current").strip() == "main"
     assert git(repo, "status", "--porcelain") == ""
     # Main has none of it; the plan branch has the drafts and nothing else

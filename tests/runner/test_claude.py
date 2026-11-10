@@ -188,6 +188,10 @@ def test_a_web_job_gets_the_web_tools_and_reads_only_the_repo_and_the_live_docs(
         assert f"{tool}(/{repo.resolve()}/**)" in tools
         assert f"{tool}(/{(tmp_path / 'home' / 'docs').resolve()}/**)" in tools
     assert "Bash(git log:*)" in tools
+    # `git diff --no-index ~/.ssh/id_ed25519 x` would read past the scoped reads
+    assert "Bash(git diff:*)" not in tools
+    no_web = JobSpec("planner", "", 1, commands=GIT_READ_COMMANDS)
+    assert "Bash(git diff:*)" in allowed_tools(no_web)
 
 
 def test_a_job_without_the_web_keeps_its_tools(tmp_path):

@@ -774,6 +774,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** the checkpoints did their job on this card: all 36 findings were real, and the chains they started (phone title ×3, phone belts ×3) were each about placement on a phone or the floor's SVG, F3's lesson again. The one real bug no checkpoint caught was a sort whose test cases also sorted by key: a test that can't tell the right rule from a wrong one passes review by eye.
 - **Decisions affected:** none.
 
+### F169 (2026-11-10): the planner searches and reads the web ([review](../reviews/f169-why-is-web-search-related-tool.md))
+
+- **Q1:** one lead ticket (f169-01, Sonnet, first time in 5 minutes, $0.26), no checkpoint. Review round 1: one blocking security finding (`git diff --no-index` read past the scoped reads), one should-fix on the tests, both fixed by the review; the `claude -p` probe ADR 33 asked for first was not run and is now the owner's sign-off check.
+- **Q3:** Opus $0.66 for the plan, Sonnet $0.26 for the build.
+- **Q5:** see the review's numbers.
+- **Anything else:** a security ticket scoped one door (the Read tool) and left the command list open: when a job's reach is narrowed, the review has to check every tool it keeps, not only the one the ticket names. A ticket whose first step can't run in a job (a `claude -p` probe) should say so and hand that step to the owner's sign-off from the start.
+- **Decisions affected:** ADR 33 gains a "Settled" line: no `git diff` beside the web.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.

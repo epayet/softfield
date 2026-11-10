@@ -30,6 +30,9 @@ EDIT_ANYWHERE = ("Edit", "Write")
 
 
 WEB_TOOLS = ("WebSearch", "WebFetch")
+# Commands that read any file on the machine (`git diff --no-index ~/.ssh/id_ed25519 x`): a
+# job with the web goes without them, or its scoped reads mean nothing (ADR 33 item 2)
+READS_ANYWHERE = ("git diff",)
 
 
 def web_reads(folders: Iterable[Path]) -> tuple[str, ...]:
@@ -48,9 +51,9 @@ def allowed_tools(spec: JobSpec, repo: Path | None = None) -> tuple[str, ...]:
     """A spec's tools as `--allowedTools`: reads, its edit globs, its command prefixes. With
     ``spec.web``: the web tools, and reads only in ``repo`` (the job's folder) and the live docs."""
     edits = EDIT_ANYWHERE if ANY in spec.edit else tuple(f"Edit({glob})" for glob in spec.edit)
-    commands = tuple(f"Bash({command}:*)" for command in spec.commands)
     if not spec.web:
-        return (*READ_TOOLS, *edits, *commands)
+        return (*READ_TOOLS, *edits, *(f"Bash({command}:*)" for command in spec.commands))
+    commands = (f"Bash({c}:*)" for c in spec.commands if c not in READS_ANYWHERE)
     folders = [repo or Path.cwd(), config.HOME / "docs"]
     return (*WEB_TOOLS, *web_reads(folders), *edits, *commands)
 

@@ -31,6 +31,7 @@
 
 ## Settled
 - **Rule form (2026-11-10):** built as `Read(//abs/path/**)`, `Glob(…)` and `Grep(…)` for the repo and the live docs, Claude Code's documented form. The building session could not run `claude -p`, so it is **not yet probed**: a read in the repo must work and `~/.ssh` be refused. If no form scopes reads, drop to `WebSearch` only.
+- **No `git diff` beside the web (review, 2026-11-10):** `git diff --no-index ~/.ssh/id_ed25519 x` reads any file past the scoped reads, so a job with the web goes without `git diff` (`READS_ANYWHERE` in `runner/claude.py`); `git log -p` and `git show` still show changes.
 
 ## Later
 - **ADR 15's offers watch** can reuse `web=True` when it is built.
