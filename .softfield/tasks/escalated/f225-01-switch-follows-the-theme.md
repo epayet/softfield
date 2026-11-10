@@ -28,3 +28,12 @@ Read the Decisions in `.softfield/cards/f225-there-is-a-tiny-amount-of.md`.
 - pressing the switch still starts a `transitionrun` on the knob, and the knob ends on the other side
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: task-tests)
+attempts: 3
+tokens: 3341923
+logs: .softfield/var/runs/20261106-011143/f225-01-switch-follows-the-theme
+```
