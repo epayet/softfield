@@ -1623,60 +1623,55 @@ def test_idle_lead_next_ticket_text_lies_inside_lead_machine_rect(page, line_cli
     lead_machine["state"] = "idle"
     lead_machine["next_ticket"] = "fX-01-next"
     lead_machine["merged_today"] = 3
+    mid = lead_machine["id"]
     page.evaluate(
-        "(doc) => { "
+        "(args) => { "
         "  const el = document.getElementById('factory-line'); "
-        "  el.textContent = JSON.stringify(doc); "
+        "  el.textContent = JSON.stringify(args.doc); "
         "  document.dispatchEvent(new CustomEvent('htmx:load', { detail: { elt: document } })); "
         "}",
-        doc,
+        {"doc": doc, "mid": mid},
     )
-    # Verify the text is inside the lead machine's rect by computing expected bounds
-    # from AREAS and comparing screen coordinates converted to SVG space.
-    result = page.eval_on_selector(
-        "svg#floor",
-        """svg => {
-            const vb = svg.viewBox.baseVal;
-            const svgBox = svg.getBoundingClientRect();
-            const scaleX = svgBox.width / vb.width;
-            const scaleY = svgBox.height / vb.height;
-            const areas = {"lead": {"x": 560, "y": 120, "width": 230, "height": 170}};
-            const area = areas.lead;
-            const rectBox = [area.x, area.y, area.x + area.width, area.y + area.height];
-            // text at (left, line) where left = x + 10, line = y + 88
-            const textSvg = [area.x + 10, area.y + 88, area.x + 10 + 60, area.y + 88 + 14];
-            // Convert rect to screen coords
-            const rectScreen = [
-                svgBox.left + rectBox[0] * scaleX,
-                svgBox.top + rectBox[1] * scaleY,
-                svgBox.left + rectBox[2] * scaleX,
-                svgBox.top + rectBox[3] * scaleY,
-            ];
-            // Convert text to screen coords
-            const textScreen = [
-                svgBox.left + textSvg[0] * scaleX,
-                svgBox.top + textSvg[1] * scaleY,
-                svgBox.left + textSvg[2] * scaleX,
-                svgBox.top + textSvg[3] * scaleY,
-            ];
-            // Get actual text box
-            const textEl = svg.querySelector('[data-machine] text');
-            const actualBox = textEl.getBoundingClientRect();
-            const actualScreen = [actualBox.left, actualBox.top, actualBox.right, actualBox.bottom];
-            const inside = (a, b) =>
-                a[0] >= b[0] - 0.5 && a[1] >= b[1] - 0.5 &&
-                a[2] <= b[2] + 0.5 && a[3] <= b[3] + 0.5;
-            return {
-                expected: inside(textScreen, rectScreen),
-                actual: inside(actualScreen, rectScreen),
-                expectedBox: rectScreen,
-                actualBox: actualScreen,
-            };
-        }""",
+    js = (
+        "svg => {"
+        "  const lead = svg.querySelector('[data-machine=\"" + mid + "\"]');"
+        "  if (!lead) return { err: 'no lead' };"
+        "  const link = lead.querySelector('a');"
+        "  if (!link) return { err: 'no link', children: lead.children.length };"
+        "  const textEl = link.querySelector('text');"
+        "  if (!textEl) return { err: 'no text' };"
+        "  const tBox = textEl.getBoundingClientRect();"
+        "  const rects = [...lead.querySelectorAll('rect.unit')];"
+        "  let body = null;"
+        "  let maxW = -1;"
+        "  const widths = [];"
+        "  for (const r of rects) {"
+        "    const b = r.getBoundingClientRect();"
+        "    const w = b.width;"
+        "    widths.push(w);"
+        "    if (w > maxW) { maxW = w; body = b; }"
+        "  }"
+        "  if (!body) return { err: 'no body', rects: rects.length, widths };"
+        "  const inside = (a, b) =>"
+        "    a.left >= b.left - 0.5 && a.top >= b.top - 0.5 &&"
+        "    a.right <= b.right + 0.5 && a.bottom <= b.bottom + 0.5;"
+        "  return { "
+        "    inside: inside(tBox, body), "
+        "    textBox: { left: tBox.left, top: tBox.top, right: tBox.right, bottom: tBox.bottom }, "
+        "    body: { left: body.left, top: body.top, right: body.right, bottom: body.bottom }, "
+        "    rects: rects.length, "
+        "    maxW "
+        "  };"
+        "}"
     )
-    assert result["expected"], "Expected text position should be inside lead rect"
-    assert result["actual"], (
-        f"Actual text box {result['actualBox']} not inside expected rect {result['expectedBox']}"
+    result = page.eval_on_selector("svg#floor", js)
+    if result.get("err"):
+        rects = result.get("rects", 0)
+        widths = result.get("widths", [])
+        pytest.fail(f"Test setup error: {result['err']} rects={rects} widths={widths}")
+    assert result["inside"], (
+        f"next-ticket link text {result['textBox']} not inside body rect {result['body']} "
+        f"(rects found: {result['rects']}, maxW: {result['maxW']})"
     )
 
 
