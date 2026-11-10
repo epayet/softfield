@@ -27,3 +27,12 @@ Read `.softfield/cards/f198-keep-the-plant-an-idea-at.md` (Decisions) and `facto
 - a note half typed in the box is still there after Coming's 5-second poll
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 3
+duration_s: 1673
+gate_failures: ['all-tests', 'all-tests']
+tokens: 2899180
+```
