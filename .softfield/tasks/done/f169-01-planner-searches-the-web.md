@@ -28,3 +28,10 @@ Read `.softfield/adr/33-the-planner-can-search-the-web.md` (items 1–5), then `
 - the planner's prompt holds the web line once
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
