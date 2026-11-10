@@ -37,3 +37,12 @@ The picture to build: `.softfield/cards/f210-mockup/one-box.html` (Proposed), bo
 - a thread with no proposals has no strip
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: stopped)
+attempts: 3
+tokens: 1168547
+logs: .softfield/var/runs/20261110-182701/f210-02-one-strip-of-steps
+```
