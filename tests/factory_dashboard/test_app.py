@@ -4315,3 +4315,16 @@ def test_a_made_up_hx_target_fails_the_check(client):
     assert problems == ["#__hx_test_nowhere_xyz__"], (
         f"expected #__hx_test_nowhere_xyz__ to be detected, got {problems}"
     )
+
+
+# --- f158: no page shows escaped HTML ----------------------------------------------------------
+
+
+def test_no_page_shows_escaped_markup(client):
+    """F158: a page that prints escaped ``&lt;ul&gt;``, ``&lt;li&gt;`` or ``&lt;p&gt;``
+    means ``_to_html``'s output reached the template without ``| safe`` (f158-02)."""
+    for path in PAGES:
+        html = client.get(path).text
+        assert "&lt;ul&gt;" not in html, f"{path} shows escaped &lt;ul&gt;"
+        assert "&lt;li&gt;" not in html, f"{path} shows escaped &lt;li&gt;"
+        assert "&lt;p&gt;" not in html, f"{path} shows escaped &lt;p&gt;"
