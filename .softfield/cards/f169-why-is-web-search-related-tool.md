@@ -1,6 +1,7 @@
 # Milestone F169: Let the planner search and read the web for research
 
-> **State:** ready · **Priority:** 4 · **Area:** factory · **Fast lane:** yes
+> **State:** done · **Priority:** 4 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-10. Base: git tag `f169-why-is-web-search-related-tool-start`. Report: [`.softfield/reviews/f169-why-is-web-search-related-tool.md`](../reviews/f169-why-is-web-search-related-tool.md).
 > Planted by the owner on 2026-10-21.
 
 ## Notes
