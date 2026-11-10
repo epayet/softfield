@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F65 mock-up: a comment dashes the sign-off row</title>
+<style>
+  /* The dashboard's own tokens (factory_dashboard/static/dashboard.css), dark theme */
+  :root {
+    --floor: #12161b; --bay: #181e25; --plate: #1f2730; --grid: #222b34; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+    --hazard: #f2b10a; --hazard-ink: #1a1405; --opus: #ff9640; --opus-ink: #ff9640; --qwen: #8ccf62; --good: #5fd17a;
+    --display: "Chakra Petch", "Bahnschrift", "DIN Alternate", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+    --stripe: repeating-linear-gradient(-45deg, var(--hazard) 0 6px, transparent 6px 12px);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--floor); color: var(--fg); font: 15px/1.5 var(--body); padding: 20px; }
+  h1 { font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 4px; }
+  p.lede { color: var(--ink-2); max-width: 820px; margin: 0 0 8px; }
+  .switch { display: inline-flex; margin: 12px 0 0; border: 1px solid var(--rule); }
+  .switch button { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 10px 18px; min-height: 44px;
+    background: var(--bay); color: var(--muted); border: 0; cursor: pointer; }
+  .switch button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+  .versions { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; margin-top: 12px; }
+  @media (min-width: 900px) {
+    .versions { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+    .versions > [data-version] { display: block !important; }
+    .switch { display: none; }
+  }
+  .vlabel { font: 700 13px var(--display); letter-spacing: .12em; text-transform: uppercase; color: var(--hazard);
+    padding: 4px 10px; background: var(--bay); border-left: 3px solid var(--hazard); display: inline-block; margin: 0 0 4px; }
+  h3.when { font: 600 12px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 18px 0 6px; }
+  .new { outline: 1px dashed var(--good); outline-offset: 2px; }
+  .mark { display: block; font: 11.5px var(--mono); color: var(--good); margin: 6px 0 0; }
+  .legend { color: var(--ink-2); font-size: 13px; margin: 14px 0 0; }
+  [hidden] { display: none; }
+
+  /* ---- the desk, as planning.html and dashboard.css draw it ---- */
+  .panel { background: var(--bay); border: 1px solid var(--rule); padding: 0 14px 12px; min-width: 0; position: relative; }
+  .panel::before, .panel::after { content: ""; position: absolute; width: 10px; height: 10px; border: 0 solid var(--ink-2); }
+  .panel::before { top: -1px; left: -1px; border-top-width: 2px; border-left-width: 2px; }
+  .panel::after { bottom: -1px; right: -1px; border-bottom-width: 2px; border-right-width: 2px; }
+  .panel > h2 { display: flex; align-items: center; gap: 10px; margin: 0 -14px 10px; padding: 7px 14px;
+    background: var(--plate); border-bottom: 1px solid var(--rule);
+    font: 600 14px var(--display); text-transform: uppercase; letter-spacing: .1em; }
+  .panel > h2::after { content: ""; order: 1; flex: 1; height: 8px; background: var(--stripe); opacity: .5; }
+  .desk-group { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid var(--grid); }
+  .desk-group:last-child { margin-bottom: 0; padding-bottom: 0; border-bottom: 0; }
+  .group-head { margin: 0; font: 600 11px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--c, var(--muted)); display: flex; align-items: center; gap: 8px; }
+  .group-head::before { content: ""; width: 10px; height: 2px; background: var(--hazard); }
+  .desk-item { display: flex; flex-direction: column; padding: 7px 9px 7px 12px; background: var(--plate); border: 1px solid var(--rule); border-left: 3px solid var(--ink-2); color: var(--fg); min-height: 44px; }
+  .desk-title { font-size: 14px; }
+  .desk-words { font: 11.5px var(--mono); color: var(--muted); }
+  .desk-item.on-its-way-item { border: 1px dashed var(--hazard); }
+  .on-its-way-item .desk-words { color: var(--hazard); }
+  .writing { border-left: 3px solid var(--opus) !important; }
+  .writing .desk-words { color: var(--opus-ink); }
+  .writing-label { align-self: flex-start; font: 600 10.5px var(--display); letter-spacing: .12em; text-transform: uppercase; color: var(--opus-ink); }
+  .writing-bar { display: block; height: 3px; background: var(--grid); margin-top: 5px; }
+  .writing-bar > span { display: block; height: 100%; background: var(--opus); }
+  .writing-elapsed { font: 10.5px var(--mono); color: var(--muted); }
+  .more { font: 11.5px var(--mono); color: var(--muted); margin: 0; }
+</style>
+</head>
+<body>
+<h1>F65: a comment dashes the sign-off row</h1>
+<p class="lede">Your desk this morning, 2026-11-04. Retire the backlog file (F149) waits for your sign-off and you commented on it: the lead's reply really came at 08:07. The time on the row being written is an example.</p>
+<div class="switch" role="group" aria-label="Which version">
+  <button type="button" data-show="today" aria-pressed="false">Today</button>
+  <button type="button" data-show="proposed" aria-pressed="true">Proposed</button>
+</div>
+
+<div class="versions">
+<!-- Today: copied from factory_dashboard/templates/planning.html -->
+<div data-version="today" hidden>
+  <p class="vlabel">Today</p>
+
+  <h3 class="when">1. You commented; the lead is writing</h3>
+  <section class="panel">
+    <h2>Your desk · 34</h2>
+    <div class="groups">
+      <div class="desk-group" style="--c: var(--qwen)">
+        <h3 class="group-head">To sign off · 3</h3>
+        <div class="desk-item"><span class="desk-title">Real before and after pictures of the changed pages when you sign a card off</span><span class="desk-words">reviewed · waits for your sign-off</span></div>
+        <div class="desk-item"><span class="desk-title">Retire the backlog file: reviews stop writing it, its items become seeds</span><span class="desk-words">reviewed · waits for your sign-off</span></div>
+        <div class="desk-item"><span class="desk-title">Store every time in UTC, show local time on screen only</span><span class="desk-words">reviewed · waits for your sign-off</span></div>
+      </div>
+      <div class="desk-group" style="--c: var(--hazard)">
+        <h3 class="group-head">Your answers wanted · 16</h3>
+        <div class="desk-item"><span class="desk-title">A shorter, consistent review page, with the decisions made along the way</span><span class="desk-words">the lead replied 4 min ago</span></div>
+        <p class="more">… and 15 more</p>
+        <div class="desk-item on-its-way-item writing"><span class="writing-label">Writing now</span><span class="desk-title">Retire the backlog file: reviews stop writing it, its items become seeds</span><span class="desk-words">the lead is writing this reply · 90 s in, about 2 min left</span><span class="writing-bar"><span style="width: 40%"></span></span><span class="writing-elapsed">90 s of about 4 min (a reply's usual length)</span></div>
+      </div>
+    </div>
+  </section>
+
+  <h3 class="when">2. The lead has replied</h3>
+  <section class="panel">
+    <h2>Your desk · 35</h2>
+    <div class="groups">
+      <div class="desk-group" style="--c: var(--qwen)">
+        <h3 class="group-head">To sign off · 3</h3>
+        <div class="desk-item"><span class="desk-title">Real before and after pictures of the changed pages when you sign a card off</span><span class="desk-words">reviewed · waits for your sign-off</span></div>
+        <div class="desk-item"><span class="desk-title">Retire the backlog file: reviews stop writing it, its items become seeds</span><span class="desk-words">reviewed · waits for your sign-off</span></div>
+        <div class="desk-item"><span class="desk-title">Store every time in UTC, show local time on screen only</span><span class="desk-words">reviewed · waits for your sign-off</span></div>
+      </div>
+      <div class="desk-group" style="--c: var(--hazard)">
+        <h3 class="group-head">Your answers wanted · 17</h3>
+        <div class="desk-item"><span class="desk-title">Retire the backlog file: reviews stop writing it, its items become seeds</span><span class="desk-words">the lead replied 36 s ago</span></div>
+        <div class="desk-item"><span class="desk-title">A shorter, consistent review page, with the decisions made along the way</span><span class="desk-words">the lead replied 4 min ago</span></div>
+        <p class="more">… and 15 more</p>
+      </div>
+    </div>
+  </section>
+  <p class="legend">The dash is at the bottom of another group, under the same title. The row you commented on looks untouched, and the card takes two places on your desk.</p>
+</div>
+
+<!-- Proposed -->
+<div data-version="proposed">
+  <p class="vlabel">Proposed</p>
+
+  <h3 class="when">1. You commented; the lead is writing</h3>
+  <section class="panel">
+    <h2>Your desk · 33</h2>
+    <div class="groups">
+      <div class="desk-group" style="--c: var(--qwen)">
+        <h3 class="group-head">To sign off · 2</h3>
+        <div class="desk-item"><span class="desk-title">Real before and after pictures of the changed pages when you sign a card off</span><span class="desk-words">reviewed · waits for your sign-off</span></div>
+        <div class="desk-item on-its-way-item writing new"><span class="writing-label">Writing now</span><span class="desk-title">Retire the backlog file: reviews stop writing it, its items become seeds</span><span class="desk-words">being revised · the lead is writing this reply · 90 s in, about 2 min left</span><span class="writing-bar"><span style="width: 40%"></span></span><span class="writing-elapsed">90 s of about 4 min (a reply's usual length)</span></div>
+        <span class="mark">The row itself dashes, from the moment you send. It isn't counted: it waits for the lead, not for you.</span>
+        <div class="desk-item"><span class="desk-title">Store every time in UTC, show local time on screen only</span><span class="desk-words">reviewed · waits for your sign-off</span></div>
+      </div>
+      <div class="desk-group new" style="--c: var(--hazard)">
+        <h3 class="group-head">Your answers wanted · 16</h3>
+        <div class="desk-item"><span class="desk-title">A shorter, consistent review page, with the decisions made along the way</span><span class="desk-words">the lead replied 4 min ago</span></div>
+        <p class="more">… and 15 more</p>
+      </div>
+      <span class="mark">No second row for this card here.</span>
+    </div>
+  </section>
+
+  <h3 class="when">2. The lead has replied</h3>
+  <section class="panel">
+    <h2>Your desk · 34</h2>
+    <div class="groups">
+      <div class="desk-group" style="--c: var(--qwen)">
+        <h3 class="group-head">To sign off · 3</h3>
+        <div class="desk-item"><span class="desk-title">Real before and after pictures of the changed pages when you sign a card off</span><span class="desk-words">reviewed · waits for your sign-off</span></div>
+        <div class="desk-item new"><span class="desk-title">Retire the backlog file: reviews stop writing it, its items become seeds</span><span class="desk-words">the lead replied 36 s ago · reviewed, waits for your sign-off</span></div>
+        <span class="mark">Solid again, with the reply on the same row. Tapping it opens the card: the reply, then Sign off.</span>
+        <div class="desk-item"><span class="desk-title">Store every time in UTC, show local time on screen only</span><span class="desk-words">reviewed · waits for your sign-off</span></div>
+      </div>
+      <div class="desk-group new" style="--c: var(--hazard)">
+        <h3 class="group-head">Your answers wanted · 16</h3>
+        <div class="desk-item"><span class="desk-title">A shorter, consistent review page, with the decisions made along the way</span><span class="desk-words">the lead replied 4 min ago</span></div>
+        <p class="more">… and 15 more</p>
+      </div>
+      <span class="mark">One thing to do, counted once: your desk's number drops by one.</span>
+    </div>
+  </section>
+  <p class="legend"><span class="new" style="padding: 0 4px">Dashed green</span> marks what changes in this picture; it isn't on the page. Dashed yellow is the desk's own on-its-way edge.</p>
+</div>
+</div>
+
+<script>
+  function wireSwitch() {
+    const buttons = document.querySelectorAll(".switch button");
+    buttons.forEach(function (button) {
+      button.addEventListener("click", function () {
+        buttons.forEach(function (b) { b.setAttribute("aria-pressed", String(b === button)); });
+        document.querySelectorAll("[data-version]").forEach(function (v) { v.hidden = v.dataset.version !== button.dataset.show; });
+      });
+    });
+  }
+  wireSwitch();
+</script>
+</body>
+</html>

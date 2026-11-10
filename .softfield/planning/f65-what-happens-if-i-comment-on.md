@@ -94,3 +94,39 @@ The planning thread behind F65's plan, oldest first, as it was when the owner ap
 > - F65: off To sign off from your Approve, and Drop this round (replan)
 > - More work approved: To sign off and the card's page, Today and Proposed (mockup)
 > - F182 joins F65, Review rounds until you sign off (merge)
+
+## The lead, 2026-10-29 10:42
+
+> Approved by the owner on 2026-10-29: approved plan/f65: queued f65-04-drop-a-round, f65-05-round-off-the-desk; changed f65-01-review-rounds
+
+## The lead, 2026-11-04 08:08
+
+> Merged F217 here: if i left a comment on a sign off review, i want to see…
+
+## The owner, 2026-11-04 08:08
+
+> From F217, merged here:
+> if i left a comment on a sign off review, i want to see that it's being revised with orange dashes in the planning desk
+
+## The lead, 2026-11-04 09:26
+
+> Your comment does show a dash today, but in the wrong place, so this replan moves it onto the sign-off row, with a mock-up. I couldn't open the mock-up in a browser from this job, so tell me if it looks wrong.
+>
+> 1. **Why you don't see it being revised**: A comment on a card waiting for sign-off already gets a dashed row, but it sits at the bottom of Your answers wanted, under the same title. The row you commented on, in To sign off, stays solid and still says 'reviewed · waits for your sign-off', so it looks as if nothing happened. Proposals already switch to 'being revised' (F100, Proposals show being revised), but To sign off was never given that. You asked for this on F182, When I don't sign off a card and comment on it instead, and I said I'd answer it here. No F65 ticket covered it: that was my miss.
+>    Action: Ticket f65-06 (developer): the To sign off row itself turns dashed orange, saying 'being revised' and when the reply comes, with Writing now while the lead writes it. It shows from the moment you send, and it isn't counted while it waits for the lead.
+> 2. **One row per card, not two**: I went further than you asked, because dashing the row alone would leave the card in two places. F149, Retire the backlog file, is in both To sign off and Your answers wanted right now. So while such a card's comment is with the lead, or the lead has replied, its row in Your answers wanted goes. Once the lead has replied, the To sign off row turns solid and says 'the lead replied 36 s ago · reviewed, waits for your sign-off', and the card is counted once. Tapping the row opens the card with the reply. That's the first step of the bundling you asked about on F182.
+>    Action: Part of f65-06 (D8). If you'd rather keep both rows, comment here.
+> 3. **Bundling the rest: F210, not here**: F182 also asked whether sign-off should bundle with the plan and the conversation. A follow-up plan the lead drafts for a card still has its own row under Proposals. F210, One box per card on the desk, is already drafted and waits for your review; it joins a conversation with its proposals but keeps To sign off apart. I recommend leaving it that way until you've used this: one more row is a small cost, and merging sign-off into that box would hide what's finished, which you asked to see first.
+>    Action: Nothing now. Whichever of F65 and F210 is built second keeps the one-row rule. If you want sign-offs inside F210's box, say so on F210's thread when you review it.
+> 4. **No extra style for finished cards**: F182 also wondered about styling a finished card differently. I recommend not doing it: To sign off has its own green heading near the top of the desk, and only Didn't go through and Blocked tickets come before it. Another colour on the rows would need its own explanation, and you've asked for no unexplained marks.
+>    Action: Nothing. Comment here if the rows still don't stand out once this is built.
+> 5. **'Being revised' can overpromise, and Sign off stays**: A comment may only be a question, and then nothing gets revised: the lead answers and the row turns solid again. I'm keeping your words anyway, since proposals already say the same. Sign off also stays on the card's page while your comment waits, so you can sign off without waiting for an answer you no longer need. If you do, the row says 'signing off at the runner's next pick' and the lead's reply still arrives on the thread.
+>    Action: Nothing.
+> 6. **When you'll see it**: f65-06 waits for nothing, but inside a card tickets run by number, so it comes after F65's other five. F65 is behind nine other cards on the board, so it won't start soon, and you don't need to pause the factory for this replan. If you want this one sooner, tell me here and I'll make it the first of F65's tickets; you'd still drag the card up the board to bring all of F65 forward.
+>    Action: Keep the order unless you say otherwise.
+> 7. **The picture**: It shows your desk this morning with F149, at two moments: while the lead is writing, and once it has replied. The 08:07 reply and the card titles are real; the time on the row being written is an example. This is a mock-up of /planning, and F65's card now lists its pages for the review's before and after pictures.
+>    Action: Mock-up f65-mockup/comment-dashes.html. Ticket f65-06 builds it, and I'll revise the ticket with any comments you make on it.
+>
+> Proposals:
+> - F65: a comment dashes the sign-off row, one row per card (replan)
+> - A comment dashes the sign-off row: your desk, Today and Proposed (mockup)

@@ -34,6 +34,11 @@ Commenting on a card that waits for sign-off starts a round: the lead answers an
 - The card's page shows that section first, headed "Round N: what changed since your comment", with the comment quoted; the first sheet's sections stay below, under "Earlier".
 - A comment on a ripe card's thread reaches the lead marked as feedback on built work, with the current sheet.
 - Sign off works as it does today, at any round.
+- A comment on a card in To sign off dashes its row there at once, "being revised", and the card has one row on the desk, not a second in Your answers wanted. Once the lead has replied, that row is solid again and says so.
+
+## Before and after
+- `/planning`
+- `/planning/f65`
 
 ## Decisions
 - **D1 A round starts at approval.** `_approve_plan` on a card whose `milestones.signoff` is stored keeps the sheet (it is the earlier round, and what comes back if the round is dropped; changed 2026-10-29 from clearing it), resets the card's `review_counts` and `review_stop`, and tags `<key>-round-<n>-start` on main before the merge. No new state or column: the card is ready, then building, as any card.
@@ -43,6 +48,7 @@ Commenting on a card that waits for sign-off starts a round: the lead answers an
 - **D5 (dropped 2026-10-29).** Follow-ups got priority 0; the board's order is now the only order (owner, 2026-10-22), so a round runs in its card's place. Drag the card up to have it sooner.
 - **D6 Drop a round.** A `set_aside` naming a card with the value `round` sets aside every ticket of the card not yet started, in one commit; the one in flight finishes. Sent before the runner took the Approve, it still works: requests run in order. The drafts stay in later/, so the owner can queue them again.
 - **D7 In a round, off the desk at once.** A card is in a round from the owner's Approve press (its request still waiting) until its round's review is written: tickets ready or running, or a review job open for it. It is not ripe then. Its page keeps the review and shows "More work approved" where Sign off was, with the round's tickets and Drop this round. Picture: [`f65-mockup/round-gap.html`](f65-mockup/round-gap.html), from F38 on 2026-10-29 (approved 00:24, Sign off pressed 00:50 and refused at the 00:52 pick).
+- **D8 One row for a card waiting for sign-off.** From the owner's notes on F182 and F217. While the lead owes a reply on a card in To sign off (`_waiting_for_lead`), its row there is dashed with F100's "being revised" words, its place in line and Writing now; it isn't counted. Once the lead has replied, the row is solid and counted, saying when. Either way the card's row in Your answers wanted goes. Sign off stays on its page throughout: a comment may be only a question. Its proposals stay where they are; F210, One box per card on the desk, keeps To sign off apart, and whichever is built second keeps this rule. Picture: [`f65-mockup/comment-dashes.html`](f65-mockup/comment-dashes.html).
 
 ## Tickets
 | # | Ticket | Who | d | Depends on | What |
@@ -52,7 +58,8 @@ Commenting on a card that waits for sign-off starts a round: the lead answers an
 | 03 | round-on-page | D | 4 | 01 | D3: "Round N" first on the card's page |
 | 04 | drop-a-round | L | 4 | 01 | D6: Set aside a card's round |
 | 05 | round-off-the-desk | D | 5 | 04 | D7: off To sign off at once; the plate and Drop this round |
+| 06 | comment-dashes-sign-off | D | 3 | – | D8: one row, dashed while the lead owes a reply |
 
-01, 02 and 04 are in `runner/` (protected): the lead's. 03 and 05 are in `factory_dashboard/` and follow `_review` and `_acted_on`: a developer's.
+01, 02 and 04 are in `runner/` (protected): the lead's. 03, 05 and 06 are in `factory_dashboard/` and follow `_review`, `_acted_on` and `_revising`: a developer's.
 
 F142's sign-off that fails on its existing tag is F186's (Why can't I sign off F142), answered on its own thread.
