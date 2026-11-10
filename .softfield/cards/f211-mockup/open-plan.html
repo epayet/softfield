@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F211 mock-up: a plan still open when a card closes</title>
+<style>
+  /* The dashboard's own tokens (factory_dashboard/static/dashboard.css), dark theme */
+  :root {
+    color-scheme: dark;
+    --floor: #12161b; --bay: #181e25; --plate: #1f2730; --grid: #222b34; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+    --hazard: #f2b10a; --hazard-ink: #1a1405; --sonnet: #ffc48a; --good: #5fd17a;
+    --tick: var(--ink-2);
+    --stripe: repeating-linear-gradient(-45deg, var(--hazard) 0 6px, transparent 6px 12px);
+    --display: "Chakra Petch", "Bahnschrift", "DIN Alternate", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--floor); color: var(--fg); font: 15px/1.5 var(--body); padding: 16px; }
+  h1 { font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 4px; }
+  h3.pic { font: 600 14px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); margin: 28px 0 2px; }
+  p.lede, p.why { color: var(--ink-2); max-width: 820px; margin: 0 0 8px; }
+  p.why { font-size: 13.5px; }
+  a { color: var(--sonnet); text-decoration: none; }
+
+  .switch { display: inline-flex; margin: 8px 0 0; border: 1px solid var(--rule); position: sticky; top: 4px; z-index: 2; }
+  .switch button { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 10px 18px; min-height: 44px;
+    background: var(--bay); color: var(--muted); border: 0; cursor: pointer; }
+  .switch button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+
+  .pair { display: grid; grid-template-columns: 1fr; gap: 12px; }
+  .side > .label { display: block; font: 600 11px var(--mono); color: var(--muted); text-transform: uppercase; margin-bottom: 4px; }
+  body[data-show="today"] .side.proposed { display: none; }
+  body[data-show="proposed"] .side.today { display: none; }
+  @media (min-width: 900px) {
+    .switch { display: none; }
+    .pair { grid-template-columns: 1fr 1fr; }
+    body[data-show] .side { display: block !important; }
+  }
+
+  /* what this card changes */
+  .new { outline: 1px dashed var(--good); outline-offset: 3px; }
+  .note { display: block; font: 12px var(--mono); color: var(--good); margin-top: 6px; }
+
+  /* ---- as drawn in dashboard.css ---- */
+  .panel { background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; min-width: 0; position: relative; display: flex; flex-direction: column; gap: 8px; }
+  .panel.needs { border-color: var(--hazard); }
+  .panel::before, .panel::after { content: ""; position: absolute; width: 10px; height: 10px; border: 0 solid var(--tick); }
+  .panel::before { top: -1px; left: -1px; border-top-width: 2px; border-left-width: 2px; }
+  .panel::after { bottom: -1px; right: -1px; border-bottom-width: 2px; border-right-width: 2px; }
+  .panel.titled { padding-top: 0; }
+  .panel > h2 { display: flex; align-items: center; gap: 10px; margin: 0 -14px 2px; padding: 7px 14px; background: var(--plate);
+    border-bottom: 1px solid var(--rule); font: 600 14px var(--display); text-transform: uppercase; letter-spacing: .1em; }
+  .panel > h2::after { content: ""; flex: 1; height: 8px; background: var(--stripe); opacity: .5; }
+  .panel.needs > h2 { background: var(--hazard); color: var(--hazard-ink); }
+  .panel.needs > h2::after { background: repeating-linear-gradient(-45deg, var(--hazard-ink) 0 6px, transparent 6px 12px); opacity: .35; }
+  .panel h3 { margin: 4px 0 0; font: 600 12px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  .panel p { margin: 0; }
+  .row-of { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .aside { font-size: 12.5px; color: var(--muted); }
+  .btn { display: inline-flex; align-items: center; justify-content: center; font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase;
+    min-height: 44px; padding: 0 16px; border: 0; cursor: default; }
+  .btn.go { background: var(--hazard); color: var(--hazard-ink); }
+  .btn.plain { background: transparent; color: var(--fg); border: 1px solid var(--rule); }
+  .pill.asked { display: inline-block; border: 1px dashed var(--hazard); padding: 4px 8px; font-size: 12.5px; align-self: flex-start; }
+  .stamp { font: 600 11px var(--mono); color: var(--muted); text-transform: uppercase; }
+  .proposal { background: var(--plate); border: 1px solid var(--rule); border-top: 3px solid var(--good); padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; color: var(--fg); }
+  .proposal > span { font: 600 11px var(--mono); color: var(--muted); }
+  .desk-row { padding: 8px 0; border-bottom: 1px solid var(--grid); }
+  .desk-row:last-child { border-bottom: 0; }
+  .desk-row b { font-weight: 500; }
+  .desk-row span { display: block; font-size: 12.5px; color: var(--muted); }
+</style>
+</head>
+<body data-show="proposed">
+<h1>F211: a plan still open when a card closes</h1>
+<p class="lede">Real cards at the moment the plan was lost: F82, Text boxes grow, signed off on 29 October; F51's replan, which arrived three minutes after its sign-off; F140, Copilot checkpoints, still an idea.</p>
+<div class="switch" role="group" aria-label="Which version">
+  <button type="button" data-show="today" aria-pressed="false">Today</button>
+  <button type="button" data-show="proposed" aria-pressed="true">Proposed</button>
+</div>
+
+<!-- 1 -->
+<h3 class="pic">1 · Sign off on F82, with a plan open</h3>
+<p class="why">The thread page and the card's milestone page. Keep turns yellow and Sign off plain, but one press still signs off.</p>
+<div class="pair">
+  <div class="side today">
+    <span class="label">Today</span>
+    <section class="panel titled">
+      <h2>The review</h2>
+      <h3>What changed</h3>
+      <p>Every text box on the dashboard now grows as you write: the Plant box first, plus a waiting plant's edit, the reply on a card's thread and the comment under a key point.</p>
+      <h3>Decisions waiting for you</h3>
+      <p>None.</p>
+      <a href="#">The whole review</a>
+      <div class="row-of">
+        <span class="btn go">Sign off</span>
+        <span class="aside">Marks it done and tags it, at the runner's next pick.</span>
+      </div>
+    </section>
+  </div>
+  <div class="side proposed">
+    <span class="label">Proposed</span>
+    <section class="panel titled">
+      <h2>The review</h2>
+      <h3>What changed</h3>
+      <p>Every text box on the dashboard now grows as you write: the Plant box first, plus a waiting plant's edit, the reply on a card's thread and the comment under a key point.</p>
+      <h3>Decisions waiting for you</h3>
+      <p>None.</p>
+      <a href="#">The whole review</a>
+      <section class="panel titled needs new">
+        <h2>A plan is still open</h2>
+        <p><a href="#">F82, Text boxes grow: the runner says when it can't update itself</a></p>
+        <p class="aside">A signed-off card takes no plan. Keep it, and the lead drafts it again against today's code on a new card, for you to approve.</p>
+        <div class="row-of">
+          <span class="btn go">Keep it as a new card</span>
+          <span class="btn plain">Sign off</span>
+        </div>
+      </section>
+      <span class="note">New: the plate. Sign off moves into it and turns plain.</span>
+    </section>
+  </div>
+</div>
+
+<!-- 2 -->
+<h3 class="pic">2 · Sign off on F51, with your message still waiting</h3>
+<p class="why">F51's replan came three minutes after this press, so at that moment there was no plan to name. The line is all it takes; picture 3 catches the rest.</p>
+<div class="pair">
+  <div class="side today">
+    <span class="label">Today</span>
+    <section class="panel">
+      <div class="row-of">
+        <span class="btn go">Sign off</span>
+        <span class="aside">Marks it done and tags it, at the runner's next pick.</span>
+      </div>
+    </section>
+  </div>
+  <div class="side proposed">
+    <span class="label">Proposed</span>
+    <section class="panel">
+      <div class="row-of">
+        <span class="btn go">Sign off</span>
+        <span class="aside">Marks it done and tags it, at the runner's next pick.</span>
+      </div>
+      <p class="new" style="color: var(--ink-2); font-size: 14px">Your message to the lead is still waiting: its answer may bring a plan.</p>
+      <span class="note">New: the line.</span>
+    </section>
+  </div>
+</div>
+
+<!-- 3 -->
+<h3 class="pic">3 · Archive on F51, signed off, with its replan open</h3>
+<p class="why">The bottom of the thread page. Archive means you don't want the plan, so nothing stands in its way; Keep is there because a done card's plan can be closed without being seen, as F51's and F82's were.</p>
+<div class="pair">
+  <div class="side today">
+    <span class="label">Today</span>
+    <div class="row-of">
+      <span class="btn plain">Archive</span>
+      <span class="aside">It leaves your desk; Planning lists it under Archived.</span>
+    </div>
+  </div>
+  <div class="side proposed">
+    <span class="label">Proposed</span>
+    <div class="row-of">
+      <span class="btn plain">Archive</span>
+      <span class="btn plain new">Keep it as a new card</span>
+    </div>
+    <p class="aside new" style="margin: 8px 0 0">Also closes the open plan: <a href="#">F51: one box per card, and a waiting Approve plan wakes up by itself</a>. It won't be built unless you reply here.</p>
+    <span class="note">New: the line, and a plain Keep. Archive stays one press.</span>
+    <p style="margin: 12px 0 4px" class="stamp">After pressing Keep</p>
+    <span class="pill asked new">Keeping as a new card at the runner's next pick</span>
+  </div>
+</div>
+
+<!-- 4 -->
+<h3 class="pic">4 · Archive on F140, still an idea, with a plan open</h3>
+<p class="why">The card stays, and so does its plan, so a new card would only repeat it. One line, no Keep. An already archived thread shows none of this.</p>
+<div class="pair">
+  <div class="side today">
+    <span class="label">Today</span>
+    <div class="row-of">
+      <span class="btn plain">Archive</span>
+      <span class="aside">It leaves your desk; Planning lists it under Archived.</span>
+    </div>
+  </div>
+  <div class="side proposed">
+    <span class="label">Proposed</span>
+    <div class="row-of">
+      <span class="btn plain">Archive</span>
+      <span class="aside new">Also closes the open plan: <a href="#">F140, Copilot takes checkpoints first: two tickets</a>. It won't be built unless you reply here.</span>
+    </div>
+    <span class="note">New: the words beside the button.</span>
+  </div>
+</div>
+
+<!-- 5 -->
+<h3 class="pic">5 · The plan's own page on F82, once signed off</h3>
+<p class="why">Approving here today would set a done card back to ready.</p>
+<div class="pair">
+  <div class="side today">
+    <span class="label">Today</span>
+    <section class="panel">
+      <a class="proposal" href="#"><span>PLAN · open</span><b>F82, Text boxes grow: the runner says when it can't update itself</b></a>
+      <span class="aside">5 agreed · 0 to change</span>
+      <div class="row-of"><span class="btn go">Approve plan</span></div>
+      <span class="stamp">Reject…</span>
+    </section>
+  </div>
+  <div class="side proposed">
+    <span class="label">Proposed</span>
+    <section class="panel">
+      <a class="proposal" href="#"><span>PLAN · open</span><b>F82, Text boxes grow: the runner says when it can't update itself</b></a>
+      <span class="aside">5 agreed · 0 to change</span>
+      <div class="row-of new"><span class="btn go">Keep it as a new card</span></div>
+      <p class="aside new">F82 is signed off, so it can't take this plan. The lead drafts it again on a new card, for you to approve.</p>
+      <span class="stamp">Reject…</span>
+      <span class="note">New: Keep in place of Approve plan, and why.</span>
+    </section>
+  </div>
+</div>
+
+<!-- 6 -->
+<h3 class="pic">6 · Sign off on F149, with approved work on another card</h3>
+<p class="why">Your question on F223. The work is safe and nothing needs doing, so this is one line, not a warning, and Sign off stays yellow. On the thread page the line stays after sign-off until the ticket is done.</p>
+<div class="pair">
+  <div class="side today">
+    <span class="label">Today</span>
+    <section class="panel">
+      <div class="row-of">
+        <span class="btn go">Sign off</span>
+        <span class="aside">Marks it done and tags it, at the runner's next pick.</span>
+      </div>
+    </section>
+  </div>
+  <div class="side proposed">
+    <span class="label">Proposed</span>
+    <section class="panel">
+      <div class="row-of">
+        <span class="btn go">Sign off</span>
+        <span class="aside">Marks it done and tags it, at the runner's next pick.</span>
+      </div>
+      <p class="new" style="color: var(--ink-2); font-size: 14px">Also asked for here, still to come: <a href="#">f164-07-review-fixes-are-quoted-too</a>, on <a href="#">F164, Plant a review's ideas straight from the review</a>. Signing off doesn't touch it.</p>
+      <span class="note">New: the line.</span>
+    </section>
+  </div>
+</div>
+
+<script>
+  (function () {
+    var buttons = document.querySelectorAll(".switch button");
+    buttons.forEach(function (button) {
+      button.addEventListener("click", function () {
+        buttons.forEach(function (b) { b.setAttribute("aria-pressed", String(b === button)); });
+        document.body.dataset.show = button.dataset.show;
+      });
+    });
+  })();
+</script>
+</body>
+</html>
