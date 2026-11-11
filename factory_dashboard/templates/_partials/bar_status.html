@@ -3,7 +3,7 @@
   <button type="button" class="dot-btn" aria-label="{{ bar_status.words }}" title="{{ bar_status.words }}"><i class="dot {{ bar_status.dot }}"></i></button>
   <span class="words" role="status">{{ bar_status.words }}</span>
   {% if bar_status.button == "pause" %}
-  <button type="button" class="sign" aria-label="Pause after this job" title="Pause after this job" hx-post="/requests" hx-vals='{"kind": "pause", "project": {{ (bar_status.project or project) | tojson }}}' hx-swap="none" data-asked="Pausing after {{ bar_status.words[9:].split(' · ', 1) | reverse | join(' · ') if bar_status.words.startswith('Running: ') else 'this job' }}">⏸</button>
+  <button type="button" class="sign" aria-label="Pause after this job" title="Pause after this job" hx-post="/requests" hx-vals='{"kind": "pause", "project": {{ (bar_status.project or project) | tojson }}}' hx-swap="none" data-asked="{{ bar_status.pausing }}">⏸</button>
   {% elif bar_status.button == "resume" %}
   <button type="button" class="sign" aria-label="Resume" title="Resume" hx-post="/requests" hx-vals='{"kind": "resume", "project": {{ (bar_status.project or project) | tojson }}}' hx-swap="none" data-asked="Resuming…">▶</button>
   {% endif %}

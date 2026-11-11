@@ -250,14 +250,17 @@ Now = Annotated[datetime, Depends(get_now)]
 class Status:
     """What the factory does, in the top bar (f6-16): its words; ``tone`` (``asked`` while the
     owner's request is on its way); the request its sign posts (``pause``, ``resume``, none);
-    and its dot (f17): ``lead`` or ``developer`` while that one's job runs, ``waiting`` for
-    Claude, ``stopped`` with no live run, else ``idle``."""
+    and its dot (f17): ``lead`` or ``developer`` while that one's job runs, ``runner`` while
+    the run works between jobs (F184), ``waiting`` for Claude, ``stopped`` with no live run,
+    else ``idle``. ``pausing`` is what a pause asked now would say: the ⏸ sign shows it at the
+    tap, the same words the server then says."""
 
     words: str
     tone: str
     button: str | None
     project: str | None = None  # whose run it is: the button's request goes there (ADR 30)
     dot: str = "idle"
+    pausing: str = "Pausing after this job"
 
 
 PICKING = "picking the next ticket"  # runner/loop.py's PICKING: between jobs
@@ -312,7 +315,7 @@ def factory_wide_status(conn: sqlite3.Connection, project: str, now: datetime) -
         words = f"Running: {name} · {words.removeprefix('Running: ')}"
     else:
         words = f"{words} · {name}"
-    return replace(status, words=words, project=name)
+    return replace(status, words=words, project=name, pausing=f"{status.pausing} · {name}")
 
 
 def factory_status(conn: sqlite3.Connection, project: str, now: datetime) -> Status:
@@ -336,35 +339,31 @@ def factory_status(conn: sqlite3.Connection, project: str, now: datetime) -> Sta
     # the dot is about the job the words name: the first live one
     jobs = overview.running_jobs(conn, project, now)
     job = next((j for j in jobs if j.live), None)
-    dot = "idle" if job is None else "developer" if job.role in DEVELOPER_ROLES else "lead"
-    if asked == "pause":  # which job, still (the owner, 2026-10-08: the bar lost it)
-        if job:
-            doing = f"{job.ticket or f'{job.role}, job {job.job}'}"
-            return Status(f"Pausing after {doing}", "warn asked", "resume", dot=dot)
-        activity = next((r.activity for r in runs if r.activity), None)
-        if activity and " · " in activity:
-            parts = activity.removeprefix("Running: ").split(" · ")
-            doing = " · ".join(reversed(parts))
-        elif activity:
-            doing = activity
-        else:
-            doing = "this job"
-        return Status(f"Pausing after {doing}", "warn asked", "resume", dot="runner")
+    dot = "runner" if job is None else "developer" if job.role in DEVELOPER_ROLES else "lead"
     waiting = next((r.waiting_until for r in runs if r.waiting_until), None)
+    activity = next((r.activity for r in runs if r.activity), None) or PICKING
+    # which job, still (the owner, 2026-10-08: the bar lost it), or the run's own work (F184)
+    if job:
+        doing = job.ticket or f"{job.role}, job {job.job}"
+    elif waiting or activity == PICKING or activity.startswith(IDLE):
+        doing = "this job"
+    else:
+        doing = activity
+    pausing = f"Pausing after {doing}"
+    if asked == "pause":
+        return Status(pausing, "warn asked", "resume", dot=dot)
     if waiting:
         words = f"Waiting for Claude until {_clock(waiting)}"
-        return Status(words, "serious", "pause", dot="waiting")
+        return Status(words, "serious", "pause", dot="waiting", pausing=pausing)
     if job:
-        words = f"Running: {job.ticket or f'{job.role}, job {job.job}'}"
-        return Status(words, "good", "pause", dot=dot)
-    activity = next((r.activity for r in runs if r.activity), None) or PICKING
+        return Status(f"Running: {doing}", "good", "pause", dot=dot, pausing=pausing)
     if activity == PICKING and not (
         jobs or overview.queue(conn, project, now) or overview.queued_jobs(conn, project, now)
     ):
         return Status("Idle: nothing to do", "", "pause")
     if activity.startswith(IDLE):
         return Status(activity, "", "pause")
-    return Status(f"Running: {activity}", "good", "pause", dot="runner")
+    return Status(f"Running: {activity}", "good", "pause", dot="runner", pausing=pausing)
 
 
 def top_bar(

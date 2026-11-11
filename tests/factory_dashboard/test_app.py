@@ -2262,7 +2262,7 @@ PAUSE, RESUME = {"Pause after this job": "pause"}, {"Resume": "resume"}
         (_stopped, "Stopped", "stopped", {}),
         # the runner's own work: green dot that breathes (f184)
         (_runner_running, "Running: check-all · f1-04-live", "runner", PAUSE),
-        (_runner_paused, "Pausing after f1-04-live · check-all", "runner", RESUME),
+        (_runner_paused, "Pausing after check-all · f1-04-live", "runner", RESUME),
     ],
     ids=[
         "running",
@@ -2291,28 +2291,30 @@ def test_the_top_bar_says_what_the_factory_does_with_pause_or_resume(
     )
 
 
-def test_the_pause_sign_s_data_asked_matches_the_server_words(serve_between, db_path):
-    """F184: when the runner runs with an activity, the ⏸ sign's data-asked holds the
-    reversed activity parts that the server would say when a pause is processed."""
-    client = _runner_running(serve_between, serve_between, db_path)
+@pytest.mark.parametrize(
+    ("setup", "pausing"),
+    [
+        (_running, "Pausing after f1-04-live · coucou"),  # more than one project
+        (_lead_ticket, "Pausing after f1-30-lead"),
+        (_runner_running, "Pausing after check-all · f1-04-live"),  # F184
+        (_idle, "Pausing after this job"),
+        (_waiting, "Pausing after this job"),
+    ],
+    ids=["running", "lead-ticket", "runner-running", "idle", "waiting"],
+)
+def test_the_pause_sign_shows_at_the_tap_what_the_server_then_says(
+    serve, serve_between, db_path, setup, pausing
+):
+    """F184: the ⏸ sign's data-asked, shown the moment it is pressed, is the words the bar
+    says once the pause is asked, in the same order."""
+    client = setup(serve, serve_between, db_path)
     html = client.get("/").text
-    block = re.search(r'<div id="factory-status"[^>]*>(.*?)</div>', html, re.S)
-    assert block, "no #factory-status"
-    words = re.search(r'<span class="words" role="status">([^<]*)</span>', block[1])
-    assert words
-    sign = re.search(r'<button type="button" class="sign"([^>]*)>⏸</button>', block[1])
-    assert sign
-    data_asked = re.search(r'data-asked="([^"]*)"', sign[1])
-    assert data_asked
-    # data-asked is "Pausing after {reversed}" while words are "Running: {activity}"
-    # they match when the activity has no " · " (single-part activity)
-    activity = words[1].removeprefix("Running: ")
-    if " · " in activity:
-        parts = activity.split(" · ")
-        expected = "Pausing after " + " · ".join(reversed(parts))
-    else:
-        expected = f"Pausing after {activity}"
-    assert data_asked[1] == expected, f"{data_asked[1]} != {expected}"
+    start = html.index('<div id="factory-status"')
+    bar = html[start : html.index("</div>", start)]
+    sign = re.search(r'<button type="button" class="sign"[^>]*data-asked="([^"]*)">⏸', bar)
+    assert sign and sign[1] == pausing, bar
+    _ask(client, "pause")
+    assert _status(client.get("/").text)[0] == pausing
 
 
 @pytest.mark.parametrize(
