@@ -31,3 +31,12 @@ The picture to build: `.softfield/cards/f210-mockup/one-box.html` (Proposed, "2 
 - a comment stored for an older lead message doesn't come back
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 1710
+gate_failures: []
+tokens: 733902
+```
