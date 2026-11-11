@@ -1,6 +1,7 @@
 # Milestone F191: The fast lane goes first under softfield run too, escalations included
 
-> **State:** ready · **Priority:** 0 · **Area:** factory · **Fast lane:** yes
+> **State:** done · **Priority:** 0 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-11. Base: git tag `f191-why-is-the-lead-reviewing-something-start`. Report: [`.softfield/reviews/f191-why-is-the-lead-reviewing-something.md`](../reviews/f191-why-is-the-lead-reviewing-something.md).
 > Planted by the owner on 2026-10-29.
 
 ## Notes

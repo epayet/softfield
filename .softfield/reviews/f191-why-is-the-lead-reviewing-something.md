@@ -1,6 +1,6 @@
 # Review: F191, the fast lane goes first under softfield run too, escalations included
 
-- **Status:** round 1 done, one finding, fixed in the round.
+- **Status:** done, signed off by the owner on 2026-11-11.
 
 ## Sign-off sheet
 
