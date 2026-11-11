@@ -1,6 +1,7 @@
 # Milestone F193: The project picker follows the owner's project order
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** done · **Priority:** 100 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-11. Base: git tag `f193-the-project-picker-at-the-top-start`. Report: [`.softfield/reviews/f193-the-project-picker-at-the-top.md`](../reviews/f193-the-project-picker-at-the-top.md).
 > Planted by the owner on 2026-11-02.
 
 ## Notes
