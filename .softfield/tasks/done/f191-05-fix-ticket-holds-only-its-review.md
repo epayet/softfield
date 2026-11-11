@@ -33,3 +33,10 @@ Read cause 6 and D7 in `.softfield/cards/f191-why-is-the-lead-reviewing-somethin
 - A last round (a stop `reason`) records its stop and returns, and its fixes run in the main queue in the board's order and count toward a checkpoint, as ADR 38 has it.
 - After a round nothing sleeps, whatever is parked or limited.
 - `runner milestone` runs its review's fixes inside the review, as today.
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
