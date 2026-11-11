@@ -2837,6 +2837,41 @@ def test_allowance_bar_colours_match_at_phone_and_desktop(page, allowance_client
             assert w > 0, f"bar with usage has width {w} at 390 px (desktop width {dw})"
 
 
+def test_allowance_bars_same_width_at_desktop(page, board_db, tmp_path):
+    """f77-01: at 1440 px every ``#allowance .meter`` has the same width, to within 1 px, also
+    with the Fast lane line under Claude's meters: in the old flex row it pushed Copilot's month
+    onto a row of its own, as wide as the panel."""
+    ORIGIN = "http://127.0.0.1:8765"
+    allowance_client = _reserve_client(board_db, tmp_path, "f23-planted")
+
+    def serve(route) -> None:
+        url = route.request.url.removeprefix(ORIGIN)
+        path = url.split("?", 1)[0]
+        if path.startswith("/static/"):
+            route.fulfill(path=str(STATIC / path.removeprefix("/static/")))
+        elif path in ("/", "/live"):
+            body = allowance_client.get(url).text
+            route.fulfill(body=body, content_type="text/html; charset=utf-8")
+        else:
+            route.fulfill(status=404, body="")
+
+    page.route(f"{ORIGIN}/**", serve)
+    page.set_viewport_size({"width": 1440, "height": 900})
+    page.goto(ORIGIN + "/")
+    page.wait_for_selector("#allowance .meter")
+    assert page.locator("#reserve-cards").count() == 1
+
+    widths = page.eval_on_selector_all(
+        "#allowance .meter",
+        "els => els.map(e => e.offsetWidth)",
+    )
+    assert len(widths) >= 3, f"expected ≥3 meters, got {len(widths)}"
+    for w in widths:
+        assert abs(w - widths[0]) <= 1, (
+            f"meter width {w} differs from first {widths[0]} by more than 1 px"
+        )
+
+
 def test_replay_bar_is_just_below_the_floor_on_phone(page, serve, db_path):
     """f9-26: at 390 px the replay bar's top is within 40 px of the floor's bottom."""
     conn = metrics.open_db(db_path)

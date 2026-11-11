@@ -280,12 +280,12 @@ tbody tr:hover { background: var(--accent-wash); }
 .stop-plate small { color: var(--ink-2); flex-basis: 100%; }
 .held { color: var(--hazard); font-family: var(--mono); font-size: 12.5px; }
 #allowance .legend { margin: 0 0 10px; }
-.allow { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 8px; }
+.allow { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 8px; }
 .allow > div { min-width: 180px; flex: 1 1 180px; }
 .allow .line { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; margin-bottom: 4px; flex-wrap: wrap; }
-.allow .line small { color: var(--muted); }
-.allow .cards-on { flex-basis: 100%; justify-content: flex-start; color: var(--ink-2); }
+.allow .cards-on { grid-column: 1 / -1; color: var(--ink-2); justify-content: flex-start; }
 .allow .cards-on b { font: 600 11px var(--mono); text-transform: uppercase; letter-spacing: .05em; color: var(--fg); }
+.allow .line small { color: var(--muted); }
 /* Mobile: one row per window with name, bar and reset text (f9-17) */
 @media (max-width: 639px) {
   #allowance { padding: 4px 14px; }
