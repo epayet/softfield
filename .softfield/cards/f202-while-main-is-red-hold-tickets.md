@@ -1,4 +1,4 @@
-# Milestone F202: While main's tests fail, hold every ticket but the mender
+# Milestone F202: While main fails its tests, only the ticket that mends it runs
 
 > **State:** idea · **Priority:** 100 · **Area:** factory
 > From docs/backlog.md (f80-review), written by the lead on 2026-11-02.
