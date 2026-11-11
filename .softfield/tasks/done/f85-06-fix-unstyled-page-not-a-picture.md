@@ -29,3 +29,10 @@ Read D12 and "Unstyled and missing pictures" in `.softfield/cards/f85-when-i-sig
 - `review_pictures` leaves out an after picture recorded `failed` whose file exists, and says "none" when no after picture was taken
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `runner/instructions/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
