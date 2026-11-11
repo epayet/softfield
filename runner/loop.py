@@ -1585,10 +1585,14 @@ def call_claude(
     process_note: Path | None = None,
     routed: router.Route | None = None,
     parked: Mapping[str, Any] | None = None,
+    give_up: bool = False,
 ) -> JobResult:
     """Run a lead job on the agent ``routed`` names, else the first its role lists, waiting
     out usage limits. Each trigger bounds its own runs (ADR 12 item 10); the count per
     milestone is kept for the metrics.
+
+    With ``give_up`` (a repair turn: nothing to resume), a certain limit or an expired login
+    ends the call at once, as a failed run, after being recorded as usual.
 
     With ``park`` (a ticket's job, a checkpoint or an escalation), a certain limit parks it
     instead of waiting: ``Parked`` is raised, and the queue goes on without Claude until the
@@ -1695,6 +1699,8 @@ def call_claude(
         _record_readings(s, agent, result.readings)
         if result.error == LOGIN:
             _login_expired(s)
+            if give_up:
+                break
             session = result.session_id or resume
             at = now()
             resumes = at + LOGIN_CHECK
@@ -1745,6 +1751,9 @@ def call_claude(
                 window=limit.window,
                 resets_at=limit.resets_at.isoformat() if limit.resets_at else None,
             )
+            if give_up and limit.certain:
+                s.log(f"[{agent}] {what}: refused by a usage limit; given up, not waited for")
+                break
             if park and limit.certain:
                 session = result.session_id or resume
                 name = ticket or subject
@@ -3997,7 +4006,7 @@ def _repair_ticket(
         commands=GIT_READ_COMMANDS,
         resume=session,
     )
-    call_claude(s, job, milestone, subject, ticket=ticket)
+    call_claude(s, job, milestone, subject, ticket=ticket, give_up=True)
     return _ticket_problems(s, path) if path.is_file() else ["the repair removed it"]
 
 
