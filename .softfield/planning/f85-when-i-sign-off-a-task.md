@@ -147,3 +147,29 @@ The planning thread behind F85's plan, oldest first, as it was when the owner ap
 >
 > Proposals:
 > - F85: a slow page still gets its picture (replan)
+
+## The lead, 2026-11-05 09:10
+
+> Approved by the owner on 2026-11-05: approved plan/f85: queued f85-05-fix-slow-page-still-pictured
+
+## The owner, 2026-11-11 12:50
+
+> The screenshots in coaster ranker are lacking css. It doesn't matter too much as it's the very first ticket but that's still concerning. Some older tickets got done with no screenshot. I understand there might not be a before screenshot but there should be at 'east an after screenshot?
+
+## The lead, 2026-11-11 12:56
+
+> I've drafted a replan with three tickets that fix both problems. Nothing is queued until you approve it.
+>
+> 1. **Why m1's pictures had no styling**: The app coaster-ranker started for the pictures served its pages without their stylesheet. m1's own review saw this, fixed coaster-ranker's picture setup, and wrote 'the next round's pictures will show it'. But m1 (Import both lists, rank Orlando coasters by drag, compare the two) had only one review round, so nothing takes the pictures again before you sign it off. Worse, the factory counted plain unstyled pages as good pictures, and the review compared them with the mock-up. So it's right to be concerned, even though it's the project's first card.
+>    Action: f85-06 and f85-08, below.
+> 2. **An unstyled page no longer counts as a picture**: While a page loads, the runner watches its stylesheets. If one fails, the picture is marked as not drawn, with the reason, for example 'drawn without its stylesheet: /static/app.css answered 404'. The review no longer compares such a picture with the mock-up. The panel already shows the reason for a failed picture, so the page looks the same and I haven't drawn a mock-up. Ask if you want one.
+>    Action: f85-06.
+> 3. **A fixed setup shows before you sign off**: The runner now remembers which picture setup and which page list each card's pictures were taken with. At each pick, a card waiting for your sign-off whose setup or list has changed gets new pictures. That costs seconds and no Claude. m1 is the first case: coaster-ranker's setup has changed since its pictures, so if this lands before you sign m1 off, its styled pictures appear by themselves. A picture that simply failed isn't retried on every pick, so a broken setup can't keep starting an app. Fixing the setup is what brings the pictures back.
+>    Action: f85-08.
+> 4. **No pictures at all: cards whose plan listed no pages**: Pictures are only taken for the pages a card's plan lists, and the planner only started listing them once F85's own tickets were in. So cards planned earlier got none: F61 (the Claude usage page's 'at this rate', signed off today), F9 (Line polish) and F192 (fast lane on the board), and the ones waiting for you now: F77 (allowance bars), F69 (theme switch), F38 (layout shift on refresh) and F193 (project picker). You're right that an After should be there, and in fact a Before can be too: every card keeps a marker of where its work started, so the runner can redraw the page as it was then. From now on, the review lists any changed page the plan forgot, in its first round, and the runner pictures it right after that round. Those four waiting now won't get pictures, because their reviews are over.
+>    Action: f85-07.
+> 5. **Cost and order**: Three lead tickets, about 30 minutes each at the current median, plus a review round for F85. All three change the runner's own code, which only the lead may change. f85-06 goes first, and 07 and 08 wait for it. F85 sits at priority 11 on the board, behind a long queue. If you want m1's pictures fixed before its sign-off, pull F85's fast lane, or sign m1 off now from the real pages (the address above each picture opens it).
+>    Action: Approve the replan; fast lane F85 if you want it sooner.
+>
+> Proposals:
+> - F85: no unstyled pictures, and pictures for every card that changes a page (replan)
