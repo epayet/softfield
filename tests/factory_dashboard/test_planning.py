@@ -235,8 +235,8 @@ def test_the_lead_window_shows_the_75_line(planning, db_path, serve):
     # NOW is 12:00, so the reset two hours on is later today (f32-01)
     assert "5-hour window 80% · resets at 14:00 · planning may go past the 75% line" in tile
     assert "the factory stops there" in tile
-    assert re.search(r'class="past-mark" style="width: 80%"', html)
-    assert re.search(r'class="mark"[^>]*style="left: 75%"', html)
+    assert re.search(r'class="past-mark" style="width:80%"', html)
+    assert re.search(r'class="mark"[^>]*style="left:75%"', html)
 
 
 def test_the_lead_window_shows_the_week_row(planning, db_path, serve):
@@ -257,7 +257,7 @@ def test_the_lead_window_shows_the_week_row(planning, db_path, serve):
     tile = _text(_tile(html, "lead-window"))
     # a reset on a later day names the day (f32-01)
     assert f"week 60% · resets on {resets:%b} {resets.day} 12:00" in tile
-    assert re.search(r'class="under-mark" style="width: 60%"', html)
+    assert re.search(r'class="under-mark" style="width:60%"', html)
 
 
 def test_the_lead_window_says_a_reset_since_and_no_reading(planning, db_path, serve):
@@ -399,11 +399,12 @@ def test_the_desk_page_lays_out_at_phone_and_display_sizes(page, planning, db_pa
     assert layout_problems(page) == []
 
 
-def test_the_planning_template_keeps_only_a_meters_mark_and_a_groups_colour_inline():
-    """f81-04: every other style= moved into dashboard.css."""
+def test_the_planning_template_keeps_only_a_groups_colour_inline():
+    """f81-04: every other style= moved into dashboard.css; the two meters' fills and marks
+    are in the shared macro."""
     template = (STATIC.parent / "templates" / "planning.html").read_text(encoding="utf-8")
     styles = re.findall(r'style="([^"]*)"', template)
-    assert len(styles) == 6  # the two meters' fills and marks, a group's colour, the writing bar
+    assert len(styles) == 2  # a group's colour, the writing bar
     assert [s for s in styles if not re.match(r"(width|left): |--c: ", s)] == []
 
 
