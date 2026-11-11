@@ -2320,14 +2320,16 @@ def test_an_escalated_dev_ticket_reads_tried_and_now_with_the_lead(db_path):
         ),
     )
     work = _work(db_path, "F72-A")
-    assert work.look == "can"
+    assert work.look == "none"
     assert work.with_lead == ("f72-01",)
     assert work.waiting == 0
     html = _page(_client(db_path), "?view=developers")
     assert _slot(html, "/milestones/f72-a") == (
-        ["dev-can"],
+        ["dev-none"],
         "developers tried f72-01 · now with the lead",
     )
+    # a faded card isn't among the cards developers can work on
+    assert read(db_path, developers=True).developers[:2] == (0, 0)
 
 
 def test_a_direction_waits_for_the_leads_direction(db_path):
@@ -2485,13 +2487,25 @@ def test_a_blocked_dev_ticket_reads_is_blocked(db_path):
         ),
     )
     work = _work(db_path, "F72-A")
-    assert work.look == "can"
+    assert work.look == "none"
     assert work.blocked == ("f72-01",)
     html = _page(_client(db_path), "?view=developers")
     assert _slot(html, "/milestones/f72-a") == (
-        ["dev-can"],
+        ["dev-none"],
         "f72-01 is blocked",
     )
+
+
+def test_two_blocked_dev_tickets_read_are_blocked(db_path):
+    write(
+        db_path,
+        _tickets(
+            ("f72-a", "f72-01", "developer", "blocked", ()),
+            ("f72-a", "f72-02", "developer", "blocked", ()),
+        ),
+    )
+    html = _page(_client(db_path), "?view=developers")
+    assert _slot(html, "/milestones/f72-a") == (["dev-none"], "f72-01, f72-02 are blocked")
 
 
 def test_a_card_holding_only_lead_tickets_still_says_lead_only(db_path):
@@ -2508,23 +2522,40 @@ def test_a_card_holding_only_lead_tickets_still_says_lead_only(db_path):
 
 
 def test_a_lit_card_with_escalated_dev_and_no_lead_ticket_says_then_the_leads_ticket(db_path):
-    """A lit card with an escalated developer ticket and a ready lead ticket reads
-    "developers tried f70-01 · now with the lead" and `then` is the lead ticket."""
+    """A lit card with an escalated developer ticket and no lead ticket left reads "then the
+    lead's" that ticket, not "then Claude's review" (F206 D3)."""
     write(
         db_path,
         _tickets(
-            ("f70-a", "f70-01", "developer", "escalated", ()),
-            ("f70-a", "f70-02", "lead", "ready", ()),
+            ("f70-a", "f70-01", "developer", "running", ()),
+            ("f70-a", "f70-02", "developer", "escalated", ()),
         ),
     )
     work = _work(db_path, "F70-A")
     assert work.look == "can"
-    assert work.with_lead == ("f70-01",)
+    assert work.with_lead == ("f70-02",)
     assert work.then == "f70-02"
     html = _page(_client(db_path), "?view=developers")
     assert _slot(html, "/milestones/f70-a") == (
         ["dev-can"],
-        "developers tried f70-01 · now with the lead",
+        "developers: working on f70-01 · then the lead's f70-02",
+    )
+
+
+def test_a_lit_card_says_what_developers_can_take_over_a_handed_on_ticket(db_path):
+    """A card with a ready developer ticket and an escalated one is lit and says what
+    developers can take, not only that one was handed on (F206 D1, D3)."""
+    write(
+        db_path,
+        _tickets(
+            ("f70-a", "f70-01", "developer", "ready", ()),
+            ("f70-a", "f70-02", "developer", "blocked", ()),
+        ),
+    )
+    html = _page(_client(db_path), "?view=developers")
+    assert _slot(html, "/milestones/f70-a") == (
+        ["dev-can"],
+        "developers: 1 now · then the lead's f70-02",
     )
 
 
@@ -2591,15 +2622,15 @@ def test_sending_from_the_view_posts_the_same_reorder(page, board_db):
 
 
 def test_in_the_developers_view_a_card_at_work_keeps_its_frame_at_full_strength(page, db_path):
-    """F209 D2: a developer at work on a card of each look (F70 can, F71 waits, F72 none: its
-    one ticket is a lead's, the job a developer's) is framed and headed in blue, unfaded; the
-    lead at work on F73 (none) keeps its orange frame. Colours are read off the legend's
-    swatches, in whichever theme the page opens."""
+    """F209 D2: a developer at work on a card of each look (F70 can, F71 waits and F72 none: the
+    ticket is a lead's, the job a developer's, since a running developer ticket lights its card,
+    F206 D1) is framed and headed in blue, unfaded; the lead at work on F73 (none) keeps its
+    orange frame. Colours are read off the legend's swatches, in whichever theme the page opens."""
     _three_looks(db_path)
     write(
         db_path,
         _tickets(
-            ("f71-a", "f71-04", "developer", "running", ()),
+            ("f71-a", "f71-04", "lead", "running", ()),
             ("f73-a", "f73-01", "lead", "ready", ()),
         ),
     )

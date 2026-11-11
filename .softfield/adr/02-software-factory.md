@@ -798,6 +798,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** for the second milestone running (F61, then F77), the gates passed a developer ticket whose Done-when readings had no test: "fail without the change" was met by re-spaced regexes. It recurs, so it should become a check. The ticket's own cause was also wrong (the lever, not the Fast lane line), which cost f77-01 its three attempts.
 - **Decisions affected:** none.
 
+### F206 (2026-11-11): the developer's view counts started tickets ([review](../reviews/f206-developer-is-curre-tly-working-on.md))
+
+- **Q1:** one developer ticket at difficulty 3 (`_dev_work`, `dev_tag`, the legend). Qwen merged it on attempt 2 (the first failed its own tests): 73 min of model time and about 6M tokens in. No checkpoint. Review round 1: one blocking finding (handed-on cards lit, against D3, and counted on the Planted head), two should-fix (`then` ignored handed-on tickets; the handed-on words hid a lit card's work) and one nit, all fixed by the review. One nit was reported only.
+- **Q3:** no Claude in the build; see the review's numbers.
+- **Q5:** see the review's numbers.
+- **Anything else:** this is the third milestone running (F61, F77, F206) where the gates passed tests the developer wrote to match its own misreading. Here the docstrings said "is faded" and the assertions said `dev-can`. One test for a Done-when line set up a different case from the one the line describes. A later card's test (F209) was then built on the wrong behaviour and had to change with the fix. The fix that keeps working is the review reading each test against the card's decisions. A cheap gate can't compare a docstring with an assertion.
+- **Decisions affected:** none.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.

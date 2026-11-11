@@ -240,25 +240,25 @@ def _dev_work(
                     now += 1
                 else:
                     after += 1
-    if now + after == 0 and waiting == 0:
-        # no ready developer tickets
-        if running or with_lead or blocked:
-            # running, escalated or blocked tickets: card is lit
-            look = "can"
-            # find the first lead-side ticket left
-            left = [t for t in own if t["state"] != "done" and not _developer_ticket(t, protected)]
-            then = left[0]["ticket"] if left else "review"
-        elif own and all(t["state"] == "done" for t in own):
-            # every ticket done: what is left is Claude's review, not the lead's tickets
-            return DevWork("none", then="review")
-        else:
-            # no developer tickets at all
-            return DevWork("none")
+    if now + after or running:
+        look = "can"  # D1: a running developer ticket lights its card
+    elif waiting:
+        look = "waits"
+    elif own and all(t["state"] == "done" for t in own):
+        # every ticket done: what is left is Claude's review, not the lead's tickets
+        return DevWork("none", then="review")
     else:
-        look = "can" if now + after else "waits"
+        # D3: escalated and blocked tickets are the lead's now, so the card stays faded
+        return DevWork("none", with_lead=tuple(with_lead), blocked=tuple(blocked))
     then = None
     if look == "can":
-        left = [t for t in own if t["state"] != "done" and not _developer_ticket(t, protected)]
+        # what's left after the developers: lead tickets, and developer tickets handed on (D3)
+        left = [
+            t
+            for t in own
+            if t["state"] != "done"
+            and (t["state"] in ("escalated", "blocked") or not _developer_ticket(t, protected))
+        ]
         then = left[0]["ticket"] if left else "review"
     return DevWork(
         look,
