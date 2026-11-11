@@ -38,3 +38,9 @@ attempts: 3
 tokens: 4203101
 logs: .softfield/var/runs/20261110-182701/f65-06-comment-dashes-sign-off
 ```
+
+```yaml
+# --- runner ---
+result: done
+finished_by: lead
+```
