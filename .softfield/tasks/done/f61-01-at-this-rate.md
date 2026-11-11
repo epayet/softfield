@@ -27,3 +27,12 @@ Read D1 to D6 in `.softfield/cards/f61-on-claude-usage-page-there-is.md`: the wo
 - the legend has the ghost's line
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 3
+duration_s: 6889
+gate_failures: ['stopped', 'stopped']
+tokens: 7754280
+```
