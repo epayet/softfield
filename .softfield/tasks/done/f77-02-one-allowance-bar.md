@@ -27,3 +27,12 @@ Read `.softfield/cards/f77-the-bars-in-the-agent-allowance.md` (Notes, D1), `fac
 - neither `allowance.html` nor `planning.html` holds the words `under-mark`, `past-mark` or `nearly-out`
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 2
+duration_s: 6260
+gate_failures: ['task-tests']
+tokens: 6088715
+```
