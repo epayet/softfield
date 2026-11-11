@@ -260,6 +260,43 @@ def test_the_lead_window_shows_the_week_row(planning, db_path, serve):
     assert re.search(r'class="under-mark" style="width:60%"', html)
 
 
+@pytest.mark.parametrize(
+    ("value", "fill"), [(0.97, "nearly-out"), (0.8, "past-mark"), (0.4, "under-mark")]
+)
+def test_the_lead_window_colours_a_reading_as_the_overview_does(
+    planning, db_path, serve, value, fill
+):
+    """f77-02: one macro draws both pages' bars, so a reading above 95% is red here too."""
+    _write(
+        db_path,
+        lambda conn: metrics.add_usage_event(
+            conn,
+            OPUS,
+            NOW.isoformat(),
+            "reading",
+            window="five_hour",
+            value=value,
+            resets_at=(NOW + timedelta(hours=2)).isoformat(),
+        ),
+    )
+    client = serve()
+    tile = _page(client).split('id="lead-window"', 1)[1].split("</section>", 1)[0]
+    assert f'class="{fill}" style="width:{value * 100:.0f}%"' in tile
+    overview = client.get("/").text
+    five_hour = overview.split('id="allow-claude-five_hour"', 1)[1].split('id="allow-', 1)[0]
+    assert f'class="{fill}" style="width:{value * 100:.0f}%"' in five_hour
+
+
+def test_no_page_keeps_its_own_allowance_fill_rule():
+    """f77 D1: the fill rule lives in the allowance_bar macro only (the Overview's legend still
+    names its swatches' classes, so the check looks for a class chosen in a Jinja expression)."""
+    templates = STATIC.parent / "templates"
+    for name in ("planning.html", "_partials/allowance.html"):
+        text = (templates / name).read_text(encoding="utf-8")
+        exprs = re.findall(r"\{[{%].*?[}%]\}", text, re.S)
+        assert not [e for e in exprs if re.search(r"under-mark|past-mark|nearly-out", e)], name
+
+
 def test_the_lead_window_says_a_reset_since_and_no_reading(planning, db_path, serve):
     """A row without a fresh reading says why, from its status (f32-01)."""
     _write(

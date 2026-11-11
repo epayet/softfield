@@ -790,6 +790,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** the gates trusted tests the developer wrote to match its own code: "the line contains 'at this rate: out'" passed a line with no gap and a negative one. When a ticket's Done-when quotes exact words, its tests list should quote the assertions too.
 - **Decisions affected:** none.
 
+### F77 (2026-11-11): allowance bars the same length, the same colours on every page ([review](../reviews/f77-the-bars-in-the-agent-allowance.md))
+
+- **Q1:** two developer tickets. f77-01 (CSS grid, difficulty 2): Qwen 0/3 (two "no edit after 20 min", then `tests-fail-on-main` because its test drew bars already equal on main), parked about 9 h for Claude's reset, then an Opus direction and finish ($1.25). f77-02 (one Jinja macro, difficulty 3): Qwen passed on attempt 2 after a 79-minute timeout, no Claude. No checkpoint. Review round 1: one should-fix (f77-02's Done-when readings untested), fixed by the review; two nits reported.
+- **Q3:** Opus $1.25 on f77-01; Qwen about 6.6M tokens in over both tickets; see the review's numbers.
+- **Q5:** see the review's numbers.
+- **Anything else:** for the second milestone running (F61, then F77), the gates passed a developer ticket whose Done-when readings had no test: "fail without the change" was met by re-spaced regexes. It recurs, so it should become a check. The ticket's own cause was also wrong (the lever, not the Fast lane line), which cost f77-01 its three attempts.
+- **Decisions affected:** none.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.
