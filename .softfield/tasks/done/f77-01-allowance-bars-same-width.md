@@ -32,3 +32,9 @@ attempts: 3
 tokens: 527533
 logs: .softfield/var/runs/20261110-182701/f77-01-allowance-bars-same-width
 ```
+
+```yaml
+# --- runner ---
+result: done
+finished_by: lead
+```
