@@ -25,3 +25,10 @@ Find the existing tests with a search for `_repair_ticket` and "fails pre-flight
 - The refusal is still recorded as a usage event, so Claude counts as limited for the next job.
 - A repair that isn't refused works as today.
 - A repair given up leaves nothing in `state.interrupted` or `state.in_flight`.
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
