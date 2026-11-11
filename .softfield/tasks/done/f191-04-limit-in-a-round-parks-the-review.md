@@ -30,3 +30,10 @@ Read "What happened (lead, 2026-11-02)" and D4 in `.softfield/cards/f191-why-is-
 - A refusal with no time given parks for the same minimum `_park` gives any job.
 - `state.parked` holds no entry for the review.
 - `runner milestone` still waits for the reset in place.
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
