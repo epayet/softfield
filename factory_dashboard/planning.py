@@ -12,7 +12,7 @@ import json
 import re
 import sqlite3
 from collections.abc import Callable, Collection, Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -590,6 +590,30 @@ def desk_trail(
     }
 
 
+def _ripe_takes_its_thread(
+    ripe: list[DeskItem], answers: list[DeskItem], revising: Mapping[str, str]
+) -> tuple[list[DeskItem], list[DeskItem]]:
+    """A ripe card's conversation is its one row in To sign off (F65 D8): dashed and being
+    revised while the lead owes a reply, then the lead's reply and the sign-off it waits for.
+    That conversation leaves Your answers wanted."""
+    threads = {a.link: a for a in answers}
+    taken: set[str] = set()
+    rows: list[DeskItem] = []
+    for item in ripe:
+        thread = threads.get(item.link)
+        if thread is None:
+            rows.append(item)
+            continue
+        taken.add(item.link)
+        if thread.on_its_way:
+            card = item.link.removeprefix("/planning/")
+            words = revising.get(card, "being revised")
+            rows.append(replace(item, words=words, on_its_way=True, place=thread.place))
+        else:
+            rows.append(replace(item, words=f"{thread.words} · reviewed, waits for your sign-off"))
+    return rows, [a for a in answers if a.link not in taken]
+
+
 def desk(
     conn: sqlite3.Connection, project: str, now: datetime, *, line: dict[str, Any] | None = None
 ) -> list[DeskGroup]:
@@ -608,13 +632,13 @@ def desk(
         titles = _card_titles(conn, project_id)
         refusals = _refused(conn, project_id, titles)
         repo = _repo(conn, project)
-        ripe = _acted_on(conn, project_id, _ripe(conn, project, now, line=line))
-        proposals = _open_proposals(
-            conn, project_id, _known_cards(repo), repo, _revising(conn, project_id, project, now)
-        )
-        answers = _acted_on(
-            conn, project_id, _answers_wanted(conn, project_id, project, titles, now)
-        )
+        revising = _revising(conn, project_id, project, now)
+        ripe = _ripe(conn, project, now, line=line)
+        answers = _answers_wanted(conn, project_id, project, titles, now)
+        ripe, answers = _ripe_takes_its_thread(ripe, answers, revising)
+        ripe = _acted_on(conn, project_id, ripe)
+        proposals = _open_proposals(conn, project_id, _known_cards(repo), repo, revising)
+        answers = _acted_on(conn, project_id, answers)
         seeds = _acted_on(conn, project_id, _seeds(conn, project_id))
         blocked = _acted_on(conn, project_id, _blocked(conn, project_id))
     return [

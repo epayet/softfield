@@ -2350,6 +2350,124 @@ def test_the_thread_and_proposal_pages_say_being_revised(planning, db_path, serv
     assert "Approve" in page and "Reject" in page
 
 
+# --- a comment on a ripe card dashes the row (D8) ------------------------------------------------
+
+
+def test_a_ripe_card_with_waiting_plan_message_shows_dashed_row(planning, db_path, db, serve):
+    """A ripe card with a waiting plan_message, and with the message stored and a planner job
+    open: one row in To sign off, dashed, \"being revised · …\", not counted in the group's
+    number or the desk's."""
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        thread = metrics.planner_thread(conn, project, "m4", _at(timedelta(hours=5)))["id"]
+        metrics.add_planner_message(
+            conn, thread, "owner", _at(timedelta(minutes=5)), "Please review."
+        )
+        metrics.queue_job(
+            conn, planning, "planner", "m4#1", "your message", _at(timedelta(minutes=4))
+        )
+    finally:
+        conn.close()
+    [item] = [i for i in _group(db, "ripe") if i.link == "/planning/m4"]
+    assert item.on_its_way
+    assert item.words.startswith("being revised · ")
+    assert "/planning/m4" not in [i.link for i in _group(db, "answers")]
+    waiting = _waiting_by_group(db_path)
+    assert waiting["ripe"] == ("To sign off", 1)
+    html = _page(serve())
+    assert _desk_count(html) == 2
+    assert 'class="desk-item on-its-way-item' in _groups(html)["ripe"]
+
+
+def test_the_lead_replied_shows_solid_row_with_reply_words(planning, db_path, db, serve):
+    """The lead has replied: one solid row in To sign off, \"the lead replied … ago · reviewed,
+    waits for your sign-off\", counted once."""
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        thread = metrics.planner_thread(conn, project, "m4", _at(timedelta(hours=5)))
+        metrics.add_planner_message(
+            conn,
+            thread["id"],
+            "lead",
+            _at(timedelta(minutes=59)),
+            "Here is my answer.",
+        )
+    finally:
+        conn.close()
+    [item] = [i for i in _group(db, "ripe") if i.link == "/planning/m4"]
+    assert not item.on_its_way
+    assert item.words.startswith("the lead replied")
+    assert item.words.endswith(" ago · reviewed, waits for your sign-off")
+    assert "/planning/m4" not in [i.link for i in _group(db, "answers")]
+    # f1, ripe with no thread, reads as before
+    [f1] = [i for i in _group(db, "ripe") if i.link == "/planning/f1"]
+    assert f1.words == "reviewed · waits for your sign-off" and not f1.on_its_way
+    waiting = _waiting_by_group(db_path)
+    assert waiting["ripe"] == ("To sign off", 2)
+    html = _page(serve())
+    assert _desk_count(html) == 3
+    ripe_group = _groups(html)["ripe"]
+    assert "on-its-way-item" not in ripe_group
+    assert "the lead replied" in ripe_group
+    assert "reviewed, waits for your sign-off" in ripe_group
+
+
+def test_a_sign_off_on_its_way_on_a_row_being_revised_says_signing_off(planning, db_path, db):
+    """A Sign off on its way on a row being revised says \"signing off at the runner's next
+    pick\"."""
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        thread = metrics.planner_thread(conn, project, "m4", _at(timedelta(hours=5)))["id"]
+        metrics.add_planner_message(
+            conn, thread, "owner", _at(timedelta(minutes=5)), "Please review."
+        )
+        metrics.queue_job(
+            conn, planning, "planner", "m4#1", "your message", _at(timedelta(minutes=4))
+        )
+        metrics.add_request(conn, planning, "signoff", "m4", None, NOW.isoformat())
+    finally:
+        conn.close()
+    [item] = [i for i in _group(db, "ripe") if i.link == "/planning/m4"]
+    assert item.on_its_way
+    assert item.words == "signing off at the runner's next pick"
+
+
+def test_a_ripe_row_whose_reply_is_being_written_says_writing_now(planning, db_path, serve):
+    """The planner job running on m4's message: m4's row in To sign off says Writing now."""
+    client = serve()
+
+    def write(conn: sqlite3.Connection) -> None:
+        run = conn.execute("SELECT id FROM runs WHERE run_dir = '20261002-113500'").fetchone()
+        metrics.add_request(
+            conn, planning, "plan_message", "m4", '{"text": "Why?"}', _at(timedelta(minutes=9))
+        )
+        row = metrics.queue_job(
+            conn, planning, "planner", "m4#1", "your message", _at(timedelta(minutes=8))
+        )
+        job = metrics.start_job(
+            conn,
+            run["id"],
+            ticket_id=None,
+            milestone_id=None,
+            role="planner",
+            agent=OPUS,
+            attempt=1,
+            started=_at(timedelta(minutes=2)),
+        )
+        conn.execute("UPDATE work_queue SET started_job = ? WHERE id = ?", (job, row))
+
+    _write(db_path, write)
+    groups = _groups(_page(client))
+    m4 = re.search(r'<a href="/planning/m4[^"]*" class="([^"]*)">(.*?)</a>', groups["ripe"], re.S)
+    assert m4, groups["ripe"]
+    assert m4[1] == "desk-item on-its-way-item writing"
+    assert _text(m4[2]).startswith("Writing now")
+    assert 'href="/planning/m4' not in groups["answers"]
+
+
 # --- old ADR paths (_adr_waits) (f196-01) -------------------------------------------------------
 
 

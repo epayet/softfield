@@ -366,10 +366,11 @@ def test_answers_wanted_lists_the_leads_newest_reply_first(planning, db_path, db
     _lead_says(db_path, planning, "f7", "Which one?")
     _lead_says(db_path, planning, "f9", "Two developers?")
     _lead_says(db_path, planning, "f7", "Or the second?")
-    _finished(db_path, planning, "plan_message", "f1", "And this one?", None)
+    _finished(db_path, planning, "plan_message", "f3", "And this one?", None)
     links = [i.link for i in _group(db, "answers")]
-    shown = ("/planning/f7", "/planning/f9", "/planning/general", "/planning/f1")
-    # general's reply is the fixture's, written before the test's
+    shown = ("/planning/f7", "/planning/f9", "/planning/general", "/planning/f3")
+    # general's reply is the fixture's, written before the test's; f3, not the ripe f1, whose
+    # conversation is its row in To sign off (F65 D8)
     assert [link for link in links if link in shown] == list(shown)
 
 
