@@ -98,7 +98,9 @@ def test_the_picker_follows_the_owner_s_project_order(db_path):
     conn = metrics.open_db(db_path)
     try:
         metrics.upsert_project(conn, "other")
-        metrics.set_project_order(conn, ["other", "coucou"])
+        metrics.upsert_project(conn, "gone")
+        metrics.set_project_order(conn, ["gone", "other", "coucou"])
+        metrics.set_project_paused(conn, "gone", metrics.FORGOTTEN)
     finally:
         conn.close()
 
@@ -106,11 +108,24 @@ def test_the_picker_follows_the_owner_s_project_order(db_path):
     app.dependency_overrides[get_now] = lambda: NOW
     client = TestClient(app, base_url="http://127.0.0.1:8765")
 
-    html = client.get("/").text
-    select_match = re.search(r'<select[^>]*name="project"[^>]*>(.*?)</select>', html, re.S)
-    assert select_match
-    options = re.findall(r'<option value="([^"]+)"', select_match.group(1))
-    assert options == ["other", "coucou"]
+    def options(address: str) -> list[str]:
+        html = client.get(address).text
+        select_match = re.search(r'<select[^>]*name="project"[^>]*>(.*?)</select>', html, re.S)
+        assert select_match
+        return re.findall(r'<option value="([^"]+)"', select_match.group(1))
+
+    # the forgotten project is left out, though first in the order
+    assert options("/") == ["other", "coucou"]
+    # a page opened on an unlisted project still shows it, last and selected
+    assert options("/?project=gone") == ["other", "coucou", "gone"]
+    assert '<option value="gone" selected>' in client.get("/?project=gone").text
+
+    conn = metrics.open_db(db_path)
+    try:
+        metrics.set_project_order(conn, ["coucou", "other"])
+    finally:
+        conn.close()
+    assert options("/") == ["coucou", "other"]
 
 
 def test_the_page_loads_its_scripts_and_styles_from_the_app(client):
