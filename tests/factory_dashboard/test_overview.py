@@ -4361,6 +4361,24 @@ def test_an_escalation_for_a_fast_lane_ticket_shows_in_the_bay_when_ticket_not_r
     assert "Direction: f24-01-other" in row_text(after)
 
 
+def test_an_escalation_of_a_card_already_in_the_lane_shows_in_the_bay(board_db, tmp_path):
+    """F191 D3: F23 marked, with no request open (the usual case once the runner applied it):
+    its escalated ticket's row still goes in the bay, as its ticket rows do."""
+    _queue_on(board_db, "escalation", "f23-06-escalated")
+    bay, after = _lane_bay(_reserve_client(board_db, tmp_path, "f23-planted").get("/").text)
+    assert _rows(bay)[0] == "Escalation: f23-06-escalated · Why"
+    assert "Escalation: f23-06-escalated" not in after
+
+
+def test_an_escalation_of_a_card_asked_out_of_the_lane_stays_in_the_run_order(board_db, tmp_path):
+    """F191 D3, F192 D4: F23 marked but asked out: its escalation shows where it does today."""
+    _queue_on(board_db, "escalation", "f23-06-escalated")
+    _ask_lane(board_db, "f23", "off")
+    bay, after = _lane_bay(_reserve_client(board_db, tmp_path, "f23-planted").get("/").text)
+    assert "Escalation: f23-06-escalated" not in bay
+    assert "Escalation: f23-06-escalated" in row_text(after)
+
+
 def test_no_card_in_the_fast_lane_leaves_next_in_line_as_the_run_order(board_db, tmp_path):
     from factory_dashboard.line import live_line
 

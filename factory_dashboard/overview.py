@@ -974,14 +974,13 @@ def _live_context(
     # the fast lane's tickets, and their directions and escalations, go first (F172 D9)
     reserve_cards = reserve_marked(conn, project, now, found=cards)
     # as the runner will once it applies the requests: a card asked out has left (F192 D4)
-    lane, rest = fast_lane(
-        line["queue"],
-        {c.key for c in reserve_cards if c.lane_asked != "off"},
-    )
+    lane_keys = {c.key for c in reserve_cards if c.lane_asked != "off"}
+    lane, rest = fast_lane(line["queue"], lane_keys)
     lane_ids = {str(r["ticket"]) for r in lane}
     # "on its way" only on a row of the card asked in, not on a ticket it waits for elsewhere
     asked_in = {c.key for c in reserve_cards if c.lane_asked == "on"}
-    qjobs = queued_jobs(conn, project, now, first=lane_ids, card_keys=asked_in)
+    # an escalated lane ticket's row goes by the same cards as its ticket rows (F191 D3)
+    qjobs = queued_jobs(conn, project, now, first=lane_ids, card_keys=lane_keys)
     lane = [
         {
             **r,
