@@ -1,6 +1,7 @@
 # Milestone F184: The top bar's dot goes green while the runner checks, not grey
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** done · **Priority:** 100 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-11. Base: git tag `f184-when-check-all-is-running-the-start`. Report: [`.softfield/reviews/f184-when-check-all-is-running-the.md`](../reviews/f184-when-check-all-is-running-the.md).
 > Planted by the owner on 2026-10-29.
 
 ## Notes

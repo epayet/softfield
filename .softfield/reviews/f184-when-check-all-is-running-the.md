@@ -1,5 +1,7 @@
 # Review: F184, the top bar's dot goes green while the runner checks
 
+- **Status:** done, signed off by the owner on 2026-11-11.
+
 ## Sign-off sheet
 
 ### 1. What changed
