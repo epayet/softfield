@@ -29,3 +29,12 @@ Read D8 in `.softfield/cards/f65-what-happens-if-i-comment-on.md` and the pictur
 - a Sign off on its way on a row being revised says "signing off at the runner's next pick"
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: all-tests)
+attempts: 3
+tokens: 4203101
+logs: .softfield/var/runs/20261110-182701/f65-06-comment-dashes-sign-off
+```
