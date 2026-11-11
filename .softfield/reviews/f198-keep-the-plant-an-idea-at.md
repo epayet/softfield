@@ -1,5 +1,7 @@
 # Review: F198, Plant an idea stays at the top, with Coming seeds under it
 
+- **Status:** done, signed off by the owner on 2026-11-11.
+
 ## Sign-off sheet
 
 ### 1. What changed
