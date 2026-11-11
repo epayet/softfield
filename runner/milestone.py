@@ -651,7 +651,13 @@ def _fix_scope(s: Session, milestone: str, since: str) -> str:
 def review_pictures(repo: Path, milestone: str) -> str:
     """The review's line on the card's after pictures and mock-up, or "none" (ADR 40 item 6)."""
     folder = repo / shots.SHOTS_DIR / milestone
-    after = sorted(folder.glob("after-*.png"))
+    listed_pictures = shots.read_list(folder).get("pictures")
+    taken = {
+        name
+        for name, picture in (listed_pictures if isinstance(listed_pictures, dict) else {}).items()
+        if isinstance(picture, dict) and picture.get("state") == shots.TAKEN
+    }
+    after = [p for p in sorted(folder.glob("after-*.png")) if p.name in taken]
     if not after:
         return "none"
     # a mock-up's folder goes by the short key, `f85-mockup` (lead.md)

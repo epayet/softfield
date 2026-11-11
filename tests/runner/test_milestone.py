@@ -466,6 +466,24 @@ def test_each_review_round_takes_the_after_and_the_before_once(repo, monkeypatch
     assert "shots" not in git(repo, "log", "--name-only", "--format=", "-5")  # never in git
 
 
+def test_review_pictures_lists_only_the_after_pictures_taken(tmp_path):
+    folder = tmp_path / shots.SHOTS_DIR / "m1"
+    folder.mkdir(parents=True)
+    for name in ("after-phone-1.png", "after-wide-1.png"):
+        (folder / name).write_bytes(b"png")
+    states = {
+        "after-phone-1.png": {"state": shots.TAKEN, "reason": ""},
+        "after-wide-1.png": {"state": shots.FAILED, "reason": "drawn without its stylesheet"},
+    }
+    (folder / shots.LIST_FILE).write_text(json.dumps({"pictures": states}))
+    line = milestone.review_pictures(tmp_path, "m1")
+    assert "after-phone-1.png" in line
+    assert "after-wide-1.png" not in line
+    states["after-phone-1.png"]["state"] = shots.FAILED
+    (folder / shots.LIST_FILE).write_text(json.dumps({"pictures": states}))
+    assert milestone.review_pictures(tmp_path, "m1") == "none"
+
+
 def test_a_review_without_shots_runs_as_it_did(repo, monkeypatch):
     _milestone_repo(repo)
     seen: list[None] = []

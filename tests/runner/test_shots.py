@@ -497,6 +497,32 @@ def test_a_500_is_recorded_by_the_browser(app):
     assert _pngs(app) == []
 
 
+def test_a_page_without_its_stylesheet_is_a_failed_picture(app):
+    (app / "pages" / "first.html").write_text('<link rel="stylesheet" href="/static/app.css">hi')
+    (app / "pages" / "second.html").write_text('<link rel="stylesheet" href="/ok.css">hi')
+    (app / "pages" / "ok.css.html").write_text("body{}")
+    _take(app)
+    pictures = _list(app)["pictures"]
+    for file in ("after-phone-1.png", "after-wide-1.png"):
+        picture = pictures[file]
+        assert picture["state"] == shots.FAILED
+        assert "/static/app.css" in picture["reason"]
+        assert "404" in picture["reason"]
+        assert (_folder(app) / file).exists()
+    assert pictures["after-wide-2.png"] == {"state": shots.TAKEN, "reason": ""}
+
+
+def test_a_stylesheet_on_another_host_is_refused_and_failed(app, other_host):
+    other, other_hits = other_host
+    (app / "pages" / "first.html").write_text(f'<link rel="stylesheet" href="{other}/x.css">hi')
+    _take(app)
+    picture = _list(app)["pictures"]["after-wide-1.png"]
+    assert picture["state"] == shots.FAILED
+    assert "was refused" in picture["reason"]
+    assert f"{other}/x.css" in picture["reason"]
+    assert other_hits == []
+
+
 def test_softfields_own_shots_picture_the_dashboard(tmp_path, monkeypatch):
     """ADR 40 item 4: a copy of the metrics database, the dashboard of the tree on that copy."""
     db = tmp_path / "metrics.sqlite"

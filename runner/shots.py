@@ -119,7 +119,15 @@ def _shoot(origin: str, wanted: Sequence[Wanted], folder: Path) -> dict[str, Pic
 def _browse(origin: str, wanted: Sequence[Wanted], folder: Path) -> dict[str, Picture]:
     """In the browser's process. The routes refuse everything but GETs to ``origin``; a redirect
     isn't routed again, so the browser also resolves no name but 127.0.0.1."""
-    from playwright.sync_api import Error, Page, Route, WebSocketRoute, sync_playwright
+    from playwright.sync_api import (
+        Error,
+        Page,
+        Request,
+        Response,
+        Route,
+        WebSocketRoute,
+        sync_playwright,
+    )
 
     def guard(route: Route) -> None:
         if allowed(route.request.method, route.request.url, origin):
@@ -131,6 +139,24 @@ def _browse(origin: str, wanted: Sequence[Wanted], folder: Path) -> dict[str, Pi
         socket.close()
 
     def draw(page: Page, want: Wanted) -> Picture:
+        unstyled: list[str] = []
+
+        def lost(request: Request) -> None:
+            if request.resource_type == "stylesheet":
+                path = urlsplit(request.url).path or "/"
+                if allowed(request.method, request.url, origin):
+                    unstyled.append(f"{path} failed to load")
+                else:
+                    unstyled.append(f"{request.url} was refused")
+
+        def answered(response: Response) -> None:
+            request = response.request
+            if request.resource_type == "stylesheet" and response.status >= 400:
+                path = urlsplit(request.url).path or "/"
+                unstyled.append(f"{path} answered {response.status}")
+
+        page.on("requestfailed", lost)
+        page.on("response", answered)
         response = page.goto(origin + want.address, timeout=PAGE_LIMIT, wait_until="load")
         if response is None:
             return Picture(FAILED, "no answer")
@@ -141,6 +167,8 @@ def _browse(origin: str, wanted: Sequence[Wanted], folder: Path) -> dict[str, Pi
         with contextlib.suppress(Error):
             page.wait_for_load_state("networkidle", timeout=SETTLE_LIMIT)
         page.screenshot(path=folder / want.file, full_page=True, animations="disabled")
+        if unstyled:
+            return Picture(FAILED, f"drawn without its stylesheet: {unstyled[0]}")
         return Picture(TAKEN)
 
     results: dict[str, Picture] = {}
@@ -268,7 +296,7 @@ def _kept_before(listed: Mapping[str, object], folder: Path) -> dict[str, Pictur
     return kept
 
 
-def _read_list(folder: Path) -> dict[str, object]:
+def read_list(folder: Path) -> dict[str, object]:
     try:
         listed = json.loads((folder / LIST_FILE).read_text(encoding="utf-8"))
     except (OSError, ValueError):
@@ -286,7 +314,7 @@ def _take(repo: Path, key: str, base: str, log: Callable[[str], None]) -> None:
         return
     folder = repo / SHOTS_DIR / key
     folder.mkdir(parents=True, exist_ok=True)
-    listed = _read_list(folder)
+    listed = read_list(folder)
     same = listed.get("pages") == addresses and listed.get("base") == base
     kept = _kept_before(listed, folder) if same else {}
     after = _wanted("after", addresses)

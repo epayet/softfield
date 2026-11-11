@@ -282,6 +282,9 @@ def test_the_review_names_the_after_pictures_and_the_mockup_or_none(tmp_path: Pa
     folder = tmp_path / ".softfield/var/shots/f1-a-card"
     folder.mkdir(parents=True)
     (folder / "after-phone-1.png").write_bytes(b"")
+    (folder / "shots.json").write_text(
+        '{"pictures": {"after-phone-1.png": {"state": "taken", "reason": ""}}}', encoding="utf-8"
+    )
     assert milestone.review_pictures(tmp_path, "f1-a-card").endswith("mock-up: none")
     (tmp_path / ".softfield/cards/f1-mockup").mkdir(parents=True)
     (tmp_path / ".softfield/cards/f1-mockup/a.html").write_text("x", encoding="utf-8")
