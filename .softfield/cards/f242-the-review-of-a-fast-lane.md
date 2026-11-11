@@ -1,4 +1,4 @@
-# Milestone F242: The review of a fast lane ticket doesn't seem to get…
+# Milestone F242: A fast-lane card's review goes in the fast lane
 
 > **State:** idea · **Priority:** 100 · **Area:** factory
 > Planted by the owner on 2026-11-11.
