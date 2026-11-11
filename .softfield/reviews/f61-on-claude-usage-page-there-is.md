@@ -1,5 +1,7 @@
 # Review: F61, Claude's meters say when the window runs out at this rate
 
+- **Status:** done, signed off by the owner on 2026-11-11.
+
 ## Sign-off sheet
 
 ### 1. What changed

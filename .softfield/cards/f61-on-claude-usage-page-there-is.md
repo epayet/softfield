@@ -1,6 +1,7 @@
 # Milestone F61: Claude's meters say when the window runs out at this rate
 
-> **State:** ready · **Priority:** 11 · **Area:** factory
+> **State:** done · **Priority:** 11 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-11. Base: git tag `f61-on-claude-usage-page-there-is-start`. Report: [`.softfield/reviews/f61-on-claude-usage-page-there-is.md`](../reviews/f61-on-claude-usage-page-there-is.md).
 > Planted by the owner on 2026-10-08.
 
 ## Notes
