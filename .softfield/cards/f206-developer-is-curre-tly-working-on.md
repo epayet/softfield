@@ -1,6 +1,7 @@
 # Milestone F206: The board's developer's view counts tickets a developer has started
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** done · **Priority:** 100 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-11. Base: git tag `f206-developer-is-curre-tly-working-on-start`. Report: [`.softfield/reviews/f206-developer-is-curre-tly-working-on.md`](../reviews/f206-developer-is-curre-tly-working-on.md).
 > Planted by the owner on 2026-11-02.
 
 ## Notes

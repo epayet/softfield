@@ -1,5 +1,7 @@
 # Review: F206, the board's developer's view counts tickets a developer has started
 
+- **Status:** done, signed off by the owner on 2026-11-11.
+
 ## Sign-off sheet
 
 ### 1. What changed
