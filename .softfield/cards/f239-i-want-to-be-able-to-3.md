@@ -1,4 +1,4 @@
-# Milestone F239: I want to be able to run projects directly from the…
+# Milestone F239: Run, stop and open each product's app from the Projects page, on Docker Compose
 
 > **State:** idea · **Priority:** 100 · **Area:** factory
 > Planted by the owner on 2026-11-10.
