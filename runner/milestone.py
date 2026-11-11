@@ -11,7 +11,7 @@ from pathlib import Path
 
 import yaml
 
-from runner import console, look, metrics, prompts, router, shots
+from runner import console, dispatch, look, metrics, prompts, router, shots
 from runner.agents import ANY, CHECK_COMMANDS, GIT_READ_COMMANDS, JobSpec
 from runner.config import Config, project_checks, read_protected
 from runner.gates import GateResult
@@ -724,6 +724,14 @@ def _fix_held_by_the_week(s: Session, milestone: str) -> bool:
     return _passed_over(_windows_now(s, at), at) is not None
 
 
+def _hand_over(s: Session, row: dispatch.Queued) -> None:
+    """End the review's turn between rounds, its row done and no stop recorded: `due_reviews`
+    makes it due again once its card's tickets are done, and it goes on from the next round."""
+    s.running_row = None
+    finish_row(s, row)
+    close_session(s)
+
+
 def review_milestone(cfg: Config, milestone: str, base: str, *, park: bool = False) -> str:
     """Run review rounds until a stop rule fires. Returns the stop reason. The review is a
     queued job (ADR 22 item 1): `runner run` queued it, else it is queued here, and its row
@@ -733,9 +741,12 @@ def review_milestone(cfg: Config, milestone: str, base: str, *, park: bool = Fal
     run`), a round Claude can't take now parks the review's row and returns PARKED: no stop
     is recorded, and it goes on from that round once the queue picks it again (F53 D1); so does
     a round a certain limit or an expired login stops half-way, its session resumed (F191 D4).
-    Without, there is no queue to go back to: it waits for the reset. With or without, a round
-    whose lead fix the week holds also returns PARKED, its row done: no stop is recorded, and the
-    review comes due again once the fix is done (F219 D3)."""
+    Also with ``park``, a round runs no queue of its own (F191 D7): one that leaves its card
+    tickets in ready/ and no stop returns PARKED, its row done, and the main queue runs the
+    fixes first among tickets (`loop.under_review`); a last round's fixes run there in the
+    board's order. Without ``park`` (`runner milestone`) there is no queue to go back to: it
+    waits for the reset, and runs each round's fixes itself; a round whose lead fix the week
+    holds returns PARKED too, its row done (F219 D3)."""
     s = open_session(cfg, f"review {milestone}")
     s.running_row = row = enqueue(s, REVIEW, milestone, review_reason(milestone))
     rounds = s.state.review_counts.setdefault(milestone, [])
@@ -812,6 +823,14 @@ def review_milestone(cfg: Config, milestone: str, base: str, *, park: bool = Fal
         rounds.append(count)
         save_state(s.state, s.state_path)
         reason = stop_reason(round_no, round_, previous, seen, cfg.review_rounds)
+        if park:  # the main queue runs the fixes (F191 D7): nothing here waits or sleeps
+            if reason:
+                stop = reason
+                break
+            if short_key(milestone) in _ticket_milestones(s.repo, "ready"):
+                _hand_over(s, row)
+                return PARKED
+            continue
         # no round follows: a checkpoint reads this round's fixes, not the review (ADR 38)
         s.last_round = short_key(milestone) if reason else None
         restarted = work_queue(s, milestone=milestone)
@@ -825,9 +844,7 @@ def review_milestone(cfg: Config, milestone: str, base: str, *, park: bool = Fal
         if _fix_held_by_the_week(s, milestone):
             # a round that reads no fixes is paid for twice: no stop, it goes on from the
             # next round once the fix is done (F219 D3)
-            s.running_row = None
-            finish_row(s, row)
-            close_session(s)
+            _hand_over(s, row)
             return PARKED
     if stop == "not started":  # no rounds left: a rerun after the owner decided something
         stop = s.state.review_stop.get(milestone, RESTART)

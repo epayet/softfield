@@ -604,6 +604,59 @@ def test_with_claude_limited_the_line_goes_on_while_the_lanes_lead_ticket_waits(
     loop.close_session(s)
 
 
+def _review_fix_session(repo: Path, monkeypatch, *, agent: str = ""):
+    """`_lane_session`'s tickets, with F30 between two review rounds and its fix f30-05 last on
+    the board."""
+    s, _ = _lane_session(repo, monkeypatch)
+    _on_card(repo, "f30-05-fix", 30, agent=agent)
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "the review's fix")
+    s.state.review_counts["f30"] = [2]
+    return s, load_dir(repo / ".softfield" / "tasks" / "ready", 150)
+
+
+def test_a_reviews_fix_goes_after_the_lane_and_the_due_parks_before_the_board(repo, monkeypatch):
+    """F191 D7: the review handed its fix to the main queue; it goes first among tickets but
+    the fast lane's and those already begun whose reset has passed."""
+    s, ready = _review_fix_session(repo, monkeypatch)
+    assert loop.under_review(s.state) == {"f30"}
+    task = loop._next_task(s, ready, set(), set())
+    assert task is not None and task.id == "f20-01-dep"  # the lane's
+    rest = [t for t in ready if t.id not in {"f20-01-dep", "f9-01-lane"}]
+    task = loop._next_task(s, rest, set(), set())
+    assert task is not None and task.id == "f2-01-parked"  # begun, its reset passed
+    rest = [t for t in rest if t.id != "f2-01-parked"]
+    task = loop._next_task(s, rest, set(), set())
+    assert task is not None and task.id == "f30-05-fix"  # before f1-01-first, first on the board
+    s.state.review_stop["f30"] = "clean"  # a last round's fixes go in the board's order
+    task = loop._next_task(s, rest, set(), set())
+    assert task is not None and task.id == "f1-01-first"
+    loop.close_session(s)
+
+
+def test_a_reviews_lead_fix_is_held_by_the_weeks_pace_line_as_any(repo, monkeypatch):
+    s, ready = _review_fix_session(repo, monkeypatch, agent="lead")
+    rest = [t for t in ready if t.id in {"f1-01-first", "f30-05-fix"}]
+    task = loop._next_task(s, rest, set(), set())
+    assert task is not None and task.id == "f30-05-fix"
+    monkeypatch.setattr(loop, "_passed_over", lambda *a: "over the week's pace line")
+    task = loop._next_task(s, rest, set(), set())
+    assert task is not None and task.id == "f1-01-first"
+    loop.close_session(s)
+
+
+def test_dry_run_names_a_reviews_fix_next(repo, capsys):
+    _on_card(repo, "f1-01-first", 1)
+    _on_card(repo, "f30-05-fix", 30)
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "cards")
+    state_path = _config(repo).runs_dir / "state.json"
+    state = load_state(state_path)
+    state.review_counts["f30"] = [2]
+    save_state(state, state_path)
+    assert "next: f30-05-fix" in _dry_run(repo, capsys)
+
+
 def test_dry_run_lists_the_fast_lane_first(repo, capsys):
     _on_card(repo, "f1-01-first", 1)
     _on_card(repo, "f9-01-lane", 9)
@@ -7138,6 +7191,20 @@ def test_a_fix_merged_while_the_review_is_stopped_at_restart_queues_no_checkpoin
     loop.close_session(s)
 
 
+def test_a_fix_merged_between_two_review_rounds_queues_no_checkpoint(repo):
+    """F191 D7, ADR 38: the review's next round reads it."""
+    _ticket_in(repo, "done", "f9-01-first")
+    _ticket_in(repo, "done", "f9-03-fix")
+    _ticket_in(repo, "ready", "f9-04-fix")  # the milestone is not due: being reviewed covers it
+    s = loop.open_session(_config(repo))
+    s.state.review_counts["f9"] = [3]
+    _merged(s, "f9-01-first")
+    _merged(s, "f9-03-fix")
+    assert loop.find_row(s, loop.CHECKPOINT) is None
+    assert s.state.unchecked == []
+    loop.close_session(s)
+
+
 def test_two_merges_of_a_milestone_still_building_queue_a_checkpoint(repo):
     for n in (1, 2):
         _ticket_in(repo, "done", f"f9-0{n}-done")
@@ -8311,6 +8378,68 @@ def test_run_projects_skips_a_project_off_main_once_reviews_and_closes_every_ses
     assert reviewed == [("softfield", "f9")]
     assert closed == opened and len(opened) == 2  # reviewed, then reopened and closed at the end
     assert capsys.readouterr().out.count("coucou: start the runner on a clean main branch") == 1
+
+
+def test_after_a_review_hands_its_fix_over_the_owners_order_holds(monkeypatch):
+    """F191 D7, 2026-11-10: coaster-ranker, first in the owner's order, kept its requests from
+    14:31 while F9's review in Softfield ran its own fixes and Softfield's planner jobs. Now the
+    review returns after its round, and the next rounds are `project_round`'s: the first
+    project's queued job, then the reviewed project's, then its fix."""
+    from types import SimpleNamespace
+
+    names = ("coaster", "softfield")
+    cfgs = [SimpleNamespace(repo=Path(f"/r/{n}"), project_name=n) for n in names]
+    # what each project has to run, by pass; the review is found in Softfield's first queued pass
+    jobs = {"coaster": {"queued": 1}, "softfield": {"queued": 1, "ticket": 1}}
+    ran: list[str] = []
+    found: list[bool] = []
+
+    def open_session(cfg):
+        report = SimpleNamespace(review=None, started=loop.now(), tasks=[], claude_runs=[])
+        return SimpleNamespace(
+            cfg=cfg, repo=cfg.repo, picks=0, report=report, state=SimpleNamespace(owner_pause=None)
+        )
+
+    def work_queue(s, **kw):
+        name = s.cfg.project_name
+        kind = (
+            "lane"
+            if kw.get("lane_only")
+            else "ticket"
+            if kw.get("take_tickets", True)
+            else "queued"
+        )
+        if name == "softfield" and kind == "queued" and not found:
+            found.append(True)
+            s.report.review = "f9"
+            return False
+        if ran and jobs[name].get(kind):  # the review goes first: it was queued before them
+            jobs[name][kind] -= 1
+            ran.append(f"{name} {kind}")
+            s.picks += 1
+        return False
+
+    def review(cfg, key):
+        ran.append(f"{cfg.project_name} review {key}: parked, its fix handed over")
+        return False
+
+    polls = iter([KeyboardInterrupt])
+
+    def idle_wait():
+        raise next(polls)()
+
+    monkeypatch.setattr(loop, "open_session", open_session)
+    monkeypatch.setattr(loop, "work_queue", work_queue)
+    monkeypatch.setattr(loop, "_main_head", lambda s: None)
+    monkeypatch.setattr(loop, "close_session", lambda s: None)
+    monkeypatch.setattr(loop, "_idle_wait", idle_wait)
+    assert loop.run_projects(lambda: cfgs, review) is False  # type: ignore[arg-type,return-value]
+    assert ran == [
+        "softfield review f9: parked, its fix handed over",
+        "coaster queued",
+        "softfield queued",
+        "softfield ticket",
+    ]
 
 
 def test_a_review_that_changes_the_runner_closes_every_session_before_the_restart(monkeypatch):

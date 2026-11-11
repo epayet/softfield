@@ -1027,12 +1027,9 @@ def _fix_review(repo, monkeypatch, *, agent: str, over: bool, runs: bool):
     return prompts
 
 
-def test_a_review_waits_for_a_lead_fix_the_week_holds(repo, monkeypatch):
-    """F219 D3: over the pace line the lead fix stays in ready/, so round 2 would read no
-    fixes: the review ends with no stop, and goes on from round 2 once the fix is done."""
-    prompts = _fix_review(repo, monkeypatch, agent="lead", over=True, runs=False)
-    cfg = _config(repo)
-    assert milestone.review_milestone(cfg, "m1", "m1-start", park=True) == milestone.PARKED
+def _round_2_once_the_fix_is_done(repo, cfg, prompts: list[str], *, park: bool) -> None:
+    """The review returned PARKED after round 1: no stop, its row done, not due while its fix
+    is in ready/, then due again and on from round 2."""
     assert len(prompts) == 1
     state = load_state(cfg.runs_dir / "state.json")
     assert "m1" not in state.review_stop and state.review_counts["m1"] == [1]
@@ -1041,28 +1038,94 @@ def test_a_review_waits_for_a_lead_fix_the_week_holds(repo, monkeypatch):
     git(repo, "mv", ".softfield/tasks/ready/m1-05-fix.md", ".softfield/tasks/done/")
     git(repo, "commit", "-q", "-m", "m1-05-fix: done")
     assert milestone.due_reviews(repo, state) == ["m1"]
-    assert milestone.review_milestone(cfg, "m1", "m1-start", park=True) == "clean"
+    assert milestone.review_milestone(cfg, "m1", "m1-start", park=park) == "clean"
     assert len(prompts) == 2 and "Round 2" in prompts[1]
 
 
+def test_a_review_waits_for_a_lead_fix_the_week_holds(repo, monkeypatch):
+    """F219 D3, under `runner milestone`: over the pace line the lead fix stays in ready/, so
+    round 2 would read no fixes: the review ends with no stop, and goes on from round 2 once the
+    fix is done."""
+    prompts = _fix_review(repo, monkeypatch, agent="lead", over=True, runs=False)
+    cfg = _config(repo)
+    assert milestone.review_milestone(cfg, "m1", "m1-start") == milestone.PARKED
+    _round_2_once_the_fix_is_done(repo, cfg, prompts, park=False)
+
+
 def test_a_lead_fix_that_runs_leaves_round_2_as_before(repo, monkeypatch):
-    """On a fast lane card or with the week's lever on, the queue runs the fix."""
+    """`runner milestone` runs its review's fixes inside the review (F191 D7)."""
     prompts = _fix_review(repo, monkeypatch, agent="lead", over=True, runs=True)
-    assert milestone.review_milestone(_config(repo), "m1", "m1-start", park=True) == "clean"
+    assert milestone.review_milestone(_config(repo), "m1", "m1-start") == "clean"
     assert len(prompts) == 2
 
 
 def test_a_developers_fix_never_parks_the_review(repo, monkeypatch):
     """The pace line passes over lead tickets only."""
     prompts = _fix_review(repo, monkeypatch, agent="developer", over=True, runs=False)
-    milestone.review_milestone(_config(repo), "m1", "m1-start", park=True)
+    milestone.review_milestone(_config(repo), "m1", "m1-start")
     assert len(prompts) == 2
 
 
 def test_a_lead_fix_with_the_week_under_its_line_does_not_park(repo, monkeypatch):
     prompts = _fix_review(repo, monkeypatch, agent="lead", over=False, runs=False)
-    milestone.review_milestone(_config(repo), "m1", "m1-start", park=True)
+    milestone.review_milestone(_config(repo), "m1", "m1-start")
     assert len(prompts) == 2
+
+
+@pytest.mark.parametrize("agent", ["developer", "lead"])
+def test_under_softfield_run_a_round_hands_its_fix_to_the_main_queue(repo, monkeypatch, agent):
+    """F191 D7: on 2026-11-10 F9's review ran f9-35 and f9-36 itself for three hours while the
+    owner's requests waited. Now a round that files a fix runs no queue: the review returns
+    PARKED, its row done and no stop, its card under review, and goes on from round 2 once the
+    fix is done. Whatever the week's pace."""
+    prompts = _fix_review(repo, monkeypatch, agent=agent, over=False, runs=True)
+    monkeypatch.setattr(milestone, "work_queue", lambda *a, **k: pytest.fail("a queue ran"))
+    cfg = _config(repo)
+    assert milestone.review_milestone(cfg, "m1", "m1-start", park=True) == milestone.PARKED
+    assert loop.under_review(load_state(cfg.runs_dir / "state.json")) == {"m1"}
+    _round_2_once_the_fix_is_done(repo, cfg, prompts, park=True)
+    assert loop.under_review(load_state(cfg.runs_dir / "state.json")) == set()
+
+
+def test_under_softfield_run_a_last_rounds_fix_runs_in_the_main_queue(repo, monkeypatch):
+    """F191 D7: a last round records its stop and returns; its fix waits in ready/ for the main
+    queue, in the board's order, and its merge counts toward a checkpoint (ADR 38)."""
+    _milestone_repo(repo)
+    cfg = _config(repo)
+    state_path = cfg.runs_dir / "state.json"
+    state = load_state(state_path)
+    state.review_counts["m1"] = [3, 2]  # two of the three rounds run
+    save_state(state, state_path)
+
+    def run_claude(job, repo_, timeout, log_path, now, resume=None):
+        milestone_ticket(repo_, "ready", "m1-05-fix", "m1")
+        _review_writes(job, repo_, [{**LEAK, "id": "m1-F1"}])
+        return JobResult(ok=True, text="", duration_s=1.0)
+
+    monkeypatch.setattr(claude, "run_claude", run_claude)
+    monkeypatch.setattr(milestone, "work_queue", lambda *a, **k: pytest.fail("a queue ran"))
+    monkeypatch.setattr(milestone, "run_e2e", lambda *a: GateResult("e2e", True, ""))
+    stop = milestone.review_milestone(cfg, "m1", "m1-start", park=True)
+    assert stop == "review round cap (3) reached"
+    state = load_state(state_path)
+    assert state.review_stop["m1"] == stop and loop.under_review(state) == set()
+    assert (repo / ".softfield" / "tasks" / "ready" / "m1-05-fix.md").is_file()
+
+
+def test_under_softfield_run_a_round_with_no_fix_goes_on_to_the_next(repo, monkeypatch):
+    """No ticket of the card left in ready/: nothing to hand over, the next round runs."""
+    prompts = _fix_review(repo, monkeypatch, agent="developer", over=False, runs=True)
+    (repo / ".softfield" / "tasks" / "ready").mkdir(parents=True, exist_ok=True)
+
+    def run_claude(job, repo_, timeout, log_path, now, resume=None):
+        prompts.append(job.prompt)
+        _review_writes(job, repo_, [{**LEAK, "id": "m1-F1"}])
+        return JobResult(ok=True, text="", duration_s=1.0)
+
+    monkeypatch.setattr(claude, "run_claude", run_claude)
+    monkeypatch.setattr(milestone, "work_queue", lambda *a, **k: pytest.fail("a queue ran"))
+    stop = milestone.review_milestone(_config(repo), "m1", "m1-start", park=True)
+    assert len(prompts) == 2 and stop == "findings did not decrease (1 -> 1)"
 
 
 def test_a_restart_with_no_round_left_stops_instead_of_restarting_again(repo, monkeypatch):

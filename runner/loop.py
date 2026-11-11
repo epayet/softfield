@@ -3014,6 +3014,13 @@ def _done_milestone(s: Session, ticket: str) -> str | None:
         return None
 
 
+def under_review(state: State) -> set[str]:
+    """The short keys of the cards whose review has rounds and no stop (F191 D7): between two
+    rounds, its fix tickets run in the main queue and its next round reads them."""
+    stopped = {short_key(key) for key in state.review_stop}
+    return {short_key(key) for key, rounds in state.review_counts.items() if rounds} - stopped
+
+
 def _drop_covered_merges(s: Session) -> None:
     """ADR 38: merges the milestone's review will read leave `unchecked` and `recheck`: their
     milestone's review is due, or stopped at `restart` with its fix tickets to come. Not the
@@ -3023,6 +3030,7 @@ def _drop_covered_merges(s: Session) -> None:
 
     covered = {short_key(key) for key in due_reviews(s.repo, s.state)}
     covered |= {short_key(key) for key, stop in s.state.review_stop.items() if stop == RESTART}
+    covered |= under_review(s.state)  # its next round reads them (F191 D7)
     covered.discard(s.last_round or "")
     if not covered or not (s.state.unchecked or s.state.recheck):
         return
@@ -5192,6 +5200,7 @@ def choose_ticket(
     lane: Collection[str],
     protected: Collection[str],
     at: datetime,
+    reviewing: Collection[str] = (),
 ) -> Task | None:
     """The next ticket, for the runner (`_next_task`) and the dry run (`dry_run_plan`) alike (ADR
     44 item 9); ``waiting`` holds what a pause or a hold keeps from running.
@@ -5200,7 +5209,9 @@ def choose_ticket(
     gates run before main moves on and its work is thrown away. Then the fast lane's (``lane``,
     ADR 35 item 2): a lane card's tickets and what they wait for, one that can't run passed over.
     Then parked tickets whose reset has passed: work already begun goes on, whatever the pace
-    (ADR 44 item 7). While Claude is limited, only work that needs no Claude: developer tickets,
+    (ADR 44 item 7). Then the fix tickets of a card between two review rounds (``reviewing``,
+    `under_review`, F191 D7), held as any ticket is. While Claude is limited, only work that
+    needs no Claude: developer tickets,
     which local takes. Over the week's pace line a lead ticket is passed over, with no park and
     no desk item, and asks again at the next pick (`allowance.lead_hold`, ADR 44 item 6). At the
     owner's share of the 5-hour window, developer tickets go before lead ones, so a lead ticket
@@ -5236,6 +5247,19 @@ def choose_ticket(
     passed_over = _passed_over(windows, at) is not None
     if (task := first(began if passed_over else began + unbegun)) is not None:
         return task
+    fixes = [
+        t
+        for t in free
+        if t.milestone != BUGS
+        and short_key(t.milestone) in reviewing
+        and not (passed_over and lead(t))
+    ]
+    if (fix := first(fixes)) is not None and (
+        not lead(fix)
+        or allowance.lead_hold(CLAUDE, windows.claude, LEAD_COST, at, reserves=windows.reserves)
+        is None
+    ):
+        return fix
     developers = [t for t in free if not lead(t)]
     task = first(developers if passed_over else free)
     if task is None or not lead(task):
@@ -5289,6 +5313,7 @@ def _next_task(s: Session, ready: list[Task], done: set[str], paused: set[str]) 
         lane=lane,
         protected=tuple(read_protected(s.repo)),
         at=at,
+        reviewing=under_review(s.state),
     )
 
 
@@ -6162,6 +6187,7 @@ def dry_run_plan(cfg: Config) -> None:
         lane=lane,
         protected=tuple(read_protected(cfg.repo)),
         at=at,
+        reviewing=under_review(state),
     )
     next_id = None if chosen is None or by_the_owner else chosen.id
     _print_plan(lines, ready, done, paused, cfg.repo, next_id)
