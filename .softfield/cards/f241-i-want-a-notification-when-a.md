@@ -1,4 +1,4 @@
-# Milestone F241: I want a notification when a job has to pause due to…
+# Milestone F241: A phone notification when Claude's limit pauses work, saying when it resumes
 
 > **State:** idea · **Priority:** 100 · **Area:** factory
 > Planted by the owner on 2026-11-11.
