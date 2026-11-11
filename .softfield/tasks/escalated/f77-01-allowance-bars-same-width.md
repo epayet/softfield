@@ -23,3 +23,12 @@ Read `.softfield/cards/f77-the-bars-in-the-agent-allowance.md` (Notes, D2), the 
 - at 390 px, each window is still one row and the layout check passes (the existing test stays green)
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: tests-fail-on-main)
+attempts: 3
+tokens: 527533
+logs: .softfield/var/runs/20261110-182701/f77-01-allowance-bars-same-width
+```
