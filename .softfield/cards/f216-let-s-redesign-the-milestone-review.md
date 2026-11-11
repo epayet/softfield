@@ -1,6 +1,6 @@
 # Milestone F216: A shorter, consistent review page, with the decisions made along the way
 
-> **State:** ready · **Priority:** 8 · **Area:** factory
+> **State:** ready · **Priority:** 13 · **Area:** factory
 > Planted by the owner on 2026-11-04.
 
 ## Notes

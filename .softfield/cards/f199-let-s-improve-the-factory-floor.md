@@ -1,6 +1,6 @@
 # Milestone F199: The factory floor: a small strip on the Overview and a one-screen map
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** ready · **Priority:** 4 · **Area:** factory
 > Planted by the owner on 2026-11-02.
 
 ## Notes

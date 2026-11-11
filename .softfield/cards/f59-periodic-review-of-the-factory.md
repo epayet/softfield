@@ -1,6 +1,6 @@
 # Milestone F59: A weekly report page: the factory's numbers over time and the lead's read
 
-> **State:** ready · **Priority:** 9 · **Area:** factory
+> **State:** ready · **Priority:** 14 · **Area:** factory
 > Planted by the owner on 2026-10-08.
 
 ## Notes

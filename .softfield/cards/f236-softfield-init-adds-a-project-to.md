@@ -1,6 +1,6 @@
 # Milestone F236: softfield init adds the project only when its setup ends and doctor passes
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** ready · **Priority:** 5 · **Area:** factory
 > Planted by the owner on 2026-11-09.
 
 ## Notes

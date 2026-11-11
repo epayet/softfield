@@ -1,6 +1,6 @@
 # Milestone F231: Triage the set-aside bugs, and a Remove button for the ones not worth a run
 
-> **State:** ready · **Priority:** 2 · **Area:** factory
+> **State:** ready · **Priority:** 8 · **Area:** factory
 > Planted by the owner on 2026-11-06.
 
 ## Notes

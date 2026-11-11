@@ -1,6 +1,6 @@
 # Milestone F85: Real before and after pictures of the changed pages when you sign a card off
 
-> **State:** ready · **Priority:** 11 · **Area:** factory
+> **State:** ready · **Priority:** 4 · **Area:** factory
 > Planted by the owner on 2026-10-09.
 
 ## Notes

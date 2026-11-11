@@ -1,6 +1,6 @@
 # Milestone F147: What happens to parked work when Claude runs out
 
-> **State:** ready · **Priority:** 9 · **Area:** factory
+> **State:** ready · **Priority:** 14 · **Area:** factory
 > Planted by the owner on 2026-10-16.
 
 ## Notes

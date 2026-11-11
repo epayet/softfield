@@ -1,7 +1,7 @@
 # Milestone F5: steer from the phone, and the board
 
 > **Status: done.** Signed off by the owner on 2026-10-23. Base: git tag `f5-board-start`. Report: [`.softfield/reviews/f5-board.md`](../reviews/f5-board.md).
-> **State:** building · **Priority:** 101 · **Area:** factory
+> **State:** building · **Priority:** 102 · **Area:** factory
 
 ## Outcome
 - From the phone, on the home Wi-Fi (`runner dashboard --lan`), the owner can:

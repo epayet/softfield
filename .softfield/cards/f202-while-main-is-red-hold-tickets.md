@@ -1,6 +1,6 @@
 # Milestone F202: While main fails its tests, only the ticket that mends it runs
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** ready · **Priority:** 4 · **Area:** factory
 > From docs/backlog.md (f80-review), written by the lead on 2026-11-02.
 
 ## Notes

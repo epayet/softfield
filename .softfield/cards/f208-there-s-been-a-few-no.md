@@ -1,6 +1,6 @@
 # Milestone F208: Let a local attempt finish its step before the no-edit stop
 
-> **State:** ready · **Priority:** 5 · **Area:** factory
+> **State:** ready · **Priority:** 10 · **Area:** factory
 > Planted by the owner on 2026-11-03.
 
 ## Notes

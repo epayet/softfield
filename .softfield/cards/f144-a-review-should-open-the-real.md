@@ -1,6 +1,6 @@
 # Milestone F144: A review reads the real page and real data before the tests
 
-> **State:** ready · **Priority:** 10 · **Area:** factory
+> **State:** ready · **Priority:** 15 · **Area:** factory
 > Planted by the owner on 2026-10-16.
 
 ## Notes
