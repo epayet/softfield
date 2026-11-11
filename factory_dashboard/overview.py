@@ -37,6 +37,8 @@ LIVE = timedelta(minutes=2)  # D3: an older heartbeat means the runner stopped
 WEEK_MARK = 0.70
 # [claude] in the machine's factory.toml: reserve for you starts at 75% of the 5-hour window.
 FIVE_HOUR_MARK = 0.75
+FIVE_HOUR = timedelta(hours=5)
+WEEK = timedelta(days=7)
 
 
 def _age(now: datetime, at: str | None) -> timedelta | None:
@@ -614,6 +616,8 @@ class WindowAllowance:
     reset_label: str | None  # e.g. "resets at 17:00" or "resets on Oct 9"
     read_label: str | None  # e.g. "read at 03:59" or "read on Oct 26 22:10"
     status: str | None  # e.g. "reset since, no new reading" or "no data yet"
+    read_at: float | None  # UTC timestamp of the reading
+    rate_line: tuple[str, bool] | None  # (display text, is warning)
 
 
 NO_DATA = "no data yet"
@@ -625,6 +629,30 @@ def _reset_label(resets: datetime, now: datetime) -> str:
     if resets.date() == now.astimezone().date():
         return f"resets at {resets:%H:%M}"
     return f"resets on {resets:%b} {resets.day} {resets:%H:%M}"
+
+
+def forecast(
+    value: float, read_at: datetime, resets_at: datetime, length: timedelta, now: datetime
+) -> tuple[datetime | None, float] | None:
+    """Project when the window runs out at this rate, and use at the reset.
+
+    Returns ``(out_time, usage_at_reset)`` or ``None`` when less than 10% of
+    ``length`` has passed or ``value`` is 0.  ``out_time`` is ``None`` when
+    the window lasts to the reset.
+    """
+    start = resets_at - length
+    elapsed = read_at - start
+    if elapsed <= timedelta(0) or elapsed < length * 0.1:
+        return None
+    rate = value / elapsed.total_seconds()
+    if rate <= 0:
+        return None
+    remaining = (1.0 - value) / rate
+    out_time = read_at + timedelta(seconds=remaining)
+    if out_time > resets_at:
+        return (None, min(value + rate * (resets_at - read_at).total_seconds(), 1.0))
+    usage_at_reset = min(value + rate * (resets_at - read_at).total_seconds(), 1.0)
+    return (out_time, usage_at_reset)
 
 
 def _read_label(at: datetime, now: datetime) -> str:
@@ -660,6 +688,36 @@ def _agent_allowances(
             status, value = RESET_SINCE, None  # the reading is stale: no percentage
         else:
             status = None
+        # Forecast the out time and usage at reset for Claude's rows.
+        read_dt: datetime | None = datetime.fromisoformat(at) if at else None
+        read_ts: float | None = None if read_dt is None else read_dt.timestamp()
+        rate_line: tuple[str, bool] | None = None
+        if agent_label == "Claude" and status is None and read_dt is not None:
+            length = FIVE_HOUR if wkey == "five_hour" else WEEK
+            if read_at is not None and resets is not None:
+                proj = forecast(value or 0, read_at, resets, length, now)
+                if proj is not None:
+                    out_time, usage_at_reset = proj
+                    if out_time is None:
+                        # lasts to the reset
+                        pct = f"{usage_at_reset:.0%}"
+                        rate_line = (
+                            f"at this rate: lasts to the reset, about {pct} by then",
+                            False,
+                        )
+                    elif out_time <= now:
+                        rate_line = ("at this rate: out any time now", True)
+                    elif (out_time - now).total_seconds() < 86400:
+                        rate_line = (f"at this rate: out {out_time:%H:%M}", True)
+                    else:
+                        delta = out_time - resets
+                        days = delta.days
+                        hours = abs(delta.seconds) // 3600
+                        if days < 0:
+                            days += 1
+                            hours += 24
+                        before = f"{days} days {hours} h before the reset"
+                        rate_line = (f"at this rate: out {out_time:%H:%M}, {before}", True)
         rows.append(
             WindowAllowance(
                 label=agent_label,
@@ -673,6 +731,8 @@ def _agent_allowances(
                 reset_label=_reset_label(resets, now) if resets and status is None else None,
                 read_label=_read_label(read_at, now) if read_at else None,
                 status=status,
+                read_at=read_ts,
+                rate_line=rate_line,
             )
         )
     return rows

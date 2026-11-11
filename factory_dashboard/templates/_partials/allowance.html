@@ -24,6 +24,7 @@
         {% endif %}
       </div>
       <div class="meter">
+        {% if a.rate_line %}<span class="ahead" style="width:{{ '%.0f' | format(a.rate_line[1] * 100) }}%"></span>{% endif %}
         <span class="{{ fill }}" style="width:{{ '%.0f' | format((a.value or 0) * 100) }}%"></span>
         {% set wp = pace if a.label == "Claude" and a.window == "seven_day" and not no_data else none %}
         {% if wp and wp.state == "over" %}
@@ -37,6 +38,7 @@
         {% endif %}
       </div>
       <div class="line">
+        {% if a.rate_line %}<small class="out{% if not a.rate_line[1] %} muted{% endif %}">{{ a.rate_line[0] }}</small>{% endif %}
         {% if a.reset_label %}
         <small>{{ a.reset_label }}</small>
         {% elif a.status %}
@@ -76,6 +78,7 @@
     <span>the mark: lead tickets stop here until the week's last hours. On the week, planning and reviews go on past it; on the 5-hour window, the rest is the owner's</span>
     <span><i class="swatch pace"></i>dashed yellow post: today's pace; lead tickets start only under it</span>
     <span><i class="swatch over-pace"></i>striped: used beyond today's pace; lead tickets wait until the post catches up</span>
+    <span><i class="swatch ahead"></i>hatched: where the meter will be at the reset, at this rate</span>
     <span><span class="lever mini" aria-hidden="true" style="min-height:0"><span class="slot"><span class="knob"></span></span></span>
       use reserve: let the factory work past the mark; on lasts 24 hours, then turns itself off</span>
     <span><span class="lever mini" aria-hidden="true" aria-checked="true" style="min-height:0"><span class="slot" style="background:repeating-linear-gradient(135deg,var(--hazard) 0 5px,var(--hazard-ink) 5px 10px)"><span class="knob" style="left:24px"></span></span></span>

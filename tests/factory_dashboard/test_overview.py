@@ -718,6 +718,159 @@ def test_each_claude_row_shows_its_own_read_label(allowance_client_distinct_read
     assert "read at 11:30" in rows["claude-seven_day"]
 
 
+def test_forecast_worked_example():
+    """f61-01: the worked example – 58 % on 2026-10-23 00:00, reset 2026-10-28 17:00."""
+    from datetime import datetime, timedelta
+
+    from factory_dashboard.overview import forecast
+
+    resets_at = datetime(2026, 10, 28, 17, 0, 0)
+    read_at = datetime(2026, 10, 23, 0, 0, 0)
+    now = datetime(2026, 10, 23, 0, 0, 0)
+    result = forecast(0.58, read_at, resets_at, timedelta(days=7), now)
+    assert result is not None
+    out_time, usage = result
+    assert out_time is not None
+    # start = 2026-10-21 17:00, elapsed = 31 h = 111 600 s
+    # remaining = 0.42 / rate ≈ 80 814 s ≈ 22 h 27 min
+    expected = datetime(2026, 10, 23, 22, 26, 54)
+    assert abs((out_time - expected).total_seconds()) < 1
+    assert abs(usage - 1.0) < 0.01  # capped at 1.0 because out < reset
+
+
+def test_forecast_lasts_to_reset():
+    """f61-01: projected use at the reset when the window lasts."""
+    from datetime import datetime, timedelta
+
+    from factory_dashboard.overview import forecast
+
+    resets_at = datetime(2026, 10, 28, 17, 0, 0)
+    read_at = datetime(2026, 10, 23, 0, 0, 0)
+    now = datetime(2026, 10, 23, 0, 0, 0)
+    # Low value → out time well after reset
+    result = forecast(0.1, read_at, resets_at, timedelta(days=7), now)
+    assert result is not None
+    out_time, usage = result
+    assert out_time is None
+    assert abs(usage - 0.54) < 0.01  # about 54 % by the reset
+
+
+def test_forecast_before_10_percent():
+    """f61-01: no forecast when less than 10 % of the window has passed."""
+    from datetime import datetime, timedelta
+
+    from factory_dashboard.overview import forecast
+
+    resets_at = datetime(2026, 10, 28, 17, 0, 0)
+    length = timedelta(hours=5)
+    start = resets_at - length
+    read_at = start + timedelta(minutes=10)
+    now = read_at
+    result = forecast(0.05, read_at, resets_at, length, now)
+    assert result is None
+
+
+def test_forecast_zero_value():
+    """f61-01: no forecast when the value is 0."""
+    from datetime import datetime, timedelta
+
+    from factory_dashboard.overview import forecast
+
+    resets_at = datetime(2026, 10, 28, 17, 0, 0)
+    read_at = datetime(2026, 10, 23, 0, 0, 0)
+    now = read_at
+    result = forecast(0.0, read_at, resets_at, timedelta(days=7), now)
+    assert result is None
+
+
+def test_forecast_out_time_past():
+    """f61-01: out time already past → returns the out_time (caller shows "any time now")."""
+    from datetime import datetime, timedelta
+
+    from factory_dashboard.overview import forecast
+
+    resets_at = datetime(2026, 10, 28, 17, 0, 0)
+    read_at = datetime(2026, 10, 26, 17, 0, 0)
+    now = datetime(2026, 10, 27, 0, 0, 0)
+    result = forecast(0.95, read_at, resets_at, timedelta(days=7), now)
+    assert result is not None
+    out_time, usage = result
+    assert out_time is not None
+    # out_time (2026-10-26 ~23:18) < now (2026-10-27 00:00)
+    assert out_time < now
+    assert usage == 1.0  # capped because out < reset
+
+
+@pytest.fixture
+def allowance_ghost(db_path: Path):
+    """A client with a Claude reading well after the window's start."""
+    from datetime import datetime
+
+    from fastapi.testclient import TestClient
+
+    from factory_dashboard.app import create_app, get_now
+    from tests.factory_dashboard.conftest import OPUS, write_allowance
+
+    conn = metrics.open_db(db_path)
+    try:
+        write_allowance(conn)
+        reading_at = "2026-10-23T00:00:00+00:00"
+        metrics.add_usage_event(
+            conn,
+            OPUS,
+            reading_at,
+            "reading",
+            window="seven_day",
+            value=0.58,
+            resets_at="2026-10-28T17:00:00+00:00",
+        )
+    finally:
+        conn.close()
+
+    app = create_app(db_path, PROJECT)
+    app.dependency_overrides[get_now] = lambda: datetime(2026, 10, 23, 0, 0, 0, tzinfo=UTC)
+    return TestClient(app, base_url="http://127.0.0.1:8765")
+
+
+def test_claude_week_and_five_hour_show_rate_line_and_ghost(allowance_ghost):
+    """f61-01: Claude's week and 5-hour rows show the rate line and ghost."""
+    html = allowance_ghost.get("/").text
+    rows = allowance_rows(html)
+    week = rows["claude-seven_day"]
+    assert "at this rate: out" in week
+    # Check the raw HTML for the ghost span
+    week_section = re.search(
+        r'<div id="allow-claude-seven_day">(.*?)</div>\s*</div>',
+        html,
+        re.S,
+    )
+    assert week_section
+    assert 'class="ahead"' in week_section.group(1)
+    copilot = rows["copilot-month"]
+    assert "at this rate" not in copilot
+
+
+def test_stale_reading_shows_no_rate_line_or_ghost(allowance_client):
+    """f61-01: a stale or missing reading shows neither rate line nor ghost."""
+    rows = allowance_rows(allowance_client.get("/").text)
+    for row in rows.values():
+        assert "at this rate" not in row
+        assert 'class="ahead"' not in row
+
+
+def test_legend_has_ghost_line(allowance_ghost):
+    """f61-01: the legend has the ghost's line."""
+    panel = re.search(
+        r'<section[^>]*\bid="allowance"[^>]*>(.*?)</section>',
+        allowance_ghost.get("/").text,
+        re.S,
+    )
+    assert panel
+    legend_text = " ".join(re.sub(r"<[^>]+>", " ", panel.group(1)).split())
+    assert "hatched" in legend_text.lower()
+    assert "where the meter will be at the reset" in legend_text.lower()
+
+
 def allowance_client_with(db_path: Path, tmp_path: Path, switches: dict[str, str]):
     """``allowance_client`` with the project's repo in ``tmp_path``: this repo's runner.toml
     and a state.json holding ``switches``."""
