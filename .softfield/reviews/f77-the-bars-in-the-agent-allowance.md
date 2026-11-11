@@ -1,5 +1,7 @@
 # Review: F77, allowance bars the same length on the Overview and the same colours on every page
 
+- **Status:** done, signed off by the owner on 2026-11-11.
+
 ## Sign-off sheet
 
 ### 1. What changed

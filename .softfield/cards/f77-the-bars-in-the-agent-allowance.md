@@ -1,6 +1,7 @@
 # Milestone F77: Allowance bars: the same length on the Overview, the same colours on every page
 
-> **State:** ready · **Priority:** 11 · **Area:** factory
+> **State:** done · **Priority:** 11 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-11. Base: git tag `f77-the-bars-in-the-agent-allowance-start`. Report: [`.softfield/reviews/f77-the-bars-in-the-agent-allowance.md`](../reviews/f77-the-bars-in-the-agent-allowance.md).
 > Planted by the owner on 2026-10-09.
 
 ## Notes
