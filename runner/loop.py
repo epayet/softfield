@@ -1277,7 +1277,8 @@ def _park(
     """Park the job: its changes committed on its branch (on ``parked/…`` if it ran on main),
     its session kept for the resume, its ticket held until the reset (with none given,
     ``backoff_min`` from now). ``extra`` is what a support job needs to start again. With
-    ``login``, an expired login stopped it, not a limit."""
+    ``login``, an expired login stopped it, not a limit. A review's round parks its review's
+    row, about its milestone (F191 D4): it goes on from that round, resuming its session."""
     at = now()
     flag = {LOGIN_HELD: True} if login else {}
     resets = resets_at or at + timedelta(seconds=s.cfg.backoff_min)
@@ -1293,8 +1294,8 @@ def _park(
     entry = {"session_id": session or "", "branch": kept}
     cause = LOGIN_HELD if login else "limit"
     s.state.interrupted[job_key(job.role, name)] = {**entry, "agent": agent, "cause": cause}
-    if job.role in QUEUED:
-        subject = milestone if job.role == CHECKPOINT else name
+    if job.role in QUEUED or job.role == REVIEW:
+        subject = milestone if job.role in (CHECKPOINT, REVIEW) else name
         park_row(s, job.role, subject, resets, **(extra or {}), **flag)
     else:
         s.state.parked[name] = {

@@ -23,6 +23,7 @@ from runner.loop import (
     NO_E2E,
     REVIEW,
     RUNNER_AGENT,
+    Parked,
     RunnerError,
     Session,
     _passed_over,
@@ -730,7 +731,8 @@ def review_milestone(cfg: Config, milestone: str, base: str, *, park: bool = Fal
 
     Claude's room is checked before each round, e2e run included. With ``park`` (`runner
     run`), a round Claude can't take now parks the review's row and returns PARKED: no stop
-    is recorded, and it goes on from that round once the queue picks it again (F53 D1).
+    is recorded, and it goes on from that round once the queue picks it again (F53 D1); so does
+    a round a certain limit or an expired login stops half-way, its session resumed (F191 D4).
     Without, there is no queue to go back to: it waits for the reset. With or without, a round
     whose lead fix the week holds also returns PARKED, its row done: no stop is recorded, and the
     review comes due again once the fix is done (F219 D3)."""
@@ -786,7 +788,12 @@ def review_milestone(cfg: Config, milestone: str, base: str, *, park: bool = Fal
         # under way: off the line's queue (f4-20); one signed off meanwhile stays done (F186 D1)
         if s.project_id is not None and not signed_off(s.repo, milestone):
             _record(s, metrics.upsert_milestone, s.project_id, milestone, status="review")
-        call_claude(s, job, milestone, f"{milestone}-review-r{round_no}")
+        try:  # a limit or a lost login inside the round parks it too (F191 D4)
+            call_claude(s, job, milestone, f"{milestone}-review-r{round_no}", park=park)
+        except Parked:
+            s.running_row = None
+            close_session(s)
+            return PARKED
         try:
             round_ = parse_review(out)
         except ReviewFileError as exc:

@@ -7,7 +7,7 @@ from datetime import date, datetime, timedelta
 import pytest
 
 from runner import claude, cli, loop, metrics, milestone, owner, shots
-from runner.agents import JobResult
+from runner.agents import JobResult, Refusal
 from runner.gates import GateResult
 from runner.loop import close_session, open_session
 from runner.milestone import (
@@ -1161,6 +1161,152 @@ def test_a_review_parked_between_rounds_resumes_at_its_round_on_its_own_fixes(
     assert state.review_counts["f9"] == [1, 0] and state.review_stop["f9"] == "clean"
     assert all(row["done"] is not None for row in _rows(repo, "work_queue"))
     assert git(repo, "status", "--porcelain") == ""
+
+
+# --- a limit inside a review's round (F191 D4) ------------------------------------------------
+
+
+def _resumed_review_writes(log_path) -> None:
+    """A clean round's file, where its first prompt said: a resume's prompt doesn't repeat it."""
+    found = re.match(r"claude-review-(\w+)-review-r(\d)", log_path.name)
+    assert found
+    out = log_path.parent / f"review-{found[1]}-r{found[2]}.json"
+    out.write_text(json.dumps({"findings": [], "stop": None}))
+
+
+def test_a_review_refused_mid_round_parks_and_the_line_goes_on(repo, monkeypatch, clock, capsys):
+    """F191 D4, through `runner run`: on 30 Oct a refusal inside a round slept 28 hours and
+    stopped every project. Now the review parks until the reset, a developer ticket runs
+    meanwhile, and the same round goes on after it, its session resumed, counted once."""
+    milestone_ticket(repo, "done", "f9-01-a", "f9")
+    milestone_ticket(repo, "ready", "f10-01-next", "f10")
+    (repo / ".softfield" / "project.toml").write_text("")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "tickets")
+    _claude_at(repo, 0.50)  # room for the round: the refusal is what rests the window
+    events: list[str] = []
+    calls: list[tuple[str, str | None]] = []
+    stops: list[dict[str, str]] = []
+
+    def run_task(s, task):
+        events.append(f"{task.id} at {loop.now():%H:%M}")
+        stops.append(dict(s.state.review_stop))
+        git(
+            repo,
+            "mv",
+            f".softfield/tasks/ready/{task.path.name}",
+            f".softfield/tasks/done/{task.path.name}",
+        )
+        git(repo, "commit", "-q", "-m", f"{task.id}: done\n\nAgent: local-m\nTask: {task.id}")
+        return TaskRecord(id=task.id, milestone=task.milestone, result="done")
+
+    def run_claude(job, repo_, timeout, log_path, now, resume=None):
+        found = re.match(r"claude-review-(\w+)-review-r(\d)", log_path.name)  # a resume's too
+        assert found
+        key, round_no = found.groups()
+        calls.append((f"{key} round {round_no}", resume))
+        if len(calls) == 1:  # Claude refuses F9's round 1 half-way, the reset given
+            events.append(f"{key} round {round_no} refused")
+            refusal = Refusal("five_hour", FIVE_RESETS)
+            return JobResult(ok=False, text="", duration_s=1.0, refusal=refusal, session_id="s-1")
+        events.append(f"{key} round {round_no}")
+        _resumed_review_writes(log_path)
+        return JobResult(ok=True, text="", duration_s=1.0)
+
+    monkeypatch.chdir(repo)
+    monkeypatch.setattr(cli, "load_config", lambda repo_: _config(repo))
+    monkeypatch.setattr(loop, "run_task", run_task)
+    monkeypatch.setattr(milestone, "run_e2e", lambda *a: GateResult("e2e", True, ""))
+    monkeypatch.setattr(claude, "run_claude", run_claude)
+    monkeypatch.setattr(milestone, "wait_for_room", lambda *a: pytest.fail("the runner slept"))
+    assert cli.main(["run", "--here"]) == 0
+    assert events[:2] == ["f9 round 1 refused", "f10-01-next at 12:00"]
+    assert "f9 round 1" in events[2:] and "f9 round 2" not in events
+    assert stops == [{}]  # no stop recorded while it was parked
+    assert calls[0] == ("f9 round 1", None)
+    assert ("f9 round 1", "s-1") in calls  # the same round, its session resumed
+    assert clock[0] >= FIVE_RESETS
+    assert "f9-review-r1 parked" in capsys.readouterr().out
+    state = load_state(_config(repo).runs_dir / "state.json")
+    assert state.review_counts["f9"] == [0] and state.review_stop["f9"] == "clean"
+    assert state.parked == {} and state.interrupted == {}
+    assert all(row["done"] is not None for row in _rows(repo, "work_queue"))
+
+
+def _refused_once(monkeypatch, first: JobResult) -> list[str | None]:
+    """A review whose first call ends with ``first``; the next writes a clean round. Returns
+    the session each call resumed."""
+    resumed: list[str | None] = []
+
+    def run_claude(job, repo_, timeout, log_path, now, resume=None):
+        resumed.append(resume)
+        if len(resumed) == 1:
+            return first
+        _resumed_review_writes(log_path)
+        return JobResult(ok=True, text="", duration_s=1.0)
+
+    monkeypatch.setattr(claude, "run_claude", run_claude)
+    monkeypatch.setattr(milestone, "run_e2e", lambda *a: GateResult("e2e", True, ""))
+    return resumed
+
+
+NO_TIME = JobResult(
+    ok=False, text="", duration_s=1.0, refusal=Refusal("five_hour", None), session_id="s-1"
+)
+LOGGED_OUT = JobResult(ok=False, text="", duration_s=1.0, login_expired=True, session_id="s-1")
+
+
+@pytest.mark.parametrize(
+    ("first", "until", "login"),
+    [(NO_TIME, timedelta(seconds=1), False), (LOGGED_OUT, loop.LOGIN_CHECK, True)],
+    ids=["a limit with no time", "an expired login"],
+)
+def test_a_review_stopped_mid_round_parks_its_row_and_goes_on_from_that_round(
+    repo, monkeypatch, clock, first, until, login
+):
+    """F191 D4: a refusal with no time parks for `_park`'s minimum (``backoff_min``, 1 s
+    here); an expired login parks until the next check of the login, and goes on once it
+    works. Neither is a ticket: `state.parked` keeps nothing for the review."""
+    _milestone_repo(repo)
+    cfg = _config(repo)
+    resumed = _refused_once(monkeypatch, first)
+    assert milestone.review_milestone(cfg, "m1", "m1-start", park=True) == milestone.PARKED
+    state = load_state(cfg.runs_dir / "state.json")
+    assert state.parked == {} and "m1" not in state.review_stop
+    assert state.review_counts["m1"] == []
+    assert state.interrupted["review:m1-review-r1"]["session_id"] == "s-1"
+    [row] = _rows(repo, "work_queue")
+    assert row["kind"] == "review" and row["subject"] == "m1" and row["done"] is None
+    assert row["not_before"] == (THURSDAY + until).isoformat()
+    assert bool(state.queued["review:m1"].get(loop.LOGIN_HELD)) is login
+    if login:  # the next check finds the owner logged in again
+        monkeypatch.setattr(loop, "probe", lambda *a: JobResult(ok=True, text="", duration_s=0))
+        s = open_session(cfg, None)
+        loop.check_login(s)
+        close_session(s)
+    else:
+        clock[0] += timedelta(seconds=2)
+    assert milestone.review_milestone(cfg, "m1", "m1-start", park=True) == "clean"
+    assert resumed == [None, "s-1"]
+    state = load_state(cfg.runs_dir / "state.json")
+    assert state.review_counts["m1"] == [0] and state.interrupted == {}
+    assert all(row["done"] is not None for row in _rows(repo, "work_queue"))
+
+
+def test_a_named_milestones_review_refused_mid_round_still_waits(repo, monkeypatch, clock):
+    """`runner milestone` has no queue to go back to: the round waits for the reset where it
+    is, and goes on with its session."""
+    _milestone_repo(repo)
+    refused = JobResult(
+        ok=False,
+        text="",
+        duration_s=1.0,
+        refusal=Refusal("five_hour", FIVE_RESETS),
+        session_id="s-1",
+    )
+    resumed = _refused_once(monkeypatch, refused)
+    assert milestone.review_milestone(_config(repo), "m1", "m1-start") == "clean"
+    assert resumed == [None, "s-1"] and clock[0] > FIVE_RESETS
 
 
 def test_a_later_round_with_only_its_own_merges_reads_the_diff_since_the_last_round(repo):
