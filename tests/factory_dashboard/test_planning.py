@@ -1149,22 +1149,23 @@ def test_plant_before_coming_before_desk_before_archived(planning, db_path, serv
 # --- Coming sits under the box (f198) --------------------------------------------------------
 
 
-def test_a_plant_stays_put_when_coming_appears(page, planning, db_path, serve):
+@pytest.mark.parametrize("width", [390, 1280])
+def test_a_plant_stays_put_when_coming_appears(page, planning, db_path, serve, width):
     """At 390 px and at 1280 px, #plant's top is the same before and after a plant is sent,
-    and #desk-coming shows below #plant."""
-    client = serve()
-    for width in [390, 1280]:
-        page.set_viewport_size({"width": width, "height": 800})
-        _open(page, client)
-        plant_top = page.locator("#plant").evaluate("el => el.getBoundingClientRect().top")
-        page.fill('#plant textarea[name="text"]', "A note about the frame")
-        page.click("#plant-only")
-        page.wait_for_selector("#desk-coming")
-        page.wait_for_timeout(100)
-        fresh_top = page.locator("#plant").evaluate("el => el.getBoundingClientRect().top")
-        assert abs(fresh_top - plant_top) <= 1
-        coming_top = page.locator("#desk-coming").evaluate("el => el.getBoundingClientRect().top")
-        assert coming_top >= plant_top
+    and #desk-coming shows below #plant. Each width starts with nothing in Coming."""
+    page.set_viewport_size({"width": width, "height": 800})
+    _open(page, serve())
+    assert page.locator("#desk-coming").count() == 0
+    plant_top = page.locator("#plant").evaluate("el => el.getBoundingClientRect().top")
+    page.fill('#plant textarea[name="text"]', "A note about the frame")
+    page.click("#plant-only")
+    page.wait_for_selector("#desk-coming")
+    page.wait_for_timeout(100)
+    fresh_top = page.locator("#plant").evaluate("el => el.getBoundingClientRect().top")
+    assert abs(fresh_top - plant_top) <= 1
+    plant_bottom = page.locator("#plant").evaluate("el => el.getBoundingClientRect().bottom")
+    coming_top = page.locator("#desk-coming").evaluate("el => el.getBoundingClientRect().top")
+    assert coming_top >= plant_bottom
 
 
 def test_coming_shows_under_the_box_at_wide_and_phone_widths(page, planning, db_path, serve):
@@ -1194,21 +1195,22 @@ def test_coming_shows_under_the_box_at_wide_and_phone_widths(page, planning, db_
 
 
 def test_a_note_half_typed_survives_coming_poll(page, planning, db_path, serve):
-    """A note half typed in the box is still there after Coming's 5-second poll."""
-    client = serve()
-    _open(page, client)
-    page.fill('#plant textarea[name="text"]', "A note about the frame")
-    page.click("#plant-only")
+    """A note half typed in the box is still there after Coming is drawn again. The poll
+    itself waits while the box holds words (liveIdle), so the test draws Coming the way the
+    poll does, with a second plant stored meanwhile to show the redraw happened."""
+    _finished(db_path, planning, "plant", None, NOTE, None)
+    _open(page, serve())
     page.wait_for_selector("#desk-coming")
-    page.wait_for_selector("#plant textarea")
-    # The form is cleared by the plant submit; type after it appears
     page.type('#plant textarea[name="text"]', "half typed")
-    page.wait_for_timeout(100)
-    initial = page.input_value('#plant textarea[name="text"]')
-    assert initial == "half typed"
-    # Wait for a Coming poll (5 s interval)
-    page.wait_for_timeout(5500)
-    page.wait_for_timeout(100)
+    _finished(db_path, planning, "plant", None, json.dumps({"text": "Second", "ask": False}), None)
+    page.evaluate(
+        """() => htmx.ajax("GET", window.location.href,
+            {target: "#live-desk-coming", select: "#desk-coming", swap: "innerHTML"})"""
+    )
+    page.wait_for_function(
+        "() => document.querySelectorAll('#desk-coming .waiting-plant, "
+        "#desk-coming .on-its-way-item').length === 2"
+    )
     assert page.input_value('#plant textarea[name="text"]') == "half typed"
 
 
