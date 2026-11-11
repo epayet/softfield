@@ -215,8 +215,8 @@ tbody tr:hover { background: var(--accent-wash); }
 .meter > span { position: absolute; inset: 1px auto 1px 1px; max-width: 100%; background: var(--c, var(--a2)); }
 .meter > .mark { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--ink);
   outline: 1px solid var(--surface); z-index: 1; }
-.meter > .ahead { position: absolute; inset: 1px auto 1px 1px; height: 100%; background: var(--ghost);
-  box-sizing: border-box; }
+/* F61 D4: the ghost, from today's fill to the projected use at the reset; neutral, never a status */
+.meter > .ahead { background: var(--ghost), var(--plate); box-shadow: inset 0 0 0 1px var(--rule); }
 /* F84 D5: the one reply the lead is writing, in the planner's colour (a status, so the agent's
    colour); !important, over the dashed edge of a row on its way */
 .writing { border-left: 3px solid var(--opus) !important; }
@@ -271,7 +271,7 @@ tbody tr:hover { background: var(--accent-wash); }
 .swatch.over-pace, .meter > .over-pace {
   background: repeating-linear-gradient(135deg, var(--hazard) 0 4px, var(--hazard-ink) 4px 8px); }
 .swatch.pace { width: 0; height: 14px; border-left: 2px dashed var(--hazard); margin: 0 9px 0 4px; vertical-align: -3px; }
-.swatch.ahead { width: 12px; height: 16px; background: var(--ghost); border: 1px solid var(--rule); vertical-align: -4px; }
+.swatch.ahead { background: var(--ghost), var(--plate); box-shadow: inset 0 0 0 1px var(--rule); }
 .stop-plate { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; margin-top: 6px;
   padding: 5px 10px 6px 16px; background: var(--plate); border: 1px solid var(--rule); position: relative; font-size: 13px; }
 .stop-plate::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 5px;
@@ -286,6 +286,9 @@ tbody tr:hover { background: var(--accent-wash); }
 .allow .cards-on { grid-column: 1 / -1; color: var(--ink-2); justify-content: flex-start; }
 .allow .cards-on b { font: 600 11px var(--mono); text-transform: uppercase; letter-spacing: .05em; color: var(--fg); }
 .allow .line small { color: var(--muted); }
+/* F61 D1: "at this rate", its own row under the meter's words; the warn ink when it runs out */
+.allow .line .rate { flex-basis: 100%; font: 12px var(--mono); }
+.allow .line .rate.out { color: var(--warn-ink); }
 /* Mobile: one row per window with name, bar and reset text (f9-17) */
 @media (max-width: 639px) {
   #allowance { padding: 4px 14px; }
@@ -334,8 +337,6 @@ tbody tr:hover { background: var(--accent-wash); }
   color: var(--muted); margin-left: 6px; }
 .lane-way { font: 600 11.5px var(--mono); color: var(--warn-ink); white-space: nowrap; }
 .warnline { color: var(--serious-ink); font-size: 13px; }
-small.out { color: var(--hazard); font-size: 13px; }
-small.out.muted { color: var(--muted); font-size: 13px; }
 .steps { list-style: none; margin: 0; padding: 0; }
 .steps li { display: grid; grid-template-columns: 110px 1fr; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--grid); }
 .steps li:last-child { border-bottom: 0; }

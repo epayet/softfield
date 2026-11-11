@@ -616,8 +616,10 @@ class WindowAllowance:
     reset_label: str | None  # e.g. "resets at 17:00" or "resets on Oct 9"
     read_label: str | None  # e.g. "read at 03:59" or "read on Oct 26 22:10"
     status: str | None  # e.g. "reset since, no new reading" or "no data yet"
-    read_at: float | None  # UTC timestamp of the reading
-    rate_line: tuple[str, bool] | None  # (display text, is warning)
+    read_at: str | None = None  # ISO time of the reading (the row's `at`)
+    rate: str | None = None  # F61 D1: "at this rate: out Thu 13:38, 3 days 3 h before the reset"
+    rate_out: bool = False  # the window runs out before its reset: the warn ink
+    ahead: float | None = None  # F61 D4: projected use at the reset (0..1), the ghost's end
 
 
 NO_DATA = "no data yet"
@@ -634,25 +636,51 @@ def _reset_label(resets: datetime, now: datetime) -> str:
 def forecast(
     value: float, read_at: datetime, resets_at: datetime, length: timedelta, now: datetime
 ) -> tuple[datetime | None, float] | None:
-    """Project when the window runs out at this rate, and use at the reset.
+    """F61 D2, D3: when the window runs out at this rate, and its use at the reset.
 
-    Returns ``(out_time, usage_at_reset)`` or ``None`` when less than 10% of
-    ``length`` has passed or ``value`` is 0.  ``out_time`` is ``None`` when
-    the window lasts to the reset.
+    The rate is the reading over the time from the window's start (``resets_at`` minus
+    ``length``) to the reading. Returns ``(out_time, use_at_reset)``, ``out_time`` none when
+    the window lasts to its reset and ``use_at_reset`` capped at 1; or none when less than 10%
+    of the window had passed at the reading, or the reading is 0. ``now`` isn't used: the
+    reading's own time is.
     """
-    start = resets_at - length
-    elapsed = read_at - start
-    if elapsed <= timedelta(0) or elapsed < length * 0.1:
+    elapsed = (read_at - (resets_at - length)).total_seconds()
+    if elapsed < length.total_seconds() * 0.1 or value <= 0:
         return None
-    rate = value / elapsed.total_seconds()
-    if rate <= 0:
+    rate = value / elapsed
+    out_time = read_at + timedelta(seconds=max(1.0 - value, 0.0) / rate)
+    use_at_reset = min(value + rate * (resets_at - read_at).total_seconds(), 1.0)
+    return (out_time if out_time < resets_at else None, use_at_reset)
+
+
+def _gap(span: timedelta) -> str:
+    """F61 D1: "3 days 3 h", "1 day", "5 h", or "40 min" under an hour."""
+    if span < timedelta(minutes=59, seconds=30):
+        return f"{max(round(span.total_seconds() / 60), 1)} min"
+    days, hours = divmod(round(span.total_seconds() / 3600), 24)
+    words = [f"{days} day{'s' if days != 1 else ''}"] if days else []
+    return " ".join(words + ([f"{hours} h"] if hours else []))
+
+
+def _rate_line(
+    value: float, read_at: datetime, resets: datetime, length: timedelta, now: datetime
+) -> tuple[str, bool, float] | None:
+    """F61 D1: one Claude meter's "at this rate" words, whether it runs out before the reset,
+    and the ghost's end; none when it is too early to tell."""
+    projected = forecast(value, read_at, resets, length, now)
+    if projected is None:
         return None
-    remaining = (1.0 - value) / rate
-    out_time = read_at + timedelta(seconds=remaining)
-    if out_time > resets_at:
-        return (None, min(value + rate * (resets_at - read_at).total_seconds(), 1.0))
-    usage_at_reset = min(value + rate * (resets_at - read_at).total_seconds(), 1.0)
-    return (out_time, usage_at_reset)
+    out, use_at_reset = projected
+    if out is None:
+        return (
+            f"at this rate: lasts to the reset, about {use_at_reset:.0%} by then",
+            False,
+            use_at_reset,
+        )
+    if out <= now:
+        return "at this rate: out any time now", True, use_at_reset
+    when = f"{out:%H:%M}" if out - now < timedelta(hours=24) else f"{out:%a %H:%M}"
+    return f"at this rate: out {when}, {_gap(resets - out)} before the reset", True, use_at_reset
 
 
 def _read_label(at: datetime, now: datetime) -> str:
@@ -688,36 +716,12 @@ def _agent_allowances(
             status, value = RESET_SINCE, None  # the reading is stale: no percentage
         else:
             status = None
-        # Forecast the out time and usage at reset for Claude's rows.
-        read_dt: datetime | None = datetime.fromisoformat(at) if at else None
-        read_ts: float | None = None if read_dt is None else read_dt.timestamp()
-        rate_line: tuple[str, bool] | None = None
-        if agent_label == "Claude" and status is None and read_dt is not None:
-            length = FIVE_HOUR if wkey == "five_hour" else WEEK
-            if read_at is not None and resets is not None:
-                proj = forecast(value or 0, read_at, resets, length, now)
-                if proj is not None:
-                    out_time, usage_at_reset = proj
-                    if out_time is None:
-                        # lasts to the reset
-                        pct = f"{usage_at_reset:.0%}"
-                        rate_line = (
-                            f"at this rate: lasts to the reset, about {pct} by then",
-                            False,
-                        )
-                    elif out_time <= now:
-                        rate_line = ("at this rate: out any time now", True)
-                    elif (out_time - now).total_seconds() < 86400:
-                        rate_line = (f"at this rate: out {out_time:%H:%M}", True)
-                    else:
-                        delta = out_time - resets
-                        days = delta.days
-                        hours = abs(delta.seconds) // 3600
-                        if days < 0:
-                            days += 1
-                            hours += 24
-                        before = f"{days} days {hours} h before the reset"
-                        rate_line = (f"at this rate: out {out_time:%H:%M}, {before}", True)
+        # F61 D5: Claude's two windows only, and only on a fresh reading (D3)
+        rate = None
+        if agent_label == "Claude" and status is None and value and read_at and resets:
+            rate = _rate_line(
+                value, read_at, resets, FIVE_HOUR if wkey == "five_hour" else WEEK, now
+            )
         rows.append(
             WindowAllowance(
                 label=agent_label,
@@ -731,8 +735,10 @@ def _agent_allowances(
                 reset_label=_reset_label(resets, now) if resets and status is None else None,
                 read_label=_read_label(read_at, now) if read_at else None,
                 status=status,
-                read_at=read_ts,
-                rate_line=rate_line,
+                read_at=at,
+                rate=rate[0] if rate else None,
+                rate_out=bool(rate and rate[1]),
+                ahead=rate[2] if rate else None,
             )
         )
     return rows

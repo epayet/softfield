@@ -24,7 +24,7 @@
         {% endif %}
       </div>
       <div class="meter">
-        {% if a.rate_line %}<span class="ahead" style="width:{{ '%.0f' | format(a.rate_line[1] * 100) }}%"></span>{% endif %}
+        {% if a.ahead is not none %}<span class="ahead" style="width:{{ '%.0f' | format(a.ahead * 100) }}%"></span>{% endif %}
         <span class="{{ fill }}" style="width:{{ '%.0f' | format((a.value or 0) * 100) }}%"></span>
         {% set wp = pace if a.label == "Claude" and a.window == "seven_day" and not no_data else none %}
         {% if wp and wp.state == "over" %}
@@ -38,7 +38,6 @@
         {% endif %}
       </div>
       <div class="line">
-        {% if a.rate_line %}<small class="out{% if not a.rate_line[1] %} muted{% endif %}">{{ a.rate_line[0] }}</small>{% endif %}
         {% if a.reset_label %}
         <small>{{ a.reset_label }}</small>
         {% elif a.status %}
@@ -55,6 +54,9 @@
         {% endif %}
         {% if sw and sw.until %}
         <small class="until">on until {{ sw.until }}</small>
+        {% endif %}
+        {% if a.rate %}
+        <small class="rate{{ ' out' if a.rate_out }}">{{ a.rate }}</small>
         {% endif %}
       </div>
       {% if wp and wp.state == "over" %}

@@ -782,6 +782,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** a security ticket scoped one door (the Read tool) and left the command list open: when a job's reach is narrowed, the review has to check every tool it keeps, not only the one the ticket names. A ticket whose first step can't run in a job (a `claude -p` probe) should say so and hand that step to the owner's sign-off from the start.
 - **Decisions affected:** ADR 33 gains a "Settled" line: no `git diff` beside the web.
 
+### F61 (2026-11-11): Claude's meters say when the window runs out at this rate ([review](../reviews/f61-on-claude-usage-page-there-is.md))
+
+- **Q1:** one developer ticket at difficulty 3 (a pure function, a template line, a legend line). Qwen 1/3: attempts 1 and 2 stopped "no edit after 20 min" (only reads), a 4-hour park for Claude's reset, then the third attempt passed the gates after an Opus direction ($0.47). No checkpoint. Review round 1: two blocking (the ghost's width from a true/false, the "before the reset" words garbled past 24 h) and two should-fix (loose tests, styling), all fixed by the review.
+- **Q3:** Qwen 7.7M tokens in over three attempts, 75 minutes on the one that passed; see the review's numbers for dollars.
+- **Q5:** see the review's numbers.
+- **Anything else:** the gates trusted tests the developer wrote to match its own code: "the line contains 'at this rate: out'" passed a line with no gap and a negative one. When a ticket's Done-when quotes exact words, its tests list should quote the assertions too.
+- **Decisions affected:** none.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.
