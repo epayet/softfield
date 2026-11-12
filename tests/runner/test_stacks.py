@@ -2,6 +2,7 @@
 on recorded ``docker compose`` output. No test runs Docker: ``_docker`` is replaced."""
 
 import json
+import shutil
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -347,3 +348,111 @@ def test_a_held_lock_gives_up_with_a_plain_error(stack, docker, monkeypatch):
     assert docker.calls == []
     stacks.stop(stack)  # free again
     assert docker.calls[-1][0][-1] == "stop"
+
+
+# --- follow main ------------------------------------------------------------------------
+
+
+def _moves_main(stack: Stack, name: str = "two") -> str:
+    git(stack.repo, "commit", "-q", "--allow-empty", "-m", name)
+    return git(stack.repo, "rev-parse", "main").strip()
+
+
+def _ups(docker: Docker) -> list[list[str]]:
+    return [args for args, _, _ in docker.calls if "up" in args]
+
+
+def _record(stack: Stack) -> dict[str, Any]:
+    record: dict[str, Any] = json.loads(stack.result_file.read_text(encoding="utf-8"))
+    return record
+
+
+def test_main_moving_moves_a_running_checkout_and_rebuilds_once(stack, docker):
+    _checkout(stack)
+    docker.answers = {"ps": _ps(_container())}
+    main = _moves_main(stack)
+    assert stacks.follow_main(stack) is True
+    assert git(stack.checkout, "rev-parse", "HEAD").strip() == main
+    assert _ups(docker) == [["compose", "-p", "coaster-ranker", "up", "-d", "--build"]]
+    assert _record(stack)["ok"] is True and _record(stack)["commit"] == main
+    assert stacks.follow_main(stack) is False  # already at main: nothing more
+    assert len(_ups(docker)) == 1
+
+
+def test_a_failed_build_says_update_failed_with_the_tail_while_old_containers_answer(stack, docker):
+    _checkout(stack)
+    lines = "\n".join(f"step {n}" for n in range(60))
+    docker.answers = {"--build": Result(1, lines, "boom"), "ps": _ps(_container())}
+    main = _moves_main(stack)
+    stacks.follow_main(stack)  # never raises
+    record = _record(stack)
+    assert record["ok"] is False and record["commit"] == main
+    assert record["tail"].splitlines()[-1] == "boom"
+    assert len(record["tail"].splitlines()) <= 40
+    found = stacks.state(stack)
+    assert found.word == "update failed" and found.url_port == 8123
+
+
+def test_a_rebuild_copies_the_data_and_keeps_three_copies(stack, docker):
+    _checkout(stack)
+    docker.answers = {"ps": _ps(_container())}
+    stack.data.mkdir(parents=True)
+    (stack.data / "db.sqlite").write_text("rows", encoding="utf-8")
+    mains = []
+    for name in ("two", "three", "four", "five"):
+        mains.append(_moves_main(stack, name))
+        stacks.follow_main(stack)
+    copies = sorted(p.name for p in stack.data.parent.glob("coaster-ranker.before-*"))
+    assert copies == sorted(f"coaster-ranker.before-{m[:12]}" for m in mains[1:])
+    newest = stack.data.parent / f"coaster-ranker.before-{mains[-1][:12]}"
+    assert (newest / "db.sqlite").read_text(encoding="utf-8") == "rows"
+
+
+def test_a_failed_copy_never_calls_up(stack, docker, monkeypatch):
+    _checkout(stack)
+    docker.answers = {"ps": _ps(_container())}
+
+    def broken(*args, **kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(shutil, "copytree", broken)
+    main = _moves_main(stack)
+    stacks.follow_main(stack)
+    assert _ups(docker) == []
+    record = _record(stack)
+    assert record["ok"] is False and "disk full" in record["tail"] and record["commit"] == main
+
+
+def test_a_stopped_apps_checkout_follows_main_and_nothing_starts(stack, docker):
+    _checkout(stack)
+    docker.answers = {"ps": _ps()}
+    main = _moves_main(stack)
+    assert stacks.follow_main(stack) is True
+    assert git(stack.checkout, "rev-parse", "HEAD").strip() == main
+    assert _ups(docker) == []
+    assert not stack.result_file.exists()
+
+
+def test_without_a_checkout_follow_main_leaves_it_to_start(stack, docker):
+    _moves_main(stack)
+    assert stacks.follow_main(stack) is False
+    assert not stack.checkout.exists() and docker.calls == []
+
+
+def test_the_runner_leaves_projects_without_run_and_softfield_alone(app, share, docker):
+    from runner import loop
+
+    (app / ".softfield" / "project.toml").write_text('[project]\nname = "x"\n', encoding="utf-8")
+    loop._follow_main(app)
+    assert docker.calls == []
+    assert stacks.stack_for(app) is None
+
+
+def test_the_runners_follow_never_raises(app, share, monkeypatch):
+    from runner import loop
+
+    def broken(repo):
+        raise RuntimeError("bad toml")
+
+    monkeypatch.setattr(stacks, "stack_for", broken)
+    loop._follow_main(app)

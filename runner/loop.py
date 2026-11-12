@@ -37,6 +37,7 @@ from runner import (
     push,
     ratings,
     router,
+    stacks,
 )
 from runner.agents import (
     ANY,
@@ -5533,6 +5534,7 @@ def _new_code(s: Session, code: str) -> bool:
     than run the next job stale. Called when a job ends, so the factory updates at the end
     of its own work, and before each pick, for a commit made outside the run."""
     update_live(s.repo)
+    _follow_main(s.repo)
     if _runner_code(s.repo) == code:
         return False
     s.report.notes.append(RESTART_NOTE)
@@ -5563,6 +5565,17 @@ def update_live(repo: Path) -> bool:
     if {"pyproject.toml", "uv.lock"} & set(changed):
         _reinstall(home)  # the new code's dependencies, before the restart imports it
     return True
+
+
+def _follow_main(repo: Path) -> None:
+    """ADR 46 item 3: the session's project's running app follows its main. Never raises."""
+    try:
+        stack = stacks.stack_for(repo)
+        if stack is not None:
+            stacks.follow_main(stack)
+    except Exception as exc:
+        stamp = f"{local_clock():%H:%M:%S}"
+        print(f"[{stamp}] [{RUNNER_AGENT}] following main failed for {repo.name}: {exc}")
 
 
 def softfield_repo() -> Path | None:

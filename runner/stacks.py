@@ -10,11 +10,13 @@ import fcntl
 import json
 import os
 import re
+import shutil
 import subprocess
 import time
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any, NamedTuple
 
@@ -26,6 +28,8 @@ MAIN = "main"
 LOCK_WAIT = 60.0  # seconds a command waits for another on the same project (D3)
 DOCKER_TIMEOUT = 900  # an `up` may build the image first
 MAX_LINES = 2000
+TAIL_LINES = 40  # of a failed build, kept in the result file
+KEEP_COPIES = 3  # of the data folder, before the newest rebuilds (D8)
 MAX_RESTARTS = 3  # restarted more than this: crashed, not starting
 # Exit codes of a container `docker compose stop` ended: none, SIGTERM's, SIGKILL's after 10 s
 STOPPED_CODES = {0, 137, 143}
@@ -195,6 +199,90 @@ def stop(stack: Stack) -> None:
     """Stop the app; its containers stay, so the next start is quick."""
     with _locked(stack):
         _check(_compose(stack, "stop"), f"stopping {stack.project}'s app")
+
+
+def _stamp() -> str:
+    return datetime.now().astimezone().isoformat(timespec="seconds")
+
+
+def _tail(text: str) -> str:
+    return _last_lines(text, TAIL_LINES)
+
+
+def _write_result(stack: Stack, commit: str, ok: bool, tail: str = "") -> None:
+    record = {"commit": commit, "ok": ok, "at": _stamp(), "tail": tail}
+    try:
+        stack.result_file.write_text(json.dumps(record), encoding="utf-8")
+    except OSError as exc:
+        print(f"[{_stamp()}] {stack.project}'s update result couldn't be written: {exc}")
+
+
+def _is_running(stack: Stack) -> bool:
+    """Whether any of the app's containers is up, whatever its health."""
+    result = _compose(stack, "ps", "--all", "--format", "json")
+    if result.code != 0:
+        return False
+    try:
+        return any(c.get("State") in ("running", "restarting") for c in _containers(result.out))
+    except ValueError:
+        return False
+
+
+def _copy_data(stack: Stack, commit: str) -> None:
+    """D8: the data folder, copied beside itself before a rebuild; the newest copies stay."""
+    stack.data.mkdir(parents=True, exist_ok=True)
+    prefix = f"{stack.project}.before-"
+    target = stack.data.parent / f"{prefix}{commit[:12]}"
+    try:
+        if target.exists():
+            shutil.rmtree(target)
+        shutil.copytree(stack.data, target, symlinks=True)
+        os.utime(target)  # a copy keeps its source's times: the newest is the one made now
+    except OSError as exc:
+        shutil.rmtree(target, ignore_errors=True)
+        raise StackError(f"copying {stack.project}'s data failed: {exc}") from exc
+    copies = sorted(
+        (p for p in stack.data.parent.glob(f"{prefix}*") if p.is_dir()),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+    for old in copies[KEEP_COPIES:]:
+        shutil.rmtree(old, ignore_errors=True)
+
+
+def follow_main(stack: Stack) -> bool:
+    """ADR 46 items 3 and 4: when main has moved, the app's checkout follows (detached); if the
+    app was running it is rebuilt, after a copy of its data. Whether the checkout moved. Never
+    raises: a failure goes to the result file, which `state` reads, and to the console, and the
+    old containers keep running."""
+    try:
+        with _locked(stack):
+            if not stack.checkout.is_dir():
+                return False  # not started yet: `start` makes it at main
+            main = Git(stack.repo).run("rev-parse", MAIN).strip()
+            if Git(stack.checkout).head() == main:
+                return False
+            running = _is_running(stack)
+            Git(stack.checkout).run("checkout", "-q", "--detach", main)
+            if not running:
+                return True
+            try:
+                _copy_data(stack, main)
+            except StackError as exc:
+                _write_result(stack, main, False, str(exc))
+                print(f"[{_stamp()}] {stack.project}'s app didn't update: {exc}")
+                return True
+            built = _compose(stack, "up", "-d", "--build")
+            if built.code == 0:
+                _write_result(stack, main, True)
+            else:
+                tail = _tail(f"{built.out}\n{built.err}") or f"exit code {built.code}"
+                _write_result(stack, main, False, tail)
+                print(f"[{_stamp()}] {stack.project}'s app didn't update: {_last_lines(tail)}")
+            return True
+    except (StackError, GitError, OSError) as exc:
+        print(f"[{_stamp()}] {stack.project}'s app couldn't follow main: {exc}")
+        return False
 
 
 def logs(stack: Stack, service: str | None = None, lines: int = 200) -> str:
