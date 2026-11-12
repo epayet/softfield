@@ -31,3 +31,10 @@ Read ADR 46 items 1, 5, 6 and 8 and D5 and D7 in `.softfield/cards/f239-i-want-t
 - `runner/instructions/run-stack.md` exists and names `APP_PORT`, `APP_DATA`, `[run]`, `restart: unless-stopped` and the migrations at start
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
