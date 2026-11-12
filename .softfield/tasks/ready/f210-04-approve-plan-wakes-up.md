@@ -2,7 +2,7 @@
 id: f210-04-approve-plan-wakes-up
 milestone: f210-bundle-a-card-s-conversation-with
 difficulty: 2
-depends_on: [f224-02-approve-first-on-the-pages]
+depends_on: [f224-02-approve-first-on-the-pages, f210-05-typed-comments-wait-for-real]
 files:
   - factory_dashboard/templates/proposal.html
 tests:
