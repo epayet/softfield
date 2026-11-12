@@ -806,6 +806,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** this is the third milestone running (F61, F77, F206) where the gates passed tests the developer wrote to match its own misreading. Here the docstrings said "is faded" and the assertions said `dev-can`. One test for a Done-when line set up a different case from the one the line describes. A later card's test (F209) was then built on the wrong behaviour and had to change with the fix. The fix that keeps working is the review reading each test against the card's decisions. A cheap gate can't compare a docstring with an assertion.
 - **Decisions affected:** none.
 
+### F220 (2026-11-12): the project picker leaves inner pages for the lit tab ([review](../reviews/f220-if-i-m-browsing-a-certain.md))
+
+- **Q1:** one developer ticket at difficulty 1 (one `action` on the picker's form, one `picker_to` on the Milestones list). Qwen merged it on attempt 1: 21 min of model time, 14 min of gates, about 3.6M tokens in. No checkpoint. Review round 1: one nit (a ticket's page missing from the parametrised test), reported only. Score 9.
+- **Q3:** no Claude in the build; see the review's numbers.
+- **Q5:** see the review's numbers.
+- **Anything else:** a card whose plan read the code and named what each page did wrong, plus a ticket that gave the test's shape (find the form by its select, D3), gave a clean first attempt. The session report flagged the ticket as "edited existing tests" though it only appended one; telling appended from changed tests would spare reviews a false lead.
+- **Decisions affected:** none.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.
