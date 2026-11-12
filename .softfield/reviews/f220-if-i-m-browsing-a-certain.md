@@ -1,5 +1,7 @@
 # Review: F220, switching project from an inner page goes back to that tab's own page
 
+- **Status:** done, signed off by the owner on 2026-11-12.
+
 ## Sign-off sheet
 
 ### 1. What changed

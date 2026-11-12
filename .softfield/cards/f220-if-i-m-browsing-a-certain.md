@@ -1,6 +1,7 @@
 # Milestone F220: Switching project from an inner page goes back to that tab's own page
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** done · **Priority:** 100 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-12. Base: git tag `f220-if-i-m-browsing-a-certain-start`. Report: [`.softfield/reviews/f220-if-i-m-browsing-a-certain.md`](../reviews/f220-if-i-m-browsing-a-certain.md).
 > Planted by the owner on 2026-11-04.
 
 ## Notes
