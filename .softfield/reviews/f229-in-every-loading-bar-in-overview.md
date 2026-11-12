@@ -1,5 +1,7 @@
 # Review: F229, one bar instead of two
 
+- **Status:** done, signed off by the owner on 2026-11-12.
+
 ## Sign-off sheet
 
 ### 1. What changed

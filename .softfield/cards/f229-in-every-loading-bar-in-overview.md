@@ -1,6 +1,7 @@
 # Milestone F229: Remove the second bar with 4 chunks under every bar
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** done · **Priority:** 100 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-12. Base: git tag `f229-in-every-loading-bar-in-overview-start`. Report: [`.softfield/reviews/f229-in-every-loading-bar-in-overview.md`](../reviews/f229-in-every-loading-bar-in-overview.md).
 > Planted by the owner on 2026-11-05.
 
 ## Notes
