@@ -29,3 +29,12 @@ Words: a ticket's row "Working now · the lead" or "· a developer"; a review's 
 - with no live job, one line says "Nothing is being worked on now" in the same place
 - two live jobs give two rows
 - the listed `tests:` pass, and fail without the change
+
+```yaml
+# --- runner ---
+result: done
+attempts: 3
+duration_s: 3632
+gate_failures: ['stopped', 'stopped']
+tokens: 5275203
+```
