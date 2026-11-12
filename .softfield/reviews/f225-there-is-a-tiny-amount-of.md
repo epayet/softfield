@@ -1,5 +1,7 @@
 # Review: F225, the night switch slides by itself when a page loads
 
+- **Status:** done, signed off by the owner on 2026-11-12.
+
 ## Sign-off sheet
 
 ### 1. What changed

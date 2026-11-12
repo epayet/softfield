@@ -1,6 +1,7 @@
 # Milestone F225: The night switch slides by itself when a page loads
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** done · **Priority:** 100 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-12. Base: git tag `f225-there-is-a-tiny-amount-of-start`. Report: [`.softfield/reviews/f225-there-is-a-tiny-amount-of.md`](../reviews/f225-there-is-a-tiny-amount-of.md).
 > Planted by the owner on 2026-11-05.
 
 ## Notes
