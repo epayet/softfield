@@ -24,3 +24,10 @@ Read the `## Replan` log in `.softfield/cards/f239-i-want-to-be-able-to-3.md`, t
 - `state` of a stack whose last update failed holds that update's commit
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
