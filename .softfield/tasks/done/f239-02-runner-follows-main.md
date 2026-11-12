@@ -30,3 +30,10 @@ Read ADR 46 items 3 and 4 and D2 and D3 in `.softfield/cards/f239-i-want-to-be-a
 - a project without `[run]`, and Softfield itself, are left alone
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
