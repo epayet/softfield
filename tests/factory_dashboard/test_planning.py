@@ -2553,3 +2553,128 @@ def test_adr_waits_for_old_path_with_file_missing_on_main(planning, db_path, che
         "path": "docs/adr/27-planning-beside-the-line.md",
     }
     assert _adr_waits(checkout, [old_adr_proposal]) is True
+
+
+# --- a thread whose last open proposal was just settled shows it is archiving (F75) ----------
+
+_CLOSE_PLAN: dict[str, object] = {
+    "id": "plan-f20",
+    "kind": "plan",
+    "title": "F20 plan",
+    "path": None,
+}
+_CLOSE_ADR: dict[str, object] = {
+    "id": "adr-9",
+    "kind": "adr",
+    "title": "An ADR",
+    "path": ".softfield/adr/9-an-adr.md",
+}
+_ARCHIVING = "archiving at the runner's next pick"
+
+
+def _closing_thread(
+    db_path: Path,
+    project: int,
+    proposals: list[dict[str, object]],
+    requests: list[tuple[str, str, str | None, str | None]],
+) -> None:
+    """``f20``: the lead's latest reply (2 h ago) lists ``proposals``; each request is
+    (kind, subject, value, result): pending when the result is None, else done with it."""
+
+    def write(conn: sqlite3.Connection) -> None:
+        thread = metrics.planner_thread(conn, project, "f20", _at(timedelta(hours=3)))["id"]
+        metrics.add_planner_message(
+            conn, thread, "lead", _at(timedelta(hours=2)), "Here.", proposals=proposals
+        )
+        for kind, subject, value, result in requests:
+            conn.execute(
+                "INSERT INTO owner_requests (project_id, kind, subject, value, created, done,"
+                " result) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    project,
+                    kind,
+                    subject,
+                    value,
+                    _at(timedelta(minutes=30)),
+                    None if result is None else NOW.isoformat(),
+                    result,
+                ),
+            )
+
+    _write(db_path, write)
+
+
+def _f20(db: sqlite3.Connection) -> Any:
+    [item] = [i for i in _group(db, "answers") if i.link == "/planning/f20"]
+    return item
+
+
+@pytest.mark.parametrize(
+    "request_",
+    [("approve_plan", "f20", None, None), ("reject", "f20/plan-f20", None, None)],
+)
+def test_approving_or_rejecting_the_only_proposal_dashes_its_thread(
+    planning, db_path, db, request_
+):
+    _closing_thread(db_path, planning, [_CLOSE_PLAN], [request_])
+    item = _f20(db)
+    assert item.on_its_way and item.words == _ARCHIVING
+    assert item not in waiting_for_you(desk(db, PROJECT, NOW))
+
+
+def test_a_thread_with_another_proposal_still_open_stays_solid(planning, db_path, db):
+    _closing_thread(
+        db_path, planning, [_CLOSE_PLAN, _CLOSE_ADR], [("approve_plan", "f20", None, None)]
+    )
+    item = _f20(db)
+    assert not item.on_its_way
+    assert item in waiting_for_you(desk(db, PROJECT, NOW))
+
+
+def test_rejecting_the_plan_takes_the_adr_draft_too(planning, db_path, db):
+    """D2: a pending reject on a draft drops the plan branch, so the ADR counts as on its way."""
+    _closing_thread(
+        db_path, planning, [_CLOSE_PLAN, _CLOSE_ADR], [("reject", "f20/plan-f20", None, None)]
+    )
+    item = _f20(db)
+    assert item.on_its_way and item.words == _ARCHIVING
+
+
+def test_one_approved_and_another_pending_dashes_the_thread(planning, db_path, db):
+    _closing_thread(
+        db_path,
+        planning,
+        [_CLOSE_PLAN, _CLOSE_ADR],
+        [
+            ("accept_adr", "f20", "9", "accepted .softfield/adr/9-an-adr.md"),
+            ("approve_plan", "f20", None, None),
+        ],
+    )
+    assert _f20(db).on_its_way
+
+
+def test_a_refused_approval_makes_the_thread_solid_again(planning, db_path, db):
+    _closing_thread(
+        db_path,
+        planning,
+        [_CLOSE_PLAN],
+        [("approve_plan", "f20", None, "plan/f20 has no draft")],
+    )
+    item = _f20(db)
+    assert not item.on_its_way
+    assert item in waiting_for_you(desk(db, PROJECT, NOW))
+
+
+def test_the_page_of_a_closing_thread_says_it_is_archiving(planning, db_path, serve):
+    _closing_thread(db_path, planning, [_CLOSE_PLAN], [("approve_plan", "f20", None, None)])
+    html = _thread(serve(), "f20")
+    assert "Archiving at the runner" in html
+    assert 'id="archive-button"' not in html
+
+
+def test_the_page_of_an_open_thread_keeps_its_archive_button(planning, db_path, serve):
+    _closing_thread(
+        db_path, planning, [_CLOSE_PLAN, _CLOSE_ADR], [("approve_plan", "f20", None, None)]
+    )
+    html = _thread(serve(), "f20")
+    assert 'id="archive-button"' in html

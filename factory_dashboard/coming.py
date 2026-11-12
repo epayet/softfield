@@ -5,7 +5,7 @@ reply line (F84) that says where a waiting thread's reply stands. Imports no pag
 
 import json
 import sqlite3
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 
@@ -314,7 +314,12 @@ def coming(conn: sqlite3.Connection, project: str, now: datetime) -> DeskGroup:
     return DeskGroup("coming", "Coming seeds", "--hazard", items)
 
 
-def _acted_on(conn: sqlite3.Connection, project_id: int, items: list[DeskItem]) -> list[DeskItem]:
+def _acted_on(
+    conn: sqlite3.Connection,
+    project_id: int,
+    items: list[DeskItem],
+    closing: Collection[str] = (),
+) -> list[DeskItem]:
     """The owner's Archive, Sign off or Remove seed still waiting for the runner, or Try again
     and Set aside on a blocked ticket (F106 D3): the item shows on its way, dashed, saying what
     is coming (the owner, 2026-10-08: an archived thread still looked like it needed them)."""
@@ -349,6 +354,8 @@ def _acted_on(conn: sqlite3.Connection, project_id: int, items: list[DeskItem]) 
                 words = "Approving the lead's fix at the runner's next pick"
         else:
             words = asked.get(thread) if "/proposals/" not in item.link else None
+            if words is None and thread in closing and "/proposals/" not in item.link:
+                words = "archiving at the runner's next pick"  # F75: the runner will archive it
         found.append(replace(item, words=words, on_its_way=True) if words else item)
     return found
 

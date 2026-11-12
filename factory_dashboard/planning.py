@@ -51,17 +51,20 @@ from factory_dashboard.overview import (
 from runner import metrics
 from runner.planner import (
     APPLIED,
+    APPROVED,
+    DRAFTED,
     MERGE,
     ON_ITS_WAY,
     OPEN,
     PLANNER,
+    REJECTED,
     PlannerError,
     is_proposed,
     merge_cards,
     proposal_state,
     thread_name,
 )
-from runner.requests import BY_YOU
+from runner.requests import BY_YOU, _latest
 from runner.tasks import (
     short_key,
 )
@@ -313,6 +316,38 @@ def _open_proposals(
         if card_parts:
             items.append(_bundle(row["card"], card_parts, repo, revising.get(row["card"])))
     return items
+
+
+def _closing(conn: sqlite3.Connection, project_id: int, card: str, known: set[str] | None) -> bool:
+    """F75: the runner will archive this thread at its next pick. It follows
+    ``_close_if_settled``: every proposal of the latest set is approved, rejected, a merge that
+    has left main (``_gone_merge``) or on its way, and at least one is on its way (D1). A pending
+    reject on a draft takes every draft of the set (D2). An archived thread, or one with no
+    proposals, is never closing."""
+    found = metrics.find_thread(conn, project_id, card)
+    if found is None or found["archived"] is not None:
+        return False
+    listed, asked = _latest(conn, project_id, found["id"])
+    if not listed:
+        return False
+    kinds = {str(p["id"]): p.get("kind") for p in listed}
+    drafts_go = any(
+        r["kind"] == "reject"
+        and r["done"] is None
+        and str(r["subject"] or "").startswith(f"{card}/")
+        and kinds.get(str(r["subject"]).partition("/")[2]) in DRAFTED
+        for r in asked
+    )
+    on_its_way = False
+    for proposal in listed:
+        state = proposal_state(proposal, card, asked)
+        if drafts_go and proposal.get("kind") in DRAFTED and state == OPEN:
+            state = ON_ITS_WAY
+        if state == ON_ITS_WAY:
+            on_its_way = True
+        elif state not in (APPROVED, REJECTED) and not _gone_merge(proposal, known):
+            return False
+    return on_its_way
 
 
 def _ripe(
@@ -638,7 +673,14 @@ def desk(
         ripe, answers = _ripe_takes_its_thread(ripe, answers, revising)
         ripe = _acted_on(conn, project_id, ripe)
         proposals = _open_proposals(conn, project_id, _known_cards(repo), repo, revising)
-        answers = _acted_on(conn, project_id, answers)
+        known = _known_cards(repo)
+        closing = {
+            a.link.removeprefix("/planning/")
+            for a in answers
+            if not a.on_its_way
+            and _closing(conn, project_id, a.link.removeprefix("/planning/"), known)
+        }
+        answers = _acted_on(conn, project_id, answers, closing)
         seeds = _acted_on(conn, project_id, _seeds(conn, project_id))
         blocked = _acted_on(conn, project_id, _blocked(conn, project_id))
     return [

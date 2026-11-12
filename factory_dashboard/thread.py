@@ -44,6 +44,7 @@ from factory_dashboard.merges import (
 from factory_dashboard.milestones import _to_html
 from factory_dashboard.overview import Change, open_changes, running_jobs
 from factory_dashboard.planning import (
+    _closing,
     _open_proposals,
     _repo,
     _waiting_for_lead,
@@ -349,13 +350,16 @@ def thread_page(
             (project_id, thread),
         ).fetchone()
         archiving = asked["value"] if asked is not None else None
+        known = _known_cards(_repo(conn, project))
+        if archiving is None and _closing(conn, project_id, thread, known):
+            archiving = "on"  # F75: its last open proposal was just settled
         rows = conn.execute(
             "SELECT m.* FROM planner_messages m JOIN planner_threads t ON t.id = m.thread_id"
             " WHERE t.project_id = ? AND t.card = ? ORDER BY m.id",
             (project_id, thread),
         ).fetchall()
         messages = _messages(rows)
-        proposals = _proposals(conn, project_id, thread, rows, _known_cards(_repo(conn, project)))
+        proposals = _proposals(conn, project_id, thread, rows, known)
         pending = any(
             r["kind"] == PLANNER and str(r["subject"] or "").startswith(f"{thread}#")
             for r in metrics.open_jobs(conn, project_id)
