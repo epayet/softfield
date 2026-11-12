@@ -31,3 +31,10 @@ Read ADR 46 in `.softfield/adr/46-run-a-project-from-the-dashboard.md` and D1 to
 - no test runs the real `docker`: every call goes through `_docker`, replaced in the tests
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
