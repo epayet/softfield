@@ -30,3 +30,12 @@ Read `.softfield/cards/f108-in-your-answers-wanted-i-see.md` (D1–D5), then `_a
 - the items' links, order, `on_its_way` and the Planning tab's count don't change
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 3
+duration_s: 11871
+gate_failures: ['mypy', 'task-tests']
+tokens: 10436735
+```
