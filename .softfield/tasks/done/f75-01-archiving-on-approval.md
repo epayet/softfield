@@ -36,3 +36,10 @@ Read `.softfield/cards/f75-i-believe-right-now-when-a.md` (Why it happens, D1–
 - `/planning/<card>` for a closing thread shows "Archiving at the runner's next pick" and no Archive button
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
