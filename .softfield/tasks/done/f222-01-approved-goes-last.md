@@ -28,3 +28,10 @@ Read `.softfield/cards/f222-when-milestones-plans-get-approved-do.md`: "What hap
 - the result says it for a plan that moved: "F222 goes last on the board", and not otherwise
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
