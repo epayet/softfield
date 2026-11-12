@@ -1,6 +1,6 @@
 # Milestone F239: Run, stop and open each product's app from the Projects page, on Docker Compose
 
-> **State:** ready · **Priority:** 4 · **Area:** factory · **Fast lane:** yes
+> **State:** ready · **Priority:** 0 · **Area:** factory · **Fast lane:** yes
 > Planted by the owner on 2026-11-10.
 
 ## Notes
