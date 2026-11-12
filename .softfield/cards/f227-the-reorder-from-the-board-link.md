@@ -1,6 +1,7 @@
 # Milestone F227: Remove the 'Reorder on the board' link from the Overview's queue
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** done · **Priority:** 100 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-12. Base: git tag `f227-the-reorder-from-the-board-link-start`. Report: [`.softfield/reviews/f227-the-reorder-from-the-board-link.md`](../reviews/f227-the-reorder-from-the-board-link.md).
 > Planted by the owner on 2026-11-05.
 
 ## Notes

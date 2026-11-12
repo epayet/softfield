@@ -1,5 +1,7 @@
 # Review: F227, the Queue panel loses its "Reorder on the board" link
 
+- **Status:** done, signed off by the owner on 2026-11-12.
+
 ## Sign-off sheet
 
 ### 1. What changed
