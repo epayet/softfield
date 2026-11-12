@@ -28,11 +28,23 @@ The joints are in [ADR 46](../adr/46-run-a-project-from-the-dashboard.md) (Propo
 - f239-02 (lead): the runner follows main.
 - f239-03 (lead): Run and Stop routes, and `run-stack.md`.
 - f239-04 (lead): replan (ADR 16 item 7).
+- f239-08 (lead): `services` and `StackState.commit` in `runner/stacks.py` (added by the replan).
 - f239-05 (developer): the app row on the Projects page.
 - f239-06 (developer): the logs page.
 - f239-07 (developer): a crashed app in Needs you.
 
 After sign-off: each product plants its stack card from its own plate (Coucou, Travel Companion, Coaster Ranker).
+
+## Replan
+Done by f239-04 (ADR 16 item 7), against main after f239-01 to f239-03. What the code does that D1 to D7 and the tickets said otherwise:
+- **D5's routes are in `factory_dashboard/stacks_routes.py`**, not `projects.py`: `stack_of(conn, name)`, `app_row(request, name, stack, error)`, `STATE_WORDS`, `UP`, `run_app`, `stop_app`. f239-05 now lists that file; f239-06's logs route goes there too, with its tests in `tests/factory_dashboard/test_stacks_routes.py`.
+- **D2's `StackState` has a sixth word, `no docker`** (`NO_DOCKER`, reason in `detail`), which f239-05's "Docker missing" row uses.
+- **`StackState` carries no commit**, but f239-05 and f239-07 show the commit an update failed on (it is only in the result file). Gap: ticket **f239-08** adds `StackState.commit`; 05 and (through 05) 07 wait for it.
+- **Nothing lists a stack's services**, which f239-06's service chooser needs, and developers can't edit `runner/`. Gap: **f239-08** adds `services(stack)`; 06 waits for it.
+- **`logs` raises `ValueError` for a malformed service name**: f239-06 answers 404 for a service not in `services(stack)` before calling it.
+- **The plant buttons post the Plant box's shape** (`kind=plant`, `project`, `value` = JSON `{"text", "ask"}`), not a bare text: f239-05 says so.
+- **`stack_for` is None for Softfield and for a project without `[run]` alike**: f239-05 takes the Softfield flag from the repo, not from `stack_of`.
+- Unchanged and checked: `project_run`/`Run` (`service`, `path`) in `runner/config.py`, `start`, `stop`, `state`, `logs`, `follow_main`, `from_the_dashboard`, `run-stack.md`, and the paths in D3.
 
 ## Before and after
 - `/projects`
