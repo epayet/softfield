@@ -30,3 +30,10 @@ Read `.softfield/cards/f224-i-want-to-be-able-to-2.md` (D1–D4) and `.softfield
 - the result ends "F224 goes first on the board, in the fast lane", with the card's own name, and still starts with `approved`
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
