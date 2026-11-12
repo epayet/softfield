@@ -37,3 +37,10 @@ Read `.softfield/cards/f222-when-milestones-plans-get-approved-do.md`: D1, D4, D
 - a drag's list is the order sent, and the table equals the list after a drag and after a sync
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
