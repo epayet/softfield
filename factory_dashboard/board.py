@@ -203,7 +203,6 @@ def _dev_work(
     rows: dict[str, sqlite3.Row],
     leads: Callable[[sqlite3.Row], frozenset[str]],
     protected: list[str],
-    by_name: dict[str, sqlite3.Row],
     open_directions: frozenset[str],
 ) -> DevWork:
     """D3 and D4's line for one card's tickets (set-aside and removed ones already left out).
@@ -236,7 +235,7 @@ def _dev_work(
                     waiting += 1
                     waits_for |= named
                 elif all(
-                    by_name.get(d) is not None and by_name[d]["state"] == "done"
+                    rows.get(d) is not None and rows[d]["state"] == "done"
                     for d in depends_on(t)
                 ):
                     now += 1
@@ -472,7 +471,6 @@ def _cards(
             by_name,
             leads,
             protected,
-            by_name,
             open_directions,
         )
 
