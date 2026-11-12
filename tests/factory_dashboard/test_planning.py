@@ -2441,9 +2441,13 @@ def test_the_lead_replied_shows_solid_row_with_reply_words(planning, db_path, db
     assert item.words.startswith("the lead replied")
     assert item.words.endswith(" ago · reviewed, waits for your sign-off")
     assert "/planning/m4" not in [i.link for i in _group(db, "answers")]
-    # f1, ripe with no thread, reads as before
+    # f1, ripe with a review job, shows the review time
     [f1] = [i for i in _group(db, "ripe") if i.link == "/planning/f1"]
-    assert f1.words == "reviewed · waits for your sign-off" and not f1.on_its_way
+    assert (
+        f1.words.startswith("reviewed 2.2 days ago")
+        and f1.words.endswith(" · waits for your sign-off")
+        and not f1.on_its_way
+    )
     waiting = _waiting_by_group(db_path)
     assert waiting["ripe"] == ("To sign off", 2)
     html = _page(serve())
@@ -2678,3 +2682,237 @@ def test_the_page_of_an_open_thread_keeps_its_archive_button(planning, db_path, 
     )
     html = _thread(serve(), "f20")
     assert 'id="archive-button"' in html
+
+
+# --- desk says when: proposals and sign-offs show their time (F108) ---------------------------
+
+
+def _review_at(
+    db_path: Path, project_id: int, thread: str, ago: timedelta, *proposals: object
+) -> None:
+    """On ``thread``, the lead's reply ``ago`` ago lists ``proposals``."""
+    conn = metrics.open_db(db_path)
+    try:
+        found = metrics.planner_thread(conn, project_id, thread, _at(timedelta(hours=5)))["id"]
+        metrics.add_planner_message(
+            conn, found, "lead", _at(ago), "Here.", proposals=list(proposals)
+        )
+    finally:
+        conn.close()
+
+
+_TEST_PROPOSAL: dict[str, Any] = {
+    "id": "test-proposal",
+    "kind": "plan",
+    "title": "Test proposal",
+    "path": None,
+    "key_points": [{"n": 1, "title": "First point", "text": "A point."}],
+}
+
+
+def test_an_open_proposal_says_when_it_was_proposed(planning, db_path, db):
+    """An open proposal listed in a lead reply stored 3 minutes before now: its desk item's
+    words end with "· proposed 3 min ago", after its key points."""
+    _review_at(db_path, planning, "f10", timedelta(minutes=3), _TEST_PROPOSAL)
+    items = [i for i in _group(db, "proposals") if i.link.startswith("/planning/f10/")]
+    assert len(items) == 1
+    item = items[0]
+    assert item.words.endswith("· proposed 3 min ago")
+    assert item.on_its_way is False
+
+
+def test_a_merge_proposal_says_when_it_was_proposed(planning, db_path, db):
+    """The same for a merge proposal, after its "merge … into …" words."""
+    merge_proposal: dict[str, Any] = {
+        "id": "merge-f9",
+        "kind": "merge",
+        "title": "Parallel, said twice",
+        "path": ".softfield/cards/f9-parallel.md",
+        "into": "f7",
+        "key_points": [{"n": 1, "title": "Notes", "text": "F9's notes go to F7."}],
+    }
+    _review_at(db_path, planning, "f11", timedelta(minutes=3), merge_proposal)
+    items = [i for i in _group(db, "proposals") if i.link.startswith("/planning/f11/")]
+    assert len(items) == 1
+    item = items[0]
+    assert "merge f9" in item.words.lower()
+    assert item.words.endswith("· proposed 3 min ago")
+    assert item.on_its_way is False
+
+
+def test_a_proposal_with_no_key_points_says_when_it_was_proposed(planning, db_path, db):
+    """For a proposal with no key points, after its kind."""
+    no_points: dict[str, Any] = {
+        "id": "no-points",
+        "kind": "plan",
+        "title": "No points plan",
+        "path": None,
+    }
+    _review_at(db_path, planning, "f12", timedelta(minutes=3), no_points)
+    items = [i for i in _group(db, "proposals") if i.link.startswith("/planning/f12/")]
+    assert len(items) == 1
+    item = items[0]
+    assert item.words.endswith("· proposed 3 min ago")
+    assert item.on_its_way is False
+
+
+def test_a_later_lead_reply_updates_the_proposed_time(planning, db_path, db):
+    """A later lead reply that lists the proposal again: the time is that later reply's."""
+    _review_at(db_path, planning, "f13", timedelta(hours=2), _TEST_PROPOSAL)
+    # Add a later lead reply (30 min ago) with the same proposal
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.find_project(conn, PROJECT)
+        assert project is not None
+        thread = conn.execute(
+            "SELECT id FROM planner_threads WHERE project_id = ? AND card = ?",
+            (project, "f13"),
+        ).fetchone()
+        assert thread is not None
+        metrics.add_planner_message(
+            conn,
+            thread["id"],
+            "lead",
+            _at(timedelta(minutes=30)),
+            "Updated.",
+            proposals=[_TEST_PROPOSAL],
+        )
+    finally:
+        conn.close()
+    items = [i for i in _group(db, "proposals") if i.link.startswith("/planning/f13/")]
+    assert len(items) == 1
+    item = items[0]
+    assert item.words.endswith("· proposed 30 min ago")
+    assert item.on_its_way is False
+
+
+def test_a_pending_approval_keeps_on_its_way_without_proposed(planning, db_path, db):
+    """A proposal with a pending approval: its words are "on its way · the runner applies it
+    at its next pick", with no "proposed"."""
+    _review_at(db_path, planning, "f14", timedelta(minutes=3), _TEST_PROPOSAL)
+    _write(
+        db_path,
+        lambda conn: metrics.add_request(
+            conn, planning, "approve_plan", "f14", None, _at(timedelta(minutes=2))
+        ),
+    )
+    items = [i for i in _group(db, "proposals") if i.link.startswith("/planning/f14/")]
+    assert len(items) == 1
+    item = items[0]
+    assert item.words == "on its way · the runner applies it at its next pick"
+    assert item.on_its_way is True
+    assert "proposed" not in item.words
+
+
+def test_a_ripe_card_says_when_its_review_ended(db_path, db):
+    """A card to sign off whose review job ended 2 hours before now: "reviewed 2 h ago ·
+    waits for your sign-off"."""
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.find_project(conn, PROJECT)
+        assert project is not None
+        m4 = conn.execute("SELECT id FROM milestones WHERE key = ?", ("m4",)).fetchone()
+        assert m4 is not None
+        # Create a run for the job
+        metrics.upsert_run(conn, project, "20261002-140000", command="test")
+        run = conn.execute("SELECT id FROM runs WHERE run_dir = '20261002-140000'").fetchone()
+        job = metrics.start_job(
+            conn,
+            run["id"],
+            ticket_id=None,
+            milestone_id=m4["id"],
+            role="review",
+            agent=OPUS,
+            attempt=2,
+            started=_at(timedelta(hours=3)),
+        )
+        metrics.finish_job(
+            conn,
+            job,
+            ended=_at(timedelta(hours=2)),
+            outcome="done",
+        )
+    finally:
+        conn.close()
+    items = [i for i in _group(db, "ripe") if i.link == "/planning/m4"]
+    assert len(items) == 1
+    item = items[0]
+    assert item.words == "reviewed 2 h ago · waits for your sign-off"
+    assert item.on_its_way is False
+
+
+def test_two_review_jobs_use_the_later_one(planning, db_path, db):
+    """With two finished review jobs, the later one's time."""
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.find_project(conn, PROJECT)
+        assert project is not None
+        m4 = conn.execute("SELECT id FROM milestones WHERE key = ?", ("m4",)).fetchone()
+        assert m4 is not None
+        # Create a run for the job
+        metrics.upsert_run(conn, project, "20261002-150000", command="test")
+        run = conn.execute("SELECT id FROM runs WHERE run_dir = '20261002-150000'").fetchone()
+        # Add a second review job that ended 2 hours ago
+        job2 = metrics.start_job(
+            conn,
+            run["id"],
+            ticket_id=None,
+            milestone_id=m4["id"],
+            role="review",
+            agent=OPUS,
+            attempt=3,
+            started=_at(timedelta(hours=3)),
+        )
+        metrics.finish_job(conn, job2, ended=_at(timedelta(hours=2)), outcome="done")
+    finally:
+        conn.close()
+    items = [i for i in _group(db, "ripe") if i.link == "/planning/m4"]
+    assert len(items) == 1
+    item = items[0]
+    assert item.words == "reviewed 2 h ago · waits for your sign-off"
+
+
+def test_a_ripe_card_with_no_review_says_reviewed_without_time(planning, db_path, db):
+    """A card to sign off with no finished review job: "reviewed · waits for your sign-off"."""
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.find_project(conn, PROJECT)
+        assert project is not None
+        m4 = conn.execute("SELECT id FROM milestones WHERE key = ?", ("m4",)).fetchone()
+        assert m4 is not None
+        # Set m4's review job outcome to "running" so it doesn't count as finished
+        conn.execute(
+            "UPDATE jobs SET outcome = 'running' WHERE milestone_id = ? AND role = 'review'",
+            (m4["id"],),
+        )
+    finally:
+        conn.close()
+    items = [i for i in _group(db, "ripe") if i.link == "/planning/m4"]
+    assert len(items) == 1
+    item = items[0]
+    assert item.words == "reviewed · waits for your sign-off"
+    assert item.on_its_way is False
+
+
+def test_the_proposed_time_does_not_change_links_order_or_count(planning, db_path, serve):
+    """The items' links, order, on_its_way and the Planning tab's count don't change."""
+    _review_at(db_path, planning, "f15", timedelta(minutes=3), _TEST_PROPOSAL)
+    client = serve()
+    html = _page(client)
+    groups = _groups(html)
+    proposals_group = groups["proposals"]
+    items_list = _items(proposals_group)
+    # links and order unchanged
+    assert any("/planning/f15/" in link for link, _ in items_list)
+    # the Planning tab's count still works
+    planning_tab = re.search(
+        r'<a href="/planning\?project=coucou"[^>]*id="planning-tab">Planning · (\d+)</a>', html
+    )
+    assert planning_tab is not None
+    count = int(planning_tab[1])
+    assert count > 0
+    # desk heading matches
+    desk_section = re.search(r'<section id="desk"[^>]*>\s*<h2[^>]*>(.*?)</h2>', html, re.S)
+    assert desk_section is not None
+    heading_text = unescape(re.sub(r"<[^>]+>", "", desk_section[1]))
+    assert f"Your desk · {count}" == heading_text

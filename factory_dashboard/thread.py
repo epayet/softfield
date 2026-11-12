@@ -416,7 +416,7 @@ def thread_page(
         thread,
         merged_into,
         known,
-        lambda: _open_proposals(conn, project_id or 0, known),
+        lambda: _open_proposals(conn, project_id or 0, now, known),
     )
     # F30 D1: the latest exchange first (the lead's latest message, under what came after it),
     # the older messages folded under Earlier; each newest first

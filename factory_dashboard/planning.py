@@ -259,6 +259,7 @@ def _bundle(
 def _open_proposals(
     conn: sqlite3.Connection,
     project_id: int,
+    now: datetime,
     known: set[str] | None = None,
     repo: Path | None = None,
     revising: dict[str, str] | None = None,
@@ -300,6 +301,10 @@ def _open_proposals(
             if merged := _merge_words(proposal):
                 words = f"{merged} · {words}" if words else merged
             asked = state == OPEN and row["card"] in revising
+            on_its_way = state == ON_ITS_WAY or asked
+            proposed = (
+                f" · proposed {ago(now - since)} ago" if state == OPEN and not on_its_way else ""
+            )
             items.append(
                 DeskItem(
                     "proposals",
@@ -310,11 +315,17 @@ def _open_proposals(
                     if asked
                     else words or str(proposal.get("kind") or ""),
                     f"/planning/{row['card']}/proposals/{proposal['id']}",
-                    on_its_way=state == ON_ITS_WAY or asked,
+                    on_its_way=on_its_way,
                 )
             )
+            # Append "proposed" time to the last item for this proposal
+            if proposed:
+                items[-1] = replace(items[-1], words=items[-1].words + proposed)
         if card_parts:
-            items.append(_bundle(row["card"], card_parts, repo, revising.get(row["card"])))
+            item = _bundle(row["card"], card_parts, repo, revising.get(row["card"]))
+            if any(state == OPEN for _, state in card_parts):
+                item = replace(item, words=item.words + f" · proposed {ago(now - since)} ago")
+            items.append(item)
     return items
 
 
@@ -357,15 +368,31 @@ def _ripe(
     them (F50 D1)."""
     if line is None:
         line = live_line(conn, project, now)
-    return [
-        DeskItem(
-            "ripe",
-            m["title"] or m["key"],
-            "reviewed · waits for your sign-off",
-            f"/planning/{short_key(m['key'])}",
+    items: list[DeskItem] = []
+    for m in line["field"]["ripe"]:
+        milestone_row = conn.execute(
+            "SELECT id FROM milestones WHERE key = ?", (m["key"],)
+        ).fetchone()
+        milestone_id = milestone_row["id"] if milestone_row else 0
+        row = conn.execute(
+            "SELECT max(ended) as ended FROM jobs"
+            " WHERE milestone_id = ? AND role = 'review' AND outcome != 'running'"
+            " AND ended IS NOT NULL",
+            (milestone_id,),
+        ).fetchone()
+        if row and row["ended"]:
+            words = f"reviewed {ago(now - _when(row['ended']))} ago · waits for your sign-off"
+        else:
+            words = "reviewed · waits for your sign-off"
+        items.append(
+            DeskItem(
+                "ripe",
+                m["title"] or m["key"],
+                words,
+                f"/planning/{short_key(m['key'])}",
+            )
         )
-        for m in line["field"]["ripe"]
-    ]
+    return items
 
 
 def _seeds(conn: sqlite3.Connection, project_id: int) -> list[DeskItem]:
@@ -672,7 +699,7 @@ def desk(
         answers = _answers_wanted(conn, project_id, project, titles, now)
         ripe, answers = _ripe_takes_its_thread(ripe, answers, revising)
         ripe = _acted_on(conn, project_id, ripe)
-        proposals = _open_proposals(conn, project_id, _known_cards(repo), repo, revising)
+        proposals = _open_proposals(conn, project_id, now, _known_cards(repo), repo, revising)
         known = _known_cards(repo)
         closing = {
             a.link.removeprefix("/planning/")

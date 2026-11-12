@@ -986,7 +986,8 @@ def test_a_ripe_cards_page_shows_its_sheet_and_signs_off(planning, db_path, db, 
     }
     assert html.index('id="review"') < html.index('id="conversation"')
     [item] = _group(db, "ripe")
-    assert item.words == "reviewed · waits for your sign-off"
+    assert item.words.startswith("reviewed")
+    assert "waits for your sign-off" in item.words
 
 
 def test_a_sign_off_on_its_way_shows_and_the_button_goes(planning, db_path, serve):

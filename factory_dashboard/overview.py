@@ -1000,7 +1000,7 @@ def _live_context(
     proposals: Sequence[DeskItem] = []
     if project_id is not None:
         card_titles = _card_titles(conn, project_id)
-        proposals = _open_proposals(conn, project_id)
+        proposals = _open_proposals(conn, project_id, now)
     items = waiting_for_you(desk(conn, project, now, line=line))  # acted on waits on no one
     if items:
         n = len(items)
@@ -1034,7 +1034,7 @@ def _live_context(
             other_needs,
             _card_titles(conn, other_id),
             p.name,
-            _open_proposals(conn, other_id),
+            _open_proposals(conn, other_id, now),
         )
         for oid, notice in other_notices.items():
             key = f"{p.name}/{oid}"

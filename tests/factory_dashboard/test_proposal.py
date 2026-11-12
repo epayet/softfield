@@ -206,7 +206,7 @@ def test_a_merge_shows_like_the_others_and_its_button_approves_the_threads_plan(
     thread's ``approve_plan``, which settles it (D6)."""
     _write(db_path, lambda conn: _review(conn, planning, "f9", _REVIEW_MERGE))
     [item] = [i for i in _group(db, "proposals") if i.link.endswith("/merge-f9")]
-    assert item.words == "merge F9 into F7 · 1 key points"
+    assert item.words == "merge F9 into F7 · 1 key points · proposed 30 min ago"
     html = _review_page(serve(), "/planning/f9/proposals/merge-f9")
     assert ">Merge F9 into F7</span>" in html and "Approve: merge F9 into F7" in html
     assert _posts(html, "approve-merge") == {
@@ -318,7 +318,7 @@ def test_a_cards_proposals_are_one_desk_item_counted_while_a_part_waits(
     (item,) = _proposals(db)
     assert item.title == "F6 plan: 7 tickets"  # the plan's title names its card already
     assert item.parts == (("ADR 20", False), ("plan", False), ("merge F9", False))
-    assert item.words == "5 key points · accept the ADR first"
+    assert item.words == "5 key points · accept the ADR first · proposed 30 min ago"
     assert item.link == "/planning/f6/proposals/adr-20"
     assert not item.on_its_way
     assert _counted(db) == 1
@@ -326,7 +326,7 @@ def test_a_cards_proposals_are_one_desk_item_counted_while_a_part_waits(
     _finished(db_path, planning, "accept_adr", "f6", "20", None)
     (item,) = _proposals(db)
     assert item.parts[0] == ("ADR 20", True)
-    assert item.words == "5 key points"
+    assert item.words == "5 key points · proposed 30 min ago"
     assert item.link == "/planning/f6/proposals/plan"
     assert not item.on_its_way
     assert _counted(db) == 1
