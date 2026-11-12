@@ -49,6 +49,7 @@ PLAN_MESSAGE = planner.PLAN_MESSAGE  # subject: the thread; value: {text, commen
 SEND_BACK = "send_back"  # subject: <thread>/<proposal id>; value: {text, comments}
 ACCEPT_ADR = "accept_adr"  # subject: the card; value: the ADR's number
 APPROVE_PLAN = "approve_plan"  # subject: the thread; its plan and its merges (f6-12)
+FIRST = "first"  # an approval's value: the card also goes first, in the fast lane (F224)
 PLANT = "plant"  # value: {title, thoughts, area}; or subject: general/<seed id>, value: {area}
 DROP_SEED = "drop_seed"  # subject: the idea card's short key; no value (f6-17)
 PRIORITY = "priority"  # subject: a ticket in ready/ or later/, or a card; value: N (f6-18)
@@ -799,6 +800,7 @@ def _approve_plan(
     state: State,
     now: datetime,
     subject: object,
+    value: object = None,
 ) -> str:
     """Merge a card's plan branch into main, queue its tickets and set the card ready, apply the
     thread's ``merge`` proposals, and write the card's thread to .softfield/planning/ (``_export``),
@@ -810,7 +812,13 @@ def _approve_plan(
     A ``replan`` (f6-13) may change its card's ready tickets too, but not the running one: a changed
     one is pre-flighted, one moved to .softfield/tasks/later/ stays there, and the owner's pause is
     lifted once it is applied. A building card keeps its state. It may bring back its card's
-    blocked tickets too (ADR 29 item 3): the blocked copy goes (``_unblock``), its item answered."""
+    blocked tickets too (ADR 29 item 3): the blocked copy goes (``_unblock``), its item answered.
+
+    With the value ``first`` (F224), a plan whose card has a ticket in ready after the approval
+    also goes first in the queue's list and in the fast lane, in the same commit; with none, or
+    with merges alone, it is approved as plain. Any other value is refused before a change."""
+    if value is not None and value != FIRST:
+        return f"an approval is plain or {FIRST}, not {value!r}"
     thread = planner.thread_key(subject)
     branch = planner.plan_branch(thread)
     git = Git(repo)
@@ -898,6 +906,8 @@ def _approve_plan(
     made: Path | None = None
     moved: dict[tuple[str, str], _Moved] = {}
     entering = False  # F222 D2: the card enters the line, last
+    going: bool | None = False  # F224: the card goes first, marked (None: its mark won't take)
+    nothing_first = False  # F224 D4: asked to go first with no ticket to run
     line: list[str] = []
     try:
         if planned:
@@ -925,13 +935,19 @@ def _approve_plan(
                 entering = not replan and state_was in (planner.IDEA, _PLANNING)
             for rel in tickets:
                 git.move(repo / rel, repo / ".softfield" / "tasks" / "ready" / Path(rel).name)
+            if value == FIRST:
+                going = _goes_first(repo, doc, thread)
+                if going is None:
+                    _undo(git)
+                    return f"{name}'s header can't take the fast lane's mark: not approved"
+                nothing_first = not going
         for d, kept in merges:
             summary = summaries.get(d)
             moved[d, kept] = _merge(repo, conn, project_id, now, d, kept, summary=summary)
         merged = [words.replace(" into ", " merged into ", 1) for words in joined]
         if planned:
-            if entering:  # read after the squash: the tickets and the card are in the tree
-                line = _last(repo, state, thread)
+            if going or entering:  # read after the squash: the tickets and the card are in it
+                line = _first(repo, state, thread) if going else _last(repo, state, thread)
                 (listed := order.order_path(repo)).write_text(order.order_text(line), "utf-8")
                 git.run("add", "--", listed.relative_to(repo).as_posix())
             title = milestone.milestone_doc(doc.read_text(encoding="utf-8")).get("title")
@@ -942,8 +958,10 @@ def _approve_plan(
     except Exception:
         _undo(git, made, *(m.made for m in moved.values()))  # untracked: the reset leaves them
         raise
-    if entering:
+    if going or entering:
         metrics.set_board_order(conn, project_id, line)
+    if going:
+        _free_parked(repo, conn, project_id, state, now)
     _merged(conn, project_id, now, [(d, k, m.said) for (d, k), m in moved.items()])
     _resolve_items(conn, project_id, now, gone)
     for blocked in brought:
@@ -970,10 +988,14 @@ def _approve_plan(
         for path in put_back.values()
     ]
     parts += said
-    if entering:
-        parts.append(f"{name} goes last on the board")
     if replan and state.owner_pause is not None:  # applied while the line held: it goes on
         parts.append(_pause(conn, state, now, RESUME))
+    if nothing_first:
+        parts.append(f"{name} has no ticket in ready: nothing goes first")
+    if entering and not going:
+        parts.append(f"{name} goes last on the board")
+    if going:
+        parts.append(f"{name} goes first on the board, in the fast lane")
     return "; ".join(parts)
 
 
@@ -1649,6 +1671,29 @@ def _last(repo: Path, state: State, key: str) -> list[str]:
     return [*(k for k in _current(repo, board) if k != key), key]
 
 
+def _first(repo: Path, state: State, key: str) -> list[str]:
+    """The queue's list with ``key`` strictly first (F224), every other open card and bug in the
+    order the pick takes them (`_current`). Read from the working tree, as ``_last`` is."""
+    board = _board(repo, state)
+    return [key, *(k for k in _current(repo, board) if k != key)]
+
+
+def _goes_first(repo: Path, doc: Path, thread: str) -> bool | None:
+    """F224 D4: whether the approved card goes first. With a ticket in ready and a card a lane may
+    hold (ready or building), its header is marked ``**Fast lane:** yes`` (once, ``_card_marked``)
+    and True; with none, False and nothing written; None when the header can't take the mark."""
+    ready = repo / ".softfield" / "tasks" / "ready"
+    text = doc.read_text(encoding="utf-8")
+    found = milestone.card(doc.stem, text)
+    if found.state not in _RESERVE_CARD_STATES or not any(ready.glob(f"{thread}-*.md")):
+        return False
+    marked = _card_marked(text, True)
+    if milestone.card(doc.stem, marked) != replace(found, reserve=True):
+        return None
+    doc.write_text(marked, encoding="utf-8")
+    return True
+
+
 def _bug_in_later(repo: Path, wanted: str) -> bool:
     """Whether ``wanted`` names a bug ticket in .softfield/tasks/later/ (what Queue then moves
     first, ``loop.move_to_ready``)."""
@@ -1980,7 +2025,7 @@ def _apply(
         if kind == SEND_BACK:
             return _send_back(conn, project_id, now, row)
         if kind == APPROVE_PLAN:
-            return _approve_plan(repo, conn, project_id, state, now, subject)
+            return _approve_plan(repo, conn, project_id, state, now, subject, value)
         if kind == ACCEPT_ADR:
             return _accept_adr(repo, db, conn, project_id, now, subject, value)
         if kind == PLANT:

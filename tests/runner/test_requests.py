@@ -881,6 +881,114 @@ def test_an_approval_that_isnt_a_first_plan_with_tickets_moves_nothing(repo, how
     assert ORDER not in _changed(repo)
 
 
+def _doc(repo: Path) -> str:
+    return (repo / ".softfield" / "cards" / "f7-one-queue.md").read_text()
+
+
+FIRST_WORDS = "approved plan/f7: queued f7-01-a; F7 goes first on the board, in the fast lane"
+
+
+def test_approving_first_puts_the_card_first_and_in_the_fast_lane_in_one_commit(repo):
+    _card(repo)
+    _board(repo, {"f8": 100, "f9": 100}, bug=True)
+    head = _listed(repo, "f9\nf8\n")
+    _plan(repo, {".softfield/tasks/later/f7-01-a.md": _ticket("f7-01-a")})
+    asked = _ask(repo, "approve_plan", "f7", "first")
+    _apply(repo)
+    assert _request(repo, asked) == (NOW.isoformat(), FIRST_WORDS)
+    assert (repo / ORDER).read_text() == f"f7\nf9\nf8\n{BUG}\n"
+    assert _stored_order(repo) == ["f7", "f9", "f8", BUG]
+    card = milestone.card("f7-one-queue", _doc(repo))
+    assert card.state == "ready" and card.reserve
+    assert _doc(repo).count("**Fast lane:** yes") == 1
+    assert git(repo, "rev-parse", "HEAD~1") == head
+    assert {ORDER, ".softfield/cards/f7-one-queue.md"} <= set(_changed(repo))
+    assert git(repo, "status", "--porcelain") == ""
+
+
+def test_approving_first_on_a_card_already_in_the_lane_marks_it_once_and_moves_it(repo):
+    _card(repo)
+    card = repo / ".softfield" / "cards" / "f7-one-queue.md"
+    card.write_text(CARD.replace("**Priority:** 3", "**Priority:** 3 · **Fast lane:** yes"))
+    _board(repo, {"f8": 100})
+    _listed(repo, "f8\n")
+    _plan(repo, {".softfield/tasks/later/f7-01-a.md": _ticket("f7-01-a")})
+    _ask(repo, "approve_plan", "f7", "first")
+    _apply(repo)
+    assert _doc(repo).count("**Fast lane:** yes") == 1
+    assert (repo / ORDER).read_text() == "f7\nf8\n"
+
+
+def test_approving_first_on_a_replan_moves_the_card_first_and_keeps_the_rest(repo):
+    _running(repo)
+    _board(repo, {"f8": 100})
+    _listed(repo, "f8\nf7\n")
+    _plan(repo, {".softfield/tasks/ready/f7-01-a.md": LESS})
+    state = _paused(repo)
+    asked = _ask(repo, "approve_plan", "f7", "first")
+    _apply(repo, state, LATER_ON)
+    assert _request(repo, asked)[1] == (
+        "approved plan/f7: queued nothing; changed f7-01-a; resumed;"
+        " F7 goes first on the board, in the fast lane"
+    )
+    assert (repo / ORDER).read_text().splitlines()[0] == "f7"
+    card = milestone.card("f7-one-queue", _doc(repo))
+    assert card.state == "building" and card.reserve
+    assert state.owner_pause is None
+
+
+def test_approving_first_frees_the_cards_parked_tickets(repo):
+    _card(repo)
+    _board(repo, {"f8": 100})
+    _plan(repo, {".softfield/tasks/later/f7-01-a.md": _ticket("f7-01-a")})
+    state = State()
+    state.parked["f7-01-a"] = {"kind": loop.RESERVE_KIND}
+    _ask(repo, "approve_plan", "f7", "first")
+    _apply(repo, state)
+    assert state.parked["f7-01-a"][loop.RETRY] is True
+
+
+def test_approving_first_with_no_ticket_in_ready_is_approved_as_plain(repo):
+    _card(repo)
+    _board(repo, {"f8": 100})
+    _listed(repo, "f8\n")
+    _plan(repo, {".softfield/cards/f7-one-queue.md": CARD + "- more.\n"})
+    asked = _ask(repo, "approve_plan", "f7", "first")
+    _apply(repo)
+    result = str(_request(repo, asked)[1])
+    assert result.startswith("approved") and "nothing goes first" in result
+    assert "goes first on the board" not in result
+    assert "Fast lane" not in _doc(repo)
+    assert (repo / ORDER).read_text() == "f8\n"
+
+
+def test_an_approval_with_another_value_is_refused_before_anything_changes(repo):
+    _card(repo)
+    _board(repo, {"f8": 100})
+    head = _listed(repo, "f8\n")
+    _plan(repo, {".softfield/tasks/later/f7-01-a.md": _ticket("f7-01-a")})
+    asked = _ask(repo, "approve_plan", "f7", "last")
+    _apply(repo)
+    assert _request(repo, asked)[1] == "an approval is plain or first, not 'last'"
+    assert git(repo, "rev-parse", "HEAD") == head
+    assert (repo / ORDER).read_text() == "f8\n"
+    assert git(repo, "branch", "--list", "plan/f7").strip() == "plan/f7"
+
+
+def test_a_refused_first_approval_leaves_the_list_and_the_card_as_they_were(repo):
+    _card(repo)
+    _board(repo, {"f8": 100})
+    head = _listed(repo, "f8\n")
+    _plan(repo, {".softfield/tasks/later/f7-01-a.md": _ticket("f7-01-a"), "runner/loop.py": "x\n"})
+    asked = _ask(repo, "approve_plan", "f7", "first")
+    _apply(repo)
+    assert "not approved" in str(_request(repo, asked)[1])
+    assert git(repo, "rev-parse", "HEAD") == head
+    assert (repo / ORDER).read_text() == "f8\n"
+    assert "Fast lane" not in _doc(repo)
+    assert git(repo, "status", "--porcelain") == ""
+
+
 def test_a_refused_approval_leaves_the_list_as_it_was(repo):
     _card(repo)
     _board(repo, {"f8": 100})
@@ -1516,6 +1624,18 @@ def _duplicates(repo: Path, kept: str = KEPT, thread: str = "f12") -> str:
     finally:
         conn.close()
     return git(repo, "rev-parse", "HEAD")
+
+
+def test_approving_first_a_merge_alone_applies_it_and_moves_nothing(repo):
+    _duplicates(repo)
+    (repo / ORDER).write_text("f10\n")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "the list")
+    asked = _ask(repo, "approve_plan", "f12", "first")
+    _apply(repo)
+    assert _request(repo, asked)[1] == "approved: merged F12 into F10"
+    assert (repo / ORDER).read_text() == "f10\n"
+    assert "Fast lane" not in (repo / ".softfield" / "cards" / "f10-one-queue.md").read_text()
 
 
 def test_a_merge_proposal_changes_nothing_before_the_owner_approves(repo):
