@@ -32,3 +32,12 @@ Read `.softfield/cards/f224-i-want-to-be-able-to-2.md` (D1, D5, D6). The picture
 - a plain open approval changes nothing on the board
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: stopped)
+attempts: 3
+tokens: 1027098
+logs: .softfield/var/runs/20261112-170349/f224-02-approve-first-on-the-pages
+```
