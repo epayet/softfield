@@ -209,12 +209,30 @@
       var box = document.querySelector('.comment-box[data-point="' + btn.dataset.point + '"]');
       box.hidden = !box.hidden;
       box.style.display = box.hidden ? '' : 'flex';
-      if (box.hidden) box.querySelector('textarea').value = '';
+      if (box.hidden) {
+        box.querySelector('textarea').value = '';
+        box.querySelector('textarea').dispatchEvent(new Event('input', {bubbles: true}));  // F210 D5: nothing waits
+      }
       else box.querySelector('textarea').focus();
       update();
     });
   });
   document.querySelectorAll('textarea.comment').forEach(function (t) { t.addEventListener('input', update); });
+  // F210 D5: comments that waited in the tab come back into their boxes (deck.js): open
+  // them, and Send back takes Approve's place
+  document.addEventListener('comments-restored', function () {
+    document.querySelectorAll('textarea.comment').forEach(function (t) {
+      if (!t.value.trim()) return;
+      var box = t.closest('.comment-box');
+      box.hidden = false;
+      box.style.display = 'flex';
+    });
+    update();
+  });
+  // a successful Send back sent them: nothing waits in the tab any more; a failed one keeps them
+  sendBack.addEventListener('htmx:afterRequest', function (e) {
+    if (e.detail.successful) window.sentComments();
+  });
   document.addEventListener('htmx:afterSwap', function (e) {
     if (e.target.id === 'review-status') {
       e.target.setAttribute('data-has-answer', 'true');

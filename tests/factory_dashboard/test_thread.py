@@ -49,6 +49,9 @@ from tests.factory_dashboard.test_planning import (
 )
 from tests.factory_dashboard.test_proposal import (
     _f6_mockup_review,
+    _hazard,
+    _not_sent,
+    _points_and_plan,
 )
 from tests.layout import DISPLAY, PHONE, layout_problems
 from tests.runner.conftest import git
@@ -380,6 +383,102 @@ def test_the_owners_message_dashes_the_open_steps_without_a_reload(page, plannin
         )
         assert border == ["dashed", hazard]
     assert page.evaluate("() => window.loadedOnce") is True
+
+
+# --- typed comments wait in the tab (F210 D5, f210-05) ------------------------------------------
+
+
+def _redraw(page) -> None:
+    """The conversation drawn again in place, as a send or the lead's answer does (F19)."""
+    page.evaluate("() => { window.redrawn = false; }")
+    page.evaluate(
+        "() => { document.addEventListener('htmx:afterSettle', () => { window.redrawn = true; },"
+        " {once: true}); htmx.ajax('GET', location.href,"
+        " {target: '#conversation', select: '#conversation', swap: 'outerHTML'}); }"
+    )
+    page.wait_for_function("() => window.redrawn")
+
+
+def test_a_comment_on_a_threads_point_waits_across_steps(page, planning, db_path, serve):
+    """A comment typed on point 2: on the plan's page the strip's Conversation says "1 comment
+    not sent" in --hazard and the plan's own box is empty; back on the thread point 2's box is
+    open with the words, the progress counts it, and two redraws keep the count at 1."""
+    _write(db_path, lambda conn: _points_and_plan(conn, planning))
+    _open(page, serve(), "/planning/f6")
+    page.click('li[data-point="2"] summary')
+    page.fill('li[data-point="2"] textarea.comment', "Say how it stops.")
+    with page.expect_navigation():
+        page.click('#card-steps a[href^="/planning/f6/proposals/plan"]')
+    assert _not_sent(page) == [("/planning/f6", "1 comment not sent")]
+    note = page.locator("#card-steps li:first-child a small.not-sent")
+    assert note.evaluate("e => getComputedStyle(e).color") == _hazard(page)
+    assert page.locator('textarea.comment[data-point="1"]').input_value() == ""
+    assert page.locator("#approve-plan").is_visible()
+    with page.expect_navigation():
+        page.click("#card-steps li:first-child a")
+    box = page.locator('li[data-point="2"] textarea.comment')
+    assert box.is_visible() and box.input_value() == "Say how it stops."
+    assert page.locator('li[data-point="2"] details.comment-box').get_attribute("open") is not None
+    assert page.locator("#progress").inner_text() == "7 points · 1 comment"
+    for _ in range(2):
+        _redraw(page)
+        assert _not_sent(page) == [("/planning/f6", "1 comment not sent")]
+        assert box.input_value() == "Say how it stops."
+
+
+def test_a_comment_typed_under_an_older_reply_of_the_leads_does_not_come_back(
+    page, planning, db_path, serve
+):
+    """A comment typed on point 2, then the lead replies again with points: on a reload the new
+    reply's boxes are empty and the strip counts nothing."""
+    _write(db_path, lambda conn: _points_and_plan(conn, planning))
+    _open(page, serve(), "/planning/f6")
+    page.click('li[data-point="2"] summary')
+    page.fill('li[data-point="2"] textarea.comment', "Say how it stops.")
+    assert _not_sent(page) == [("/planning/f6", "1 comment not sent")]
+
+    def again(conn: sqlite3.Connection) -> None:
+        f6 = metrics.planner_thread(conn, planning, "f6", _at(timedelta(hours=5)))["id"]
+        metrics.add_planner_message(
+            conn,
+            f6,
+            "lead",
+            _at(timedelta(minutes=5)),
+            "Here it is again.",
+            points=_SEVEN_POINTS,
+            proposals=[_REVIEW_PLAN],
+        )
+
+    _write(db_path, again)
+    page.reload()
+    assert "Here it is again." in page.locator("#conversation").inner_text()
+    values = page.locator("textarea.comment").evaluate_all("ts => ts.map(t => t.value)")
+    assert values == [""] * 7
+    assert _not_sent(page) == []
+
+
+def test_a_sent_comment_goes_and_a_failed_send_keeps_it(page, planning, db_path, serve):
+    """Send failing (500) keeps point 2's comment, after a reload too; Send succeeding empties
+    the box and the strip, and a reload brings nothing back."""
+    _write(db_path, lambda conn: _points_and_plan(conn, planning))
+    _open(page, serve(), "/planning/f6")
+    page.click('li[data-point="2"] summary')
+    page.fill('li[data-point="2"] textarea.comment', "Say how it stops.")
+    page.route(f"{ORIGIN}/requests", lambda route: route.fulfill(status=500, body="no"))
+    with page.expect_response(f"{ORIGIN}/requests"):
+        page.click('#reply button[type="submit"]')
+    page.reload()
+    box = page.locator('li[data-point="2"] textarea.comment')
+    assert box.is_visible() and box.input_value() == "Say how it stops."
+    assert _not_sent(page) == [("/planning/f6", "1 comment not sent")]
+    page.unroute(f"{ORIGIN}/requests")
+    page.click('#reply button[type="submit"]')
+    page.wait_for_selector("#reply", state="hidden")
+    assert page.evaluate("() => sessionStorage.getItem('softfield-comments')") == "{}"
+    assert _not_sent(page) == []
+    page.reload()
+    assert _not_sent(page) == []
+    assert page.evaluate("() => sessionStorage.getItem('softfield-comments')") == "{}"
 
 
 def test_send_with_comments_posts_one_request(page, planning, db_path, serve):

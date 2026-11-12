@@ -450,6 +450,8 @@ def thread_page(
             "trail": desk_trail(conn, project, now, request.url.path),
             "messages": latest,
             "earlier": earlier,
+            # F210 D5: comments typed in the tab wait for this message only (deck.js)
+            "lead_latest": str(messages[split].at) if lead else "",
             "points": next((len(m.points) for m in messages if m.latest), 0),
             "proposals": proposals,
             "next_reply": next_reply,

@@ -17,11 +17,13 @@ from runner import metrics
 from tests.factory_dashboard.conftest import (
     NOW,
     PROJECT,
+    _at,
 )
 from tests.factory_dashboard.test_planning import (
     _REVIEW_ADR,
     _REVIEW_MERGE,
     _REVIEW_PLAN,
+    _SEVEN_POINTS,
     _finished,
     _group,
     _lead_says,
@@ -898,3 +900,88 @@ def test_the_proposal_plate_stays_in_place_on_a_phone(page, planning, db_path, s
     page.locator(".deck-arrows button").all()[1].click()
     assert shown.count() == 1 and shown.inner_text() != first
     assert plate.is_visible() and on_the_page() == before
+
+
+# --- typed comments wait in the tab (F210 D5, f210-05) ------------------------------------------
+
+
+def _points_and_plan(conn: sqlite3.Connection, project_id: int) -> None:
+    """On f6's thread, the lead's reply 30 min ago lists ``_SEVEN_POINTS`` and the plan."""
+    f6 = metrics.planner_thread(conn, project_id, "f6", _at(timedelta(hours=5)))["id"]
+    metrics.add_planner_message(
+        conn,
+        f6,
+        "lead",
+        _at(timedelta(minutes=30)),
+        "Here's each point with my answer.",
+        points=_SEVEN_POINTS,
+        proposals=[_REVIEW_PLAN],
+    )
+
+
+def _hazard(page) -> str:
+    """``--hazard`` as the browser computes a colour."""
+    colour: str = page.evaluate(
+        "() => { const p = document.createElement('p'); p.style.color = 'var(--hazard)';"
+        " document.body.append(p); const c = getComputedStyle(p).color; p.remove(); return c; }"
+    )
+    return colour
+
+
+def _not_sent(page) -> list[tuple[str, str]]:
+    """Each strip link that says comments wait: (its path, its words)."""
+    found: list[tuple[str, str]] = page.evaluate(
+        "() => Array.from(document.querySelectorAll('#card-steps a small.not-sent'),"
+        " s => [new URL(s.closest('a').href).pathname, s.textContent])"
+    )
+    return [tuple(pair) for pair in found]  # type: ignore[misc]
+
+
+def test_a_comment_on_a_proposal_page_waits_across_steps(page, planning, db_path, serve):
+    """A comment typed on the plan's page: on the thread the strip's Plan says "1 comment not
+    sent" in --hazard, the Conversation says nothing; back on the plan its box is open with the
+    words, Send back shows and Approve plan is hidden."""
+    _write(db_path, lambda conn: _points_and_plan(conn, planning))
+    _open(page, serve(), "/planning/f6/proposals/plan")
+    assert _not_sent(page) == []
+    page.click('.change-btn[data-point="1"]')
+    page.fill('textarea.comment[data-point="1"]', "Two tickets, not one.")
+    assert _not_sent(page) == [("/planning/f6/proposals/plan", "1 comment not sent")]
+    with page.expect_navigation():
+        page.click("#card-steps li:first-child a")
+    assert _not_sent(page) == [("/planning/f6/proposals/plan", "1 comment not sent")]
+    note = page.locator('#card-steps a[href^="/planning/f6/proposals/plan"] small.not-sent')
+    assert note.evaluate("e => getComputedStyle(e).color") == _hazard(page)
+    assert (
+        page.locator("li.point textarea.comment").evaluate_all("ts => ts.map(t => t.value)")
+        == [""] * 7
+    )
+    with page.expect_navigation():
+        page.click('#card-steps a[href^="/planning/f6/proposals/plan"]')
+    box = page.locator('textarea.comment[data-point="1"]')
+    assert box.is_visible() and box.input_value() == "Two tickets, not one."
+    assert page.locator("#send-back").is_visible()
+    assert page.locator("#send-back").inner_text().lower() == "send 1 change back"
+    assert not page.locator("#approve-plan").is_visible()
+
+
+def test_a_sent_back_comment_goes_and_a_failed_one_stays(page, planning, db_path, serve):
+    """Send back failing (500) keeps the comment, after a reload too; Send back succeeding
+    empties its box and the strip, and a reload brings nothing back."""
+    _write(db_path, lambda conn: _points_and_plan(conn, planning))
+    _open(page, serve(), "/planning/f6/proposals/plan")
+    page.click('.change-btn[data-point="1"]')
+    page.fill('textarea.comment[data-point="1"]', "Two tickets, not one.")
+    page.route(f"{ORIGIN}/requests", lambda route: route.fulfill(status=500, body="no"))
+    with page.expect_response(f"{ORIGIN}/requests"):
+        page.click("#send-back")
+    page.reload()
+    box = page.locator('textarea.comment[data-point="1"]')
+    assert box.is_visible() and box.input_value() == "Two tickets, not one."
+    page.unroute(f"{ORIGIN}/requests")
+    page.click("#send-back")
+    page.wait_for_selector("#review-status >> text=Asked")
+    assert box.input_value() == ""
+    assert _not_sent(page) == []
+    page.reload()
+    assert box.input_value() == "" and _not_sent(page) == []

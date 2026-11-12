@@ -148,7 +148,7 @@
     {# F30 D1: the latest exchange first, Send under it, the older messages folded under it.
        Its stamp changes with what the runner and the lead write, for the poll below (F19). #}
     <div id="conversation">
-    <i id="conversation-stamp" hidden data-stamp="{{ next_reply }}|{{ earlier | length }}|{{ merged_on | length }}{% for m in messages %}|{{ m.author }} {{ m.at }} {{ m.waiting }} {{ m.change.id if m.change }}{% endfor %}{% for p in proposals %}|{{ p.link }} {{ p.state }}{% endfor %}"></i>
+    <i id="conversation-stamp" hidden data-latest="{{ lead_latest }}" data-stamp="{{ next_reply }}|{{ earlier | length }}|{{ merged_on | length }}{% for m in messages %}|{{ m.author }} {{ m.at }} {{ m.waiting }} {{ m.change.id if m.change }}{% endfor %}{% for p in proposals %}|{{ p.link }} {{ p.state }}{% endfor %}"></i>
     {% if next_reply %}
     <p id="waiting"{% if writing_now %} class="writing"{% endif %}>Next for the lead · {{ next_reply }}</p>
     {% endif %}
@@ -207,6 +207,7 @@
       document.getElementById("reply").addEventListener("htmx:afterRequest", (event) => {
         if (event.detail.successful) {
           if (event.detail.elt === event.currentTarget) event.currentTarget.elements.again.value = "";
+          window.sentComments(); // F210 D5: sent, so nothing waits in the tab any more
           setTimeout(() => {
             htmx.ajax("GET", window.location.href, {
               target: "#conversation",

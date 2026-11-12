@@ -31,76 +31,81 @@ document.querySelectorAll(".deck").forEach(deckUp);
 // the conversation drawn again (a send, or the lead's answer arriving: F19) brings its decks up
 document.addEventListener("htmx:afterSettle", () => document.querySelectorAll(".deck").forEach(deckUp));
 
-// f210-03: typed comments that wait in the browser tab across steps
-(function () {
+// f210-03, f210-05 (F210 D5): comments typed on a thread's or a proposal's points wait in this
+// browser tab (sessionStorage, by page path) across the card's steps. They come back in their
+// open boxes, the strip says which step holds some, and a successful send clears them. On a
+// thread they wait for the lead's latest message only (#conversation-stamp's data-latest).
+(() => {
   const KEY = "softfield-comments";
-  function _path() {
-    return window.location.pathname + window.location.search;
-  }
-  function _load() {
+  const load = () => {
     try {
       return JSON.parse(sessionStorage.getItem(KEY)) || {};
     } catch {
       return {};
     }
-  }
-  function _save(obj) {
-    sessionStorage.setItem(KEY, JSON.stringify(obj));
-  }
-  window._saveComment = function () {
-    const page = _load();
-    page[_path()] = Array.from(document.querySelectorAll("textarea.comment"))
-      .filter((t) => t.value.trim())
-      .map((t) => [t.dataset.point, t.value]);
-    _save(page);
   };
-  window._restoreComments = function () {
-    const page = _load();
-    const path = _path();
-    const stored = page[path];
-    if (!stored || !stored.length) return;
-    const latest = document.querySelector("[data-latest]")?.dataset.latest;
-    const storedLatest = stored._latest;
-    if (latest && storedLatest && storedLatest !== latest) return; // older message
-    for (const [n, text] of stored) {
-      const box = document.querySelector(
-        `textarea.comment[data-point="${n}"]`
-      );
-      if (box) {
+  const save = (all) => sessionStorage.setItem(KEY, JSON.stringify(all));
+  const latest = () => document.getElementById("conversation-stamp")?.dataset.latest || "";
+  const boxes = () => Array.from(document.querySelectorAll("textarea.comment"));
+  const counted = (entry) => (entry && Array.isArray(entry.comments) ? entry.comments.length : 0);
+  // each step's link says how many comments wait on its page, counted afresh every time
+  const strip = () => {
+    const all = load();
+    document.querySelectorAll("#card-steps a").forEach((a) => {
+      a.querySelector("small.not-sent")?.remove();
+      const n = counted(all[new URL(a.href).pathname]);
+      a.classList.toggle("unsent", n > 0);
+      if (!n) return;
+      const note = document.createElement("small");
+      note.className = "not-sent";
+      note.textContent = `${n} comment${n === 1 ? "" : "s"} not sent`;
+      a.append(note);
+    });
+  };
+  const keep = () => {
+    const all = load();
+    const comments = boxes().filter((t) => t.value.trim()).map((t) => [t.dataset.point, t.value]);
+    if (comments.length) all[location.pathname] = { latest: latest(), comments };
+    else delete all[location.pathname];
+    save(all);
+    strip();
+  };
+  const restore = () => {
+    const all = load();
+    const entry = all[location.pathname];
+    const filled = [];
+    if (entry && entry.latest !== latest()) {
+      delete all[location.pathname]; // typed under an older message of the lead's
+      save(all);
+    } else if (entry) {
+      for (const [n, text] of entry.comments) {
+        const box = document.querySelector(`textarea.comment[data-point="${n}"]`);
+        if (!box || box.value.trim()) continue;
         box.value = text;
-        // Open the box: details for thread, label for proposal
-        const parent = box.parentElement;
-        if (parent.tagName === "DETAILS" && !parent.open) {
-          parent.open = true;
-        } else if (parent.tagName === "LABEL") {
-          parent.hidden = false;
-          parent.style.display = "flex";
-        }
+        const details = box.closest("details");
+        if (details) details.open = true;
+        filled.push(box);
       }
     }
-    // Update the strip's unsent counts
-    const unsendEl = document.getElementById("card-steps")?.dataset.unsend;
-    if (!unsendEl) return;
-    const unsend = JSON.parse(unsendEl);
-    for (const [n, text] of stored) {
-      unsend[n] = (unsend[n] || 0) + 1;
-    }
-    const nav = document.getElementById("card-steps");
-    if (nav) nav.dataset.unsend = JSON.stringify(unsend);
+    // the page's own counters (the thread's progress, the deck's dots, the review's buttons)
+    filled.forEach((box) => box.dispatchEvent(new Event("input", { bubbles: true })));
+    if (filled.length) document.dispatchEvent(new Event("comments-restored"));
+    strip();
   };
-  window._clearPageComments = function () {
-    const page = _load();
-    delete page[_path()];
-    _save(page);
+  // called by the page after a successful send; a failed one keeps them
+  window.sentComments = () => {
+    const all = load();
+    delete all[location.pathname];
+    save(all);
+    boxes().forEach((box) => {
+      box.value = "";
+      box.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    strip();
   };
-  // Restore on load
-  window._restoreComments();
-  // Save on input
   document.addEventListener("input", (e) => {
-    if (e.target.classList.contains("comment")) window._saveComment();
+    if (e.target.matches && e.target.matches("textarea.comment")) keep();
   });
-  // Restore after htmx swap
-  document.addEventListener("htmx:afterSettle", () => {
-    window._restoreComments();
-  });
+  document.addEventListener("htmx:afterSettle", restore);
+  restore();
 })();

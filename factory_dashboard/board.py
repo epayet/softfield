@@ -235,8 +235,7 @@ def _dev_work(
                     waiting += 1
                     waits_for |= named
                 elif all(
-                    rows.get(d) is not None and rows[d]["state"] == "done"
-                    for d in depends_on(t)
+                    rows.get(d) is not None and rows[d]["state"] == "done" for d in depends_on(t)
                 ):
                     now += 1
                 else:
