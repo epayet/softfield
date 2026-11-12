@@ -914,7 +914,10 @@ def _approve_plan(
                 _undo(git)
                 return f"{name} has no card in .softfield/cards/: not approved"
             text = doc.read_text(encoding="utf-8")
-            if milestone.card(doc.stem, text).state != _BUILDING:  # a replan redirects it
+            # a plan of docs alone leaves a card with no ticket as it was (f196-02)
+            if milestone.card(doc.stem, text).state != _BUILDING and _has_tickets(
+                git, None, thread
+            ):
                 doc.write_text(planner.ready_card(text), encoding="utf-8")
             for rel in tickets:
                 git.move(repo / rel, repo / ".softfield" / "tasks" / "ready" / Path(rel).name)

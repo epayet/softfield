@@ -903,6 +903,26 @@ def test_a_plan_editing_an_adr_but_not_its_status_is_approved(repo):
     assert _request(repo, asked)[1] == "approved plan/f7: queued nothing"
 
 
+def test_a_plan_of_docs_alone_leaves_a_card_with_no_ticket_as_it_was(repo):
+    _card(repo)
+    _plan(repo, {".softfield/cards/f7-mockup/index.html": "<p>queue</p>\n"})
+    asked = _ask(repo, "approve_plan", "f7")
+    _apply(repo)
+    assert _request(repo, asked)[1] == "approved plan/f7: queued nothing"
+    assert (repo / ".softfield" / "cards" / "f7-mockup" / "index.html").is_file()
+    assert "**State:** planning" in (repo / ".softfield" / "cards" / "f7-one-queue.md").read_text()
+
+
+def test_a_plan_of_docs_alone_readies_a_card_that_already_has_a_ticket(repo):
+    _card(repo)
+    _later(repo, "f7-01-a")
+    _plan(repo, {".softfield/cards/f7-mockup/index.html": "<p>queue</p>\n"})
+    asked = _ask(repo, "approve_plan", "f7")
+    _apply(repo)
+    assert _request(repo, asked)[1] == "approved plan/f7: queued nothing"
+    assert "**State:** ready" in (repo / ".softfield" / "cards" / "f7-one-queue.md").read_text()
+
+
 def test_a_plan_with_a_symlink_is_refused(repo):
     """A link in docs/ would let a later edit reach outside the drafts."""
     _card(repo)
