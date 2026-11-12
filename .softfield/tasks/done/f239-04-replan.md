@@ -26,3 +26,10 @@ Read D1 to D7 in `.softfield/cards/f239-i-want-to-be-able-to-3.md`, then runner/
 - `softfield check-tickets` passes on the three tickets
 - the listed `tests:` pass
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
