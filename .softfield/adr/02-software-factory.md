@@ -830,6 +830,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** green gates hid an unrequested change inside the block the model moved, because the tests it edited covered only what it removed. Comparing the before and after pictures caught it in seconds, where the after picture against the mock-up alone could have passed for "close". Keep comparing before against after in UI reviews; if this recurs, tell developers to change nothing else inside a block they move.
 - **Decisions affected:** none.
 
+### F230 (2026-11-12): Queue rows without a number use the whole row ([review](../reviews/f230-cards-in-the-queue-wrap-words.md))
+
+- **Q1:** one developer ticket at difficulty 2 (a CSS grid rule, a template class, a browser test). Qwen merged it on attempt 3 (no-changes, then a timeout and a park for Claude's reset, then a directed pass): 37 min of model time, about 5.2M tokens in. A checkpoint re-checked it and raised nothing. Review round 1: three should-fix the checkpoint missed (`.count` deleted though still used, the stripe drawn over the label, a browser test of one Done when line out of three), all fixed by the review; one nit reported. Score 5.
+- **Q3:** no Claude in the build beyond its direction; see the review's numbers.
+- **Q5:** see the review's numbers.
+- **Anything else:** "remove the unused rules" let the model remove a used one next to them: a ticket that deletes CSS should name each selector. The test covered the symptom the owner reported and none of the ticket's other lines, as in F188 and F77, so the bug those lines would have shown (text under the stripe) passed the gates.
+- **Decisions affected:** none.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.
