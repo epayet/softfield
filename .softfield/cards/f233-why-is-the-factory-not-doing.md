@@ -1,6 +1,7 @@
 # Milestone F233: The board's developer's view counts tickets that wait for the lead's direction
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** done · **Priority:** 100 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-12. Base: git tag `f233-why-is-the-factory-not-doing-start`. Report: [`.softfield/reviews/f233-why-is-the-factory-not-doing.md`](../reviews/f233-why-is-the-factory-not-doing.md).
 > Planted by the owner on 2026-11-06.
 
 ## Notes
