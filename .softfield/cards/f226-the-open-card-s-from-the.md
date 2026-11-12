@@ -1,6 +1,7 @@
 # Milestone F226: Remove 'Open the card' from the board's ⋯ menu
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** done · **Priority:** 100 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-12. Base: git tag `f226-the-open-card-s-from-the-start`. Report: [`.softfield/reviews/f226-the-open-card-s-from-the.md`](../reviews/f226-the-open-card-s-from-the.md).
 > Planted by the owner on 2026-11-05.
 
 ## Notes

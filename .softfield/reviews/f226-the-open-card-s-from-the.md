@@ -1,5 +1,7 @@
 # Review: F226, the ⋯ menu no longer offers "Open the card"
 
+- **Status:** done, signed off by the owner on 2026-11-12.
+
 ## Sign-off sheet
 
 ### 1. What changed
