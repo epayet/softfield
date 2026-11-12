@@ -1,6 +1,6 @@
 # Milestone F210: One box per card on the desk, and one reading path through its proposals
 
-> **State:** ready · **Priority:** 0 · **Area:** factory · **Fast lane:** yes
+> **State:** ready · **Priority:** 1 · **Area:** factory · **Fast lane:** yes
 > Planted by the owner on 2026-11-03.
 
 ## Notes
