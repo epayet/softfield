@@ -45,3 +45,10 @@ The picture to build: `.softfield/cards/f210-mockup/one-box.html` (Proposed), th
 - `.softfield/tasks/later/f31-04-what-to-do-now.md` is gone
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
