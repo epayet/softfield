@@ -1,0 +1,13 @@
+{# A project's app (ADR 46 item 8, F239 D5): its state in words, and Run or Stop, which post
+   to the dashboard at once and swap this row for the one they answer. Words and buttons only:
+   f239-05 draws it as the mock-up. #}
+<div class="app-row">
+  <span class="app-state" role="status">{{ word }}</span>
+  {% if app.detail %}<span class="app-detail">{{ app.detail }}</span>{% endif %}
+  {% if error %}<p class="app-error" role="alert">{{ error }}</p>{% endif %}
+  {% if up %}
+  <button type="button" class="btn" hx-post="/projects/{{ name | urlencode }}/stop" hx-target="closest .app-row" hx-swap="outerHTML">Stop</button>
+  {% else %}
+  <button type="button" class="btn go" hx-post="/projects/{{ name | urlencode }}/run" hx-target="closest .app-row" hx-swap="outerHTML">Run</button>
+  {% endif %}
+</div>

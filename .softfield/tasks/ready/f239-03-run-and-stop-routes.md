@@ -5,7 +5,9 @@ agent: lead
 difficulty: 5
 depends_on: [f239-01-run-config-and-stacks]
 files:
-  - factory_dashboard/projects.py
+  - factory_dashboard/stacks_routes.py   # the routes: the layout gate wants a module for the test file
+  - factory_dashboard/app.py
+  - tests/runner/test_look.py             # the dashboard's POSTs: ADR 46 item 6 adds two
   - runner/stacks.py
   - factory_dashboard/templates/_partials/app_row.html
   - runner/instructions/run-stack.md

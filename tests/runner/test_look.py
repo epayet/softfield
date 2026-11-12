@@ -214,10 +214,15 @@ def _get_addresses() -> list[str]:
     ]
 
 
-def test_only_the_request_route_is_not_a_get():
-    """`look page` only ever sends a GET, and the dashboard's one write is a POST."""
+def test_only_the_request_and_app_routes_are_not_a_get():
+    """`look page` only ever sends a GET, and the dashboard's writes are POSTs: a request row,
+    and an app's Run and Stop (ADR 46 item 6)."""
     others = {(path, method) for path, methods in _routes() for method in methods - {"GET", "HEAD"}}
-    assert others == {("/requests", "POST")}
+    assert others == {
+        ("/requests", "POST"),
+        ("/projects/{name}/run", "POST"),
+        ("/projects/{name}/stop", "POST"),
+    }
 
 
 def test_no_get_route_of_the_dashboard_writes(db, tmp_path):

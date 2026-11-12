@@ -124,6 +124,7 @@ def create_app(db: Path, project: str, host: str = HOST) -> FastAPI:
         proposal,
         requests,
         runs,
+        stacks_routes,
         thread,
         tickets,
         timeline,
@@ -143,6 +144,7 @@ def create_app(db: Path, project: str, host: str = HOST) -> FastAPI:
     app.include_router(jobs.router)
     app.include_router(timeline.router)
     app.include_router(projects.router)
+    app.include_router(stacks_routes.router)
     app.include_router(runs.router)
     app.include_router(agents.router)
     app.include_router(bench.router)
