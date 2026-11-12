@@ -27,3 +27,10 @@ Read `.softfield/cards/f196-f58-is-in-progress-but-has.md`: "What happens today"
 - in the same ticket, any non-done doc in `.softfield/cards/` whose state is `ready` and that has no ticket in any folder has its state edited to `idea`. Today that is only F58's, unless the owner has removed it. If it's gone, say so in the commit and change nothing
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
