@@ -39,3 +39,12 @@ f210-03 merged only `factory_dashboard/static/deck.js`, with no test. Read that 
 - the existing browser tests in both files still pass (the phone deck, the lead's answer on an open thread)
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: task-tests)
+attempts: 3
+tokens: 12559608
+logs: .softfield/var/runs/20261112-062815/f210-05-typed-comments-wait-for-real
+```
