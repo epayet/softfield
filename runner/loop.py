@@ -5840,8 +5840,9 @@ type Turn = Callable[..., tuple[bool, bool]]  # one project's turn: (restart, it
 def project_round(sessions: Sequence[Session], turn: Turn) -> tuple[bool, bool]:
     """One round of `run_projects`, the projects in the owner's order: first every project's
     fast lane (ADR 35 item 2, F235 D1: its lane tickets, and the directions and escalations
-    about them), then every project's queued jobs (the owner's planning replies, directions,
-    checkpoints, escalations: they never wait behind another project's ticket), then one ticket
+    about them), then one queued job, the first project's that has one (the owner's planning
+    replies, directions, checkpoints, escalations: they never wait behind another project's
+    ticket, and the lane is asked again before the next), then one ticket
     from the first project that has one it can run. While the owner pauses, no lane and no
     ticket (ADR 35 item 5): the planning replies still go. Returns (restart, a job ran)."""
     held = any(s.state.owner_pause is not None for s in sessions)
