@@ -1,5 +1,7 @@
 # Review: F235, the fast lane goes before planner replies in the multi-project run
 
+- **Status:** done, signed off by the owner on 2026-11-12.
+
 ## Sign-off sheet
 
 ### 1. What changed

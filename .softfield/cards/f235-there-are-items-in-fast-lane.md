@@ -1,6 +1,7 @@
 # Milestone F235: The fast lane goes before planner replies in the multi-project run
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** done · **Priority:** 100 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-12. Base: git tag `f235-there-are-items-in-fast-lane-start`. Report: [`.softfield/reviews/f235-there-are-items-in-fast-lane.md`](../reviews/f235-there-are-items-in-fast-lane.md).
 > Planted by the owner on 2026-11-09.
 
 ## Notes
