@@ -2374,6 +2374,7 @@ def test_the_status_dot_wears_the_floors_colours_from_the_tokens(serve):
     assert breathing == [
         ".factory-status .dot.lead, .factory-status .dot.developer, .factory-status .dot.runner ",
         ".at-work-head .lamp.lit ",
+        ".lamp.lit ",
     ]
     assert "rgba" not in rule(".factory-status .dot.lead") + rule(".factory-status .dot.developer")
     # what the owner asked shows on its way: a dashed orange edge (lead.md, 2026-10-07)
@@ -3684,6 +3685,9 @@ def test_no_border_radius_except_top_bar_status_dot():
             continue
         # The board's card at work has the dot's lamp (F209 D2)
         if selector.strip() == ".at-work-head .lamp":
+            continue
+        # The plate's lamp (F209 D3)
+        if selector.strip() == ".lamp":
             continue
         # The theme switch plate and knob are allowed (it's a switch, not a panel)
         if ".theme-switch .plate" in selector and "border-radius" in body:

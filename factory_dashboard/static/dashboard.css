@@ -997,6 +997,25 @@ main:has(.board) { max-width: 1360px; }
 #field.dev-view .slot.at-work:not(.dragging) { opacity: 1; }
 #field.dev-view .slot.at-work .card { box-shadow: none; border-right-style: solid; }
 .swatch.at-work-lead { background: var(--opus); } .swatch.at-work-developer { background: var(--dev); }
+
+/* the plate at the top of the board: what works now (F209 D3) */
+.lead { --who: var(--opus); } .developer { --who: var(--dev); }
+.lamp { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--who);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--who) 25%, transparent); }
+@media (prefers-reduced-motion: no-preference) { .lamp.lit { animation: breathe 2.6s ease-in-out infinite; } }
+@keyframes breathe { 50% { box-shadow: 0 0 0 7px transparent; } }
+.board-now { display: grid; gap: 3px; padding: 10px 26px 10px 14px; color: var(--fg); background: var(--plate);
+  border: 1px solid var(--rule); border-left: 6px solid var(--who, var(--rule)); clip-path: var(--notch); text-decoration: none; }
+.board-now .row { display: flex; align-items: center; gap: 8px; }
+.board-now .what { font: 700 12px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--who, var(--muted)); }
+.board-now .when { margin-left: auto; font: 12px var(--mono); color: var(--muted); }
+.board-now .name { font: 600 15px/1.25 var(--body); }
+.board-now .doing { font-size: 13px; line-height: 1.35; color: var(--ink-2); overflow-wrap: anywhere; }
+.board-now .foot { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 12px; font: 12px var(--mono); color: var(--muted); }
+.board-now .foot .go { color: var(--sonnet); }
+.board-now.idle { padding-top: 8px; padding-bottom: 8px; }
+.board-now .stale { color: var(--hazard); }
+
 .field > .dev-legend { margin: 0; padding: 8px 14px; border-top: 1px solid var(--rule); }
 body.has-order-bar main { padding-bottom: 120px; }
 .order-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; display: flex; flex-wrap: wrap;

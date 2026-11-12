@@ -508,6 +508,151 @@ def test_a_job_waiting_for_claude_says_until_when_and_is_not_lit(paris, board_db
     assert "lamp" not in raw
 
 
+# --- the working-now plate (F209 D3) -------------------------------------------------------
+
+
+def test_a_live_ticket_job_shows_its_key_title_ticket_goal_agent_attempt_elapsed_and_place(
+    board_db,
+    board_client,
+):
+    """A live ticket job: the plate shows the card's key and title, its ticket, its goal,
+    its agent and attempt, how long it has run and its place as ``#23 in Planted``, linking
+    to the card."""
+
+    # Remove the fixture's existing live job for F24 so we only have our new one
+    def clear_fixture_job(conn: sqlite3.Connection, p: int) -> None:
+        conn.execute(
+            "UPDATE jobs SET outcome = ?, ended = ? WHERE ticket_id = "
+            "(SELECT id FROM tickets WHERE ticket = ?) AND outcome = 'running'",
+            ("stopped", NOW.isoformat(), "f24-02-working"),
+        )
+
+    write(board_db, clear_fixture_job)
+    write(board_db, _live_job("developer", ticket="f24-02-working"))
+    found = read(board_db)
+    assert len(found.now) == 1
+    c = found.now[0]
+    assert c.key == "F24"
+    assert c.title == "Growing"
+    assert c.place == 1
+    assert c.at_work is not None
+    assert c.at_work.ticket == "f24-02-working"
+    assert c.at_work.goal == "Goal of f24-02-working."
+    assert c.at_work.agent == OPUS
+    assert c.at_work.attempt == 1
+    assert c.at_work.elapsed == timedelta(minutes=3)
+    html = _page(board_client)
+    # the plate shows
+    assert "Working now · a developer" in html
+    assert "F24" in html
+    assert "Growing" in html
+    assert "f24-02-working" in html
+    assert "Goal of f24-02-working." in html
+    assert OPUS in html
+    assert "attempt 1" in html
+    assert "#1 in Planted" in html
+    # the link goes to the card
+    assert re.search(r'href="/milestones/f24-growing\?[^"]*"', html)
+
+
+def test_a_live_review_links_to_the_card_and_a_live_planner_links_to_the_conversation(
+    board_db,
+    board_client,
+):
+    """A live review links to the card, and a live planner job links to the card's conversation."""
+    write(board_db, _live_job("review", milestone="f25-unreviewed"))
+    write(board_db, _live_job("planner", milestone="f22-research", run_dir="20261002-120000"))
+    found = read(board_db)
+    keys = [c.key for c in found.now]
+    assert "F25" in keys
+    assert "F22" in keys
+    html = _page(board_client)
+    # review: links to the card
+    assert re.search(r'href="/milestones/f25-unreviewed\?[^"]*"', html)
+    assert "Working now · the lead reviews it" in html
+    # planner: links to the conversation
+    assert re.search(r'href="/planning/f22[^"]*"', html)
+    assert "Working now · the lead answers you" in html
+
+
+def test_a_job_waiting_for_claude_says_until_when_and_has_no_lit_lamp(
+    paris, board_db, board_client
+):
+    """A job waiting for Claude's limit shows ``Waits for Claude until HH:MM`` and no lit lamp."""
+
+    def wait(conn: sqlite3.Connection, p: int) -> None:
+        run = metrics.upsert_run(conn, p, "20261002-113500")
+        metrics.update_run_activity(conn, run, "waiting for Claude", "2026-10-02T21:40:00+00:00")
+
+    write(board_db, wait)
+    found = read(board_db)
+    assert len(found.now) == 1
+    assert found.now[0].at_work is not None
+    assert found.now[0].at_work.waiting_clock == "23:40"
+    html = _page(board_client)
+    assert "Waits for Claude until 23:40" in html
+    # no lit lamp in the plate
+    board_now = re.search(r'id="board-now"(.*?)</section>', html, re.S)
+    assert board_now
+    plate_html = board_now[1]
+    assert 'class="lamp lit"' not in plate_html
+
+
+def test_with_a_search_that_leaves_out_the_card_the_plate_still_shows_it(board_db, board_client):
+    """With a search that leaves out the card, the plate still shows it."""
+    write(board_db, _live_job("developer", ticket="f24-02-working"))
+    # F24's title is "Growing", so searching for a word it doesn't contain
+    html = _page(board_client, "?q=nowhere")
+    found = read(board_db, q="nowhere")
+    assert len(found.now) == 1
+    assert found.now[0].key == "F24"
+    assert "Working now · a developer" in html
+    assert "F24" in html
+
+
+def test_with_no_live_job_one_line_says_nothing_is_being_worked_on_now(board_db, board_client):
+    """With no live job, one line says ``Nothing is being worked on now`` in the same place."""
+    # board_db's F24 has a live developer job by default.
+    # We need to end the running job so it's no longer live.
+    found = read(board_db)
+    assert len(found.now) == 1  # F24's developer job
+
+    # End the running job by updating its outcome
+    def end_job(conn: sqlite3.Connection, p: int) -> None:
+        conn.execute(
+            "UPDATE jobs SET outcome = ?, ended = ? WHERE outcome = 'running'",
+            ("stopped", NOW.isoformat()),
+        )
+
+    write(board_db, end_job)
+    found = read(board_db)
+    assert len(found.now) == 0
+    html = _page(board_client)
+    assert "Nothing is being worked on now" in html
+
+
+def test_two_live_jobs_give_two_rows(board_db, board_client):
+    """Two live jobs give two rows in the plate (plus F24's fixture job)."""
+    write(board_db, _live_job("lead-ticket", ticket="f23-01-first"))
+    write(
+        board_db,
+        _live_job("developer", ticket="bug-03-working", agent=LOCAL, run_dir="20261002-120000"),
+    )
+    found = read(board_db)
+    # F24's fixture job + the two new jobs
+    assert len(found.now) == 3
+    keys = [c.key for c in found.now]
+    assert "F24" in keys
+    assert "F23" in keys
+    assert "bug-03-working" in keys
+    html = _page(board_client)
+    # the plate has three rows
+    board_now = re.search(r'id="board-now"(.*?)</section>', html, re.S)
+    assert board_now
+    plate_html = board_now[1]
+    assert plate_html.count("Working now") == 3
+
+
 def test_a_lit_card_keeps_its_place_and_its_growing_tag(board_db, board_client):
     write(board_db, _live_job("lead-ticket", ticket="f23-01-first"))
     write(

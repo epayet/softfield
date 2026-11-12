@@ -149,6 +149,8 @@ class Board:
     # with the developers' view: the planted cards developers can work on, their tickets, and the
     # minutes that work takes (the median merged ticket's, None with no merged ticket) (F146 D4)
     developers: tuple[int, int, float | None] = (0, 0, None)
+    # the cards with a live job, built from ``found`` before ``q`` and ``kind`` narrow (F209 D3)
+    now: tuple[Card, ...] = ()
 
 
 def _developer_ticket(row: sqlite3.Row, protected: list[str]) -> bool:
@@ -741,6 +743,8 @@ def board(
     whatever the case; ``kind`` is one of ``KINDS``. ``now`` tells which jobs are live.
     ``developers`` adds each card's developer work and the board's totals (F146 D4)."""
     found = _placed(conn, project, _cards(conn, project, now, developers))
+    # the cards with a live job, built before ``q`` and ``kind`` narrow (F209 D3)
+    now_cards = tuple(card for card, _ in found if card.at_work is not None)
     kept = [(card, at) for card, at in found if _matches(card, q, kind)]
     stages: dict[str, list[Card]] = {stage: [] for stage in STAGES}
     for card, _ in kept:
@@ -758,6 +762,7 @@ def board(
         _developer_totals(conn, project, [card for card, _ in found])
         if developers
         else (0, 0, None),
+        now_cards,
     )
 
 
