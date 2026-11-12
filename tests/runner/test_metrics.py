@@ -22,6 +22,7 @@ TABLES = {
     "work_queue",
     "planner_threads",
     "planner_messages",
+    "board_order",
 }
 T0 = "2026-09-30T15:23:11+02:00"
 T1 = "2026-09-30T15:40:00+02:00"
@@ -69,10 +70,23 @@ def test_a_fresh_path_gets_every_table_and_the_latest_version(tmp_path):
     conn = metrics.open_db(path)
     assert path.is_file()
     assert _tables(conn) >= TABLES
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 14 == len(metrics.MIGRATIONS)
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 15 == len(metrics.MIGRATIONS)
     assert conn.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
     assert conn.execute("PRAGMA foreign_keys").fetchone()[0] == 1
     conn.close()
+
+
+def test_the_board_order_is_rewritten_whole_per_project(db):
+    """F222 D5: the dashboard's copy of each project's queue list."""
+    first = metrics.upsert_project(db, "coucou")
+    second = metrics.upsert_project(db, "softfield")
+    metrics.set_board_order(db, first, ["f9", "bug-07-a", "f7"])
+    metrics.set_board_order(db, second, ["f1"])
+    metrics.set_board_order(db, first, ["f7", "f9"])
+    assert metrics.board_order(db, first) == ["f7", "f9"]
+    assert metrics.board_order(db, second) == ["f1"]
+    metrics.set_board_order(db, first, [])
+    assert metrics.board_order(db, first) == []
 
 
 def test_opening_again_changes_nothing(tmp_path):

@@ -282,6 +282,17 @@ _V14 = """
 ALTER TABLE planner_threads ADD COLUMN merges_unread TEXT;
 """
 
+# F222 D5: the dashboard's copy of each project's queue order (`.softfield/order.txt`), a
+# card's short key or a bug ticket's id with its place, 0 first; the runner keeps it equal.
+_V15 = """
+CREATE TABLE board_order (
+    project_id INTEGER NOT NULL REFERENCES projects(id),
+    key TEXT NOT NULL,
+    place INTEGER NOT NULL,
+    PRIMARY KEY (project_id, key)
+);
+"""
+
 UTC_STEP = "f187 utc"  # F187 D5: old local times become UTC, once
 ONCE_STEPS = ("f55 clear-out", UTC_STEP)  # one-off steps an older database still owes (F55 D3)
 
@@ -305,6 +316,7 @@ UTC_COLUMNS: dict[str, tuple[str, ...]] = {
 MIGRATIONS: list[str] = [
     *(_V1, _V2, _V3, _V4, _V5, _V6, _V7, _V8, _V9, _V10, _V11, _V12, _V13),
     _V14,
+    _V15,
 ]
 
 type Value = str | int | float | Sequence[object] | Mapping[str, object] | None
@@ -414,6 +426,30 @@ def set_project_order(conn: sqlite3.Connection, names: Sequence[str]) -> list[st
         for place, name in enumerate(order, start=1):
             conn.execute("UPDATE projects SET priority = ? WHERE name = ?", (place, name))
     return unknown
+
+
+def set_board_order(conn: sqlite3.Connection, project_id: int, keys: Sequence[str]) -> None:
+    """The project's ``board_order`` rewritten as the queue's list (F222 D5): each key with
+    its place, 0 first, in one transaction."""
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        conn.execute("DELETE FROM board_order WHERE project_id = ?", (project_id,))
+        conn.executemany(
+            "INSERT INTO board_order (project_id, key, place) VALUES (?, ?, ?)",
+            [(project_id, key, place) for place, key in enumerate(dict.fromkeys(keys))],
+        )
+        conn.execute("COMMIT")
+    except BaseException:
+        conn.execute("ROLLBACK")
+        raise
+
+
+def board_order(conn: sqlite3.Connection, project_id: int) -> list[str]:
+    """The project's copy of the queue's list, first first (F222 D5)."""
+    rows = conn.execute(
+        "SELECT key FROM board_order WHERE project_id = ? ORDER BY place", (project_id,)
+    ).fetchall()
+    return [row[0] for row in rows]
 
 
 SETTING_UP = "setting up"  # a project's `paused` from `softfield init` until `doctor` passes

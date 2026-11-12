@@ -20,7 +20,7 @@ from typing import NamedTuple
 
 import yaml
 
-from runner import loop, metrics, milestone, notify, owner, planner
+from runner import loop, metrics, milestone, notify, order, owner, planner
 from runner.config import project_name
 from runner.gitops import RUNNER_AUTHOR, Git, GitError, with_trailers
 from runner.state import State
@@ -1418,9 +1418,9 @@ def _whole(value: object) -> int:
 
 
 def _commit_files(git: Git, texts: Mapping[Path, str], message: str) -> None:
-    """Each path rewritten as its text, and they alone committed together, by the runner; as
-    they were if the commit fails."""
-    before = {path: path.read_text(encoding="utf-8") for path in texts}
+    """Each path rewritten (or made) as its text, and they alone committed together, by the
+    runner; as they were, or gone again, if the commit fails."""
+    before = {path: path.read_text(encoding="utf-8") if path.exists() else None for path in texts}
     rels = [path.relative_to(git.repo).as_posix() for path in texts]
     for path, text in texts.items():
         path.write_text(text, encoding="utf-8")
@@ -1432,8 +1432,11 @@ def _commit_files(git: Git, texts: Mapping[Path, str], message: str) -> None:
         )
     except GitError:
         git.run("reset", "-q", "--", *rels, check=False)
-        for path, text in before.items():
-            path.write_text(text, encoding="utf-8")
+        for path, was in before.items():
+            if was is None:
+                path.unlink(missing_ok=True)
+            else:
+                path.write_text(was, encoding="utf-8")
         raise
 
 
@@ -1605,6 +1608,53 @@ def _board(repo: Path, state: State) -> dict[str, _Placed]:
     return found
 
 
+def _open_bug(repo: Path, key: str) -> bool:
+    """Whether ``key`` is a bug ticket not done: the running one, or one blocked or escalated,
+    keeps its line on the list though no reorder may place it."""
+    if not (len(key) <= _MAX_ID and key.startswith("bug-") and _TICKET_ID_RE.fullmatch(key)):
+        return False
+    found = (repo / ".softfield" / "tasks").glob(f"*/{key}.md")
+    return any(path.parent.name != "done" for path in found)
+
+
+def _current(repo: Path, board: Mapping[str, _Placed]) -> list[str]:
+    """The open cards and bugs in the order the pick takes them now: the queue's list without
+    a line for one done or gone, then what it doesn't name by card number, then ticket id
+    (ADR 45 item 2); with no list, by their numbers, as ``run_order`` sorts them."""
+    listed = order.read_order(repo)
+    if listed is None:
+        return sorted(board, key=lambda key: (board[key].priority, board[key].tie))
+    kept = [key for key in listed if key in board or _open_bug(repo, key)]
+    named = set(kept)
+    return kept + sorted((key for key in board if key not in named), key=lambda k: board[k].tie)
+
+
+MOVED = "the board's order, kept in .softfield/order.txt from now on (F222)"
+
+
+def move_to_list(repo: Path) -> list[str]:
+    """F222 D4, once per project, as the runner's pick applies the owner's requests (just
+    before `apply_requests`, so a reorder reads the list): with no queue list and an open
+    card, the list written in the order the pick takes the work today (`_current`), in a
+    commit of that file alone, on main only. Nothing with no open card, and nothing again once
+    there is a list. The caller copies the list to ``board_order``."""
+    path = order.order_path(repo)
+    if path.exists() or path.is_symlink():
+        return []
+    git = Git(repo)
+    if git.current_branch() != loop.MAIN:
+        return []  # the next apply on main moves it
+    board = _board(repo, State())  # the running bug ticket keeps its place too
+    if not any(placed.card is not None for placed in board.values()):
+        return []
+    keys = _current(repo, board)
+    try:
+        _commit_file(git, path, order.order_text(keys), MOVED)
+    except GitError as exc:
+        return [f"{MOVED}: not yet, {exc}"]
+    return [f"{MOVED}: {len(keys)} cards and bugs in line"]
+
+
 def _numbers(line: list[tuple[int, _Tie]]) -> list[int]:
     """The priorities that put ``line`` (each one's priority and what orders it among equals)
     in its order, with as many kept as can be: neighbours may share a number when the tie
@@ -1660,14 +1710,15 @@ def _renumbered(key: str, placed: _Placed, priority: int) -> str:
 def _reorder(
     repo: Path, conn: sqlite3.Connection, project_id: int, state: State, value: object
 ) -> str:
-    """The board's order, sent whole (F15 D3, D5): each listed card's header Priority and each
-    listed bug ticket's ``priority:`` set so that the pick's order (``run_order``) is the
-    list's, in one commit of the files whose number changed, and none when the order holds
-    already. An open card or bug the list doesn't name comes after the listed ones, in the
-    order it had. A key that is no open card or bug ticket (unknown, done, removed, running,
-    general) is skipped and named. A card's tickets follow it: they have no ``priority:`` of
-    their own (F173, ``task_priority``). Refused, main unchanged, for
-    a value that isn't a JSON list of strings or holds a key twice."""
+    """The board's order, sent whole (F15 D3, D5): the queue's list (.softfield/order.txt,
+    F222 D1) rewritten as the order sent, open keys only, and each card's header Priority and
+    bug ticket's ``priority:`` set to agree with it (F222 D9, until f222-04), in one commit of
+    the files that changed, and none when the order holds already. An open card or bug the
+    order doesn't name comes after the ones it names, in the order it had. A key that is no
+    open card or bug ticket (unknown, done, removed, running, general) is skipped and named.
+    A card's tickets follow it: they have no ``priority:`` of their own (F173,
+    ``task_priority``). Refused, main unchanged, for a value that isn't a JSON list of strings
+    or holds a key twice."""
     try:
         keys = json.loads(value) if isinstance(value, str) else None
     except json.JSONDecodeError:
@@ -1680,9 +1731,10 @@ def _reorder(
             return f"a reorder names each card once: {key[:_MAX_ID]} is there twice"
         seen.add(key)
     board = _board(repo, state)
-    was = sorted(board, key=lambda key: (board[key].priority, board[key].tie))
-    line = [key for key in keys if key in board]
-    line += [key for key in was if key not in seen]
+    sent = [key for key in keys if key in board]
+    placed = set(sent)
+    written = sent + [key for key in _current(repo, board) if key not in placed]
+    line = [key for key in written if key in board]
     numbers = _numbers([(board[key].priority, board[key].tie) for key in line])
     moved = {
         key: number
@@ -1690,9 +1742,15 @@ def _reorder(
         if number != board[key].priority
     }
     texts = {key: _renumbered(key, board[key], number) for key, number in moved.items()}
-    if texts:
-        files = {board[key].path: text for key, text in texts.items()}
+    files = {board[key].path: text for key, text in texts.items()}
+    listed = order.order_path(repo)
+    text = order.order_text(written)
+    was = listed.read_text(encoding="utf-8") if listed.is_file() else None
+    if text != was and (written or was is not None):  # F222 D1: the list, whole
+        files[listed] = text
+    if files:
         _commit_files(Git(repo), files, "the board's order, by the owner")
+    metrics.set_board_order(conn, project_id, written)
     for key, number in moved.items():
         if board[key].card is not None:
             stem = board[key].path.stem
@@ -1923,8 +1981,8 @@ def _project_order(conn: sqlite3.Connection, value: str | None) -> str:
     if not isinstance(names, list) or not names or not all(isinstance(n, str) for n in names):
         return _PROJECT_ORDER_VALUE
     unknown = metrics.set_project_order(conn, names)
-    order = ", ".join(p.name for p in metrics.projects_in_order(conn))
-    return f"the projects' order: {order}" + (
+    names_now = ", ".join(p.name for p in metrics.projects_in_order(conn))
+    return f"the projects' order: {names_now}" + (
         f" (no project {', '.join(unknown)})" if unknown else ""
     )
 

@@ -31,6 +31,7 @@ from runner import (
     messages,
     metrics,
     notify,
+    order,
     planner,
     prompts,
     push,
@@ -620,7 +621,8 @@ def sync_tickets(s: Session) -> None:
 def sync_cards(s: Session) -> None:
     """Every milestone doc's card (f5 D4) and title, as ``sync_tickets`` does for tickets: an
     idea with no tickets yet is on the board too. A doc not named by a key is left out, and a
-    card whose doc is gone (merged away, dropped, deleted) leaves the board (f6-17)."""
+    card whose doc is gone (merged away, dropped, deleted) leaves the board (f6-17). The
+    queue's list too, as ``board_order`` (F222 D5)."""
     from runner.milestone import (  # runner.milestone imports this module
         card,
         milestone_doc,
@@ -660,6 +662,8 @@ def sync_cards(s: Session) -> None:
             signoff=sheet or None,
         )
     _record(s, metrics.remove_cards, s.project_id, present=present)
+    # F222 D5: the dashboard's copy of the queue's list, equal to the file (none: no list)
+    _record(s, metrics.set_board_order, s.project_id, order.read_order(s.repo) or [])
 
 
 PICKING = "picking the next ticket"
@@ -5614,14 +5618,21 @@ def _queue_due_review(s: Session) -> None:
 def apply_owner_requests(s: Session) -> None:
     """The owner's requests from the dashboard (f5 D2), at each pick: the run is git's one
     writer, so it applies them itself, as their console commands would, and turns off the
-    switches whose 24 hours are over. A switch turned on frees what waited for it. Best
-    effort, like every write."""
-    from runner.requests import apply_requests  # runner.requests imports this module
+    switches whose 24 hours are over. A switch turned on frees what waited for it. The first
+    time, the queue's order moves to its list (F222 D4). Best effort, like every write."""
+    from runner.requests import apply_requests, move_to_list  # it imports this module
 
     at = now()
     was_on = {switch: switch_on(s.state, switch, at) for switch in SWITCHES}
+    try:  # a move that fails leaves the numbers ordering the work, and the requests applied
+        moved = move_to_list(s.repo)
+    except Exception as exc:
+        moved = [f"the board's order wasn't moved to its list: {type(exc).__name__}: {exc}"]
+    listed = order.read_order(s.repo) if moved else None
+    if listed is not None and s.project_id is not None:  # the dashboard's copy (F222 D5)
+        _record(s, metrics.set_board_order, s.project_id, listed)
     try:
-        lines = apply_requests(s.repo, s.cfg.metrics_db, at, s.state)
+        lines = moved + apply_requests(s.repo, s.cfg.metrics_db, at, s.state)
     except Exception as exc:
         _metrics_failed(s, exc)
         return
@@ -6087,10 +6098,14 @@ def _held(repo: Path, ready: list[Task]) -> dict[str, str]:
 
 
 def _cards(repo: Path, ready: list[Task]) -> dict[str, int]:
-    """Short key -> the priority on its milestone doc's card (f5 D4), for the ready tickets'
-    milestones that have a doc."""
+    """The ready tickets' places: from the queue's list when the project has one (F222 D1,
+    each card's short key and bug's id to its place); else each short key to the priority on
+    its milestone doc's card (f5 D4), for the milestones that have a doc."""
     from runner.milestone import card  # runner.milestone imports this module
 
+    listed = order.read_order(repo)
+    if listed is not None:
+        return order.places(listed, ready)
     found = {}
     for key in {t.milestone for t in ready if t.milestone != BUGS}:
         doc = milestone_file(repo, "cards", key)

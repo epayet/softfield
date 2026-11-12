@@ -382,10 +382,13 @@ def held_ids(ready: Iterable[Task], waits: Mapping[str, str]) -> dict[str, str]:
 
 
 def task_priority(task: Task, cards: Mapping[str, int]) -> int:
-    """A bug's own ``priority:`` (its place on the board, 50 when none); a feature ticket's
-    card's (``cards`` maps a short key to it), else 100. Lower goes first (ADR 19 item 3). A
-    feature ticket's own ``priority:`` is never read: the board orders the work (F173 D1)."""
+    """A ticket's place: ``cards`` maps a card's short key, or a bug's id, to it (the queue's
+    list, `runner.order.places`, F222 D1). Without one, a bug's own ``priority:`` (50 when
+    none); a feature ticket's card's, else 100. Lower goes first (ADR 19 item 3). A feature
+    ticket's own ``priority:`` is never read: the board orders the work (F173 D1)."""
     if task.milestone == BUGS:
+        if task.id in cards:
+            return cards[task.id]
         return BUG_PRIORITY if task.priority is None else task.priority
     return cards.get(short_key(task.milestone), DEFAULT_PRIORITY)
 
