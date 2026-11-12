@@ -319,6 +319,7 @@ def _drafts(git: Git, branch: str) -> list[tuple[str, str]]:
 
 _OUTSIDE = "outside docs/, .softfield/cards/, .softfield/adr/ and .softfield/tasks/later/"
 _BUILDING = "building"  # a card's state while its tickets run (f5 D4): a plan keeps it
+_PLANNING = "planning"  # a card's state while its first plan is drafted
 
 
 def _why_not_blocked(path: str, mode: str, card: str, replan: bool, placed: set[str]) -> str:
@@ -896,6 +897,8 @@ def _approve_plan(
                 return f"{branch} clashes with {loop.MAIN}: not approved"
     made: Path | None = None
     moved: dict[tuple[str, str], _Moved] = {}
+    entering = False  # F222 D2: the card enters the line, last
+    line: list[str] = []
     try:
         if planned:
             _replace_put_back(git, put_back)
@@ -915,10 +918,11 @@ def _approve_plan(
                 return f"{name} has no card in .softfield/cards/: not approved"
             text = doc.read_text(encoding="utf-8")
             # a plan of docs alone leaves a card with no ticket as it was (f196-02)
-            if milestone.card(doc.stem, text).state != _BUILDING and _has_tickets(
-                git, None, thread
-            ):
+            state_was = milestone.card(doc.stem, text).state
+            if state_was != _BUILDING and _has_tickets(git, None, thread):
                 doc.write_text(planner.ready_card(text), encoding="utf-8")
+                # F222 D2: a first plan's approval puts the card last in line
+                entering = not replan and state_was in (planner.IDEA, _PLANNING)
             for rel in tickets:
                 git.move(repo / rel, repo / ".softfield" / "tasks" / "ready" / Path(rel).name)
         for d, kept in merges:
@@ -926,6 +930,10 @@ def _approve_plan(
             moved[d, kept] = _merge(repo, conn, project_id, now, d, kept, summary=summary)
         merged = [words.replace(" into ", " merged into ", 1) for words in joined]
         if planned:
+            if entering:  # read after the squash: the tickets and the card are in the tree
+                line = _last(repo, state, thread)
+                (listed := order.order_path(repo)).write_text(order.order_text(line), "utf-8")
+                git.run("add", "--", listed.relative_to(repo).as_posix())
             title = milestone.milestone_doc(doc.read_text(encoding="utf-8")).get("title")
             made = _export(repo, conn, project_id, thread, doc.stem, title)
             git.commit_all("; ".join([f"{name} plan approved by the owner", *merged]))
@@ -934,6 +942,8 @@ def _approve_plan(
     except Exception:
         _undo(git, made, *(m.made for m in moved.values()))  # untracked: the reset leaves them
         raise
+    if entering:
+        metrics.set_board_order(conn, project_id, line)
     _merged(conn, project_id, now, [(d, k, m.said) for (d, k), m in moved.items()])
     _resolve_items(conn, project_id, now, gone)
     for blocked in brought:
@@ -960,6 +970,8 @@ def _approve_plan(
         for path in put_back.values()
     ]
     parts += said
+    if entering:
+        parts.append(f"{name} goes last on the board")
     if replan and state.owner_pause is not None:  # applied while the line held: it goes on
         parts.append(_pause(conn, state, now, RESUME))
     return "; ".join(parts)
@@ -1629,6 +1641,31 @@ def _current(repo: Path, board: Mapping[str, _Placed]) -> list[str]:
     return kept + sorted((key for key in board if key not in named), key=lambda k: board[k].tie)
 
 
+def _last(repo: Path, state: State, key: str) -> list[str]:
+    """The queue's list with ``key`` strictly last (F222 D2): every open card and bug in the order
+    the pick takes them (`_current`, so one the list didn't name too), then ``key``. Read from
+    the working tree, so a card and tickets just merged are in it."""
+    board = _board(repo, state)
+    return [*(k for k in _current(repo, board) if k != key), key]
+
+
+def _bug_in_later(repo: Path, wanted: str) -> bool:
+    """Whether ``wanted`` names a bug ticket in .softfield/tasks/later/ (what Queue then moves
+    first, ``loop.move_to_ready``)."""
+    path = repo / ".softfield" / "tasks" / LATER / f"{wanted}.md"
+    return wanted.startswith("bug-") and path.is_file()
+
+
+def _queue_last(
+    repo: Path, conn: sqlite3.Connection, project_id: int, state: State, ticket: str
+) -> None:
+    """The bug Queue just moved to ready/ put last on the list, in a commit of the list alone."""
+    line = _last(repo, state, ticket)
+    _commit_file(Git(repo), order.order_path(repo), order.order_text(line), QUEUED_LAST)
+    metrics.set_board_order(conn, project_id, line)
+
+
+QUEUED_LAST = "the queued bug goes last on the board, by the owner"
 MOVED = "the board's order, kept in .softfield/order.txt from now on (F222)"
 
 
@@ -1926,7 +1963,10 @@ def _apply(
             if not subject:  # "" would match every ticket in the folder
                 return f"a {kind} request names its ticket"
             if kind == QUEUE:
+                from_later = _bug_in_later(repo, str(subject))
                 said, ticket = "queued", loop.move_to_ready(repo, str(subject))
+                if from_later:  # F222 D2: a queued bug goes last in line
+                    _queue_last(repo, conn, project_id, state, ticket)
             else:
                 said, ticket = "set aside", loop.set_aside(repo, str(subject))
             _answered_block(conn, project_id, now, ticket)

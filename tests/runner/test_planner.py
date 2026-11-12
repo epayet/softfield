@@ -1559,11 +1559,12 @@ def test_approving_a_plan_commits_its_thread_with_its_drafts(repo):
     _talked_through(repo)
     asked = _ask(repo, "approve_plan", "f7")
     _apply(repo)
-    assert _request(repo, asked)[1] == "approved plan/f7: queued f7-01-a"
+    assert _request(repo, asked)[1] == "approved plan/f7: queued f7-01-a; F7 goes last on the board"
     assert (repo / EXPORT).read_text() == EXPORTED
     assert git(repo, "log", "-1", "--format=%s").strip() == "F7 plan approved by the owner"
     assert _committed(repo) == [
         ".softfield/cards/f7-one-queue.md",
+        ".softfield/order.txt",
         EXPORT,
         ".softfield/tasks/ready/f7-01-a.md",
     ]

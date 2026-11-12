@@ -797,7 +797,7 @@ def test_approving_a_plan_merges_its_drafts_queues_its_tickets_and_readies_the_c
     )
     head = git(repo, "rev-parse", "HEAD")
     asked = _ask(repo, "approve_plan", "f7-one-queue")
-    result = "approved plan/f7: queued f7-01-a, f7-02-b"
+    result = "approved plan/f7: queued f7-01-a, f7-02-b; F7 goes last on the board"
     assert _apply(repo) == [f"approve_plan f7-one-queue: {result}"]
     assert _request(repo, asked) == (NOW.isoformat(), result)
     ready = sorted(p.name for p in (repo / ".softfield" / "tasks" / "ready").glob("*.md"))
@@ -814,6 +814,102 @@ def test_approving_a_plan_merges_its_drafts_queues_its_tickets_and_readies_the_c
     assert git(repo, "status", "--porcelain") == ""
     assert git(repo, "branch", "--list", "plan/f7") == ""
     assert _apply(repo) == []  # finished once
+
+
+def _bug(repo: Path, folder: str, bug_id: str) -> None:
+    text = _ticket(bug_id).replace("milestone: f7", "milestone: bugs\narea: factory")
+    path = repo / ".softfield" / "tasks" / folder / f"{bug_id}.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text)
+
+
+def _listed(repo: Path, keys: str) -> str:
+    """The queue's list on main, with the line written; main's head."""
+    (repo / ORDER).write_text(keys)
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "the list")
+    return git(repo, "rev-parse", "HEAD")
+
+
+def _stored_order(repo: Path) -> list[str]:
+    conn = metrics.open_db(_db(repo))
+    try:
+        project = metrics.upsert_project(conn, repo.name, repo=str(repo))
+        return metrics.board_order(conn, project)
+    finally:
+        conn.close()
+
+
+def test_a_first_plans_approval_puts_its_card_last_in_the_one_commit(repo):
+    _card(repo)
+    _board(repo, {"f8": 100, "f9": 100}, bug=True)
+    head = _listed(repo, "f9\nf8\n")  # f7 and the bug are not on it
+    _plan(repo, {".softfield/tasks/later/f7-01-a.md": _ticket("f7-01-a")})
+    asked = _ask(repo, "approve_plan", "f7")
+    _apply(repo)
+    result = "approved plan/f7: queued f7-01-a; F7 goes last on the board"
+    assert _request(repo, asked) == (NOW.isoformat(), result)
+    assert (repo / ORDER).read_text() == f"f9\nf8\n{BUG}\nf7\n"
+    assert git(repo, "rev-parse", "HEAD~1") == head
+    assert ORDER in _changed(repo)
+    assert ".softfield/tasks/ready/f7-01-a.md" in _changed(repo)
+    assert git(repo, "status", "--porcelain") == ""
+    assert _stored_order(repo) == ["f9", "f8", BUG, "f7"]
+
+
+@pytest.mark.parametrize("how", ["second plan", "building", "no ticket"])
+def test_an_approval_that_isnt_a_first_plan_with_tickets_moves_nothing(repo, how):
+    _card(repo)
+    _board(repo, {"f8": 100})
+    card = repo / ".softfield" / "cards" / "f7-one-queue.md"
+    doc = CARD
+    if how in ("second plan", "building"):
+        doc = CARD.replace("planning", "ready" if how == "second plan" else "building")
+        card.write_text(doc)
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "--allow-empty", "-m", "the card")
+    _listed(repo, "f7\nf8\n")
+    drafts = {".softfield/cards/f7-one-queue.md": doc + "- more.\n"}
+    if how != "no ticket":
+        drafts[".softfield/tasks/later/f7-01-a.md"] = _ticket("f7-01-a")
+    _plan(repo, drafts)
+    asked = _ask(repo, "approve_plan", "f7")
+    _apply(repo)
+    _, result = _request(repo, asked)
+    assert "goes last" not in str(result)
+    assert (repo / ORDER).read_text() == "f7\nf8\n"
+    assert ORDER not in _changed(repo)
+
+
+def test_a_refused_approval_leaves_the_list_as_it_was(repo):
+    _card(repo)
+    _board(repo, {"f8": 100})
+    head = _listed(repo, "f8\n")
+    _plan(repo, {".softfield/tasks/later/f7-01-a.md": _ticket("f7-01-a"), "runner/loop.py": "x\n"})
+    _apply_after = _ask(repo, "approve_plan", "f7")
+    _apply(repo)
+    assert "not approved" in str(_request(repo, _apply_after)[1])
+    assert git(repo, "rev-parse", "HEAD") == head
+    assert (repo / ORDER).read_text() == "f8\n"
+    assert git(repo, "status", "--porcelain") == ""
+
+
+def test_queueing_a_bug_from_later_puts_it_last_but_trying_a_blocked_one_again_doesnt(repo):
+    _board(repo, {"f8": 100, "f9": 100})
+    _bug(repo, "later", "bug-08-late")
+    _bug(repo, "blocked", "bug-09-stuck")
+    _listed(repo, "bug-09-stuck\nbug-08-late\nf8\nf9\n")
+    _ask(repo, "queue", "bug-08-late")
+    _apply(repo)
+    assert (repo / ORDER).read_text() == "bug-09-stuck\nf8\nf9\nbug-08-late\n"
+    assert _stored_order(repo) == ["bug-09-stuck", "f8", "f9", "bug-08-late"]
+    assert (repo / ".softfield" / "tasks" / "ready" / "bug-08-late.md").is_file()
+    assert git(repo, "status", "--porcelain") == ""
+    head = git(repo, "rev-parse", "HEAD")
+    _ask(repo, "queue", "bug-09-stuck")
+    _apply(repo)
+    assert (repo / ORDER).read_text() == "bug-09-stuck\nf8\nf9\nbug-08-late\n"
+    assert git(repo, "rev-parse", "HEAD~1") == head  # the move alone
 
 
 @pytest.mark.parametrize(
@@ -919,7 +1015,7 @@ def test_a_plan_of_docs_alone_readies_a_card_that_already_has_a_ticket(repo):
     _plan(repo, {".softfield/cards/f7-mockup/index.html": "<p>queue</p>\n"})
     asked = _ask(repo, "approve_plan", "f7")
     _apply(repo)
-    assert _request(repo, asked)[1] == "approved plan/f7: queued nothing"
+    assert _request(repo, asked)[1] == "approved plan/f7: queued nothing; F7 goes last on the board"
     assert "**State:** ready" in (repo / ".softfield" / "cards" / "f7-one-queue.md").read_text()
 
 
@@ -1036,7 +1132,7 @@ def test_a_clashing_plan_its_planner_job_rebuilt_is_approved(repo):
     assert requests.plan_clash(repo, "f7") is None
     asked = _ask(repo, "approve_plan", "f7")
     _apply(repo)
-    assert _request(repo, asked)[1] == "approved plan/f7: queued f7-01-a"
+    assert _request(repo, asked)[1] == "approved plan/f7: queued f7-01-a; F7 goes last on the board"
     assert (repo / ".softfield" / "tasks" / "ready" / "f7-01-a.md").is_file()
     card = (repo / ".softfield" / "cards" / "f7-one-queue.md").read_text()
     assert "one queue, kept" in card and "- The plan, drafted." in card
@@ -1060,7 +1156,7 @@ def test_a_note_main_merged_into_the_card_while_its_plan_was_drafted_is_kept_and
     git(repo, "commit", "-q", "-am", "F9 merged into F7 by the lead")
     asked = _ask(repo, "approve_plan", "f7")
     _apply(repo)
-    assert _request(repo, asked)[1] == "approved plan/f7: queued f7-01-a"
+    assert _request(repo, asked)[1] == "approved plan/f7: queued f7-01-a; F7 goes last on the board"
     text = doc.read_text()
     assert "<<<<<<<" not in text and "|||||||" not in text and ">>>>>>>" not in text
     assert text.index("Why two?") < text.index("- D1 one queue.")
@@ -1140,7 +1236,9 @@ def test_accept_adr_merges_the_draft_and_the_plan_waits_for_it(repo):
 
     second = _ask(repo, "approve_plan", "f7")
     _apply(repo)
-    assert _request(repo, second)[1] == "approved plan/f7: queued f7-01-a"
+    assert (
+        _request(repo, second)[1] == "approved plan/f7: queued f7-01-a; F7 goes last on the board"
+    )
     assert (repo / ".softfield" / "tasks" / "ready" / "f7-01-a.md").is_file()
     assert "Accepted (by the owner, 2026-10-01)" in adr.read_text()
 
@@ -1188,7 +1286,9 @@ def test_accept_then_approve_in_one_pick_accepts_the_adr_and_merges_the_plan(rep
     approved = _ask(repo, "approve_plan", "f7")
     _apply(repo)
     assert _request(repo, accepted)[1] == "accepted .softfield/adr/23-parallel-planners.md"
-    assert _request(repo, approved)[1] == "approved plan/f7: queued f7-01-a"
+    assert (
+        _request(repo, approved)[1] == "approved plan/f7: queued f7-01-a; F7 goes last on the board"
+    )
     adr = repo / ".softfield" / "adr" / "23-parallel-planners.md"
     assert "Accepted (by the owner, 2026-10-01)" in adr.read_text()
     assert (repo / ".softfield" / "tasks" / "ready" / "f7-01-a.md").is_file()
@@ -1239,7 +1339,9 @@ def test_accept_adr_takes_the_branchs_own_draft_when_main_has_that_number(repo):
     git(repo, "checkout", "-q", "main")
     second = _ask(repo, "approve_plan", "f7")
     _apply(repo)
-    assert _request(repo, second)[1] == "approved plan/f7: queued f7-01-a"
+    assert (
+        _request(repo, second)[1] == "approved plan/f7: queued f7-01-a; F7 goes last on the board"
+    )
 
 
 def test_accepting_an_adr_on_a_card_with_no_tickets_asks_its_lead_for_the_plan(repo):
@@ -1465,7 +1567,10 @@ def test_a_merge_proposed_on_the_kept_cards_thread_with_its_plan_goes_in_one_com
     _plan(repo, {".softfield/tasks/later/f10-01-a.md": _ticket("f10-01-a")}, card="f10")
     asked = _ask(repo, "approve_plan", "f10")
     _apply(repo)
-    assert _request(repo, asked)[1] == "approved plan/f10: queued f10-01-a; merged F12 into F10"
+    assert (
+        _request(repo, asked)[1]
+        == "approved plan/f10: queued f10-01-a; merged F12 into F10; F10 goes last on the board"
+    )
     assert git(repo, "rev-parse", "HEAD~1") == head
     assert (repo / ".softfield" / "tasks" / "ready" / "f10-01-a.md").is_file()
     doc = (repo / ".softfield" / "cards" / "f10-one-queue.md").read_text()
