@@ -1,6 +1,7 @@
 # Milestone F230: Queue rows squeezed into the number column, one word per line
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** done · **Priority:** 100 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-12. Base: git tag `f230-cards-in-the-queue-wrap-words-start`. Report: [`.softfield/reviews/f230-cards-in-the-queue-wrap-words.md`](../reviews/f230-cards-in-the-queue-wrap-words.md).
 > Planted by the owner on 2026-11-06.
 
 ## Notes
