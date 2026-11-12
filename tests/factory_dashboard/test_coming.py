@@ -492,13 +492,12 @@ def test_a_waiting_message_adds_nothing_to_the_counts_and_takes_its_proposals_of
         ),
     )
     html = _page(client)
-    # The dashed box is the only new item, and it doesn't count
+    # F6's proposals join its conversation's box (F210 D1), dashed, and it doesn't count
     groups = _groups(html)
-    assert list(groups) == ["ripe", "answers", "proposals", "seeds"]
+    assert list(groups) == ["ripe", "answers", "seeds"]
     assert _dashed(html, "/planning/f6") == 1
-    # The Planning tab count drops by f6's plan and ADR only: with the owner's message waiting
-    # for the lead they are being revised, not waiting for the owner (F100); the dashed box
-    # itself adds nothing
+    # The Planning tab count drops by f6's box only: with the owner's message waiting for the
+    # lead its plan and ADR are being revised, not waiting for the owner (F100)
     planning_tab = re.search(
         r'<a href="/planning\?project=coucou"[^>]*id="planning-tab">Planning · (\d+)</a>', html
     )

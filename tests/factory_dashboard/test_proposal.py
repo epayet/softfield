@@ -205,8 +205,9 @@ def test_a_merge_shows_like_the_others_and_its_button_approves_the_threads_plan(
     """f6-12: on the desk and its page, its words say "merge F9 into F7"; approving it is the
     thread's ``approve_plan``, which settles it (D6)."""
     _write(db_path, lambda conn: _review(conn, planning, "f9", _REVIEW_MERGE))
-    [item] = [i for i in _group(db, "proposals") if i.link.endswith("/merge-f9")]
-    assert item.words == "merge F9 into F7 · 1 key points · proposed 30 min ago"
+    item = _box(db, "f9")
+    assert item.words == "the lead replied 30 min ago · merge F9 into F7 · 1 key points"
+    assert [p.link for p in item.parts] == ["/planning/f9/proposals/merge-f9"]
     html = _review_page(serve(), "/planning/f9/proposals/merge-f9")
     assert ">Merge F9 into F7</span>" in html and "Approve: merge F9 into F7" in html
     assert _posts(html, "approve-merge") == {
@@ -221,12 +222,19 @@ def test_a_merge_shows_like_the_others_and_its_button_approves_the_threads_plan(
             conn, planning, "approve_plan", "f9", None, NOW.isoformat()
         ),
     )
-    [item] = [i for i in _group(db, "proposals") if i.link.endswith("/merge-f9")]
+    item = _box(db, "f9")
     assert item.on_its_way  # on its way until the runner's next pick, no longer waiting on you
 
 
 def _merges_on_the_desk(db: sqlite3.Connection) -> list[str]:
-    return [i.link for i in _group(db, "proposals") if "/merge-" in i.link and not i.on_its_way]
+    """The merges the desk's boxes still ask about (F210 D1)."""
+    return [
+        p.link
+        for i in _group(db, "answers")
+        if not i.on_its_way
+        for p in i.parts
+        if "/merge-" in p.link and not p.on_its_way
+    ]
 
 
 def test_an_approved_merge_leaves_the_desk(planning, db_path, db):
@@ -300,52 +308,61 @@ def _f6_mockup_review(db_path: Path, planning: int, checkout: Path) -> None:
     _write(db_path, lambda conn: _review(conn, planning, "f6", _REVIEW_MOCKUP))
 
 
-def _proposals(db: sqlite3.Connection) -> list[Any]:
-    return _group(db, "proposals")
+def _box(db: sqlite3.Connection, card: str) -> Any:
+    """A card's one box on the desk (F210 D1): its conversation and its proposals."""
+    (item,) = [i for i in _group(db, "answers") if i.link == f"/planning/{card}"]
+    return item
 
 
-def _counted(db: sqlite3.Connection) -> int:
-    """How many of the proposals the desk counts as waiting for the owner."""
-    return len([i for i in waiting_for_you(desk(db, PROJECT, NOW)) if i.group == "proposals"])
+def _counted(db: sqlite3.Connection, card: str) -> int:
+    """How many of the card's items the desk counts as waiting for the owner."""
+    return len(
+        [
+            i
+            for i in waiting_for_you(desk(db, PROJECT, NOW))
+            if i.link.startswith(f"/planning/{card}")
+        ]
+    )
 
 
 def test_a_cards_proposals_are_one_desk_item_counted_while_a_part_waits(
     planning, db_path, db, checkout
 ):
-    """F51 D1: ADR first, then plan and merge; the item links to the first part still to do,
-    and counts until every part is on its way."""
+    """F51 D1, F210 D1: the card's box holds ADR first, then plan and merge, each linking to its
+    page, and counts once until every part is on its way."""
     _f6_adr_plan_merge(db_path, planning, checkout)
-    (item,) = _proposals(db)
-    assert item.title == "F6 plan: 7 tickets"  # the plan's title names its card already
-    assert item.parts == (("ADR 20", False), ("plan", False), ("merge F9", False))
-    assert item.words == "5 key points · accept the ADR first · proposed 30 min ago"
-    assert item.link == "/planning/f6/proposals/adr-20"
+    item = _box(db, "f6")
+    assert item.title == "The planning room"  # the conversation's
+    assert [(p.name, p.on_its_way, p.link, p.points) for p in item.parts] == [
+        ("ADR 20", False, "/planning/f6/proposals/adr-20", 3),
+        ("plan", False, "/planning/f6/proposals/plan", 1),
+        ("merge F9", False, "/planning/f6/proposals/merge-f9", 1),
+    ]
+    assert item.words == "the lead replied 30 min ago · 5 key points · accept the ADR first"
     assert not item.on_its_way
-    assert _counted(db) == 1
+    assert _counted(db, "f6") == 1
 
     _finished(db_path, planning, "accept_adr", "f6", "20", None)
-    (item,) = _proposals(db)
-    assert item.parts[0] == ("ADR 20", True)
-    assert item.words == "5 key points · proposed 30 min ago"
-    assert item.link == "/planning/f6/proposals/plan"
+    item = _box(db, "f6")
+    assert (item.parts[0].name, item.parts[0].on_its_way) == ("ADR 20", True)
+    assert item.words == "the lead replied 30 min ago · 5 key points"
     assert not item.on_its_way
-    assert _counted(db) == 1
+    assert _counted(db, "f6") == 1
 
     _finished(db_path, planning, "approve_plan", "f6", None, None)
-    (item,) = _proposals(db)
+    item = _box(db, "f6")
     assert item.on_its_way
-    assert all(way for _, way in item.parts)
-    assert _counted(db) == 0
+    assert all(p.on_its_way for p in item.parts)
+    assert _counted(db, "f6") == 0
 
 
 def test_a_plan_and_its_mockup_are_one_item_and_the_general_seeds_stay_two(planning, db_path, db):
     seeds = [{**_REVIEW_SEED, "id": "seed-1"}, {**_REVIEW_SEED, "id": "seed-2"}]
     _write(db_path, lambda conn: _review(conn, planning, "f7", _REVIEW_PLAN, _REVIEW_MOCKUP))
     _write(db_path, lambda conn: _review(conn, planning, "general", *seeds))
-    items = _proposals(db)
-    assert [(i.title, i.parts) for i in items if i.link.startswith("/planning/f7/")] == [
-        ("F7: F6 plan: 7 tickets", (("plan", False), ("mock-up", False)))  # F7's, named so
-    ]
+    item = _box(db, "f7")
+    assert (item.title, [p.name for p in item.parts]) == ("Memory drift", ["mock-up", "plan"])
+    items = _group(db, "answers")
     assert len([i for i in items if i.link.startswith("/planning/general/")]) == 2
 
 
@@ -380,7 +397,7 @@ def test_a_merge_the_lead_applied_asks_nothing(planning, db_path, db, serve):
     """F49 D1: the runner applied it after the job; no Approve, on the desk or its page."""
     applied = {**_REVIEW_MERGE, "applied": True}
     _write(db_path, lambda conn: _review(conn, planning, "f9", applied))
-    assert not [i for i in _group(db, "proposals") if i.link.endswith("/merge-f9")]
+    assert _merges_on_the_desk(db) == [] and not _box(db, "f9").parts
     html = _review_page(serve(), "/planning/f9/proposals/merge-f9")
     assert 'id="approve-merge"' not in html and 'id="merged-by-lead"' in html
     assert 'id="reject"' not in html  # nothing left to reject

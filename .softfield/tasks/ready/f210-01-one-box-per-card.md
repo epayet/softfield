@@ -30,7 +30,7 @@ The picture to build: `.softfield/cards/f210-mockup/one-box.html` (Proposed), th
 - The desk is drawn from classes (f81-04: `.desk-item`, `.desk-title`, `.desk-words`, `.parts`, `.part`), with no inline styles. The box follows them; its new rules (the box, its corner ticks in `--ink-2`, the proposal links) go beside `.desk-item` in `factory_dashboard/static/dashboard.css`, and nothing goes inline.
 - D9: build the box from whichever group holds the card's conversation link. If F65's f65-06 is on main by then, a ripe card's conversation is in its To sign off row, and that row takes the proposals; if it isn't, every conversation is in Your answers wanted.
 - `_open_proposals` stays for the Overview's notices (`factory_dashboard/overview.py`). The groups left keep their markup; "Proposals to review" leaves `desk()` and the tests that name it.
-- Delete `.softfield/tasks/later/f31-04-what-to-do-now.md` (D6).
+- Delete f31-04's ticket, what-to-do-now, from `.softfield/tasks/later/` (D6; the `rm` in `commands:`).
 
 ### Done when
 - a thread with a lead reply, listing a plan, a mock-up and an open ADR in that order: one box, linking to the thread, with three proposal links reading ADR, mock-up, plan, each with its key points, and "accept the ADR first"; the desk's number counts it once

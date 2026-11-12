@@ -66,6 +66,12 @@ def _group(db: sqlite3.Connection, key: str) -> list[Any]:
     return []
 
 
+def _box(db: sqlite3.Connection, card: str) -> Any:
+    """A card's one box on the desk (F210 D1), in whichever group holds it."""
+    (item,) = [i for g in desk(db, PROJECT, NOW) for i in g.items if i.link == f"/planning/{card}"]
+    return item
+
+
 def _tile(html: str, tile_id: str) -> str:
     found = re.search(rf'<div id="{tile_id}"(.*?)</div>\s*(?=<div id=|</section>)', html, re.S)
     assert found, tile_id
@@ -74,30 +80,30 @@ def _tile(html: str, tile_id: str) -> str:
 
 def test_each_group_shows_its_items_in_order(planning, serve):
     """A reply unanswered, the open proposals and a ripe card, each in its group, and the
-    groups in D6's order, answers before proposals (F185 D1); the thread the owner answered
-    last is not among the answers."""
+    groups in D6's order; the thread the owner answered last is not among the answers, but its
+    open proposals are a box of their own after them, linking to the thread (F210 D1)."""
     groups = _groups(_page(serve()))
-    assert list(groups) == ["ripe", "answers", "proposals", "seeds"]
-    assert _items(groups["answers"]) == [("/planning/general", "General")]
-    assert "the lead replied 60 min ago" in groups["answers"]
-    assert _items(groups["proposals"]) == [
-        ("/planning/f6/proposals/adr-20", "F6 plan: 7 tickets"),
+    assert list(groups) == ["ripe", "answers", "seeds"]
+    assert _items(groups["answers"]) == [
+        ("/planning/general", "General"),
+        ("/planning/f6", "F6 plan: 7 tickets"),
     ]
-    assert "2 key points" in groups["proposals"]
+    assert "the lead replied 60 min ago" in groups["answers"]
+    assert "2 key points" in groups["answers"]
     assert _items(groups["ripe"]) == [("/planning/m4", "The web app")]
     assert _items(groups["seeds"]) == [("/planning/f9", "Parallel developers")]
 
 
-def test_desk_returns_the_six_groups_in_order_empty_ones_too(db_path, db):
+def test_desk_returns_the_five_groups_in_order_empty_ones_too(db_path, db):
     """Without a thread or an idea card, the groups are still there, in order, empty but the
-    ripe one: without ``write_live``'s running and ready tickets, f1 is ripe too."""
+    ripe one: without ``write_live``'s running and ready tickets, f1 is ripe too. No "Proposals
+    to review": a card's proposals are in its box (F210 D1)."""
     groups = desk(db, PROJECT, NOW)
     assert [g.name for g in groups] == [
         "Didn't go through",
         "Blocked tickets",
         "To sign off",
         "Your answers wanted",
-        "Proposals to review",
         "Seeds, not asked about yet",
     ]
     assert [[i.title for i in g.items] for g in groups] == [
@@ -106,10 +112,9 @@ def test_desk_returns_the_six_groups_in_order_empty_ones_too(db_path, db):
         ["The factory measures itself", "The web app"],
         [],
         [],
-        [],
     ]
     assert _group(db, "blocked") == []
-    assert [g.items for g in desk(db, "nowhere", NOW)] == [[], [], [], [], [], []]
+    assert [g.items for g in desk(db, "nowhere", NOW)] == [[], [], [], [], []]
 
 
 def test_an_idea_card_with_a_thread_is_not_a_seed(planning, db):
@@ -153,11 +158,11 @@ def test_a_proposal_the_owner_settled_is_not_among_the_proposals(
             ),
         ),
     )
-    (item,) = _group(db, "proposals")  # the card's parts are one item (F51 D1)
+    item = _box(db, "f6")  # the card's parts are in its one box (F51 D1, F210 D1)
     names = {"adr-20": "ADR 20", "plan": "plan"}
-    assert [name for name, way in item.parts if not way] == [names[p] for p in still_open]
+    assert [p.name for p in item.parts if not p.on_its_way] == [names[p] for p in still_open]
     # a pending one stays, dashed and on its way (the owner, 2026-10-08)
-    assert [name for name, way in item.parts if way] == (
+    assert [p.name for p in item.parts if p.on_its_way] == (
         ["plan"] if kind == "approve_plan" and subject == "f6" and done is None else []
     )
 
@@ -170,8 +175,8 @@ def test_a_request_older_than_the_reply_settles_nothing(planning, db_path, db):
             conn, planning, "approve_plan", "f6", None, _at(timedelta(hours=3))
         ),
     )
-    (item,) = _group(db, "proposals")  # F51 D1: the card's two proposals are one item
-    assert item.parts == (("ADR 20", False), ("plan", False))
+    item = _box(db, "f6")  # F51 D1: the card's two proposals are in one box
+    assert [(p.name, p.on_its_way) for p in item.parts] == [("ADR 20", False), ("plan", False)]
 
 
 def test_the_factory_tile_names_the_running_ticket(planning, serve):
@@ -751,8 +756,9 @@ def test_group_headings_count_what_waits_and_add_up_to_the_desk(planning, db_pat
     for key, (name, n) in waiting.items():
         assert n > 0
         assert headings[key] == f"{name} · {n}"
-    # the fixture's card with open proposals: one item since F51 D1
-    assert headings["proposals"] == "Proposals to review · 1"
+    # the general thread, and the fixture's card with open proposals: one box (F210 D1)
+    assert headings["answers"] == "Your answers wanted · 2"
+    assert "proposals" not in headings
     # the fixture's seed, F9
     assert headings["seeds"] == "Seeds, not asked about yet · 1"
     total = sum(n for key, (_, n) in waiting.items() if key != "seeds")
@@ -826,9 +832,9 @@ def test_desk_heading_leaves_out_what_is_on_its_way(planning, db_path, serve):
         return unescape(heading[1]), unescape(tab[1])
 
     def cards_outside_seeds(html: str) -> int:
-        # F103 D1: seeds are listed but wait on no one
+        # F103 D1: seeds are listed but wait on no one; a box's proposal links are not items
         return sum(
-            len(re.findall(r"<a href=", group))
+            len(re.findall(r'<a href="[^"]*" class="desk-item', group))
             for key, group in _groups(html).items()
             if key != "seeds"
         )
@@ -873,11 +879,11 @@ def test_an_archived_thread_leaves_the_desk(planning, db_path, serve):
     archived; the Planning count drops with them."""
     client = serve()
     before = _groups(_page(client))
-    assert _items(before["answers"]) and _items(before["proposals"])
+    assert [link for link, _ in _items(before["answers"])] == ["/planning/general", "/planning/f6"]
     _archive(db_path, planning, "general", timedelta(hours=2))
     _archive(db_path, planning, "f6", timedelta(hours=1))
     after = _groups(_page(client))
-    assert "answers" not in after and "proposals" not in after
+    assert "answers" not in after
     assert _items(after["seeds"]) == [("/planning/f9", "Parallel developers")]  # not a thread
 
 
@@ -1064,28 +1070,39 @@ def test_a_sign_off_on_its_way_shows_on_the_desk(planning, db_path, db):
 def _trail(html: str) -> dict[str, str]:
     nav = re.search(r'<nav id="desk-trail".*?</nav>', html, re.S)
     assert nav, "no #desk-trail"
-    found = dict(re.findall(r'<a id="desk-(previous|next)" href="([^"?]+)', nav[0]))
+    found: dict[str, str] = {}
+    for which, link, label in re.findall(
+        r'<a id="desk-(previous|next)" href="([^"?]+)[^>]*>(.*?)</a>', nav[0], re.S
+    ):
+        found[which] = link
+        found[f"{which}_label"] = _text(label)
     found["words"] = _text(nav[0])
     return found
 
 
 def test_previous_and_next_step_through_what_waits(planning, db_path, serve):
-    """F35: the sign-off, then the general thread, then the proposal (F185 D1): the proposal is
-    the last one waiting, no Next. F103 D1: the seed F9 is not stepped through, and from its
-    page Next leads to the first one waiting; a page already done with leads to the first one
-    left."""
+    """F35: the sign-off, then the general thread, then F6's box (F185 D1, F210 D1): its thread,
+    its ADR, its plan (D2), the last one waiting, no Next. "N of M" counts boxes. F103 D1: the
+    seed F9 is not stepped through, and from its page Next leads to the first one waiting; a
+    page already done with leads to the first one left."""
     client = serve()
     ripe = _trail(_thread(client, "m4"))
     assert ripe["next"] == "/planning/general" and "previous" not in ripe
-    last = _trail(_review_page(client, "/planning/f6/proposals/adr-20"))
-    assert "next" not in last and last["previous"] == "/planning/general"
+    assert ripe["next_label"] == "Next ›"
+    adr = _trail(_review_page(client, "/planning/f6/proposals/adr-20"))
+    assert adr["previous"] == "/planning/f6" and adr["previous_label"] == "‹ Conversation"
+    assert adr["next"] == "/planning/f6/proposals/plan" and adr["next_label"] == "Next: plan ›"
+    assert "3 of 3 waiting for you" in adr["words"]
+    last = _trail(_review_page(client, "/planning/f6/proposals/plan"))
+    assert "next" not in last and last["previous"] == "/planning/f6/proposals/adr-20"
+    assert last["previous_label"] == "‹ ADR 20"
     assert "3 of 3 waiting for you" in last["words"]
     seed = _trail(_thread(client, "f9"))
     assert seed["next"] == "/planning/m4" and "previous" not in seed
     assert "3 waiting for you" in seed["words"] and " of " not in seed["words"]
     middle = _trail(_thread(client, "general"))
-    assert middle["previous"] == "/planning/m4"
-    assert middle["next"] == "/planning/f6/proposals/adr-20"
+    assert middle["previous"] == "/planning/m4" and middle["previous_label"] == "‹ Previous"
+    assert middle["next"] == "/planning/f6" and middle["next_label"] == "Next ›"
     _write(
         db_path,
         lambda conn: metrics.add_request(
@@ -2287,9 +2304,10 @@ def _revising(
 
 
 def _proposal_items(db_path: Path) -> list[Any]:
+    """F85's box (F210 D1): its conversation with its proposals."""
     conn = metrics.open_db(db_path)
     try:
-        return [i for i in _group(conn, "proposals") if i.link.startswith("/planning/f85/")]
+        return [i for i in _group(conn, "answers") if i.link.startswith("/planning/f85")]
     finally:
         conn.close()
 
@@ -2297,7 +2315,11 @@ def _proposal_items(db_path: Path) -> list[Any]:
 def _waiting_proposals(db_path: Path) -> list[Any]:
     conn = metrics.open_db(db_path)
     try:
-        return [i for i in waiting_for_you(desk(conn, PROJECT, NOW)) if "/f85/" in i.link]
+        return [
+            i
+            for i in waiting_for_you(desk(conn, PROJECT, NOW))
+            if i.link.startswith("/planning/f85")
+        ]
     finally:
         conn.close()
 
@@ -2306,15 +2328,18 @@ def _waiting_proposals(db_path: Path) -> list[Any]:
 def test_proposals_wait_for_the_lead_while_the_owners_message_does(
     planning, db_path, serve, stored
 ):
-    """An open request, or the stored message with a planner job open: the thread's proposals
-    are dashed, "being revised · …", and don't wait for the owner."""
+    """An open request, or the stored message with a planner job open: the thread's box is
+    dashed, its proposals "being revised", their links still there (F210 D1), and doesn't wait
+    for the owner."""
     client = serve()
     _revising(db_path, planning, stored=stored)
     (item,) = _proposal_items(db_path)
-    assert item.on_its_way and item.words.startswith("being revised · ")
-    group = _groups(_page(client))["proposals"]
-    assert 'class="desk-item on-its-way-item' in group
-    assert "being revised · " in _text(group)
+    assert item.on_its_way and item.words.endswith(" · 2 key points, being revised")
+    assert [p.name for p in item.parts] == ["mock-up", "plan"]
+    group = _groups(_page(client))["answers"]
+    assert '<article class="desk-box on-its-way">' in group
+    assert '<a href="/planning/f85?project=coucou" class="desk-item on-its-way-item' in group
+    assert "being revised" in _text(group)
     assert not _waiting_proposals(db_path)
 
 
@@ -2328,7 +2353,7 @@ def test_the_general_threads_proposals_are_revised_each_on_its_own(planning, db_
         metrics.add_request(conn, planning, "plan_message", "f85", value, _at(timedelta(minutes=6)))
 
     _write(db_path, write)
-    general = [i for i in _group(db, "proposals") if i.link.startswith("/planning/general/")]
+    general = [i for i in _group(db, "answers") if i.link.startswith("/planning/general/")]
     assert len(general) == 2 and not any(i.on_its_way for i in general)
     _write(
         db_path,
@@ -2336,7 +2361,7 @@ def test_the_general_threads_proposals_are_revised_each_on_its_own(planning, db_
             conn, planning, "plan_message", "general", '{"text": "Why?"}', NOW.isoformat()
         ),
     )
-    general = [i for i in _group(db, "proposals") if i.link.startswith("/planning/general/")]
+    general = [i for i in _group(db, "answers") if i.link.startswith("/planning/general/")]
     assert len(general) == 2
     assert all(i.on_its_way and i.words.startswith("being revised · ") for i in general)
 
@@ -2366,7 +2391,8 @@ def test_a_cancelled_message_leaves_the_proposals_solid(planning, db_path, serve
     assert not item.on_its_way
 
 
-def test_an_approve_on_its_way_keeps_its_own_words(planning, db_path, serve):
+def test_a_reject_on_its_way_keeps_its_proposal_on_its_way(planning, db_path, serve):
+    """While the box is revised (F100), the proposal the owner settled still says on its way."""
     serve()
     _revising(db_path, planning, proposals=(_REVIEW_PLAN,))
     _write(
@@ -2376,7 +2402,7 @@ def test_an_approve_on_its_way_keeps_its_own_words(planning, db_path, serve):
         ),
     )
     (item,) = _proposal_items(db_path)
-    assert item.words == "on its way · the runner applies it at its next pick"
+    assert [(p.name, p.on_its_way) for p in item.parts] == [("plan", True)]
 
 
 def test_the_thread_and_proposal_pages_say_being_revised(planning, db_path, serve):
@@ -2710,14 +2736,19 @@ _TEST_PROPOSAL: dict[str, Any] = {
 }
 
 
+def _card_box(db: sqlite3.Connection, card: str) -> Any:
+    (item,) = [i for i in _group(db, "answers") if i.link.startswith(f"/planning/{card}")]
+    return item
+
+
 def test_an_open_proposal_says_when_it_was_proposed(planning, db_path, db):
-    """An open proposal listed in a lead reply stored 3 minutes before now: its desk item's
-    words end with "· proposed 3 min ago", after its key points."""
+    """An open proposal listed in a lead reply stored 3 minutes before now: its card's box says
+    when the lead replied, then its key points; F108's "proposed N ago" goes from the box
+    (F210 D1)."""
     _review_at(db_path, planning, "f10", timedelta(minutes=3), _TEST_PROPOSAL)
-    items = [i for i in _group(db, "proposals") if i.link.startswith("/planning/f10/")]
-    assert len(items) == 1
-    item = items[0]
-    assert item.words.endswith("· proposed 3 min ago")
+    item = _card_box(db, "f10")
+    assert item.link == "/planning/f10"
+    assert item.words == "the lead replied 3 min ago · 1 key points"
     assert item.on_its_way is False
 
 
@@ -2732,11 +2763,8 @@ def test_a_merge_proposal_says_when_it_was_proposed(planning, db_path, db):
         "key_points": [{"n": 1, "title": "Notes", "text": "F9's notes go to F7."}],
     }
     _review_at(db_path, planning, "f11", timedelta(minutes=3), merge_proposal)
-    items = [i for i in _group(db, "proposals") if i.link.startswith("/planning/f11/")]
-    assert len(items) == 1
-    item = items[0]
-    assert "merge f9" in item.words.lower()
-    assert item.words.endswith("· proposed 3 min ago")
+    item = _card_box(db, "f11")
+    assert item.words == "the lead replied 3 min ago · merge F9 into F7 · 1 key points"
     assert item.on_its_way is False
 
 
@@ -2749,10 +2777,9 @@ def test_a_proposal_with_no_key_points_says_when_it_was_proposed(planning, db_pa
         "path": None,
     }
     _review_at(db_path, planning, "f12", timedelta(minutes=3), no_points)
-    items = [i for i in _group(db, "proposals") if i.link.startswith("/planning/f12/")]
-    assert len(items) == 1
-    item = items[0]
-    assert item.words.endswith("· proposed 3 min ago")
+    item = _card_box(db, "f12")
+    assert item.words == "the lead replied 3 min ago"
+    assert [(p.name, p.points) for p in item.parts] == [("plan", 0)]
     assert item.on_its_way is False
 
 
@@ -2779,16 +2806,14 @@ def test_a_later_lead_reply_updates_the_proposed_time(planning, db_path, db):
         )
     finally:
         conn.close()
-    items = [i for i in _group(db, "proposals") if i.link.startswith("/planning/f13/")]
-    assert len(items) == 1
-    item = items[0]
-    assert item.words.endswith("· proposed 30 min ago")
+    item = _card_box(db, "f13")
+    assert item.words == "the lead replied 30 min ago · 1 key points"
     assert item.on_its_way is False
 
 
 def test_a_pending_approval_keeps_on_its_way_without_proposed(planning, db_path, db):
-    """A proposal with a pending approval: its words are "on its way · the runner applies it
-    at its next pick", with no "proposed"."""
+    """A card's only proposal with a pending approval: its link is on its way, and the box is
+    dashed, archiving at the runner's next pick (F75), with no "proposed"."""
     _review_at(db_path, planning, "f14", timedelta(minutes=3), _TEST_PROPOSAL)
     _write(
         db_path,
@@ -2796,10 +2821,9 @@ def test_a_pending_approval_keeps_on_its_way_without_proposed(planning, db_path,
             conn, planning, "approve_plan", "f14", None, _at(timedelta(minutes=2))
         ),
     )
-    items = [i for i in _group(db, "proposals") if i.link.startswith("/planning/f14/")]
-    assert len(items) == 1
-    item = items[0]
-    assert item.words == "on its way · the runner applies it at its next pick"
+    item = _card_box(db, "f14")
+    assert [(p.name, p.on_its_way) for p in item.parts] == [("plan", True)]
+    assert item.words == "archiving at the runner's next pick"
     assert item.on_its_way is True
     assert "proposed" not in item.words
 
@@ -2900,10 +2924,9 @@ def test_the_proposed_time_does_not_change_links_order_or_count(planning, db_pat
     client = serve()
     html = _page(client)
     groups = _groups(html)
-    proposals_group = groups["proposals"]
-    items_list = _items(proposals_group)
-    # links and order unchanged
-    assert any("/planning/f15/" in link for link, _ in items_list)
+    items_list = _items(groups["answers"])
+    # the card's box, newest first
+    assert items_list[0][0] == "/planning/f15"
     # the Planning tab's count still works
     planning_tab = re.search(
         r'<a href="/planning\?project=coucou"[^>]*id="planning-tab">Planning · (\d+)</a>', html
@@ -2916,3 +2939,158 @@ def test_the_proposed_time_does_not_change_links_order_or_count(planning, db_pat
     assert desk_section is not None
     heading_text = unescape(re.sub(r"<[^>]+>", "", desk_section[1]))
     assert f"Your desk · {count}" == heading_text
+
+
+# --- one box per card (F210 D1, D9) ------------------------------------------------------------
+
+_BOX_MOCKUP: dict[str, Any] = {
+    "id": "mockup",
+    "kind": "mockup",
+    "title": "The box, drawn",
+    "path": ".softfield/cards/f30-mockup/one-box.html",
+    "key_points": [
+        {"n": 1, "title": "One box", "text": "A card is one row.", "flag": False},
+        {"n": 2, "title": "Its links", "text": "Each proposal inside.", "flag": False},
+    ],
+}
+
+
+def _desk_box(html: str, card: str) -> str:
+    """The markup of the card's box on the desk."""
+    found = re.search(
+        rf'<article class="desk-box[^"]*">\s*<a href="/planning/{card}\?.*?</article>', html, re.S
+    )
+    assert found, f"no box for {card}"
+    return found[0]
+
+
+def _box_links(box: str) -> list[tuple[str, str, str]]:
+    """A box's proposal links: (link without the query, class, text)."""
+    return [
+        (link, cls, _text(body))
+        for link, cls, body in re.findall(
+            r'<a href="([^"?]+)[^"]*" class="(part[^"]*)">(.*?)</a>', box, re.S
+        )
+    ]
+
+
+def test_a_cards_reply_and_its_proposals_are_one_box_counted_once(
+    planning, db_path, db, serve, checkout
+):
+    """A lead reply listing a plan, a mock-up and an ADR not yet on main: one box linking to
+    the thread, its proposals as links in reading order (D8), each with its key points, and
+    "accept the ADR first"; the desk counts it once."""
+    client = serve()
+    before = _desk_number(_page(client))
+    _write(
+        db_path,
+        lambda conn: _review(conn, planning, "f30", _REVIEW_PLAN, _BOX_MOCKUP, _REVIEW_ADR),
+    )
+    item = _box(db, "f30")
+    assert item.words == "the lead replied 30 min ago · 6 key points · accept the ADR first"
+    html = _page(client)
+    assert _desk_number(html) == before + 1
+    assert "Proposals to review" not in html
+    box = _desk_box(html, "f30")
+    assert _box_links(box) == [
+        ("/planning/f30/proposals/adr-20", "part", "ADR 20 3 key points"),
+        ("/planning/f30/proposals/mockup", "part", "mock-up 2 key points"),
+        ("/planning/f30/proposals/plan", "part", "plan 1 key point"),
+    ]
+    assert "accept the ADR first" in _text(box)
+    assert "proposed" not in _text(box)  # F108's words go: the box says when the lead replied
+
+
+def test_a_reply_without_proposals_is_a_box_with_no_proposal_links(planning, db_path, db, serve):
+    _lead_says(db_path, planning, "f30", "Which one?")
+    item = _box(db, "f30")
+    assert item.parts == () and not item.on_its_way
+    html = _page(serve())
+    assert '<a href="/planning/f30?project=coucou" class="desk-item">' in html
+    assert "/planning/f30/proposals/" not in html
+
+
+def test_a_box_whose_message_waits_for_the_lead_is_dashed_and_keeps_its_links(
+    planning, db_path, db, serve
+):
+    """The owner's message on the card waits for the lead: the box is dashed and not counted,
+    its proposal links still there."""
+    _write(db_path, lambda conn: _review(conn, planning, "f30", _REVIEW_PLAN, _BOX_MOCKUP))
+    client = serve()
+    before = _desk_number(_page(client))
+    _write(
+        db_path,
+        lambda conn: metrics.add_request(
+            conn, planning, "plan_message", "f30", '{"text": "Why?"}', NOW.isoformat()
+        ),
+    )
+    item = _box(db, "f30")
+    assert item.on_its_way and item not in waiting_for_you(desk(db, PROJECT, NOW))
+    html = _page(client)
+    assert _desk_number(html) == before - 1
+    box = _desk_box(html, "f30")
+    assert box.startswith('<article class="desk-box on-its-way">')
+    assert 'class="desk-item on-its-way-item' in box
+    assert [link for link, _, _ in _box_links(box)] == [
+        "/planning/f30/proposals/mockup",
+        "/planning/f30/proposals/plan",
+    ]
+
+
+def test_a_box_stays_counted_until_every_proposal_is_on_its_way(planning, db_path, db, serve):
+    """One of two proposals on its way: its link is dashed, the box solid and counted; both on
+    their way: the box is dashed and not counted."""
+    _write(db_path, lambda conn: _review(conn, planning, "f30", _REVIEW_ADR, _REVIEW_PLAN))
+    client = serve()
+    _finished(db_path, planning, "accept_adr", "f30", "20", None)
+    item = _box(db, "f30")
+    assert [p.on_its_way for p in item.parts] == [True, False]
+    assert not item.on_its_way and item in waiting_for_you(desk(db, PROJECT, NOW))
+    box = _desk_box(_page(client), "f30")
+    assert box.startswith('<article class="desk-box">')
+    assert [cls for _, cls, _ in _box_links(box)] == ["part on-its-way", "part"]
+    _finished(db_path, planning, "approve_plan", "f30", None, None)
+    item = _box(db, "f30")
+    assert item.on_its_way and item not in waiting_for_you(desk(db, PROJECT, NOW))
+    assert _desk_box(_page(client), "f30").startswith('<article class="desk-box on-its-way">')
+
+
+def test_the_overview_and_the_planning_tab_count_the_same(planning, db_path, serve):
+    """With a box holding a conversation and two proposals: the Overview's "N things wait for
+    you" is the Planning tab's number."""
+    _write(db_path, lambda conn: _review(conn, planning, "f30", _REVIEW_PLAN, _BOX_MOCKUP))
+    client = serve()
+    html = _page(client)
+    tab = re.search(r'id="planning-tab">Planning · (\d+)</a>', html)
+    assert tab
+    assert f"{tab[1]} things wait for you on your desk" in client.get("/live").text
+
+
+def test_a_ripe_cards_proposals_are_links_in_its_sign_off_row(planning, db_path, db, serve):
+    """D9: M4 is ripe and its conversation is its To sign off row (F65 D8): its replan is a
+    link in that row, and no other row names the card."""
+    replan = {**_REVIEW_PLAN, "id": "replan", "kind": "replan", "title": "M4, again"}
+    _write(db_path, lambda conn: _review(conn, planning, "m4", replan))
+    groups = desk(db, PROJECT, NOW)
+    named = [
+        (g.key, link)
+        for g in groups
+        for i in g.items
+        for link in [i.link, *(p.link for p in i.parts)]
+        if link.startswith("/planning/m4")
+    ]
+    assert named == [("ripe", "/planning/m4"), ("ripe", "/planning/m4/proposals/replan")]
+    box = _desk_box(_page(serve()), "m4")
+    assert _box_links(box) == [("/planning/m4/proposals/replan", "part", "replan 1 key point")]
+    assert "waits for your sign-off" in _text(box)
+
+
+def test_the_desk_draws_its_boxes_without_inline_styles(planning, db_path, serve):
+    """f81-04: the desk is drawn from classes. Its only style attributes are those main had:
+    the group's colour and the reply meter's width."""
+    _write(db_path, lambda conn: _review(conn, planning, "f30", _REVIEW_PLAN, _BOX_MOCKUP))
+    html = _page(serve())
+    desk_html = html.split('<section id="desk"', 1)[1].split("</section>", 1)[0]
+    assert '<article class="desk-box">' in desk_html
+    for style in re.findall(r'style="([^"]*)"', desk_html):
+        assert re.fullmatch(r"--c: var\(--[a-z0-9-]+\)|width: \d+%", style), style

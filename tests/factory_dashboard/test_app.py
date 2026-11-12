@@ -2409,6 +2409,29 @@ def test_every_page_shows_the_planning_count_on_first_paint(serve, db_path):
         assert _tab(client.get(path).text) == counted, path
 
 
+def test_a_cards_conversation_and_proposals_count_once_everywhere(serve, db_path):
+    """F210 D1: the lead's reply on F7 lists a plan and a mock-up: one box, so the Planning tab
+    says 2 (with the fixture's ripe card) on every page, and the Overview says the same."""
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        thread = metrics.planner_thread(conn, project, "f7", NOW.isoformat())
+        proposals: list[dict[str, object]] = [
+            {"id": "plan", "kind": "plan", "title": "F7 plan", "path": None, "key_points": []},
+            {"id": "mock", "kind": "mockup", "title": "F7 drawn", "path": None, "key_points": []},
+        ]
+        metrics.add_planner_message(
+            conn, thread["id"], "lead", NOW.isoformat(), "A reply.", proposals=proposals
+        )
+    finally:
+        conn.close()
+    client = serve()
+    for path in ("/", "/planning", "/tickets", "/jobs", "/live"):
+        assert _tab(client.get(path).text) == "Planning · 2", path
+    assert "2 things wait for you on your desk" in client.get("/live").text
+    assert "Proposals to review" not in client.get("/planning").text
+
+
 def test_the_top_bar_refreshes_on_any_page_without_notifications(page, serve, db_path):
     client = serve()
 

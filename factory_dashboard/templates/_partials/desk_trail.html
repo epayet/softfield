@@ -1,9 +1,11 @@
-{# F35, the owner's Previous and Next between what waits for them on the desk (2026-10-08) #}
+{# F35, the owner's Previous and Next between what waits for them on the desk (2026-10-08);
+   inside a card's box they name the step (F210 D2: "Next: mock-up", "‹ Mock-up"). One row on
+   a phone too: the count's words wrap, the steps don't #}
 {% if trail %}
-<nav id="desk-trail" aria-label="What waits for you" style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between">
-  {% set step = "display: inline-flex; align-items: center; min-height: 44px; padding: 0 14px; font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; border: 1px solid var(--rule); background: var(--plate); color: var(--fg); text-decoration: none; box-sizing: border-box" %}
-  {% if trail.previous %}<a id="desk-previous" href="{{ trail.previous }}{{ q }}" style="{{ step }}">&lsaquo; Previous</a>{% else %}<span></span>{% endif %}
-  <a href="/planning{{ q }}" style="font: 12px var(--mono); color: var(--muted); min-height: 44px; display: inline-flex; align-items: center">{{ trail.words }}</a>
-  {% if trail.next %}<a id="desk-next" href="{{ trail.next }}{{ q }}" style="{{ step }}; border-color: var(--hazard); color: var(--hazard)">Next &rsaquo;</a>{% else %}<span></span>{% endif %}
+<nav id="desk-trail" aria-label="What waits for you" style="display: flex; gap: 8px; align-items: center; justify-content: space-between">
+  {% set step = "display: inline-flex; align-items: center; flex: none; min-height: 44px; padding: 0 12px; font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; border: 1px solid var(--rule); background: var(--plate); color: var(--fg); text-decoration: none; box-sizing: border-box" %}
+  {% if trail.previous %}<a id="desk-previous" href="{{ trail.previous }}{{ q }}" style="{{ step }}">&lsaquo; {{ trail.previous_label or "Previous" }}</a>{% else %}<span></span>{% endif %}
+  <a href="/planning{{ q }}" style="font: 12px/1.25 var(--mono); color: var(--muted); min-height: 44px; min-width: 0; display: inline-flex; align-items: center; justify-content: center; text-align: center">{{ trail.words }}</a>
+  {% if trail.next %}<a id="desk-next" href="{{ trail.next }}{{ q }}" style="{{ step }}; border-color: var(--hazard); color: var(--hazard)">{{ trail.next_label or "Next" }} &rsaquo;</a>{% else %}<span></span>{% endif %}
 </nav>
 {% endif %}

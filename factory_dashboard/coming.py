@@ -8,6 +8,7 @@ import sqlite3
 from collections.abc import Collection, Mapping
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
+from typing import NamedTuple
 
 from factory_dashboard.app import ago
 from factory_dashboard.overview import CANCELLING, Running, open_changes
@@ -50,6 +51,16 @@ class Place:
     typical: timedelta | None = None  # being written: a reply's usual length
 
 
+class Part(NamedTuple):
+    """One of a card's open proposals in its desk box (F210 D1): its short name (``ADR 27``,
+    ``mock-up``), whether it is on its way, its page and how many key points it has."""
+
+    name: str
+    on_its_way: bool
+    link: str = ""
+    points: int = 0
+
+
 @dataclass(frozen=True)
 class DeskItem:
     group: str
@@ -60,8 +71,8 @@ class DeskItem:
     # longer counts as waiting for them (the owner, 2026-10-08)
     on_its_way: bool = field(default=False, kw_only=True)
     place: Place | None = field(default=None, kw_only=True)  # a waiting thread's (F84)
-    # a card's open proposals as one item (F51 D1): each part's name, and whether it is on its way
-    parts: tuple[tuple[str, bool], ...] = field(default=(), kw_only=True)
+    # a card's open proposals in its box (F51 D1, F210 D1), in reading order (F210 D8)
+    parts: tuple[Part, ...] = field(default=(), kw_only=True)
     # blocked ticket fix facts (f170-03): the card's key, the lead's first point title, and the
     # replan proposal (title + key points count) if the lead replied with one
     fix_card: str | None = field(default=None, kw_only=True)

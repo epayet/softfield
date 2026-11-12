@@ -44,10 +44,12 @@ from tests.factory_dashboard.test_planning import (
     _seven_points,
     _text,
     _thread,
+    _trail,
     _values,
     _write,
 )
 from tests.factory_dashboard.test_proposal import (
+    _REVIEW_MOCKUP,
     _f6_mockup_review,
     _hazard,
     _not_sent,
@@ -1701,3 +1703,30 @@ def test_the_review_status_shows_after_sending_on_a_phone(page, planning, db_pat
     status = page.locator("#review-status")
     assert status.is_visible()
     assert "Asked" in status.inner_text()
+
+
+def test_next_walks_a_cards_conversation_and_proposals_then_the_next_card(planning, db_path, serve):
+    """F210 D2: F30's reply lists a plan then a mock-up; its box is the desk's second, after
+    M4's sign-off. From its thread Next is the mock-up, then the plan (D8's order), then the
+    general thread, each step naming where it goes inside the card; every page of the box says
+    "2 of 4", boxes counted. A page already settled leads to the first one left."""
+    _write(db_path, lambda conn: _review(conn, planning, "f30", _REVIEW_PLAN, _REVIEW_MOCKUP))
+    client = serve()
+    thread = _trail(_thread(client, "f30"))
+    assert (thread["previous"], thread["previous_label"]) == ("/planning/m4", "‹ Previous")
+    assert thread["next"] == "/planning/f30/proposals/mockup"
+    assert thread["next_label"] == "Next: mock-up ›"
+    mockup = _trail(_review_page(client, "/planning/f30/proposals/mockup"))
+    assert (mockup["previous"], mockup["previous_label"]) == ("/planning/f30", "‹ Conversation")
+    assert (mockup["next"], mockup["next_label"]) == (
+        "/planning/f30/proposals/plan",
+        "Next: plan ›",
+    )
+    plan = _trail(_review_page(client, "/planning/f30/proposals/plan"))
+    assert plan["previous_label"] == "‹ Mock-up"
+    assert (plan["next"], plan["next_label"]) == ("/planning/general", "Next ›")
+    for trail in (thread, mockup, plan):
+        assert "2 of 4 waiting for you" in trail["words"]
+    settled = _trail(_review_page(client, "/planning/f6/proposals/old"))
+    assert settled["next"] == "/planning/m4" and "previous" not in settled
+    assert "4 waiting for you" in settled["words"] and " of " not in settled["words"]

@@ -25,6 +25,7 @@ from factory_dashboard.coming import (
     GENERAL,
     DeskGroup,
     DeskItem,
+    Part,
     Place,
     _acted_on,
     _card_titles,
@@ -221,24 +222,37 @@ def _part_name(proposal: dict[str, object]) -> str:
     return "mock-up" if kind == "mockup" else kind
 
 
-def _bundle(
-    card: str,
-    parts: list[tuple[dict[str, object], str]],
-    repo: Path | None,
-    revising: str | None = None,
-) -> DeskItem:
-    """A card's open proposals as one desk item (F51 D1): the plan's title, the parts in the
-    order they are settled (ADR first), the link to the first still to do. ``revising`` (F100):
-    the owner's message waits for the lead, who may change them; they show dashed."""
-    parts = sorted(parts, key=lambda p: p[0].get("kind") != "adr")  # stable: ADR first
-    leading = next((p for p, _ in parts if p.get("kind") in ("plan", "replan")), parts[0][0])
-    total = sum(len(points) for p, _ in parts if isinstance(points := p.get("key_points"), list))
+def _key_points(proposal: Mapping[str, object]) -> int:
+    points = proposal.get("key_points")
+    return len(points) if isinstance(points, list) else 0
+
+
+def _proposal_words(parts: list[tuple[dict[str, object], str]], repo: Path | None) -> str:
+    """What a card's open proposals add to its box: their key points in all, what a merge alone
+    joins, and "accept the ADR first" while its ADR waits on main."""
+    total = sum(_key_points(p) for p, _ in parts)
     words = f"{total} key points" if total else ""
     if len(parts) == 1 and (merged := _merge_words(parts[0][0])):  # a merge alone says what joins
         words = f"{merged} · {words}" if words else merged
     adr_open = any(p.get("kind") == "adr" and state == OPEN for p, state in parts)
     if repo is not None and adr_open and _adr_waits(repo, [p for p, _ in parts]):
         words = f"{words} · accept the ADR first" if words else "accept the ADR first"
+    return words
+
+
+def _bundle(
+    card: str,
+    parts: list[tuple[dict[str, object], str]],
+    repo: Path | None,
+    revising: str | None = None,
+) -> DeskItem:
+    """A card's open proposals as one desk item (F51 D1): the plan's title, the parts in reading
+    order (F210 D8), each with its page and key points, the link to the first still to do.
+    ``revising`` (F100): the owner's message waits for the lead, who may change them; they show
+    dashed."""
+    parts = reading_order(parts, lambda p: p[0])
+    leading = next((p for p, _ in parts if p.get("kind") in ("plan", "replan")), parts[0][0])
+    words = _proposal_words(parts, repo)
     todo = next((p for p, state in parts if state == OPEN), None)
     on_its_way = todo is None or revising is not None
     shown = parts[0][0] if todo is None else todo
@@ -252,23 +266,24 @@ def _bundle(
         _NEXT_PICK if todo is None else revising or words or str(shown.get("kind") or ""),
         f"/planning/{card}/proposals/{shown['id']}",
         on_its_way=on_its_way,
-        parts=tuple((_part_name(p), state == ON_ITS_WAY) for p, state in parts),
+        parts=tuple(
+            Part(
+                _part_name(p),
+                state == ON_ITS_WAY,
+                f"/planning/{card}/proposals/{p['id']}",
+                _key_points(p),
+            )
+            for p, state in parts
+        ),
     )
 
 
-def _open_proposals(
-    conn: sqlite3.Connection,
-    project_id: int,
-    now: datetime,
-    known: set[str] | None = None,
-    repo: Path | None = None,
-    revising: dict[str, str] | None = None,
-) -> list[DeskItem]:
-    """The proposals in each thread's latest lead message that lists some, still open, on
-    threads not archived. A card's make one item (F51 D1); the general thread's, one each.
-    ``revising`` (F100): the cards whose owner's message waits for the lead, with the words;
-    their open proposals are on their way too."""
-    revising = revising or {}
+def _listed(
+    conn: sqlite3.Connection, project_id: int, known: set[str] | None = None
+) -> list[tuple[str, datetime, list[tuple[dict[str, object], str]]]]:
+    """Each thread not archived whose latest lead message listing proposals still has some
+    open or on their way: its card, when the lead wrote it, and those proposals with their
+    state, as listed. Oldest message first."""
     rows = conn.execute(
         "SELECT t.card, m.at, m.proposals FROM planner_threads t"
         " JOIN planner_messages m ON m.id = ("
@@ -280,53 +295,130 @@ def _open_proposals(
     requests = conn.execute(
         "SELECT * FROM owner_requests WHERE project_id = ? ORDER BY id", (project_id,)
     ).fetchall()
-    items = []
+    found = []
     for row in rows:
         since = _when(row["at"])
         later = [r for r in requests if _when(r["created"]) > since]
-        card_parts: list[tuple[dict[str, object], str]] = []
+        parts: list[tuple[dict[str, object], str]] = []
         for proposal in json.loads(row["proposals"]):
             if not isinstance(proposal, dict) or not proposal.get("id"):
                 continue
             if proposal.get(APPLIED) or _gone_merge(proposal, known):
                 continue
             state = proposal_state(proposal, row["card"], later)
-            if state not in (OPEN, ON_ITS_WAY):
-                continue
-            if row["card"] != GENERAL:
-                card_parts.append((proposal, state))
-                continue
-            points = proposal.get("key_points")
-            words = f"{len(points)} key points" if isinstance(points, list) and points else ""
-            if merged := _merge_words(proposal):
-                words = f"{merged} · {words}" if words else merged
-            asked = state == OPEN and row["card"] in revising
-            on_its_way = state == ON_ITS_WAY or asked
-            proposed = (
-                f" · proposed {ago(now - since)} ago" if state == OPEN and not on_its_way else ""
+            if state in (OPEN, ON_ITS_WAY):
+                parts.append((proposal, state))
+        if parts:
+            found.append((str(row["card"]), since, parts))
+    return found
+
+
+def _general_items(
+    since: datetime,
+    parts: list[tuple[dict[str, object], str]],
+    now: datetime,
+    revising: str | None,
+) -> list[DeskItem]:
+    """The general thread's open proposals, one item each (F51 D1): each takes its own press."""
+    items = []
+    for proposal, state in parts:
+        points = _key_points(proposal)
+        words = f"{points} key points" if points else ""
+        if merged := _merge_words(proposal):
+            words = f"{merged} · {words}" if words else merged
+        asked = state == OPEN and revising is not None
+        on_its_way = state == ON_ITS_WAY or asked
+        if state == ON_ITS_WAY:
+            words = _NEXT_PICK
+        elif revising is not None:
+            words = revising
+        else:  # F108: when the lead proposed it
+            words = f"{words or proposal.get('kind') or ''} · proposed {ago(now - since)} ago"
+        items.append(
+            DeskItem(
+                "answers",
+                str(proposal.get("title") or proposal["id"]),
+                words,
+                f"/planning/{GENERAL}/proposals/{proposal['id']}",
+                on_its_way=on_its_way,
             )
-            items.append(
-                DeskItem(
-                    "proposals",
-                    str(proposal.get("title") or proposal["id"]),
-                    _NEXT_PICK
-                    if state == ON_ITS_WAY
-                    else revising[row["card"]]
-                    if asked
-                    else words or str(proposal.get("kind") or ""),
-                    f"/planning/{row['card']}/proposals/{proposal['id']}",
-                    on_its_way=on_its_way,
-                )
-            )
-            # Append "proposed" time to the last item for this proposal
-            if proposed:
-                items[-1] = replace(items[-1], words=items[-1].words + proposed)
-        if card_parts:
-            item = _bundle(row["card"], card_parts, repo, revising.get(row["card"]))
-            if any(state == OPEN for _, state in card_parts):
-                item = replace(item, words=item.words + f" · proposed {ago(now - since)} ago")
-            items.append(item)
+        )
     return items
+
+
+def _open_proposals(
+    conn: sqlite3.Connection,
+    project_id: int,
+    now: datetime,
+    known: set[str] | None = None,
+    repo: Path | None = None,
+    revising: dict[str, str] | None = None,
+) -> list[DeskItem]:
+    """The proposals in each thread's latest lead message that lists some, still open, on
+    threads not archived: a card's make one item (F51 D1), the general thread's one each. The
+    Overview's notices read them; the desk puts them in their card's box (F210 D1).
+    ``revising`` (F100): the cards whose owner's message waits for the lead, with the words;
+    their open proposals are on their way too."""
+    revising = revising or {}
+    items = []
+    for card, since, parts in _listed(conn, project_id, known):
+        if card == GENERAL:
+            items += _general_items(since, parts, now, revising.get(card))
+            continue
+        item = _bundle(card, parts, repo, revising.get(card))
+        if any(state == OPEN for _, state in parts):
+            item = replace(item, words=item.words + f" · proposed {ago(now - since)} ago")
+        items.append(item)
+    return items
+
+
+def _with_proposals(
+    ripe: list[DeskItem],
+    answers: list[DeskItem],
+    listed: list[tuple[str, datetime, list[tuple[dict[str, object], str]]]],
+    repo: Path | None,
+    now: datetime,
+    revising: Mapping[str, str],
+) -> tuple[list[DeskItem], list[DeskItem]]:
+    """F210 D1, D9: each card's open proposals join the row holding its conversation, ripe or
+    an answer wanted, as one box: the conversation's words, then the proposals' (F108's
+    "proposed N ago" goes: the words say when the lead replied). Dashed when the conversation
+    is, or every proposal. A card with proposals and no conversation row is a box of its own,
+    linking to its thread, after the answered ones, newest first; so are the general thread's,
+    one each."""
+    cards = {card: parts for card, _, parts in listed if card != GENERAL}
+
+    def joined(item: DeskItem) -> DeskItem:
+        card = item.link.removeprefix("/planning/")
+        parts = cards.pop(card, None) if "/" not in card else None
+        if parts is None:
+            return item
+        bundle = _bundle(card, parts, repo)
+        said = _proposal_words(parts, repo)
+        if card in revising and "being revised" not in item.words:  # F100: the lead may change them
+            said = f"{said}, being revised" if said else "being revised"
+        return replace(
+            item,
+            words=" · ".join(filter(None, [item.words, said])),
+            parts=bundle.parts,
+            on_its_way=item.on_its_way or all(p.on_its_way for p in bundle.parts),
+        )
+
+    ripe = [joined(item) for item in ripe]
+    answers = [joined(item) for item in answers]
+    alone: list[DeskItem] = []
+    for card, since, parts in reversed(listed):
+        if card == GENERAL:
+            alone += _general_items(since, parts, now, revising.get(card))
+        elif card in cards:
+            bundle = _bundle(card, parts, repo, revising.get(card))
+            words = bundle.words
+            if any(state == OPEN for _, state in parts) and not bundle.on_its_way:
+                words += f" · proposed {ago(now - since)} ago"
+            alone.append(replace(bundle, group="answers", words=words, link=f"/planning/{card}"))
+    answered = [a for a in answers if not a.on_its_way]
+    dashed = [a for a in answers if a.on_its_way]
+    return ripe, answered + alone + dashed
 
 
 def _closing(conn: sqlite3.Connection, project_id: int, card: str, known: set[str] | None) -> bool:
@@ -629,27 +721,48 @@ def desk_trail(
     conn: sqlite3.Connection, project: str, now: datetime, path: str
 ) -> dict[str, object]:
     """F35, the owner's Previous and Next between what waits for them: the pages of the desk's
-    items still waiting, in desk order (what didn't go through stays on /planning). On one of
-    them, its neighbours; on a page already done with, the first one left."""
-    links = list(
-        dict.fromkeys(
-            item.link
-            for item in waiting_for_you(desk(conn, project, now))
-            if item.link.startswith("/planning/")
-        )
-    )
-    if path in links:
-        at = links.index(path)
+    items still waiting, in desk order (what didn't go through stays on /planning), each box's
+    own page then its proposals not on their way (F210 D2). "N of M" counts boxes. A step inside
+    a box names where it goes; one to another box says Previous or Next. On a page already
+    done with, Next is the first one left."""
+    steps: dict[str, tuple[int, str]] = {}  # each page: its box's number and its name
+    boxes = 0
+    for item in waiting_for_you(desk(conn, project, now)):
+        if not item.link.startswith("/planning/") or item.link in steps:
+            continue
+        boxes += 1
+        steps[item.link] = (boxes, "conversation")
+        for part in item.parts:
+            if not part.on_its_way and part.link not in steps:
+                steps[part.link] = (boxes, part.name)
+    links = list(steps)
+    if path not in steps:
         return {
-            "previous": links[at - 1] if at > 0 else None,
-            "next": links[at + 1] if at + 1 < len(links) else None,
-            "words": f"{at + 1} of {len(links)} waiting for you",
+            "previous": None,
+            "next": links[0] if links else None,
+            "previous_label": "Previous",
+            "next_label": "Next",
+            "words": f"{boxes} waiting for you" if links else "Nothing else waits for you",
         }
+    at = links.index(path)
+    box = steps[path][0]
+    previous = links[at - 1] if at > 0 else None
+    after = links[at + 1] if at + 1 < len(links) else None
+    inside_before = previous is not None and steps[previous][0] == box
+    inside_after = after is not None and steps[after][0] == box
     return {
-        "previous": None,
-        "next": links[0] if links else None,
-        "words": f"{len(links)} waiting for you" if links else "Nothing else waits for you",
+        "previous": previous,
+        "next": after,
+        "previous_label": _capital(steps[previous][1])
+        if previous and inside_before
+        else "Previous",
+        "next_label": f"Next: {steps[after][1]}" if after and inside_after else "Next",
+        "words": f"{box} of {boxes} waiting for you",
     }
+
+
+def _capital(name: str) -> str:
+    return name[:1].upper() + name[1:]
 
 
 def _ripe_takes_its_thread(
@@ -679,14 +792,13 @@ def _ripe_takes_its_thread(
 def desk(
     conn: sqlite3.Connection, project: str, now: datetime, *, line: dict[str, Any] | None = None
 ) -> list[DeskGroup]:
-    """What waits for the owner (D6), in six groups in this order, empty ones included: what
+    """What waits for the owner (D6), in five groups in this order, empty ones included: what
     didn't go through first (F31 D9), blocked tickets (F106 D1), sign-offs, conversations
-    (F185 D1), proposals, and seeds."""
+    (F185 D1), each card's with its open proposals in one box (F210 D1), and seeds."""
     project_id = metrics.find_project(conn, project)
     if project_id is None:
         refusals: list[DeskItem] = []
         ripe: list[DeskItem] = []
-        proposals: list[DeskItem] = []
         answers: list[DeskItem] = []
         seeds: list[DeskItem] = []
         blocked: list[DeskItem] = []
@@ -694,19 +806,20 @@ def desk(
         titles = _card_titles(conn, project_id)
         refusals = _refused(conn, project_id, titles)
         repo = _repo(conn, project)
+        known = _known_cards(repo)
         revising = _revising(conn, project_id, project, now)
         ripe = _ripe(conn, project, now, line=line)
         answers = _answers_wanted(conn, project_id, project, titles, now)
         ripe, answers = _ripe_takes_its_thread(ripe, answers, revising)
-        ripe = _acted_on(conn, project_id, ripe)
-        proposals = _open_proposals(conn, project_id, now, _known_cards(repo), repo, revising)
-        known = _known_cards(repo)
         closing = {
             a.link.removeprefix("/planning/")
             for a in answers
             if not a.on_its_way
             and _closing(conn, project_id, a.link.removeprefix("/planning/"), known)
         }
+        listed = _listed(conn, project_id, known)
+        ripe, answers = _with_proposals(ripe, answers, listed, repo, now, revising)
+        ripe = _acted_on(conn, project_id, ripe)
         answers = _acted_on(conn, project_id, answers, closing)
         seeds = _acted_on(conn, project_id, _seeds(conn, project_id))
         blocked = _acted_on(conn, project_id, _blocked(conn, project_id))
@@ -715,7 +828,6 @@ def desk(
         DeskGroup("blocked", "Blocked tickets", "--hazard", blocked),
         DeskGroup("ripe", "To sign off", "--qwen", ripe),
         DeskGroup("answers", "Your answers wanted", "--hazard", answers),
-        DeskGroup("proposals", "Proposals to review", "--opus", proposals),
         DeskGroup("seeds", "Seeds, not asked about yet", "--ink-2", seeds),
     ]
 

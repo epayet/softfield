@@ -194,20 +194,21 @@
       {# the owner acted on it: on its way, dashed orange, until the runner's next pick #}
       {# F84 D5, kept by F74: a thread waiting for the lead shows its place; the one reply being written, in the planner's colour #}
       {% set writing = item.place is not none and item.place.place == 0 %}
+      {# F210 D1: a card's box, its conversation's link, then its proposals' links in reading order (D8) #}
+      {% if item.parts %}<article class="desk-box{% if item.on_its_way %} on-its-way{% endif %}">{% endif %}
       <a href="{{ item.link }}{{ q }}" class="desk-item{% if item.on_its_way %} on-its-way-item{% if writing %} writing{% endif %}{% endif %}">
         {% if writing %}<span class="writing-label">Writing now</span>{% endif %}
         <span class="desk-title">{{ item.title }}</span>
-        {% if item.parts | length > 1 %}
-        <span class="parts">
-          {% for name, way in item.parts %}<span class="part{% if way %} on-its-way{% endif %}">{% if not loop.first %}<span class="part-arrow">→ </span>{% endif %}{{ name }}{% if way %} · on its way{% endif %}</span>{% endfor %}
-        </span>
-        {% endif %}
         {% if item.words %}<span class="desk-words">{{ item.words }}</span>{% endif %}
         {% if writing and item.place.typical %}
         <span class="writing-bar" title="time spent against a typical reply"><span style="width: {{ [100, (item.place.elapsed / item.place.typical * 100) | int] | min }}%"></span></span>
         <span class="writing-elapsed">{{ item.place.elapsed | ago }} of about {{ item.place.typical | ago }} (a reply's usual length)</span>
         {% endif %}
       </a>
+      {% if item.parts %}
+        <span class="parts">{% for part in item.parts %}<a href="{{ part.link }}{{ q }}" class="part{% if part.on_its_way %} on-its-way{% endif %}">{{ part.name }}{% if part.points %}<small>{{ part.points }} key point{{ "" if part.points == 1 else "s" }}</small>{% endif %}{% if part.on_its_way %}<small>on its way</small>{% endif %}</a>{% endfor %}</span>
+      </article>
+      {% endif %}
       {% endif %}
       {% endfor %}
     </div>

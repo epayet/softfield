@@ -1291,6 +1291,19 @@ textarea { max-height: 60vh; overflow-y: auto; }
 .parts > .part { font: 600 10.5px var(--mono); letter-spacing: .06em; text-transform: uppercase; padding: 1px 6px; background: var(--bay); color: var(--ink-2); border: 1px solid var(--rule); }
 .parts > .part.on-its-way { color: var(--hazard); border: 1px dashed var(--hazard); }
 .part-arrow { color: var(--muted); }
+/* F210 D1: a card's box, its conversation's link, then its proposals' links. The corner ticks
+   are ornament, in ink; dashed orange is the box on its way, as a .desk-item's. */
+.desk-box { position: relative; display: flex; flex-direction: column; background: var(--plate); border: 1px solid var(--rule); border-left: 3px solid var(--ink-2); }
+.desk-box::before, .desk-box::after { content: ""; position: absolute; right: -1px; width: 8px; height: 8px; border: 0 solid var(--ink-2); pointer-events: none; }
+.desk-box::before { top: -1px; border-width: 2px 2px 0 0; }
+.desk-box::after { bottom: -1px; border-width: 0 2px 2px 0; }
+.desk-box.on-its-way { border: 1px dashed var(--hazard); }
+.desk-box > .desk-item, .desk-box > .desk-item.on-its-way-item { border: 0; background: none; }
+.desk-box > .parts { margin: 0; padding: 0 9px 8px 12px; }
+.desk-box .parts > .part { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 8px; color: var(--fg); box-sizing: border-box; }
+.desk-box .parts > .part small { font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--muted); }
+.desk-box .parts > .part.on-its-way small { color: var(--hazard); }
+.desk-box.on-its-way .parts > .part { border: 1px dashed var(--hazard); }
 .blocked-ticket { display: flex; flex-direction: column; gap: 6px; }
 .blocked-ticket .fix { position: relative; padding: 8px 10px 9px 14px; background: var(--plate); border: 1px solid var(--rule); }
 .fix-hazard { position: absolute; left: 0; top: 0; bottom: 0; width: 5px; background: repeating-linear-gradient(135deg, var(--hazard) 0 5px, var(--hazard-ink) 5px 10px); }
