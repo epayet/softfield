@@ -814,6 +814,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** a card whose plan read the code and named what each page did wrong, plus a ticket that gave the test's shape (find the form by its select, D3), gave a clean first attempt. The session report flagged the ticket as "edited existing tests" though it only appended one; telling appended from changed tests would spare reviews a false lead.
 - **Decisions affected:** none.
 
+### F226 (2026-11-12): the ⋯ menu drops "Open the card" ([review](../reviews/f226-the-open-card-s-from-the.md))
+
+- **Q1:** one developer ticket at difficulty 1 (one template macro, two named tests edited as the ticket listed). Qwen merged it on attempt 1: 18 min of model time, 8 min of gates, about 0.9M tokens in. No checkpoint. Review round 1: two nits, reported only. Score 9.
+- **Q3:** no Claude in the build beyond the planner ($0.92); see the review's numbers.
+- **Q5:** see the review's numbers.
+- **Anything else:** the ticket named the one trap (an empty `<template>` leaves white space that `:empty` doesn't hide), and the model avoided it. The before and after pictures show a page as it loads, so a change behind a tap (a menu, a dialog) shows nothing in them; this is worth a ticket if menu cards recur.
+- **Decisions affected:** none.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.
