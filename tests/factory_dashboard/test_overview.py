@@ -1543,6 +1543,37 @@ def test_empty_queue_shows_message_once(serve):
     assert count == 1, f"expected 1, got {count}"
 
 
+def test_tickets_and_a_queued_job_count_the_tickets(queue_client, db_path):
+    """F227 review: with tickets waiting, a queued job doesn't take over the count."""
+    conn = metrics.open_db(db_path)
+    try:
+        proj = conn.execute("SELECT id FROM projects WHERE name = ?", (PROJECT,)).fetchone()["id"]
+        metrics.queue_job(conn, proj, "checkpoint", "f1", "A checkpoint", NOW.isoformat())
+        conn.commit()
+    finally:
+        conn.close()
+    for path in ("/", "/live"):
+        queue_section = section(queue_client.get(path).text, "queue")
+        assert queue_section.startswith("Queue 7 tickets waiting. Next in line"), path
+        assert "job waiting" not in queue_section and "Checkpoint:" in queue_section, path
+
+
+def test_only_a_due_review_shows_its_row_and_no_count(queue_client, db_path):
+    """F227 Done when: a review due with no ticket or job waiting is still Next in line, under
+    no "0 tickets" and no "The queue is empty."."""
+    conn = metrics.open_db(db_path)
+    try:
+        conn.execute("UPDATE tickets SET state = 'done' WHERE state = 'ready'")
+        proj = conn.execute("SELECT id FROM projects WHERE name = ?", (PROJECT,)).fetchone()["id"]
+        metrics.upsert_milestone(conn, proj, "f1", status=metrics.REVIEW_DUE)
+        conn.commit()
+    finally:
+        conn.close()
+    queue_section = section(queue_client.get("/").text, "queue")
+    assert re.search(r"\b1 review F1 · a batch\b", queue_section.split("Next in line", 1)[1])
+    assert queue_section.startswith("Queue Next in line"), queue_section
+
+
 def test_queue_with_queued_jobs_says_how_many(queue_client, db_path):
     """f9-20: when there are no tickets but queued jobs exist,
     the queue's first line names the jobs waiting by count, never says "0 tickets"

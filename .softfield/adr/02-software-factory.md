@@ -822,6 +822,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** the ticket named the one trap (an empty `<template>` leaves white space that `:empty` doesn't hide), and the model avoided it. The before and after pictures show a page as it loads, so a change behind a tap (a menu, a dialog) shows nothing in them; this is worth a ticket if menu cards recur.
 - **Decisions affected:** none.
 
+### F227 (2026-11-12): the Queue panel drops "Reorder on the board" ([review](../reviews/f227-the-reorder-from-the-board-link.md))
+
+- **Q1:** one developer ticket at difficulty 1 (one partial, four named test edits). Qwen merged it on attempt 1: 27 min of model time, 8 min of gates, about 1.5M tokens in. No checkpoint. Review round 1: one blocking (the count's branches swapped: "1 job waiting." with 143 tickets queued), fixed by Claude with two tests; one should-fix (the Done-when case untested), fixed with them; one nit reported. Score 6.
+- **Q3:** no Claude in the build beyond the planner ($0.82); see the review's numbers.
+- **Q5:** see the review's numbers.
+- **Anything else:** green gates hid an unrequested change inside the block the model moved, because the tests it edited covered only what it removed. Comparing the before and after pictures caught it in seconds, where the after picture against the mock-up alone could have passed for "close". Keep comparing before against after in UI reviews; if this recurs, tell developers to change nothing else inside a block they move.
+- **Decisions affected:** none.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.

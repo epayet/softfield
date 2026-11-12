@@ -1,10 +1,11 @@
 <section id="queue" class="panel">
   <h2>Queue</h2>
-  {% if queue or queued_jobs or next %}
-    {% if queued_jobs %}
-    <p><span class="count">{{ queued_jobs | length }} <small>{{ "job" if queued_jobs | length == 1 else "jobs" }} waiting.</small></span></p>
-    {% else %}
+  {% if queue or queued_jobs or lane or next %}
+    {# the tickets' count first, as before F227; the jobs' only when no ticket waits #}
+    {% if queue %}
     <p><span class="count">{{ queue | length }} <small>{{ "ticket" if queue | length == 1 else "tickets" }} waiting.</small></span></p>
+    {% elif queued_jobs %}
+    <p><span class="count">{{ queued_jobs | length }} <small>{{ "job" if queued_jobs | length == 1 else "jobs" }} waiting.</small></span></p>
     {% endif %}
     <h3>Next in line</h3>
     <ol class="belt">
