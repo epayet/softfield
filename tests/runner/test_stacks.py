@@ -234,6 +234,32 @@ def test_a_failed_update_of_the_checkouts_commit_wins_over_the_containers(stack,
     assert found.url_port == 8123  # the old containers still serve
 
 
+def test_a_failed_update_carries_the_commit_it_failed_on(stack, docker):
+    commit = _checkout(stack)
+    docker.answers = {"ps": _ps(_container())}
+    assert stacks.state(stack).commit == ""
+    _result(stack, commit, ok=False)
+    assert stacks.state(stack).commit == commit
+
+
+def test_services_are_the_names_compose_prints(stack, docker):
+    docker.answers = {"--services": Result(0, "web\ndb\n\n", "")}
+    assert stacks.services(stack) == ["web", "db"]
+    args = docker.calls[-1][0]
+    assert args[:3] == ["compose", "-p", stack.project]
+    assert args[3:] == ["config", "--services"]
+
+
+def test_services_are_empty_when_docker_fails(stack, docker):
+    docker.answers = {"--services": Result(1, "", "no such file")}
+    assert stacks.services(stack) == []
+
+
+def test_services_drop_anything_that_is_not_a_service_name(stack, docker):
+    docker.answers = {"--services": Result(0, "web\n--since=0\nweb db\n../x\n", "")}
+    assert stacks.services(stack) == ["web"]
+
+
 def test_an_old_or_good_update_result_says_nothing(stack, docker):
     commit = _checkout(stack)
     docker.answers = {"ps": _ps(_container())}

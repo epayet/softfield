@@ -86,6 +86,7 @@ class StackState:
     url_port: int | None = None  # the main service's published host port
     since: str = ""
     detail: str = ""
+    commit: str = ""  # of an UPDATE_FAILED: the commit the update failed on
 
 
 def _docker(args: Sequence[str], cwd: Path, env: Mapping[str, str]) -> Result:
@@ -295,6 +296,15 @@ def logs(stack: Stack, service: str | None = None, lines: int = 200) -> str:
     return result.out if result.code == 0 else result.err or result.out
 
 
+def services(stack: Stack) -> list[str]:
+    """The names of the stack's services; empty when Docker couldn't say."""
+    result = _compose(stack, "config", "--services")
+    if result.code != 0:
+        return []
+    names = (line.strip() for line in result.out.splitlines())
+    return [n for n in names if _SERVICE.fullmatch(n)]
+
+
 def _containers(out: str) -> list[dict[str, Any]]:
     """``ps --format json``: one array before Compose 2.21, one object a line since."""
     text = out.strip()
@@ -369,7 +379,11 @@ def state(stack: Stack) -> StackState:
     since = str(main.get("CreatedAt", "")) if main else ""
     if failed := _failed_update(stack):
         return StackState(
-            UPDATE_FAILED, port, str(failed.get("at", "")), str(failed.get("tail", ""))
+            UPDATE_FAILED,
+            port,
+            str(failed.get("at", "")),
+            str(failed.get("tail", "")),
+            str(failed.get("commit", "")),
         )
     if not containers:
         return StackState(STOPPED)
