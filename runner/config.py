@@ -291,6 +291,34 @@ def project_shots(repo: Path) -> Shots | None:
     return shots
 
 
+@dataclass(frozen=True)
+class Run:
+    """``[run]`` in ``.softfield/project.toml``: the main service of the project's Docker Compose
+    stack, and the page its link opens (ADR 46 item 2)."""
+
+    service: str
+    path: str = "/"
+
+
+def project_run(repo: Path) -> Run | None:
+    """The project's ``[run]``; None without one: it has no stack the Projects page can run."""
+    try:
+        data = tomllib.loads((repo / PROJECT_TOML).read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return None
+    except tomllib.TOMLDecodeError as exc:
+        raise ConfigError(f"{PROJECT_TOML}: {exc}") from exc
+    table = data.get("run")
+    if table is None:
+        return None
+    if not isinstance(table, dict):
+        raise ConfigError(f"[run] in {PROJECT_TOML}: not a table")
+    service = table.get("service")
+    if not isinstance(service, str) or not service:
+        raise ConfigError(f"[run] in {PROJECT_TOML}: service, the main service, is missing")
+    return Run(service=service, path=str(table.get("path", "/")))
+
+
 def suite_args(checks: Checks) -> list[str]:
     """pytest's arguments for the whole suite: its folders, on its workers."""
     workers = ["-n", str(checks.test_workers)] if checks.test_workers > 0 else []
