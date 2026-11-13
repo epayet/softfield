@@ -4630,7 +4630,8 @@ def park_review(s: Session, milestone: str) -> bool:
     now, its row parks until the hold ends, as a checkpoint's does, and the queue goes on with
     the developers' tickets. Returns whether it parked. A parked review is no stop: its rounds
     stay in ``State.review_counts``, for it to go on from the round it was at."""
-    if (hold := claude_hold(s, now())) is None:
+    in_lane = milestone in lane_reviews(s.repo, s.state)  # may use both reserves (F242 D3)
+    if (hold := claude_hold(s, now(), owners=in_lane)) is None:
         return False
     _park_support(s, REVIEW, milestone, hold)
     return True
@@ -5621,11 +5622,17 @@ def _queue_due_review(s: Session) -> None:
     for row in rows:
         if row.kind == REVIEW and row.subject not in due:
             finish_row(s, row)
-    if not due or any(row.kind in SUPPORT for row in rows):
+    # a fast-lane card's review is queued first, held only by a job of its own card (F242 D2)
+    lane = [key for key in lane_reviews(s.repo, s.state) if not _holds_review(rows, key)]
+    if lane:
+        key = lane[0]
+    elif due and not any(row.kind in SUPPORT for row in rows):
+        key = due[0]
+    else:
         return
     if s.project_id is not None:
-        _record(s, metrics.upsert_milestone, s.project_id, due[0], status=metrics.REVIEW_DUE)
-    enqueue(s, REVIEW, due[0], review_reason(due[0]))
+        _record(s, metrics.upsert_milestone, s.project_id, key, status=metrics.REVIEW_DUE)
+    enqueue(s, REVIEW, key, review_reason(key))
 
 
 def apply_owner_requests(s: Session) -> None:
@@ -5742,8 +5749,10 @@ def work_queue(
         lane = lane_with_escalated(
             s.repo, ready, load_dir(s.tasks_dir("escalated"), s.cfg.default_max_diff)
         )
+        if reviews:  # a fast-lane card's review goes with the lane (F242 D1)
+            lane = lane | set(lane_reviews(s.repo, s.state))
         if lane_only:  # the round's first pass (F235 D1): nothing but the lane
-            rows = [r for r in rows if r.kind in dispatch.GOES_WITH and r.subject in lane]
+            rows = [r for r in rows if r.kind in dispatch.LANE_KINDS and r.subject in lane]
             task = task if task is not None and task.id in lane else None
         tickets = [] if task is None else [_dispatch_ticket(s, task, ready)]
         paused_by_owner = s.state.owner_pause is not None
@@ -5813,11 +5822,16 @@ def _runnable_rows(
     support = any(row.kind in SUPPORT for row in rows)
     mine = {t.id for t in ready}
     gone = {row.subject for row in rows} - {p.stem for p in s.tasks_dir("ready").glob("*.md")}
+    lane = lane_reviews(s.repo, s.state) if reviews and support else []  # F242 D2
     return [
         row
         for row in rows
         if (row.kind != ESCALATION or escalate)
-        and (row.kind != REVIEW or (reviews and not support))
+        and (
+            row.kind != REVIEW
+            or (reviews and not support)
+            or (row.subject in lane and not _holds_review(rows, row.subject))
+        )
         and (row.kind != DIRECTION or row.subject in mine | gone)
     ]
 
@@ -6157,6 +6171,32 @@ def lane_with_escalated(repo: Path, ready: list[Task], escalated: list[Task]) ->
     return lane | reserve_cards(repo, escalated) & {t.id for t in escalated}
 
 
+def lane_reviews(repo: Path, state: State) -> list[str]:
+    """The full keys of the due reviews of cards in the fast lane (F242 D1), in milestone order:
+    marked ``**Fast lane:** yes`` and not on its way out (still ready or building), whether or
+    not they have a ready ticket. Their reviews go with the lane."""
+    from runner.milestone import card, due_reviews  # runner.milestone imports this module
+
+    found = []
+    for key in due_reviews(repo, state):
+        doc = milestone_file(repo, "cards", key)
+        if not doc.is_file():
+            continue
+        parsed = card(key, doc.read_text(encoding="utf-8"))
+        if parsed.reserve and parsed.state in ("ready", "building"):
+            found.append(key)
+    return found
+
+
+def _holds_review(rows: Sequence[dispatch.Queued], key: str) -> bool:
+    """Whether a checkpoint or an escalation of the card ``key`` is queued: its review waits."""
+    short = short_key(key)
+    return any(
+        row.kind in SUPPORT and (row.subject == key or row.subject.startswith(f"{short}-"))
+        for row in rows
+    )
+
+
 def _uses_reserve(s: Session, task: Task) -> bool:
     """Whether ``task`` may use Claude's reserve without the owner's switch (`reserve_cards`)."""
     return task.id in reserve_cards(s.repo, load_dir(s.tasks_dir("ready"), s.cfg.default_max_diff))
@@ -6204,6 +6244,7 @@ def dry_run_plan(cfg: Config) -> None:
     claude = _claude_windows_from(cfg, readings, refusals, at)
     windows = _pick_windows(state, claude, queued, at)
     lane = lane_with_escalated(cfg.repo, ready, load_dir(tasks / "escalated", cfg.default_max_diff))
+    lane |= set(lane_reviews(cfg.repo, state))  # a lane card's review (F242 D1)
     by_the_owner = state.owner_pause is not None
     # A parked row says its own wait in the list: only a parked ticket limits the other rows. A
     # ticket's line goes by what `choose_ticket` goes by, a parked row's limit included.

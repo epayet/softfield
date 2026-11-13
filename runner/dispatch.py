@@ -48,6 +48,7 @@ COST = 0.0  # a job's share of Claude's windows isn't learned yet (`loop.LEAD_CO
 SUPPORT_RESERVE = "seven_day"  # the week's reserve is the support roles' (ADR 15 item 4)
 LANE_RESERVES = frozenset({"seven_day", "five_hour"})  # the fast lane's (ADR 35 item 4)
 GOES_WITH = (ESCALATION, DIRECTION)  # a ticket's own work: it joins the lane with it
+LANE_KINDS = (ESCALATION, DIRECTION, REVIEW)  # the queued rows the lane takes (F242 D1)
 UNKNOWN_KIND = "unknown kind of job"
 PAUSED = "paused by you"  # the owner paused the factory (f5-18): every line but planning waits
 
@@ -139,8 +140,8 @@ def plan(
     (``first``'s ticket ids) on top. While the owner pauses the factory (ADR 22 item 5), every
     one waits for them but a planner job, which keeps its own wait (its ⚑, f6-14)."""
     rows = sorted(queued, key=lambda q: (_rank(q.kind), _at(q.created), q.id or 0))
-    lane_rows = [q for q in rows if q.kind in GOES_WITH and q.subject in first]
-    rows = [q for q in rows if not (q.kind in GOES_WITH and q.subject in first)]
+    lane_rows = [q for q in rows if q.kind in LANE_KINDS and q.subject in first]
+    rows = [q for q in rows if not (q.kind in LANE_KINDS and q.subject in first)]
     lane = [_queued_line(q, windows, now, LANE_RESERVES) for q in lane_rows]
     lane += [_ticket_line(t, windows, now, lane=True) for t in tickets if t.id in first]
     tickets = [t for t in tickets if t.id not in first]

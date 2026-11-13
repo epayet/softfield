@@ -6661,6 +6661,91 @@ def test_a_due_review_is_queued_with_its_reason(repo, monkeypatch):
     assert row["done"] is None  # the review loop finishes it
 
 
+def _f9_review_due(repo: Path, *, fast_lane: bool, state: str = "building") -> None:
+    """F9's tickets are all done, F10 has one ready; F9's card says whether it is in the lane."""
+    _two_milestones(repo)
+    git(repo, "mv", ".softfield/tasks/ready/f9-02-last.md", ".softfield/tasks/done/f9-02-last.md")
+    lane = " · **Fast lane:** yes" if fast_lane else ""
+    card = repo / ".softfield" / "cards" / "f9.md"
+    card.parent.mkdir(parents=True, exist_ok=True)
+    card.write_text(f"# Milestone F9: a card\n\n> **State:** {state} · **Priority:** 1{lane}\n")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "f9 done")
+
+
+def test_a_lane_cards_due_review_is_in_the_lane_only_while_it_is_on_the_way_in(repo):
+    """F242 D1: marked fast lane and still ready or building."""
+    _f9_review_due(repo, fast_lane=True)
+    s = loop.open_session(_config(repo), None)
+    assert loop.lane_reviews(repo, s.state) == ["f9"]
+    loop.close_session(s)
+    (repo / ".softfield" / "cards" / "f9.md").write_text(
+        "# Milestone F9: a card\n\n> **State:** needs sign-off · **Fast lane:** yes\n"
+    )
+    git(repo, "commit", "-q", "-am", "f9 on its way out")
+    s = loop.open_session(_config(repo), None)
+    assert loop.lane_reviews(repo, s.state) == []
+    loop.close_session(s)
+
+
+def test_a_lane_cards_review_is_queued_past_another_cards_checkpoint_but_not_its_own(repo):
+    """F242 D2: another card's checkpoint or escalation doesn't hold it; one of its own does."""
+    _f9_review_due(repo, fast_lane=True)
+    s = loop.open_session(_config(repo), None)
+    loop.enqueue(s, "checkpoint", "f10", "after f10-01")
+    loop.enqueue(s, "escalation", "f10-01-next", "failed")
+    loop._queue_due_review(s)
+    assert [(r.kind, r.subject) for r in loop.open_rows(s) if r.kind == "review"] == [
+        ("review", "f9")
+    ]
+    rows = loop._runnable_rows(s, [], escalate=True, reviews=True)
+    assert {r.subject for r in rows} == {"f10", "f10-01-next", "f9"}
+    loop.close_session(s)
+
+
+def test_a_lane_cards_review_waits_for_a_checkpoint_or_escalation_of_its_own_card(repo):
+    _f9_review_due(repo, fast_lane=True)
+    s = loop.open_session(_config(repo), None)
+    loop.enqueue(s, "escalation", "f9-02-last", "failed")
+    loop._queue_due_review(s)
+    assert [r.kind for r in loop.open_rows(s)] == ["escalation"]
+    assert loop._holds_review(loop.open_rows(s), "f9")
+    assert not loop._holds_review(loop.open_rows(s), "f90")
+    loop.close_session(s)
+
+
+def test_a_cards_out_of_the_lane_review_keeps_the_old_rule(repo):
+    _f9_review_due(repo, fast_lane=False)
+    s = loop.open_session(_config(repo), None)
+    loop.enqueue(s, "checkpoint", "f10", "after f10-01")
+    loop._queue_due_review(s)
+    assert [r.kind for r in loop.open_rows(s)] == ["checkpoint"]
+    loop.close_session(s)
+
+
+def test_a_lane_cards_review_parks_with_both_reserves_and_another_cards_with_one(repo, monkeypatch):
+    """F242 D3: `claude_hold` is asked with ``owners`` for the lane card only."""
+    asked: list[bool] = []
+
+    def hold(s, at, *, owners=False):
+        asked.append(owners)
+
+    monkeypatch.setattr(loop, "claude_hold", hold)
+    _f9_review_due(repo, fast_lane=True)
+    s = loop.open_session(_config(repo), None)
+    assert loop.park_review(s, "f9") is False
+    assert loop.park_review(s, "f10") is False
+    loop.close_session(s)
+    assert asked == [True, False]
+
+
+def test_dry_run_lists_a_lane_cards_review_first_in_the_lane(repo, capsys):
+    _f9_review_due(repo, fast_lane=True)
+    out = _dry_run(repo, capsys)
+    assert "-> review F9: runnable, F9's tickets are all done" in out
+    assert "next: review F9" in out
+
+
 def test_a_parked_checkpoint_survives_a_restart_as_a_row_and_runs_after_its_reset(
     repo, fake_model, fake_clock, monkeypatch
 ):

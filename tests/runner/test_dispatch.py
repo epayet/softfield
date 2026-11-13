@@ -320,6 +320,17 @@ def test_a_direction_or_escalation_for_a_lane_ticket_goes_with_it():
     assert got == Pick("direction", "f8-05", "why direction f8-05")
 
 
+def test_a_lane_cards_review_goes_before_every_other_job_and_ticket():
+    """F242 D1: the review whose subject is in ``first`` is a lane row; others keep their place."""
+    queued = [*LANE_QUEUE, _row("review", "f191-card", minutes_ago=1)]
+    tickets = [_lead("f8-02", 2), _dev("f9-01", 3)]
+    lines = plan(queued, tickets, OPEN, NOW, first={"f191-card"})
+    assert _order(lines)[0] == ("review", "f191-card")
+    assert _order(lines)[1:] == _order(plan(LANE_QUEUE, tickets, OPEN, NOW))
+    got = pick(queued, tickets, OPEN, NOW, first={"f191-card"})
+    assert got == Pick("review", "f191-card", "why review f191-card")
+
+
 def test_inside_the_lane_the_order_the_caller_gives():
     """ADR 35 item 3: the board's order (`pick_next`'s), not lead before developer."""
     tickets = [_dev("f90-01", 3), _lead("f142-01", 9), _lead("f8-02", 1)]
