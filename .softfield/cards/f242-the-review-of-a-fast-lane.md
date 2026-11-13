@@ -1,6 +1,6 @@
 # Milestone F242: A fast-lane card's review goes in the fast lane
 
-> **State:** ready · **Priority:** 1 · **Area:** factory
+> **State:** ready · **Priority:** 1 · **Area:** factory · **Fast lane:** yes
 > Planted by the owner on 2026-11-11.
 
 ## Notes
