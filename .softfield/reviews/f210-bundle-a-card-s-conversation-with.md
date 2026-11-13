@@ -1,5 +1,7 @@
 # F210 review: one box per card on the desk, and one reading path through its proposals
 
+- **Status:** done, signed off by the owner on 2026-11-13.
+
 ## Sign-off sheet
 
 ### 1. What changed

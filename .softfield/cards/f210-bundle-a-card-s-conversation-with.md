@@ -1,6 +1,7 @@
 # Milestone F210: One box per card on the desk, and one reading path through its proposals
 
-> **State:** ready · **Priority:** 1 · **Area:** factory · **Fast lane:** yes
+> **State:** done · **Priority:** 1 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-13. Base: git tag `f210-bundle-a-card-s-conversation-with-start`. Report: [`.softfield/reviews/f210-bundle-a-card-s-conversation-with.md`](../reviews/f210-bundle-a-card-s-conversation-with.md).
 > Planted by the owner on 2026-11-03.
 
 ## Notes
