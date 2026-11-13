@@ -32,3 +32,12 @@ For browser tests, follow `tests/factory_dashboard/test_line.py`: its `page` fix
 - with moves not sent, no fetch, the moves stay, and the plate says "Refresh held: your moves aren't sent yet"
 - after a failed fetch the plate says "Not updated since HH:MM: the dashboard doesn't answer", and the next good one clears it
 - the listed `tests:` pass, and fail without the change
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: ruff)
+attempts: 3
+tokens: 5824471
+logs: .softfield/var/runs/20261112-062815/f209-03-field-refreshes-itself
+```
