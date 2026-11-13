@@ -1,6 +1,7 @@
 # Milestone F224: Approve a plan to go first in line, in the fast lane
 
-> **State:** ready · **Priority:** 6 · **Area:** factory
+> **State:** done · **Priority:** 6 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-13. Base: git tag `f224-i-want-to-be-able-to-2-start`. Report: [`.softfield/reviews/f224-i-want-to-be-able-to-2.md`](../reviews/f224-i-want-to-be-able-to-2.md).
 > Planted by the owner on 2026-11-05.
 
 ## Notes

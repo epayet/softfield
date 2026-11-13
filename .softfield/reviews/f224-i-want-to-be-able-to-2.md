@@ -1,6 +1,6 @@
 # Review: F224, Approve a plan to go first in line, in the fast lane
 
-- **Status:** round 1 done, waiting for your sign-off.
+- **Status:** done, signed off by the owner on 2026-11-13.
 
 ## Sign-off sheet
 
