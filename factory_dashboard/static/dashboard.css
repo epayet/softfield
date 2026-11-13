@@ -1180,6 +1180,30 @@ body.has-order-bar main { padding-bottom: 120px; }
   border: 0; padding: 10px 16px; margin-top: 10px; }
 .projects-page .send-order:disabled { background: var(--plate); color: var(--muted); }
 .projects-page .on-its-way { color: var(--hazard); font-size: 13px; margin-left: 10px; }
+/* A project's app row (F239 D6, .softfield/cards/f239-mockup/projects-run.html): a machine plate
+   under the facts, its lamp and word the state; red only for a crash or a failed update */
+.app-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-top: 6px;
+  padding: 6px 8px 6px 12px; background: var(--plate); border: 1px solid var(--rule); position: relative; }
+.app-row::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--stripe); }
+.app-row .app-tag { font: 600 10.5px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.app-row .app-state { display: inline-flex; align-items: center; gap: 7px; font: 700 13px var(--display);
+  letter-spacing: .06em; text-transform: uppercase; }
+.app-row .app-lamp { width: 10px; height: 10px; border: 1px solid var(--rule); background: var(--floor); }
+.app-row.running .app-lamp { background: var(--good); box-shadow: 0 0 6px var(--good); }
+.app-row.broken { border-color: var(--fail); }
+.app-row.broken .app-lamp { background: var(--fail); box-shadow: 0 0 6px var(--fail); }
+.app-row.broken .app-state { color: var(--fail); }
+.app-row .app-detail { font: 12px var(--mono); color: var(--ink-2); flex-basis: 100%; overflow-wrap: anywhere; }
+.app-row .app-error { font: 12px var(--mono); color: var(--fail); flex-basis: 100%; }
+.app-row .app-acts { display: flex; gap: 8px; margin-left: auto; flex-wrap: wrap; align-items: center; }
+.app-row .way:empty { display: none; }
+.app-row.none { background: transparent; border-style: dashed; }
+.app-row.none::before { display: none; }
+/* Run or Stop pressed: the row waits, on its way, until its answer swaps it */
+.app-row .app-wait { display: none; }
+.app-row.htmx-request { border: 1px dashed var(--hazard); }
+.app-row.htmx-request .app-wait { display: inline; }
+.app-row.htmx-request .app-acts > button { visibility: hidden; }
 
 /* Mock-up gone message */
 .gone { background: var(--bay); border: 1px dashed var(--rule); padding: 10px 12px; font-size: 14px; color: var(--ink-2); }

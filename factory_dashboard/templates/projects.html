@@ -57,6 +57,18 @@
             <a href="/board?project={{ card.name | urlencode }}">Board</a>
             <a href="/?project={{ card.name | urlencode }}">Overview</a>
           </div>
+          {% if card.app %}{% with row = card.app %}{% include "_partials/app_row.html" %}{% endwith %}
+          {% elif card.stack_plant %}
+          <div class="app-row none">
+            <span class="app-tag">App</span><span class="muted">No stack yet: the factory can't run it.</span>
+            <div class="app-acts">
+              <button type="button" class="btn plain" hx-post="/requests" hx-target="next .app-sent" hx-swap="innerHTML"
+                hx-vals='{{ {"kind": "plant", "project": card.name, "value": card.stack_plant} | tojson }}'
+                hx-on::before-request="this.hidden = true; this.nextElementSibling.textContent = 'On its way: the runner plants it at its next pick'">Plant a card for a stack</button>
+              <div class="app-sent way"></div>
+            </div>
+          </div>
+          {% endif %}
           {% if asked %}<span class="way">on its way · at the runner's next pick</span>{% endif %}
         </div>
       </li>
@@ -81,10 +93,13 @@
       .sort((a, b) => a[0] - b[0] || a[1] - b[1]).map((r) => r[2]);
     const sameAsShown = () => order().every((name, i) => name === rows[i].dataset.name);
     form.addEventListener("input", () => { send.disabled = sameAsShown(); });
+    // the app rows' buttons post from inside this form too: their events are theirs (f239-05)
     form.addEventListener("htmx:configRequest", (event) => {
+      if (event.target !== form) return;
       event.detail.parameters.value = JSON.stringify(order());
     });
-    form.addEventListener("htmx:beforeRequest", () => {
+    form.addEventListener("htmx:beforeRequest", (event) => {
+      if (event.target !== form) return;
       for (const input of form.querySelectorAll("input[type=number]")) { input.classList.add("asked"); input.disabled = true; }
       send.disabled = true;
       document.getElementById("order-sent").textContent = "On its way: the runner takes it at its next pick";

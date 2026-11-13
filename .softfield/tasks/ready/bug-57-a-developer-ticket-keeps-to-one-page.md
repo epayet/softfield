@@ -17,8 +17,9 @@ Pre-flight refuses a developer ticket whose `files:` span two pages' modules, so
 
 ### Context
 Read `def preflight` in `runner/tasks.py`, and the routing rule from F143 D6 in `runner/instructions/task-writing.md`: one of the modules under `factory_dashboard/`, its test file and its template go to the developer; two pages' modules stay the lead's. Nothing checks it yet: f170-04 listed `factory_dashboard/tickets.py` and `factory_dashboard/planning.py`, spent 7.3M local tokens on three failed attempts, then escalated.
-- Add a problem, as `TESTS_ONLY` is one, when a ticket that isn't `agent: lead` lists two or more of `factory_dashboard/planning.py`, `factory_dashboard/coming.py`, `factory_dashboard/thread.py`, `factory_dashboard/merges.py`, `factory_dashboard/proposal.py` and `factory_dashboard/tickets.py`.
+- Add a problem, as `TESTS_ONLY` is one, when a ticket that isn't `agent: lead` lists two or more pages' modules, such as `factory_dashboard/planning.py`, `factory_dashboard/coming.py`, `factory_dashboard/thread.py`, `factory_dashboard/merges.py`, `factory_dashboard/proposal.py` and `factory_dashboard/tickets.py` (see the f239-05 line below for which modules count).
 - f210-02 (2026-11-10) was the next: a developer ticket listing `factory_dashboard/planning.py` and `factory_dashboard/thread.py`, three attempts with no edit (26–28 tool calls each, the third under a direction), done by the lead in one session. This check would have refused it.
+- f239-05 (2026-11-13) was the third, and a fixed list of five would not have caught it: a developer ticket listing `factory_dashboard/projects.py` and `factory_dashboard/stacks_routes.py`, three failed attempts and 12.2M local tokens, done by the lead. So a page's module is any `factory_dashboard/*.py` that holds `router = APIRouter()` (read from the file, so a new page counts at once), not only the five above.
 - Checked against main on 2026-11-09 (F231): `runner/tasks.py` names none of these modules yet.
 - `test_preflight` cases in `tests/runner/test_tasks.py` are the worked example; the problem's words name the modules and say the ticket is the lead's.
 
@@ -26,5 +27,6 @@ Read `def preflight` in `runner/tasks.py`, and the routing rule from F143 D6 in 
 - a developer ticket listing `factory_dashboard/tickets.py` and `factory_dashboard/planning.py`: the problem, naming both
 - the same ticket with `agent: lead`: no problem
 - a developer ticket listing one of them, its template and its test file: no problem
+- a developer ticket listing `factory_dashboard/projects.py` and `factory_dashboard/stacks_routes.py`: the problem, naming both
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)

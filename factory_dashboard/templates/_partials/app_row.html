@@ -1,13 +1,32 @@
-{# A project's app (ADR 46 item 8, F239 D5): its state in words, and Run or Stop, which post
-   to the dashboard at once and swap this row for the one they answer. Words and buttons only:
-   f239-05 draws it as the mock-up. #}
-<div class="app-row">
-  <span class="app-state" role="status">{{ word }}</span>
-  {% if app.detail %}<span class="app-detail">{{ app.detail }}</span>{% endif %}
-  {% if error %}<p class="app-error" role="alert">{{ error }}</p>{% endif %}
-  {% if up %}
-  <button type="button" class="btn" hx-post="/projects/{{ name | urlencode }}/stop" hx-target="closest .app-row" hx-swap="outerHTML">Stop</button>
-  {% else %}
-  <button type="button" class="btn go" hx-post="/projects/{{ name | urlencode }}/run" hx-target="closest .app-row" hx-swap="outerHTML">Run</button>
+{# A project's app (ADR 46 item 8, F239 D5 and D6, .softfield/cards/f239-mockup/projects-run.html):
+   its state in words beside its lamp, Open while it runs, Run or Stop, which post to the dashboard
+   at once and swap this row for the one they answer, Logs, and for a crashed app or a failed
+   update a plant that asks for a fix. `row` is `stacks_routes.AppRow`. #}
+{% set broken = row.fix != "" %}
+{% set docker = row.app.word != "no docker" %}{# without Docker, its reason and nothing to press #}
+<div class="app-row{% if row.running %} running{% elif broken %} broken{% endif %}">
+  <span class="app-tag">App</span>
+  <span class="app-state" role="status"><span class="app-lamp" aria-hidden="true"></span>{{ row.word }}</span>
+  <div class="app-acts">
+    {% if row.running and row.app.url_port %}
+    <a class="btn go" href="http://{{ request.url.hostname }}:{{ row.app.url_port }}{{ row.path }}">Open ↗ :{{ row.app.url_port }}</a>
+    {% endif %}
+    {% if row.up %}
+    <button type="button" class="btn plain" hx-post="/projects/{{ row.name | urlencode }}/stop" hx-target="closest .app-row" hx-swap="outerHTML" hx-indicator="closest .app-row">Stop</button>
+    {% elif docker %}
+    <button type="button" class="btn go" hx-post="/projects/{{ row.name | urlencode }}/run" hx-target="closest .app-row" hx-swap="outerHTML" hx-indicator="closest .app-row">Run</button>
+    {% endif %}
+    {% if docker %}<a class="btn plain" href="/projects/{{ row.name | urlencode }}/logs">Logs</a>{% endif %}
+    {% if broken %}
+    <button type="button" class="btn plain" hx-post="/requests" hx-target="next .app-sent" hx-swap="innerHTML"
+      hx-vals='{{ {"kind": "plant", "project": row.name, "value": row.fix} | tojson }}'
+      hx-on::before-request="this.hidden = true; this.nextElementSibling.textContent = 'On its way: the runner plants it at its next pick'">Plant a card to fix it</button>
+    <div class="app-sent way"></div>
+    {% endif %}
+  </div>
+  {% if docker %}<span class="app-wait way">{{ "stopping…" if row.up else "starting…" }}</span>{% endif %}
+  {% if row.app.detail or row.commit %}
+  <span class="app-detail">{{ row.summary }}{% if row.app.detail and row.commit %} · {% endif %}{% if row.commit %}main {{ row.commit[:7] }}{% endif %}</span>
   {% endif %}
+  {% if row.error %}<span class="app-error" role="alert">{{ row.error }}</span>{% endif %}
 </div>

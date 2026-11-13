@@ -7,10 +7,13 @@ once, without waiting for the runner.
 - The guard is ``/requests``'s (ADR 18 item 3), checked before anything else: without it, 403,
   and Docker never runs.
 - A name not in the registry, a project without ``[run]`` and Softfield itself answer 404.
-- The answer is ``_partials/app_row.html``, re-drawn from ``state``.
+- The answer is ``_partials/app_row.html``, re-drawn from ``state``; the Projects page draws
+  the same partial from the same ``row_of`` (f239-05).
 """
 
+import json
 import sqlite3
+from dataclasses import dataclass
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
@@ -20,8 +23,16 @@ from factory_dashboard.app import Db, templates
 from factory_dashboard.requests import from_the_dashboard
 from runner import metrics, stacks
 from runner.config import ConfigError
+from runner.gitops import Git, GitError
 
 router = APIRouter()
+
+FIX_LOG_LINES = 30  # of the app's logs, in the plant that asks for a fix (D7)
+# What a project without a stack can plant (D7)
+STACK_PLANT = (
+    "Give {name} a Docker Compose stack the Projects page can run "
+    "(ADR 46; what it needs: runner/instructions/run-stack.md)"
+)
 
 # The state's word on the page, beside its colour (D6)
 STATE_WORDS = {
@@ -32,8 +43,74 @@ STATE_WORDS = {
     stacks.UPDATE_FAILED: "Update failed",
     stacks.NO_DOCKER: "Docker isn't available",
 }
-# The states whose app has containers up: they offer Stop; the others offer Run
-UP = (stacks.RUNNING, stacks.STARTING, stacks.CRASHED, stacks.UPDATE_FAILED)
+# The states whose app is up: they offer Stop; the others, a crashed app too, offer Run
+# (`up -d` brings a crashed app back; a failed update left the old containers running)
+UP = (stacks.RUNNING, stacks.STARTING, stacks.UPDATE_FAILED)
+# The states that offer a card to fix them (D7)
+BROKEN = (stacks.CRASHED, stacks.UPDATE_FAILED)
+
+
+def plant_value(text: str) -> str:
+    """A ``plant`` request's value, in the Plant box's shape: planted, not asked."""
+    return json.dumps({"text": text, "ask": False})
+
+
+@dataclass(frozen=True)
+class AppRow:
+    """What ``_partials/app_row.html`` draws for one project's app."""
+
+    name: str
+    app: stacks.StackState
+    path: str  # the app's URL path, from ``[run]``: Open is the page's host, ``url_port`` and it
+    commit: str = ""  # main's commit the app is on (an update failed: the one it failed on)
+    fix: str = ""  # the "Plant a card to fix it" value, for a crashed app or a failed update
+    error: str = ""  # why a press failed
+
+    @property
+    def word(self) -> str:
+        return STATE_WORDS.get(self.app.word, self.app.word)
+
+    @property
+    def up(self) -> bool:
+        return self.app.word in UP
+
+    @property
+    def running(self) -> bool:
+        return self.app.word == stacks.RUNNING
+
+    @property
+    def summary(self) -> str:
+        """The detail's last line: a failed update's is the end of its build's output."""
+        lines = self.app.detail.strip().splitlines()
+        return lines[-1] if lines else ""
+
+
+def _checkout_commit(stack: stacks.Stack) -> str:
+    try:
+        return Git(stack.checkout).head() if stack.checkout.is_dir() else ""
+    except (GitError, OSError):
+        return ""
+
+
+def fix_text(name: str, stack: stacks.Stack, app: stacks.StackState, commit: str) -> str:
+    """D7: what happened, ``state``'s detail and the last log lines, for a planner that can't
+    run Docker."""
+    what = "crashed" if app.word == stacks.CRASHED else "didn't update"
+    head = f"{name}'s app {what}"
+    if app.since:
+        head += f" at {app.since}"
+    if commit:
+        head += f" on main {commit}"
+    lines = stacks.logs(stack, lines=FIX_LOG_LINES).rstrip("\n")
+    return f"{head}: find out why and fix it\n\n{app.detail}\n\n```\n{lines}\n```"
+
+
+def row_of(name: str, stack: stacks.Stack, error: str = "") -> AppRow:
+    """The project's app row, from its state now."""
+    app = stacks.state(stack)
+    commit = app.commit or (_checkout_commit(stack) if app.word in BROKEN else "")
+    fix = plant_value(fix_text(name, stack, app, commit)) if app.word in BROKEN else ""
+    return AppRow(name, app, stack.path, commit, fix, error)
 
 
 def stack_of(conn: sqlite3.Connection, name: str) -> stacks.Stack | None:
@@ -50,17 +127,8 @@ def stack_of(conn: sqlite3.Connection, name: str) -> stacks.Stack | None:
 
 def app_row(request: Request, name: str, stack: stacks.Stack, error: str = "") -> HTMLResponse:
     """The project's app row, from its state now; ``error`` says why a press failed."""
-    app = stacks.state(stack)
     return templates.TemplateResponse(
-        request,
-        "_partials/app_row.html",
-        {
-            "name": name,
-            "app": app,
-            "word": STATE_WORDS.get(app.word, app.word),
-            "up": app.word in UP,
-            "error": error,
-        },
+        request, "_partials/app_row.html", {"row": row_of(name, stack, error)}
     )
 
 

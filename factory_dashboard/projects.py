@@ -16,7 +16,8 @@ from fastapi.responses import HTMLResponse
 
 from factory_dashboard.app import Db, Now, Project, render
 from factory_dashboard.overview import running_jobs
-from runner import metrics
+from factory_dashboard.stacks_routes import STACK_PLANT, AppRow, plant_value, row_of, stack_of
+from runner import metrics, stacks
 from runner.requests import PROJECT_ORDER
 
 router = APIRouter()
@@ -120,6 +121,9 @@ class ProjectCard:
     done: int
     for_you: int  # its Planning desk's items waiting for the owner
     paused: str | None = None  # `metrics.SETTING_UP` while `softfield init`'s setup runs
+    app: AppRow | None = None  # its app (F239 D6); None without `[run]`, and for Softfield
+    softfield: bool = False  # Softfield's own repo: it runs from `live`, with no app row
+    stack_plant: str = ""  # the "Plant a card for a stack" value, for a project without one
 
 
 @dataclass(frozen=True)
@@ -150,6 +154,9 @@ def project_cards(conn: sqlite3.Connection, now: datetime) -> list[ProjectCard]:
                 (row.name,),
             ).fetchall()
         )
+        stack = stack_of(conn, row.name)
+        # `stack_for` is None for Softfield as for a project without `[run]`: ask the repo
+        softfield = stack is None and row.repo is not None and stacks._is_softfield(Path(row.repo))
         cards.append(
             ProjectCard(
                 name=row.name,
@@ -161,6 +168,11 @@ def project_cards(conn: sqlite3.Connection, now: datetime) -> list[ProjectCard]:
                 done=states.get("done", 0),
                 for_you=len(waiting_for_you(desk(conn, row.name, now))),
                 paused=row.paused,
+                app=row_of(row.name, stack) if stack else None,
+                softfield=softfield,
+                stack_plant=""
+                if stack or softfield or not row.repo
+                else plant_value(STACK_PLANT.format(name=row.name)),
             )
         )
     return cards

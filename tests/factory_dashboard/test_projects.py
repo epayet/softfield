@@ -1,12 +1,28 @@
 import json
 import re
+from html import unescape
 
 import pytest
 
-from runner import metrics
+from factory_dashboard import stacks_routes
+from runner import config, metrics, stacks
+from runner.stacks import Result
+from tests.factory_dashboard import test_stacks_routes
 from tests.factory_dashboard.conftest import NOW, PROJECT
 from tests.factory_dashboard.test_planning import _open as open_page
+from tests.factory_dashboard.test_stacks_routes import (
+    APP,
+    HTMX,
+    _crashed,
+    _register,
+    _repo,
+    _running,
+)
 from tests.layout import DISPLAY, PHONE, layout_problems
+
+# The app's fixtures: Docker replaced, and coaster-ranker registered with a `[run]`
+docker = test_stacks_routes.docker
+app_repo = test_stacks_routes.app_repo
 
 
 def section(html: str, name: str) -> str:
@@ -245,3 +261,186 @@ def test_a_project_being_set_up_says_so(projects_client, db_path):
         conn.close()
     order = section(projects_client.get("/projects").text, "projects-order")
     assert "ducks Being set up on its computer; the runner takes it once that's done." in order
+
+
+# --- each plate's app (F239 D6, f239-05) -----------------------------------------------------
+
+
+def plate(html: str, name: str) -> str:
+    """The HTML of project ``name``'s plate on the Projects page."""
+    key = re.escape(name)
+    match = re.search(rf'<li class="proj"[^>]*data-key="{key}"[^>]*>(.*?)</li>', html, re.S)
+    assert match, f"no plate for {name}"
+    return match.group(1)
+
+
+def words(html: str) -> str:
+    return " ".join(unescape(re.sub(r"<[^>]+>", " ", html)).split())
+
+
+def plant_of(html: str, button: str) -> dict[str, str]:
+    """The ``hx-vals`` of the plant button whose text is ``button``, read as htmx reads it."""
+    match = re.search(rf"hx-vals='([^']*)'[^>]*>{re.escape(button)}</button>", html)
+    assert match, f"no button {button!r}"
+    found: dict[str, str] = json.loads(match.group(1))
+    return found
+
+
+def test_a_running_app_shows_running_stop_open_and_logs(projects_client, docker, app_repo):
+    docker.ps = _running()
+    row = plate(projects_client.get("/projects").text, APP)
+    assert "App Running" in words(row)
+    assert f'hx-post="/projects/{APP}/stop"' in row
+    assert f'hx-post="/projects/{APP}/run"' not in row
+    # the page's host, the main service's published port, `[run]`'s path ("/" by default)
+    assert '<a class="btn go" href="http://127.0.0.1:8123/">' in row
+    assert f'href="/projects/{APP}/logs">Logs</a>' in row
+    assert 'target="_blank"' not in row
+    assert "Plant a card" not in row
+
+
+def test_open_follows_the_run_tables_path(projects_client, docker, app_repo):
+    toml = app_repo / ".softfield" / "project.toml"
+    toml.write_text(toml.read_text() + 'path = "/app/"\n', encoding="utf-8")
+    docker.ps = _running()
+    row = plate(projects_client.get("/projects").text, APP)
+    assert 'href="http://127.0.0.1:8123/app/"' in row
+
+
+def test_a_stopped_app_shows_stopped_and_run_without_open(projects_client, docker, app_repo):
+    docker.ps = ""  # no containers
+    row = plate(projects_client.get("/projects").text, APP)
+    assert "App Stopped" in words(row)
+    assert f'hx-post="/projects/{APP}/run"' in row
+    assert f'hx-post="/projects/{APP}/stop"' not in row
+    assert "Open" not in row
+    assert "Plant a card" not in row
+
+
+def test_a_crashed_app_shows_why_run_logs_and_a_fix_plant(projects_client, docker, app_repo):
+    docker.ps = _crashed()
+    row = plate(projects_client.get("/projects").text, APP)
+    text = words(row)
+    assert "App Crashed" in text
+    assert f"{APP}-web-1: Exited (1) 3 minutes ago" in text  # `state`'s detail
+    assert 'class="app-row broken"' in row
+    assert f'hx-post="/projects/{APP}/run"' in row
+    assert f'hx-post="/projects/{APP}/stop"' not in row
+    assert "Open" not in row
+    assert "Logs" in text
+    plant = plant_of(row, "Plant a card to fix it")
+    assert plant["kind"] == "plant" and plant["project"] == APP
+    assert json.loads(plant["value"])["text"].startswith(f"{APP}'s app crashed")
+
+
+@pytest.fixture
+def update_failed(docker, monkeypatch):
+    """`state` as it reads a failed update's result file (runner/stacks.py's tests cover that)."""
+    tail = "Step 4/9 : RUN pip install\nERROR: no matching distribution for nope==9"
+    failed = stacks.StackState(
+        stacks.UPDATE_FAILED, 8123, "2026-11-12T14:02:00+00:00", tail, "a8c3fae1d2b4c5e6"
+    )
+    monkeypatch.setattr(stacks, "state", lambda stack: failed)
+    docker.logs = "".join(f"web-1  | line {n}\n" for n in range(1, 31))
+    return failed
+
+
+def test_a_failed_update_shows_its_commit_and_the_fix_plant(
+    projects_client, docker, app_repo, update_failed
+):
+    row = plate(projects_client.get("/projects").text, APP)
+    text = words(row)
+    assert "App Update failed" in text
+    assert "ERROR: no matching distribution for nope==9 · main a8c3fae" in text
+    assert "Step 4/9" not in text  # only the build output's last line on the row
+    assert "Plant a card to fix it" in text
+
+
+def test_the_fix_plant_holds_the_project_the_commit_and_the_last_30_log_lines(
+    projects_client, docker, app_repo, update_failed, db_path
+):
+    plant = plant_of(plate(projects_client.get("/projects").text, APP), "Plant a card to fix it")
+    value = json.loads(plant["value"])
+    assert value["ask"] is False
+    head, detail, logs = value["text"].split("\n\n")
+    assert head == (
+        f"{APP}'s app didn't update at 2026-11-12T14:02:00+00:00 on main a8c3fae1d2b4c5e6:"
+        " find out why and fix it"
+    )
+    assert detail == update_failed.detail
+    assert logs.splitlines()[0] == logs.splitlines()[-1] == "```"
+    assert logs.splitlines()[1:-1] == [f"web-1  | line {n}" for n in range(1, 31)]
+    assert next(c for c in docker.calls if "logs" in c)[-2:] == ["--tail", "30"]
+    # posted as the button posts it, it is the Plant box's request
+    response = projects_client.post("/requests", data=plant, headers=HTMX)
+    assert response.status_code == 200
+    conn = metrics.open_db(db_path)
+    try:
+        rows = conn.execute("SELECT kind, value FROM owner_requests").fetchall()
+    finally:
+        conn.close()
+    assert [(r[0], json.loads(r[1])) for r in rows] == [("plant", value)]
+
+
+def test_a_project_without_run_offers_a_stack_plant_and_no_run(
+    projects_client, docker, db_path, tmp_path
+):
+    _register(db_path, APP, _repo(tmp_path / "Coaster Ranker", run=False))
+    row = plate(projects_client.get("/projects").text, APP)
+    assert "No stack yet: the factory can't run it." in words(row)
+    assert f'/projects/{APP}/run"' not in row and "Logs" not in row
+    plant = plant_of(row, "Plant a card for a stack")
+    assert plant["kind"] == "plant" and plant["project"] == APP
+    assert json.loads(plant["value"]) == {
+        "text": f"Give {APP} a Docker Compose stack the Projects page can run"
+        " (ADR 46; what it needs: runner/instructions/run-stack.md)",
+        "ask": False,
+    }
+    assert docker.calls == []  # no stack, no Docker
+
+
+def test_a_plant_press_is_its_own_request_not_the_orders(page, projects_client, db_path, tmp_path):
+    """The plate's buttons sit inside the order form: a plant sends a plant, says so, and leaves
+    the places editable."""
+    _register(db_path, APP, _repo(tmp_path / "Coaster Ranker", run=False))
+    open_page(page, projects_client, "/projects")
+    row = page.locator(f'.proj[data-key="{APP}"]')
+    row.get_by_role("button", name="Plant a card for a stack").click()
+    row.locator(".app-sent").get_by_text("Asked: the runner will do it.").wait_for()
+    assert row.get_by_role("button", name="Plant a card for a stack").is_hidden()
+    assert page.get_by_label("softfield's place").is_enabled()
+    assert page.locator("#order-sent").inner_text() == ""
+    conn = metrics.open_db(db_path)
+    try:
+        rows = conn.execute("SELECT kind, value FROM owner_requests").fetchall()
+    finally:
+        conn.close()
+    assert [(r[0], json.loads(r[1])["text"]) for r in rows] == [
+        ("plant", stacks_routes.STACK_PLANT.format(name=APP))
+    ]
+
+
+def test_softfields_plate_has_neither_run_nor_a_plant(
+    projects_client, docker, tmp_path, monkeypatch
+):
+    home = _repo(tmp_path / "softfield")  # Softfield's repo, with a `[run]` even
+    monkeypatch.setattr(config, "HOME", home)
+    row = plate(projects_client.get("/projects").text, "softfield")
+    assert "app-row" not in row
+    assert "Plant a card" not in row and '/projects/softfield/run"' not in row
+    assert docker.calls == []
+
+
+def test_docker_missing_shows_its_reason_and_the_page_still_draws(
+    projects_client, docker, app_repo, monkeypatch
+):
+    def missing(args, cwd, env) -> Result:
+        return Result(127, "", "docker is not installed on this machine")
+
+    monkeypatch.setattr(stacks, "_docker", missing)
+    response = projects_client.get("/projects")
+    assert response.status_code == 200
+    text = words(plate(response.text, APP))
+    assert "App Docker isn't available docker is not installed on this machine" in text
+    assert "Run" not in text and "Stop" not in text and "starting" not in text
+    assert "Plant a card" not in text

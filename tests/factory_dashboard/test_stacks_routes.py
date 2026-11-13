@@ -17,15 +17,19 @@ APP = "coaster-ranker"
 
 
 class Docker:
-    """``_docker`` replaced: records each call; ``ps`` answers with ``self.ps``."""
+    """``_docker`` replaced: records each call; ``ps`` answers with ``self.ps``, ``logs`` with
+    ``self.logs``."""
 
     def __init__(self) -> None:
         self.calls: list[list[str]] = []
         self.ps = ""
+        self.logs = ""
 
     def __call__(self, args, cwd, env) -> Result:
         self.calls.append(list(args))
-        return Result(0, self.ps if "ps" in args else "", "")
+        if "ps" in args:
+            return Result(0, self.ps, "")
+        return Result(0, self.logs if "logs" in args else "", "")
 
     def commands(self) -> list[str]:
         """The Compose verb of each call: ``up``, ``stop``, ``ps``."""
@@ -63,6 +67,13 @@ def app_repo(db_path: Path, tmp_path: Path) -> Path:
     repo = _repo(tmp_path / "Coaster Ranker")
     _register(db_path, APP, repo)
     return repo
+
+
+def _crashed() -> str:
+    """The main service exited 1: crashed, not stopped (`STOPPED_CODES`)."""
+    web = json.loads(_running())
+    web.update(State="exited", ExitCode=1, Status="Exited (1) 3 minutes ago", Publishers=[])
+    return json.dumps(web) + "\n"
 
 
 def _running() -> str:
@@ -144,6 +155,15 @@ def test_a_guarded_stop_stops_the_app_and_offers_run(client, docker, app_repo):
     assert "up" not in docker.commands()
     assert "Stopped" in response.text
     assert f'hx-post="/projects/{APP}/run"' in response.text
+
+
+def test_a_crashed_apps_row_offers_run_not_stop(client, docker, app_repo):
+    """f239-05: a crashed app is brought back with Run; Stop is for an app that is up."""
+    docker.ps = _crashed()
+    response = client.post(f"/projects/{APP}/stop", headers=HTMX)
+    assert "Crashed" in response.text
+    assert f'hx-post="/projects/{APP}/run"' in response.text
+    assert f'hx-post="/projects/{APP}/stop"' not in response.text
 
 
 def test_a_failed_start_answers_the_row_with_why(client, docker, app_repo, monkeypatch):
