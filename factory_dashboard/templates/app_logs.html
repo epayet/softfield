@@ -1,0 +1,35 @@
+{# The app's logs page (ADR 46 item 9, F239 D5): the app's state on top, then the last 200
+   lines of its stack's logs, refreshed every 5 s while the page is open, for all services or
+   one. The log block is a partial the page polls with htmx every 5 s; it stays scrolled to the
+   bottom unless the owner scrolled up. #}
+{% extends "base.html" %}
+{% block title %}{{ name }} · app logs{% endblock %}
+{% block crumbs %}
+<a href="/projects">{{ projects | first }}</a> · <a href="/projects?project={{ name | urlencode }}">Projects</a>
+{% endblock %}
+{% block content %}
+<div class="page logs-page">
+
+<div class="panel">
+  <h2>{{ name }} · app logs <span class="src">/projects/{{ name | urlencode }}/logs</span></h2>
+  <div class="logs-bar">
+    <span class="app-state" role="status"><span class="app-lamp" aria-hidden="true"></span>{{ word }}</span>
+    {% if services %}
+    <select aria-label="Service" hx-get="/projects/{{ name | urlencode }}/logs" hx-target="#logs-content" hx-indicator="#logs-content">
+      <option value="">All services</option>
+      {% for s in services %}
+      <option value="{{ s }}" {% if s == service %}selected{% endif %}>{{ s }}</option>
+      {% endfor %}
+    </select>
+    {% endif %}
+    <button type="button" class="btn plain" id="pause-btn" aria-pressed="false">Pause</button>
+    <span class="muted" id="updated-at">{% if since %}updated at {{ since | local("%H:%M:%S") }}{% endif %}</span>
+  </div>
+</div>
+
+<div id="logs-content" class="panel logs">
+  <pre>{{ logs }}</pre>
+</div>
+
+</div>
+{% endblock %}

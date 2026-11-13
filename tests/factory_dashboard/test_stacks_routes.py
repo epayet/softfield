@@ -18,17 +18,20 @@ APP = "coaster-ranker"
 
 class Docker:
     """``_docker`` replaced: records each call; ``ps`` answers with ``self.ps``, ``logs`` with
-    ``self.logs``."""
+    ``self.logs``, ``config --services`` with ``self.config_services``."""
 
     def __init__(self) -> None:
         self.calls: list[list[str]] = []
         self.ps = ""
         self.logs = ""
+        self.config_services = ""
 
     def __call__(self, args, cwd, env) -> Result:
         self.calls.append(list(args))
         if "ps" in args:
             return Result(0, self.ps, "")
+        if "config" in args and "--services" in args:
+            return Result(0, self.config_services, "")
         return Result(0, self.logs if "logs" in args else "", "")
 
     def commands(self) -> list[str]:
@@ -178,3 +181,41 @@ def test_a_failed_start_answers_the_row_with_why(client, docker, app_repo, monke
     assert response.status_code == 200
     assert "port is already allocated" in response.text
     assert "Stopped" in response.text
+
+
+def _with_services(services: list[str]) -> str:
+    """``docker compose config --services`` output for a list of service names."""
+    return "\n".join(services) + "\n"
+
+
+def test_the_page_shows_logs_lines_and_service_chooser_lists_services(client, docker, app_repo):
+    docker.ps = _running()
+    docker.config_services = "web\nworker\n"
+    docker.logs = "web-1 | line one\nweb-1 | line two\n"
+    response = client.get(f"/projects/{APP}/logs")
+    assert response.status_code == 200
+    assert "line one" in response.text
+    assert "line two" in response.text
+    assert 'value="web"' in response.text
+    assert 'value="worker"' in response.text
+    assert '<option value="">' in response.text or "<option value=''>" in response.text
+
+
+def test_service_param_asks_logs_for_that_service_only(client, docker, app_repo):
+    docker.ps = _running()
+    docker.config_services = "web\nworker\n"
+    docker.logs = "worker-1 | worker log\n"
+    response = client.get(f"/projects/{APP}/logs?service=web")
+    assert response.status_code == 200
+    assert docker.calls[-1][:5] == ["compose", "-p", "coaster-ranker", "logs", "--no-color"]
+    assert "web" in docker.calls[-1]
+    assert "worker" not in "".join(docker.calls[-1])
+
+
+def test_an_unknown_project_answers_404(client, docker):
+    assert client.get("/projects/nowhere/logs").status_code == 404
+
+
+def test_an_unknown_service_answers_404(client, docker, app_repo):
+    docker.ps = _running()
+    assert client.get(f"/projects/{APP}/logs?service=ghost").status_code == 404

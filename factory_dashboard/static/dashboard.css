@@ -1346,3 +1346,9 @@ textarea { max-height: 60vh; overflow-y: auto; }
 
 /* Ensure the HTML hidden attribute works even when .btn sets display */
 [hidden] { display: none !important; }
+
+/* Logs page (f239-06): the app's state on top, then the last 200 lines of its stack's logs,
+   refreshed every 5 s while the page is open, for all services or one. */
+.logs-page .logs-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; font-size: 13px; }
+.logs-page .logs pre { margin: 0; background: var(--floor); border: 1px solid var(--rule); padding: 10px; font: 12px/1.5 var(--mono); color: var(--ink-2); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 260px; overflow: auto; }
+.logs-page .logs .err { color: var(--fail); }
