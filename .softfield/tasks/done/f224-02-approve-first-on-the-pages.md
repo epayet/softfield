@@ -41,3 +41,9 @@ attempts: 3
 tokens: 1027098
 logs: .softfield/var/runs/20261112-170349/f224-02-approve-first-on-the-pages
 ```
+
+```yaml
+# --- runner ---
+result: done
+finished_by: lead
+```
