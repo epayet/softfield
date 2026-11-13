@@ -366,7 +366,7 @@ def _open_proposals(
             items += _general_items(since, parts, now, revising.get(card))
             continue
         item = _bundle(card, parts, repo, revising.get(card))
-        if any(state == OPEN for _, state in parts):
+        if any(state == OPEN for _, state in parts) and not item.on_its_way:  # D3
             item = replace(item, words=item.words + f" · proposed {ago(now - since)} ago")
         items.append(item)
     return items
@@ -462,15 +462,14 @@ def _ripe(
         line = live_line(conn, project, now)
     items: list[DeskItem] = []
     for m in line["field"]["ripe"]:
-        milestone_row = conn.execute(
-            "SELECT id FROM milestones WHERE key = ?", (m["key"],)
-        ).fetchone()
-        milestone_id = milestone_row["id"] if milestone_row else 0
+        # F108 D4: when its review ended; milestone keys are unique per project only
         row = conn.execute(
-            "SELECT max(ended) as ended FROM jobs"
-            " WHERE milestone_id = ? AND role = 'review' AND outcome != 'running'"
-            " AND ended IS NOT NULL",
-            (milestone_id,),
+            "SELECT max(j.ended) AS ended FROM jobs j"
+            " JOIN milestones ms ON ms.id = j.milestone_id"
+            " JOIN projects p ON p.id = ms.project_id"
+            " WHERE p.name = ? AND ms.key = ? AND j.role = 'review'"
+            " AND j.outcome != 'running' AND j.ended IS NOT NULL",
+            (project, m["key"]),
         ).fetchone()
         if row and row["ended"]:
             words = f"reviewed {ago(now - _when(row['ended']))} ago · waits for your sign-off"

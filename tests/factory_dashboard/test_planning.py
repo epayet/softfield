@@ -13,7 +13,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from factory_dashboard.planning import desk, waiting_for_you
+from factory_dashboard.planning import _open_proposals, desk, waiting_for_you
 from runner import metrics
 from tests.factory_dashboard.conftest import (
     LOCAL,
@@ -2916,6 +2916,56 @@ def test_a_ripe_card_with_no_review_says_reviewed_without_time(planning, db_path
     item = items[0]
     assert item.words == "reviewed · waits for your sign-off"
     assert item.on_its_way is False
+
+
+def test_a_ripe_cards_time_is_its_own_projects_review(db_path, db):
+    """Milestone keys are unique per project only: another project's ``m4``, reviewed later,
+    doesn't lend its time to this one's (F108 review)."""
+    conn = metrics.open_db(db_path)
+    try:
+        other = metrics.upsert_project(conn, "elsewhere")
+        # the lowest id, so a lookup by key alone finds it first
+        conn.execute(
+            "INSERT INTO milestones (id, project_id, key, title) VALUES (-1, ?, 'm4', 'Its M4')",
+            (other,),
+        )
+        conn.commit()
+        m4 = -1
+        metrics.upsert_run(conn, other, "20261002-160000", command="test")
+        run = conn.execute("SELECT id FROM runs WHERE run_dir = '20261002-160000'").fetchone()
+        job = metrics.start_job(
+            conn,
+            run["id"],
+            ticket_id=None,
+            milestone_id=m4,
+            role="review",
+            agent=OPUS,
+            attempt=1,
+            started=_at(timedelta(minutes=20)),
+        )
+        metrics.finish_job(conn, job, ended=_at(timedelta(minutes=10)), outcome="done")
+    finally:
+        conn.close()
+    [item] = [i for i in _group(db, "ripe") if i.link == "/planning/m4"]
+    assert "10 min" not in item.words
+    assert item.words.endswith(" · waits for your sign-off")
+
+
+def test_a_proposal_being_revised_says_no_proposed_time(planning, db_path, db):
+    """D3: while the owner's message waits for the lead, the card's proposals are on their way
+    and their item keeps the revising words alone, with no "proposed N ago"."""
+    _review_at(db_path, planning, "f16", timedelta(minutes=3), _TEST_PROPOSAL)
+    [item] = [
+        i
+        for i in _open_proposals(db, planning, NOW, revising={"f16": "being revised"})
+        if i.link.startswith("/planning/f16/")
+    ]
+    assert item.on_its_way is True
+    assert item.words == "being revised"
+    [open_item] = [
+        i for i in _open_proposals(db, planning, NOW) if i.link.startswith("/planning/f16/")
+    ]
+    assert open_item.words == "1 key points · proposed 3 min ago"
 
 
 def test_the_proposed_time_does_not_change_links_order_or_count(planning, db_path, serve):

@@ -838,6 +838,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** "remove the unused rules" let the model remove a used one next to them: a ticket that deletes CSS should name each selector. The test covered the symptom the owner reported and none of the ticket's other lines, as in F188 and F77, so the bug those lines would have shown (text under the stripe) passed the gates.
 - **Decisions affected:** none.
 
+### F108 (2026-11-13): Desk boxes say when ([review](../reviews/f108-in-your-answers-wanted-i-see.md))
+
+- **Q1:** one developer ticket at difficulty 2, following an example line in the same file. Qwen merged it on attempt 3, after two 75-minute timeouts and a lead direction: 187 min of model time, about 10.4M tokens in. No checkpoint ran. Review round 1: two should-fix (a milestone looked up by key without its project; a time added to a box on its way, against D3) and one nit (an edited test loosened), all fixed by the review. Score 6.
+- **Q3:** no Claude in the build beyond its direction; see the review's numbers.
+- **Q5:** see the review's numbers.
+- **Anything else:** a signature change pulled callers outside `files:`, and the planner could have listed them. The direction came after two timeouts; on a small ticket, one would have been enough. Lookups by milestone key need their project: keys are unique per project only.
+- **Decisions affected:** none.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.
