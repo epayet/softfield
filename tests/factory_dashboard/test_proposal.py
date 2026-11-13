@@ -1123,3 +1123,74 @@ def test_a_sent_back_comment_goes_and_a_failed_one_stays(page, planning, db_path
     assert _not_sent(page) == []
     page.reload()
     assert box.input_value() == "" and _not_sent(page) == []
+
+
+# --- a plan's poll enables Approve plan once Accept ADR is pressed (f210-04) -------------------
+
+
+def test_a_plan_page_with_adr_still_proposed_carries_the_poll(
+    page, planning, db_path, serve, checkout
+):
+    """A plan page whose ADR is still Proposed: #primary carries the 5 s poll; Approve plan is
+    disabled. With an Accept ADR open, or the ADR Accepted, it doesn't."""
+    adr = checkout / ".softfield" / "adr" / "20-planning-room.md"
+    adr.parent.mkdir(parents=True)
+    adr.write_text(ADR_ON_MAIN.format(status="Proposed"))
+    _write(db_path, lambda conn: _review(conn, planning, "f6", _REVIEW_ADR, _REVIEW_PLAN))
+    page.set_viewport_size({"width": 1024, "height": 800})
+    _open(page, serve(), "/planning/f6/proposals/plan")
+    # Approve plan is disabled: the ADR still waits
+    assert page.locator("#approve-plan").is_disabled()
+    # The poll container exists while adr_waits
+    assert page.locator("#polling-fold").is_visible()
+
+
+def test_an_open_accept_adr_enables_approve_plan_in_the_browser(
+    page, planning, db_path, serve, checkout
+):
+    """Open the plan page (Approve plan disabled), add an open ``accept_adr`` for the card, and
+    within the poll Approve plan and Approve first's button are both enabled and the page says
+    \"ADR N's acceptance is on its way: the runner applies it first.\""""
+    adr = checkout / ".softfield" / "adr" / "20-planning-room.md"
+    adr.parent.mkdir(parents=True)
+    adr.write_text(ADR_ON_MAIN.format(status="Proposed"))
+    _write(db_path, lambda conn: _review(conn, planning, "f6", _REVIEW_ADR, _REVIEW_PLAN))
+    # Add the request before opening the page so the first poll sees it
+    conn = metrics.open_db(db_path)
+    try:
+        metrics.add_request(conn, planning, "accept_adr", "f6", "20", "2026-10-28T10:00:00+00:00")
+    finally:
+        conn.close()
+    page.set_viewport_size({"width": 1024, "height": 800})
+    _open(page, serve(), "/planning/f6/proposals/plan")
+    # Approve plan and Approve first are both enabled
+    assert page.locator("#approve-plan").is_enabled()
+    assert page.locator("#approve-first-button").is_enabled()
+    # The page says the ADR's acceptance is on its way
+    assert "ADR 20's acceptance is on its way: the runner applies it first." in page.content()
+
+
+def test_a_comment_on_the_waiting_plan_page_stays_hidden_after_the_poll(
+    page, planning, db_path, serve, checkout
+):
+    """With a comment typed on the waiting plan page, after the poll Send back still shows and
+    Approve plan and the Approve first fold stay hidden."""
+    adr = checkout / ".softfield" / "adr" / "20-planning-room.md"
+    adr.parent.mkdir(parents=True)
+    adr.write_text(ADR_ON_MAIN.format(status="Proposed"))
+    _write(db_path, lambda conn: _points_and_plan(conn, planning))
+    page.set_viewport_size({"width": 1024, "height": 800})
+    _open(page, serve(), "/planning/f6/proposals/plan")
+    # Type a comment
+    page.click('.change-btn[data-point="1"]')
+    page.fill('textarea.comment[data-point="1"]', "Not this.")
+    assert page.locator("#send-back").is_visible()
+    assert not page.locator("#approve-plan").is_visible()
+    assert not page.locator("#approve-first").is_visible()
+    # Wait for the poll to fire
+    page.wait_for_timeout(6000)
+    # After the poll: Send back still shows, Approve plan and Approve first stay hidden
+    assert page.locator("#send-back").is_visible()
+    assert page.locator("#send-back").inner_text().lower() == "send 1 change back"
+    assert not page.locator("#approve-plan").is_visible()
+    assert not page.locator("#approve-first").is_visible()

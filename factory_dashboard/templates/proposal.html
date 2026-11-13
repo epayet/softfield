@@ -100,6 +100,14 @@
           hx-on::before-request="document.getElementById('actions').classList.add('on-its-way')" hidden
         hx-post="/requests" hx-target="#review-status" hx-swap="innerHTML"
         hx-vals='js:{kind: "send_back", project: {{ project | tojson }}, subject: {{ (thread ~ "/" ~ proposal.id) | tojson }}, value: JSON.stringify({text: "", comments: Object.fromEntries(Array.from(document.querySelectorAll("textarea.comment"), t => [t.dataset.point, t.value.trim()]).filter(c => c[1]))})}'>Send back</button>
+      {% if kind in ("plan", "mockup", "replan") and adr_waits %}
+      {# F210-04 D3: while the ADR waits, #primary and #approve-first poll together #}
+      <div id="polling-fold"
+        hx-get="{{ request.url.path }}{{ q }}"
+        hx-trigger="every 5s [window.liveIdle()]"
+        hx-select="#polling-fold"
+        hx-swap="outerHTML">
+      {% endif %}
       <div id="primary">
         {% if kind == "adr" and adr_number %}
         <button type="button" id="accept-adr" class="btn go"
@@ -137,6 +145,9 @@
             hx-vals='{"kind": "approve_plan", "project": {{ project | tojson }}, "subject": {{ thread | tojson }}, "value": "first"}'><i></i>Approve first</button>
         </div>
       </details>
+      {% endif %}
+      {% if kind in ("plan", "mockup", "replan") and adr_waits %}
+      </div>
       {% endif %}
       {% if not (kind == "merge" and proposal.applied) %}
       {# F31 D2: won't do, in two taps, saying what it takes with it #}
@@ -205,12 +216,13 @@
 (function () {
   var total = {{ key_points | length }};
   var sendBack = document.getElementById('send-back');
-  var primary = document.getElementById('primary');
-  var first = document.getElementById('approve-first');
   var count = document.getElementById('review-count');
-  if (!sendBack || !primary) return;  // settled: no buttons
+  if (!sendBack) return;  // settled: no buttons
 
   function update() {
+    var primary = document.getElementById('primary');
+    var first = document.getElementById('approve-first');
+    if (!primary) return;  // settled: no buttons
     var n = Array.from(document.querySelectorAll('textarea.comment')).filter(function (t) { return t.value.trim(); }).length;
     sendBack.hidden = n === 0;
     primary.hidden = n > 0;
@@ -252,6 +264,12 @@
     if (e.target.id === 'review-status') {
       e.target.setAttribute('data-has-answer', 'true');
     }
+  });
+  // F210-04 D4: coming back from the browser's back-forward cache redraws them
+  document.addEventListener('pageshow', function (event) {
+    var back = performance.getEntriesByType("navigation")[0]?.type === "back_forward";
+    if (!event.persisted && !back) return;
+    update();
   });
 })();
 </script>
