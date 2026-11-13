@@ -23,3 +23,12 @@ The picture is the Needs you panel in `.softfield/cards/f239-mockup/projects-run
 - a running or stopped project adds none
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 1624
+gate_failures: []
+tokens: 1671899
+```
