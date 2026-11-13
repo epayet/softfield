@@ -23,3 +23,12 @@ Tests to follow: the F191 D3 tests in `tests/factory_dashboard/test_overview.py`
 - An open review row for F172's full key, with F172 in the fast lane, shows in the Fast lane bay, above the planner jobs.
 - The same row with F172 out of the lane, or on its way out, shows where it does today.
 - The F191 D3 tests pass unchanged.
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 4716
+gate_failures: []
+tokens: 3887759
+```
