@@ -665,6 +665,7 @@ tr.few .gauge { opacity: .35; }
 .proposal-page .plan-change pre { margin: 6px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; font: 13px/1.4 var(--mono); color: var(--fg); }
 .proposal-page > aside { flex: 1 1 300px; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
 .proposal-page #actions, .proposal-page .action-buttons, .proposal-page :is(#reject, #approve-first) > div { display: flex; flex-direction: column; gap: 8px; }
+.proposal-page #approval { display: contents; }  /* F210 D7: a box for the poll only; its buttons lay out as .action-buttons' own */
 /* F224 D5: Approve first… is a fold, as Reject… is; its button carries the fast lane's stripe */
 .proposal-page #approve-first > div > span { font-size: 13px; }
 .proposal-page #approve-first .words-phone { display: none; }

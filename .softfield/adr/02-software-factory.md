@@ -846,6 +846,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** a signature change pulled callers outside `files:`, and the planner could have listed them. The direction came after two timeouts; on a small ticket, one would have been enough. Lookups by milestone key need their project: keys are unique per project only.
 - **Decisions affected:** none.
 
+### F210 (2026-11-13): one box per card, one reading path ([review](../reviews/f210-bundle-a-card-s-conversation-with.md))
+
+- **Q1:** five tickets: one the lead's (01), four Qwen's (02 to 05, one of them a repair). Qwen merged 03 (difficulty 3) at once and 04 (difficulty 2) on attempt 2, and failed 02 and 05 three times each: they went to Claude. About 4.6 hours of local model time ended in failures or timeouts. 03 merged a script with no test and no markup to act on; a checkpoint caught it, and 05 rebuilt it. 04 passed its gates with tests that couldn't fail, and on the real page its poll removed Approve plan, the button it was meant to enable. Review round 1: one blocking and two should-fix in 04, fixed by the review; three nits reported. Score 7.
+- **Q3:** Claude built 01 and finished 02 and 05: about $9.8 of the build. See the review's numbers.
+- **Q5:** see the review's numbers.
+- **Anything else:** for a live-update ticket (a poll, a swap), "the listed tests fail without the change" isn't enough: the test must change the data after the page is open. Qwen's 04 test added the request before loading the page, which tests the first draw, already built. A Done when about a script needs a browser test in the ticket's `tests:`, or the model can merge a script that does nothing (03).
+- **Decisions affected:** none.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.

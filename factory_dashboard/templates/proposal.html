@@ -100,14 +100,12 @@
           hx-on::before-request="document.getElementById('actions').classList.add('on-its-way')" hidden
         hx-post="/requests" hx-target="#review-status" hx-swap="innerHTML"
         hx-vals='js:{kind: "send_back", project: {{ project | tojson }}, subject: {{ (thread ~ "/" ~ proposal.id) | tojson }}, value: JSON.stringify({text: "", comments: Object.fromEntries(Array.from(document.querySelectorAll("textarea.comment"), t => [t.dataset.point, t.value.trim()]).filter(c => c[1]))})}'>Send back</button>
-      {% if kind in ("plan", "mockup", "replan") and adr_waits %}
-      {# F210-04 D3: while the ADR waits, #primary and #approve-first poll together #}
-      <div id="polling-fold"
-        hx-get="{{ request.url.path }}{{ q }}"
-        hx-trigger="every 5s [window.liveIdle()]"
-        hx-select="#polling-fold"
-        hx-swap="outerHTML">
-      {% endif %}
+      {# F210 D7: #primary and the Approve first fold, redrawn together. While the card's ADR
+         waits they poll their page; the box is always drawn, so the last poll finds it, and the
+         redrawn one has no poll. The page's script keeps the fold's state and its hidden rule #}
+      <div id="approval"{% if kind in ("plan", "mockup", "replan") and adr_waits %}
+        hx-get="{{ request.url.path }}{{ q }}" hx-trigger="every 5s [window.liveIdle()]"
+        hx-select="#approval" hx-swap="outerHTML"{% endif %}>
       <div id="primary">
         {% if kind == "adr" and adr_number %}
         <button type="button" id="accept-adr" class="btn go"
@@ -146,9 +144,7 @@
         </div>
       </details>
       {% endif %}
-      {% if kind in ("plan", "mockup", "replan") and adr_waits %}
       </div>
-      {% endif %}
       {% if not (kind == "merge" and proposal.applied) %}
       {# F31 D2: won't do, in two taps, saying what it takes with it #}
       <details id="reject">
@@ -265,11 +261,25 @@
       e.target.setAttribute('data-has-answer', 'true');
     }
   });
-  // F210-04 D4: coming back from the browser's back-forward cache redraws them
-  document.addEventListener('pageshow', function (event) {
-    var back = performance.getEntriesByType("navigation")[0]?.type === "back_forward";
-    if (!event.persisted && !back) return;
+  // F210 D7: the approval box redrawn by its poll keeps the fold as the owner left it, and
+  // Send back keeps Approve's place while comments are typed
+  var foldOpen = false;
+  document.addEventListener('htmx:beforeSwap', function (e) {
+    var fold = document.getElementById('approve-first');
+    if (e.detail.target.id === 'approval') foldOpen = !!(fold && fold.open);
+  });
+  document.addEventListener('htmx:load', function (e) {
+    if (e.target.id !== 'approval') return;
+    var fold = document.getElementById('approve-first');
+    if (fold) fold.open = foldOpen;
     update();
+  });
+  // shown again from the back-forward cache: ask the page once more while the ADR waited
+  window.addEventListener('pageshow', function (event) {
+    var box = document.getElementById('approval');
+    if (event.persisted && box && box.hasAttribute('hx-trigger')) {
+      htmx.ajax('GET', location.pathname + location.search, {target: '#approval', select: '#approval', swap: 'outerHTML'});
+    }
   });
 })();
 </script>
