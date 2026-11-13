@@ -71,6 +71,11 @@ class AppRow:
         return STATE_WORDS.get(self.app.word, self.app.word)
 
     @property
+    def word_lower(self) -> str:
+        """Lowercase word for the Needs you line (e.g. 'crashed', 'update failed')."""
+        return self.word.lower()
+
+    @property
     def up(self) -> bool:
         return self.app.word in UP
 
@@ -83,6 +88,11 @@ class AppRow:
         """The detail's last line: a failed update's is the end of its build's output."""
         lines = self.app.detail.strip().splitlines()
         return lines[-1] if lines else ""
+
+    @property
+    def needs_you(self) -> bool:
+        """Whether this app needs the owner's attention (crashed or update failed)."""
+        return self.app.word in BROKEN
 
 
 def _checkout_commit(stack: stacks.Stack) -> str:

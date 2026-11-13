@@ -334,6 +334,52 @@ def test_a_crashed_app_shows_why_run_logs_and_a_fix_plant(projects_client, docke
 
 
 @pytest.fixture
+def crashed_project(projects_client, docker, app_repo, db_path, tmp_path, monkeypatch):
+    """A project with a stack whose app is crashed."""
+    _register(db_path, APP, app_repo)
+    docker.ps = _crashed()
+    return projects_client
+
+
+def test_a_crashed_project_adds_its_line_to_needs_you(crashed_project):
+    """A crashed project adds its line to the Needs you panel."""
+    html = crashed_project.get("/projects").text
+    needs_you = section(html, "projects-needs-you")
+    assert "coaster-ranker" in needs_you
+    assert "app crashed" in needs_you
+    assert "Logs" in needs_you
+    # The count includes both desk items and the crashed project.
+    assert "in all" in needs_you
+
+
+def test_needs_you_shows_even_with_no_desk_items(crashed_project, db_path):
+    """The Needs you panel shows when there are no items on any desk, only a crashed app."""
+    conn = metrics.open_db(db_path)
+    try:
+        conn.execute("DELETE FROM owner_requests")
+        conn.commit()
+    finally:
+        conn.close()
+    html = crashed_project.get("/projects").text
+    needs_you = section(html, "projects-needs-you")
+    assert "coaster-ranker" in needs_you
+    assert "app crashed" in needs_you
+
+
+def test_running_or_stopped_adds_no_needs_you_line(projects_client, docker, app_repo, db_path):
+    """A running or stopped project adds no line to Needs you."""
+    _register(db_path, APP, app_repo)
+    docker.ps = _running()
+    html = projects_client.get("/projects").text
+    needs_you = section(html, "projects-needs-you")
+    assert "coaster-ranker" not in needs_you
+    docker.ps = ""  # stopped
+    html = projects_client.get("/projects").text
+    needs_you = section(html, "projects-needs-you")
+    assert "coaster-ranker" not in needs_you
+
+
+@pytest.fixture
 def update_failed(docker, monkeypatch):
     """`state` as it reads a failed update's result file (runner/stacks.py's tests cover that)."""
     tail = "Step 4/9 : RUN pip install\nERROR: no matching distribution for nope==9"

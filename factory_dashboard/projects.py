@@ -210,6 +210,10 @@ def projects_page(request: Request, conn: Db, project: Project, now: Now) -> HTM
     asked = order_on_its_way(conn)
     if asked is not None:  # shown as sent, on its way (owner, 2026-10-07)
         cards.sort(key=lambda c: asked.index(c.name) if c.name in asked else len(asked))
+    for_you = [c for c in cards if c.for_you]
+    needs_you = [c for c in cards if c.app and c.app.needs_you]
+    needs_you.extend(for_you)
+    needs_you_count = sum(c.for_you for c in for_you) + len(needs_you) - len(for_you)
     return render(
         request,
         conn,
@@ -219,7 +223,9 @@ def projects_page(request: Request, conn: Db, project: Project, now: Now) -> HTM
             "active": "/projects",
             "cards": cards,
             "now_jobs": running_now(conn, now),
-            "for_you": [c for c in cards if c.for_you],
+            "for_you": for_you,
+            "needs_you": needs_you,
+            "needs_you_count": needs_you_count,
             "asked": asked is not None,
         },
     )
