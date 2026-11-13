@@ -128,7 +128,9 @@ class Card:
     was: int = 0  # then, its place without the reorder
     waits: tuple[str, ...] = ()  # other card keys this card's ready tickets depend on
     reserve: bool = False  # a planted card marked to use Claude's reserve (F172 D6)
-    lane_asked: str | None = None  # "on" or "off" from an open reserve request (F192)
+    # "on" or "off" from an open reserve request (F192); "first" from an open Approve first,
+    # in any stage (F224 D6)
+    lane_asked: str | None = None
     developers: DevWork | None = None  # its developer work; None outside the developers' view
     thread: str = ""  # its conversation's short key, lower case; "" for a bug or none (f15-06)
     setting_aside: bool = False  # an open request sets its thread aside
@@ -508,6 +510,16 @@ def _cards(
         (project, RESERVE),
     ):
         lane_requests.setdefault(r["subject"], r["value"])
+    # an open Approve first goes first and into the lane, in whichever stage (F224 D1, D6)
+    going_first = {
+        r["subject"]
+        for r in conn.execute(
+            "SELECT r.subject FROM owner_requests r JOIN projects p ON p.id = r.project_id"
+            " WHERE p.name = ? AND r.kind = 'approve_plan' AND r.value = 'first'"
+            " AND r.done IS NULL",
+            (project,),
+        )
+    }
     latest_messages: dict[str, sqlite3.Row] = {}
     for r in conn.execute(
         "SELECT t.card, m.author, m.at FROM planner_messages m"
@@ -628,7 +640,13 @@ def _cards(
             note=_card_note(key.lower(), stage, latest_messages, sent, waits),
             waits=waits,
             reserve=stage in RESERVABLE and marked(repo, m["key"]),
-            lane_asked=lane_requests.get(key.lower()) if stage in RESERVABLE else None,
+            lane_asked=(
+                "first"
+                if key.lower() in going_first
+                else lane_requests.get(key.lower())
+                if stage in RESERVABLE
+                else None
+            ),
             started=started,
             at_work=live_work(own, m["key"]),
             developers=dev_work(stage, own),
@@ -780,11 +798,15 @@ def reserve_marked(
 ) -> list[Card]:
     """The planted cards marked to use Claude's reserve, or asked to (F192 D4), in the board's
     order: the Overview names them under Claude's meters (F172 D6). A marked card asked out
-    stays until the runner applies it; its ``lane_asked`` says so."""
+    stays until the runner applies it; its ``lane_asked`` says so. A card approved to go first
+    joins them from any stage (F224 D6)."""
     if found is None:
         found = board(conn, project, now)
     return [
-        c for stage in RESERVABLE for c in found.stages[stage] if c.reserve or c.lane_asked == "on"
+        c
+        for cards in found.stages.values()
+        for c in cards
+        if c.reserve or c.lane_asked in ("on", "first")
     ]
 
 

@@ -978,7 +978,7 @@ def _live_context(
     lane, rest = fast_lane(line["queue"], lane_keys)
     lane_ids = {str(r["ticket"]) for r in lane}
     # "on its way" only on a row of the card asked in, not on a ticket it waits for elsewhere
-    asked_in = {c.key for c in reserve_cards if c.lane_asked == "on"}
+    asked_in = {c.key for c in reserve_cards if c.lane_asked in ("on", "first")}
     # an escalated lane ticket's row goes by the same cards as its ticket rows (F191 D3)
     qjobs = queued_jobs(conn, project, now, first=lane_ids, card_keys=lane_keys)
     lane = [

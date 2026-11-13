@@ -14,11 +14,21 @@ import pytest
 from fastapi.testclient import TestClient
 
 from factory_dashboard.app import create_app, get_now
-from factory_dashboard.board import STAGES, Board, Card, DevWork, _hours, board, milestone_card
+from factory_dashboard.board import (
+    STAGES,
+    Board,
+    Card,
+    DevWork,
+    _hours,
+    board,
+    milestone_card,
+    reserve_marked,
+)
 from factory_dashboard.line import live_line
 from factory_dashboard.queries import connect
 from runner import metrics
 from tests.factory_dashboard.conftest import LOCAL, NOW, OPUS, PROJECT, mark_reserve
+from tests.factory_dashboard.test_overview import _reserve_client, _reserve_row
 from tests.factory_dashboard.test_planning import ORIGIN, STATIC
 from tests.factory_dashboard.test_planning import _open as open_page
 from tests.layout import DISPLAY, PHONE, layout_problems
@@ -2888,6 +2898,68 @@ def test_a_done_reserve_request_shows_no_plate(board_db, board_client):
     html = _page(board_client)
     _, _words, raw = _card(html, "/milestones/f23-planted")
     assert "on-its-way" not in raw
+
+
+# --- a card approved to go first (F224 D6) ---------------------------------------------------
+
+
+def _approve(
+    value: str | None, done: str | None = None
+) -> Callable[[sqlite3.Connection, int], None]:
+    """An ``approve_plan`` on F20 (a seed, not planted), open or finished with ``done``."""
+
+    def change(conn: sqlite3.Connection, p: int) -> None:
+        asked = metrics.add_request(conn, p, "approve_plan", "f20", value, NOW.isoformat())
+        if done:
+            metrics.finish_request(conn, asked, done, "approved")
+
+    return change
+
+
+_GOES_FIRST = "goes first · fast lane · on its way · at the runner's next pick"
+
+
+def test_an_open_approve_first_draws_the_dashed_plate_in_any_stage_and_names_it_on_the_overview(
+    board_db, tmp_path
+):
+    """F224 D6: F20 is a seed: an open Approve first gives it the dashed plate at once, and the
+    Overview's Fast lane line names it, beside F23's own mark."""
+    client = _reserve_client(board_db, tmp_path, "f23-planted")
+    write(board_db, _approve("first"))
+    found = read(board_db)
+    f20 = card(found, "F20")
+    assert (f20.stage, f20.lane_asked, f20.reserve) == ("seed", "first", False)
+    assert card(found, "F23").lane_asked is None
+    _, words, raw = _card(_page(client), "/milestones/f20-duck-pond")
+    assert '<span class="card-reserve on-its-way"><i></i>' in raw
+    assert _GOES_FIRST in words
+    assert [c.key for c in reserve_marked(connect(board_db), PROJECT, NOW, found=found)] == [
+        "F20",
+        "F23",
+    ]
+    row = _reserve_row(client.get("/").text)
+    assert row.startswith("Fast lane: F20, ") and "goes first · on its way" in row
+    assert row.endswith("F23, Planted")
+
+
+def test_once_approve_first_is_done_the_card_is_as_its_doc_says(board_db, tmp_path):
+    """The runner did it: the plate and the line go back to what the card's doc says (F20 is
+    unmarked, so neither)."""
+    client = _reserve_client(board_db, tmp_path)
+    write(board_db, _approve("first", NOW.isoformat()))
+    assert card(read(board_db), "F20").lane_asked is None
+    _, _words, raw = _card(_page(client), "/milestones/f20-duck-pond")
+    assert "card-reserve" not in raw
+    assert 'id="reserve-cards"' not in client.get("/").text
+
+
+def test_a_plain_open_approval_changes_nothing_on_the_board(board_db, tmp_path):
+    client = _reserve_client(board_db, tmp_path)
+    before = _page(client)
+    write(board_db, _approve(None))
+    assert card(read(board_db), "F20").lane_asked is None
+    assert _page(client) == before
+    assert 'id="reserve-cards"' not in client.get("/").text
 
 
 def test_pageshow_with_persisted_true_draws_the_field_with_grip_and_menu(page, board_db):

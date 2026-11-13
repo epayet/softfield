@@ -281,6 +281,136 @@ def test_reject_posts_a_reject_and_says_what_it_takes(
     }
 
 
+_FIRST_WORDS = (
+    "It goes first on the board and into the fast lane: ahead of every other job, planning and"
+    " reviews too, and it may use Claude's reserve. You can take it out of the lane on its card's"
+    " page."
+)
+
+
+def _approve_first(html: str) -> str:
+    """The Approve first… fold's markup (F224 D5)."""
+    return html.split('<details id="approve-first">', 1)[1].split("</details>", 1)[0]
+
+
+def _button(html: str, button: str) -> str:
+    """The button's opening tag."""
+    found = re.search(rf'<button type="button" id="{button}"[^>]*>', html)
+    assert found, button
+    return found[0]
+
+
+_REVIEW_REPLAN: dict[str, Any] = {
+    "id": "replan",
+    "kind": "replan",
+    "title": "F7, redirected",
+    "path": None,
+    "key_points": [{"n": 1, "title": "Less", "text": "Set b aside.", "flag": False}],
+}
+
+
+@pytest.mark.parametrize("review", [_REVIEW_PLAN, _REVIEW_MOCKUP, _REVIEW_REPLAN])
+def test_approve_first_is_a_closed_fold_between_approve_plan_and_reject(
+    planning, db_path, serve, review
+):
+    """F224 D3, D5: on a plan, a mock-up or a replan, closed, after #primary and before Reject…,
+    saying what it costs; its button posts ``approve_plan`` valued ``first`` about the card."""
+    _write(db_path, lambda conn: _review(conn, planning, "f6", review))
+    html = _review_page(serve(), f"/planning/f6/proposals/{review['id']}")
+    assert html.index('id="primary"') < html.index('<details id="approve-first">')
+    assert html.index('<details id="approve-first">') < html.index('<details id="reject">')
+    fold = _approve_first(html)
+    assert _text(fold.split("</summary>", 1)[0]) == "Approve first… First…"  # one per width
+    assert _FIRST_WORDS in _text(fold)
+    assert _posts(fold, "approve-first-button") == {
+        "kind": "approve_plan",
+        "project": PROJECT,
+        "subject": "f6",
+        "value": "first",
+    }
+    assert " disabled" not in _button(fold, "approve-first-button")
+
+
+def test_approve_first_is_disabled_while_the_cards_adr_waits(planning, db_path, serve):
+    """As Approve plan is: ADR 20 isn't on main, so both wait."""
+    _write(db_path, lambda conn: _review(conn, planning, "f6", _REVIEW_ADR, _REVIEW_PLAN))
+    html = _review_page(serve(), "/planning/f6/proposals/plan")
+    assert " disabled" in _button(html, "approve-plan")
+    assert " disabled" in _button(html, "approve-first-button")
+
+
+@pytest.mark.parametrize(
+    ("thread", "review"),
+    [("f6", _REVIEW_ADR), ("f9", _REVIEW_MERGE), ("general", _REVIEW_SEED)],
+)
+def test_no_approve_first_on_an_adr_a_merge_or_a_seed(planning, db_path, serve, thread, review):
+    _write(db_path, lambda conn: _review(conn, planning, thread, review))
+    html = _review_page(serve(), f"/planning/{thread}/proposals/{review['id']}")
+    assert 'id="primary"' in html
+    assert 'id="approve-first' not in html and '"value": "first"' not in unescape(html)
+
+
+def _top(page, selector: str) -> float:
+    box = page.locator(selector).bounding_box()
+    assert box, selector
+    return float(box["y"])
+
+
+@pytest.mark.parametrize(("width", "words"), [(1280, "Approve first…"), (390, "First…")])
+def test_approve_first_says_its_name_at_each_width(page, planning, db_path, serve, width, words):
+    _write(db_path, lambda conn: _review(conn, planning, "f6", _REVIEW_PLAN))
+    page.set_viewport_size({"width": width, "height": 800})
+    _open(page, serve(), "/planning/f6/proposals/plan")
+    fold = page.locator("#approve-first")
+    assert fold.get_attribute("open") is None
+    assert fold.locator("summary").inner_text().lower() == words.lower()
+
+
+def test_on_a_phone_the_closed_dock_is_one_row_and_an_open_fold_takes_its_own(
+    page, planning, db_path, serve
+):
+    """D5: Approve plan, First… and Reject… side by side in 390 px, nothing to scroll sideways;
+    First… opened sits on a row under Approve plan, its button inside the page."""
+    _write(db_path, lambda conn: _review(conn, planning, "f6", _REVIEW_PLAN))
+    page.set_viewport_size(PHONE)
+    _open(page, serve(), "/planning/f6/proposals/plan")
+    row = _top(page, "#approve-plan")
+    for summary in ("#approve-first > summary", "#reject > summary"):
+        assert abs(_top(page, summary) - row) < 4, summary
+    assert page.evaluate("document.documentElement.scrollWidth") <= PHONE["width"]
+    page.click("#approve-first > summary")
+    plan = page.locator("#approve-plan").bounding_box()
+    assert plan
+    assert _top(page, "#approve-first") >= plan["y"] + plan["height"]
+    button = page.locator("#approve-first-button").bounding_box()
+    assert button
+    assert button["x"] >= 0 and button["x"] + button["width"] <= PHONE["width"]
+    assert page.evaluate("document.documentElement.scrollWidth") <= PHONE["width"]
+
+
+def test_a_comment_hides_approve_first_with_approve_plan(page, planning, db_path, serve):
+    _write(db_path, lambda conn: _review(conn, planning, "f6", _REVIEW_PLAN))
+    _open(page, serve(), "/planning/f6/proposals/plan")
+    assert page.locator("#approve-first").is_visible()
+    page.click('.change-btn[data-point="1"]')
+    page.fill('textarea.comment[data-point="1"]', "Not this.")
+    assert not page.locator("#approve-plan").is_visible()
+    assert not page.locator("#approve-first").is_visible()
+    page.fill('textarea.comment[data-point="1"]', "")
+    assert page.locator("#approve-first").is_visible()
+
+
+def test_pressing_approve_first_posts_it_and_shows_on_its_way(page, planning, db_path, serve):
+    _write(db_path, lambda conn: _review(conn, planning, "f6", _REVIEW_PLAN))
+    _open(page, serve(), "/planning/f6/proposals/plan")
+    page.click("#approve-first > summary")
+    page.click("#approve-first-button")
+    page.wait_for_selector("#review-status >> text=Asked")
+    assert "on-its-way" in (page.locator("#actions").get_attribute("class") or "")
+    assert not page.locator("#approve-first-button").is_visible()
+    assert _asked(db_path, planning) == [("approve_plan", "f6", "first")]
+
+
 def _f6_adr_plan_merge(db_path: Path, planning: int, checkout: Path) -> None:
     """F6's thread lists an ADR (Proposed on main), a plan and a merge into it."""
     adr = checkout / ".softfield" / "adr" / "20-planning-room.md"
@@ -495,15 +625,6 @@ def test_a_mockup_gone_shows_its_message_and_no_frame(planning, db_path, serve, 
     assert gone is not None
     assert "isn't in the repo any more" in gone[1]
     assert "docs/milestones/f54-mockup/moves.html" in gone[1]
-
-
-_REVIEW_REPLAN: dict[str, Any] = {
-    "id": "replan",
-    "kind": "replan",
-    "title": "F7, redirected",
-    "path": None,
-    "key_points": [{"n": 1, "title": "Less", "text": "Set b aside.", "flag": False}],
-}
 
 
 def _changes(html: str) -> list[tuple[str, str, str | None]]:

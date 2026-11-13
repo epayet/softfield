@@ -49,7 +49,7 @@
   <span class="card-count">{{ c.done }} of {{ c.total }} ticket{{ "" if c.total == 1 else "s" }}{% if c.set_aside %} · {{ c.set_aside }} set aside, won't run{% endif %}</span>
   {% endif %}
   {% if c.note %}<span class="{{ 'card-action' if c.bug and c.stage == 'seed' else 'card-note' }}">{{ c.note }}</span>{% endif %}
-  {% if c.lane_asked == "on" %}<span class="card-reserve on-its-way"><i></i>fast lane · on its way · at the runner's next pick</span>{% elif c.lane_asked == "off" %}<span class="card-reserve on-its-way leaving"><i></i>leaving the fast lane · on its way</span>{% elif c.reserve %}<span class="card-reserve"><i></i>fast lane</span>{% endif %}
+  {% if c.lane_asked == "first" %}<span class="card-reserve on-its-way"><i></i>goes first · fast lane · on its way · at the runner's next pick</span>{% elif c.lane_asked == "on" %}<span class="card-reserve on-its-way"><i></i>fast lane · on its way · at the runner's next pick</span>{% elif c.lane_asked == "off" %}<span class="card-reserve on-its-way leaving"><i></i>leaving the fast lane · on its way</span>{% elif c.reserve %}<span class="card-reserve"><i></i>fast lane</span>{% endif %}
   {% if c.review_step %}<span class="card-review"><b>{{ c.review_step.label }}</b>{{ c.review_step.text }}</span>{% endif %}
   {% if w %}
   <span class="at-work-doing">{% if w.ticket %}<code>{{ w.ticket }}</code>{% if w.goal %} · {{ w.goal }}{% endif %}{% else %}{{ w.role }}{% endif %} · {{ w.agent }}, attempt {{ w.attempt }}</span>

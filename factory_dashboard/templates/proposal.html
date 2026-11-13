@@ -125,6 +125,19 @@
           hx-vals='{"kind": "plant", "project": {{ project | tojson }}, "subject": {{ ("general/" ~ proposal.id) | tojson }}}'>Plant it</button>
         {% endif %}
       </div>
+      {% if kind in ("plan", "mockup", "replan") %}
+      {# F224 D5: going first, in two taps, saying what it costs; the same request as Approve plan, valued "first" #}
+      <details id="approve-first">
+        <summary class="fold"><span class="words-wide">Approve first…</span><span class="words-phone">First…</span></summary>
+        <div>
+          <span>It goes first on the board and into the fast lane: ahead of every other job, planning and reviews too, and it may use Claude's reserve. You can take it out of the lane on its card's page.</span>
+          <button type="button" id="approve-first-button" class="btn first"
+            hx-on::before-request="document.getElementById('actions').classList.add('on-its-way')"{% if adr_waits %} disabled{% endif %}
+            hx-post="/requests" hx-target="#review-status" hx-swap="innerHTML"
+            hx-vals='{"kind": "approve_plan", "project": {{ project | tojson }}, "subject": {{ thread | tojson }}, "value": "first"}'><i></i>Approve first</button>
+        </div>
+      </details>
+      {% endif %}
       {% if not (kind == "merge" and proposal.applied) %}
       {# F31 D2: won't do, in two taps, saying what it takes with it #}
       <details id="reject">
@@ -193,6 +206,7 @@
   var total = {{ key_points | length }};
   var sendBack = document.getElementById('send-back');
   var primary = document.getElementById('primary');
+  var first = document.getElementById('approve-first');
   var count = document.getElementById('review-count');
   if (!sendBack || !primary) return;  // settled: no buttons
 
@@ -200,6 +214,7 @@
     var n = Array.from(document.querySelectorAll('textarea.comment')).filter(function (t) { return t.value.trim(); }).length;
     sendBack.hidden = n === 0;
     primary.hidden = n > 0;
+    if (first) first.hidden = n > 0;  // F224: going first is an approval too
     sendBack.textContent = n ? 'Send ' + n + (n === 1 ? ' change' : ' changes') + ' back' : 'Send back';
     count.textContent = (total - n) + ' agreed · ' + n + ' to change';
   }
