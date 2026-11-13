@@ -26,3 +26,12 @@ The picture to build is the Logs part of `.softfield/cards/f239-mockup/projects-
 - an unknown project, and an unknown service, answer 404
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 2
+duration_s: 3138
+gate_failures: ['stopped']
+tokens: 2792913
+```
