@@ -29,3 +29,10 @@ In `runner/loop.py`: `reserve_cards` and `lane_with_escalated` (the lane as tick
 - With Claude in the owner's share of the 5-hour window, a lane card's review runs and another card's parks, as today; a real limit parks both.
 - `softfield run --dry-run` lists the lane card's review in the lane.
 - A card out of the lane keeps today's order, queueing and parking (the existing tests pass unchanged).
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
