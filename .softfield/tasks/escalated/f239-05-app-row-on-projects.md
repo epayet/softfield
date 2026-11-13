@@ -34,3 +34,12 @@ The picture to build is `.softfield/cards/f239-mockup/projects-run.html` (Propos
 - Docker missing shows its reason on the row, and the page still draws
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: protected-paths)
+attempts: 3
+tokens: 12234516
+logs: .softfield/var/runs/20261112-203008/f239-05-app-row-on-projects
+```
