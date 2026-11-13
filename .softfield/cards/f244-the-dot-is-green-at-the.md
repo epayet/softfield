@@ -1,6 +1,6 @@
 # Milestone F244: the dot is green at the top sometimes it says picking up…
 
-> **State:** idea · **Priority:** 100 · **Area:** factory
+> **State:** idea · **Priority:** 102 · **Area:** factory
 > Planted by the owner on 2026-11-13.
 
 ## Notes

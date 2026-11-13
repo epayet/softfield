@@ -1,6 +1,6 @@
 # Milestone F194: The menu: Overview, Planning, Board in fixed places, the rest in a sub menu
 
-> **State:** ready · **Priority:** 7 · **Area:** factory
+> **State:** ready · **Priority:** 6 · **Area:** factory
 > Planted by the owner on 2026-11-02.
 
 ## Notes

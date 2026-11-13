@@ -1,6 +1,6 @@
 # Milestone F207: Every lead reply and proposal review opens with In short
 
-> **State:** ready · **Priority:** 7 · **Area:** factory
+> **State:** ready · **Priority:** 6 · **Area:** factory
 > Planted by the owner on 2026-11-02.
 
 ## Notes
