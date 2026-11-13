@@ -1,6 +1,7 @@
 # Milestone F108: Desk boxes say when: proposals and sign-offs show their time too
 
-> **State:** ready · **Priority:** 18 · **Area:** factory
+> **State:** done · **Priority:** 18 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-13. Base: git tag `f108-in-your-answers-wanted-i-see-start`. Report: [`.softfield/reviews/f108-in-your-answers-wanted-i-see.md`](../reviews/f108-in-your-answers-wanted-i-see.md).
 > Planted by the owner on 2026-10-13.
 
 ## Notes

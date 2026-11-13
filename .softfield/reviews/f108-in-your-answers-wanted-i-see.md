@@ -1,5 +1,7 @@
 # F108 review: desk boxes say when
 
+- **Status:** done, signed off by the owner on 2026-11-13.
+
 ## Sign-off sheet
 
 ### 1. What changed
