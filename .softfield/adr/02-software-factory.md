@@ -854,6 +854,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** for a live-update ticket (a poll, a swap), "the listed tests fail without the change" isn't enough: the test must change the data after the page is open. Qwen's 04 test added the request before loading the page, which tests the first draw, already built. A Done when about a script needs a browser test in the ticket's `tests:`, or the model can merge a script that does nothing (03).
 - **Decisions affected:** none.
 
+### F224 (2026-11-13): Approve first puts a plan first, in the fast lane ([review](../reviews/f224-i-want-to-be-able-to-2.md))
+
+- **Q1:** two tickets. The lead's runner ticket (01, difficulty 3) passed on attempt 1 with Sonnet ($0.48). Qwen's pages ticket (02, difficulty 3: a template, CSS, a board query, two test files) failed three 20-minute attempts with no edit at all, the last under an Opus direction, and Claude finished it ($2.24). No checkpoint. Review round 1: two should-fix (the card's dashed edge from the mock-up missing; a Done when line about two presses untested), both fixed by the review; one nit reported. Score 8.
+- **Q3:** Claude built 01 and finished 02; see the review's numbers.
+- **Q5:** see the review's numbers.
+- **Anything else:** Qwen's failure mode here was pure reading: about 2.6M tokens in and no edit across three attempts. The escalation added developer note 12 (first edit within ten steps, a worked example to copy). If a wide UI ticket stalls this way again, split it by surface at planning time and direct after the first empty attempt.
+- **Decisions affected:** none.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.

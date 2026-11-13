@@ -906,6 +906,21 @@ def test_approving_first_puts_the_card_first_and_in_the_fast_lane_in_one_commit(
     assert git(repo, "status", "--porcelain") == ""
 
 
+def test_two_approvals_first_in_one_pick_leave_the_later_press_first(repo):
+    """F224 Done when: Approve first on two cards, the later press stands first."""
+    _card(repo)
+    _board(repo, {"f8": 100, "f9": 100})
+    _listed(repo, "f9\nf8\n")
+    _plan(repo, {".softfield/tasks/later/f7-01-a.md": _ticket("f7-01-a")})
+    later = _ticket("f8-02-b").replace("milestone: f7", "milestone: f8")
+    _plan(repo, {".softfield/tasks/later/f8-02-b.md": later}, card="f8")
+    _ask(repo, "approve_plan", "f7", "first")
+    _ask(repo, "approve_plan", "f8", "first")
+    _apply(repo)
+    assert (repo / ORDER).read_text() == "f8\nf7\nf9\n"
+    assert _stored_order(repo) == ["f8", "f7", "f9"]
+
+
 def test_approving_first_on_a_card_already_in_the_lane_marks_it_once_and_moves_it(repo):
     _card(repo)
     card = repo / ".softfield" / "cards" / "f7-one-queue.md"

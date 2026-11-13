@@ -2938,7 +2938,8 @@ def test_an_open_approve_first_draws_the_dashed_plate_in_any_stage_and_names_it_
     f20 = card(found, "F20")
     assert (f20.stage, f20.lane_asked, f20.reserve) == ("seed", "first", False)
     assert card(found, "F23").lane_asked is None
-    _, words, raw = _card(_page(client), "/milestones/f20-duck-pond")
+    classes, words, raw = _card(_page(client), "/milestones/f20-duck-pond")
+    assert "on-its-way" in classes  # the card's dashed edge too, as the mock-up draws it
     assert '<span class="card-reserve on-its-way"><i></i>' in raw
     assert _GOES_FIRST in words
     assert [c.key for c in reserve_marked(connect(board_db), PROJECT, NOW, found=found)] == [
@@ -2956,8 +2957,8 @@ def test_once_approve_first_is_done_the_card_is_as_its_doc_says(board_db, tmp_pa
     client = _reserve_client(board_db, tmp_path)
     write(board_db, _approve("first", NOW.isoformat()))
     assert card(read(board_db), "F20").lane_asked is None
-    _, _words, raw = _card(_page(client), "/milestones/f20-duck-pond")
-    assert "card-reserve" not in raw
+    classes, _words, raw = _card(_page(client), "/milestones/f20-duck-pond")
+    assert "card-reserve" not in raw and "on-its-way" not in classes
     assert 'id="reserve-cards"' not in client.get("/").text
 
 

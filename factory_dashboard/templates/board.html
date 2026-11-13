@@ -37,7 +37,7 @@
    planted card with a ticket started has the orange edge and a "growing" tag (F154 D3) #}
 {% macro card_href(c) %}{{ '/tickets/' if c.bug else '/milestones/' }}{{ c.full_key | urlencode }}{{ q }}{% if c.stage == "ripe" and not c.bug %}#review{% endif %}{% endmacro %}
 {% macro card_link(c) %}
-<a class="card {{ c.area }}{% if c.bug %} bug{% endif %}{% if c.started %} started{% endif %}{% if c.on_its_way %} on-its-way{% endif %}" href="{{ card_href(c) }}">
+<a class="card {{ c.area }}{% if c.bug %} bug{% endif %}{% if c.started %} started{% endif %}{% if c.on_its_way or c.lane_asked == "first" %} on-its-way{% endif %}" href="{{ card_href(c) }}">
   {% set w = c.at_work %}
   {% if w %}
   <span class="at-work-head">{% if w.waiting_clock %}Waits for Claude until {{ w.waiting_clock }}{% else %}<i class="lamp lit"></i>Working now · {{ "a developer" if w.who == "developer" else "the lead" }}{% endif %}</span>
