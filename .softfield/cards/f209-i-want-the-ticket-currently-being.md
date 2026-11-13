@@ -1,6 +1,7 @@
 # Milestone F209: The board lights the card at work and keeps itself up to date
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** done · **Priority:** 100 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-13. Base: git tag `f209-i-want-the-ticket-currently-being-start`. Report: [`.softfield/reviews/f209-i-want-the-ticket-currently-being.md`](../reviews/f209-i-want-the-ticket-currently-being.md).
 > Planted by the owner on 2026-11-03.
 
 ## Notes

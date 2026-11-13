@@ -1,5 +1,7 @@
 # F209: the work that runs now, on the board — review
 
+- **Status:** done, signed off by the owner on 2026-11-13.
+
 ### 1. What changed
 
 - On the board, the card something works on stands out: a thick frame, a filled "Working now" head with a breathing lamp, and a light wash, in orange when the lead works and in blue when a developer does. The old small "Now:" line is gone. A job waiting for Claude's limit keeps the frame, says "Waits for Claude until 23:40" and doesn't glow. In the developers' view a card at work no longer fades.
