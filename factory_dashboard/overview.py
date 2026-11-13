@@ -342,8 +342,9 @@ def queued_jobs(
     """The project's open ``work_queue`` rows, minus those whose ``started_job`` is still
     running, each with the order and wait from ``dispatch.plan``, a direction or escalation of
     ``first``'s tickets (the fast lane's) on top. Also includes open plant requests from
-    ``owner_requests``. Escalations and directions whose subject starts with a ``card_keys``
-    short key (F191 D3) are treated as fast-lane rows even when the lane has no ready ticket."""
+    ``owner_requests``. Escalations, directions and reviews whose subject starts with a
+    ``card_keys`` short key (F191 D3, F242 D4) are treated as fast-lane rows even when the lane
+    has no ready ticket."""
     from runner import dispatch
 
     found_project = conn.execute("SELECT id FROM projects WHERE name = ?", (project,)).fetchone()

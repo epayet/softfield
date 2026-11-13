@@ -870,6 +870,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** the replan step (04) paid for itself: it found two things developers needed in protected `runner/` and queued a lead ticket before they started. Same lesson as F210, again: a UI ticket that promises behaviour (a poll, a pause, a chooser that sends) passes on text assertions while doing nothing; its `tests:` must read the behaviour's markup or drive the browser.
 - **Decisions affected:** ADR 46 item 6 (Run is now `up -d --build`, decided in review: the same fixed command).
 
+### F242 (2026-11-13): a fast-lane card's review goes in the fast lane ([review](../reviews/f242-the-review-of-a-fast-lane.md))
+
+- **Q1:** two tickets, both first time. The lead's runner ticket (01, D1 to D3) passed with Sonnet in 9 minutes ($0.49). Qwen's dashboard ticket (02, D4: three lines in `queued_jobs` and two tests on an existing pattern) passed in 79 minutes, with 3.9M tokens in and a peak context of 130,249 of 130,304: one step from the limit for a 7-line change. No checkpoint. Review round 1: no defect; two stale docstrings fixed by the review. Score 9.
+- **Q3:** Claude built 01; Qwen built 02. See the review's numbers.
+- **Q5:** see the review's numbers.
+- **Anything else:** the card that makes reviews go with the lane wasn't in the lane itself: 02 waited about 4 h 40 min behind other cards' tickets after 01 merged, and its review was queued two seconds after the merge. A small ticket that copies an existing test pattern still filled Qwen's whole context; worth watching whether that repeats before acting.
+- **Decisions affected:** none.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.

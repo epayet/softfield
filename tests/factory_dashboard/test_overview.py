@@ -4436,8 +4436,7 @@ def test_a_review_of_a_fast_lane_card_shows_in_the_bay(board_db, tmp_path):
 
 
 def test_a_review_of_a_card_asked_out_stays_in_the_run_order(board_db, tmp_path):
-    """F242 D4: the same row with F172 out of the lane, or on its way out, shows where it does
-    today."""
+    """F242 D4: the same row with F172 asked out of the lane shows where it does today."""
     (tmp_path / ".softfield" / "cards").mkdir(parents=True, exist_ok=True)
     (tmp_path / ".softfield" / "cards" / "f172.md").write_text(
         "# Milestone f172: a card\n\n> **State:** ready · **Area:** factory"
