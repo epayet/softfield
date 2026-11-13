@@ -20,12 +20,13 @@
   <h2>Needs you <span class="src">{{ needs_you_count }} in all</span></h2>
   <ul class="steps">
     {% for card in needs_you %}
-    {% if card.for_you %}
-    <li><a href="/planning?project={{ card.name | urlencode }}">{{ card.name }}</a> · {{ card.for_you }} item{{ "s" if card.for_you != 1 }} on the Planning desk</li>
-    {% elif card.app and card.app.needs_you %}
-    <li><a href="/planning?project={{ card.name | urlencode }}">{{ card.name }}</a>'s app {{ card.app.word_lower }} · {{ card.app.summary }} · <a href="/projects/{{ card.name | urlencode }}/logs">Logs</a> · <button type="button" class="btn plain" hx-post="/requests" hx-target="next .app-sent" hx-swap="innerHTML"
+    {% if card.app and card.app.needs_you %}
+    <li class="app-broken"><a href="/projects/{{ card.name | urlencode }}/logs">{{ card.name }}</a>'s app {{ card.app.word_lower }} · {{ card.app.summary }} · <a href="/projects/{{ card.name | urlencode }}/logs">Logs</a> · <button type="button" class="btn plain" hx-post="/requests" hx-target="next .app-sent" hx-swap="innerHTML"
         hx-vals='{{ {"kind": "plant", "project": card.name, "value": card.app.fix} | tojson }}'
         hx-on::before-request="this.hidden = true; this.nextElementSibling.textContent = 'On its way: the runner plants it at its next pick'">Plant a card to fix it</button><div class="app-sent way"></div></li>
+    {% endif %}
+    {% if card.for_you %}
+    <li><a href="/planning?project={{ card.name | urlencode }}">{{ card.name }}</a> · {{ card.for_you }} item{{ "s" if card.for_you != 1 }} on the Planning desk</li>
     {% endif %}
     {% endfor %}
   </ul>

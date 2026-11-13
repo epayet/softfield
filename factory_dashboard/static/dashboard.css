@@ -1204,6 +1204,7 @@ body.has-order-bar main { padding-bottom: 120px; }
 .app-row.broken { border-color: var(--fail); }
 .app-row.broken .app-lamp { background: var(--fail); box-shadow: 0 0 6px var(--fail); }
 .app-row.broken .app-state { color: var(--fail); }
+.needs li.app-broken { color: var(--fail); }
 .app-row .app-detail { font: 12px var(--mono); color: var(--ink-2); flex-basis: 100%; overflow-wrap: anywhere; }
 .app-row .app-error { font: 12px var(--mono); color: var(--fail); flex-basis: 100%; }
 .app-row .app-acts { display: flex; gap: 8px; margin-left: auto; flex-wrap: wrap; align-items: center; }
@@ -1363,3 +1364,9 @@ textarea { max-height: 60vh; overflow-y: auto; }
 .logs-page .logs-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; font-size: 13px; }
 .logs-page .logs pre { margin: 0; background: var(--floor); border: 1px solid var(--rule); padding: 10px; font: 12px/1.5 var(--mono); color: var(--ink-2); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 260px; overflow: auto; }
 .logs-page .logs .err { color: var(--fail); }
+.logs-page .logs select { min-height: 36px; background: var(--plate); color: var(--fg); border: 1px solid var(--rule); font: 13px var(--body); }
+.logs-page .app-state { display: inline-flex; align-items: center; gap: 7px; font: 700 13px var(--display); letter-spacing: .06em; text-transform: uppercase; }
+.logs-page .app-lamp { width: 10px; height: 10px; border: 1px solid var(--rule); background: var(--floor); }
+.logs-page .app-state.running .app-lamp { background: var(--good); box-shadow: 0 0 6px var(--good); }
+.logs-page .app-state.broken { color: var(--fail); }
+.logs-page .app-state.broken .app-lamp { background: var(--fail); box-shadow: 0 0 6px var(--fail); }

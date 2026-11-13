@@ -210,10 +210,11 @@ def projects_page(request: Request, conn: Db, project: Project, now: Now) -> HTM
     asked = order_on_its_way(conn)
     if asked is not None:  # shown as sent, on its way (owner, 2026-10-07)
         cards.sort(key=lambda c: asked.index(c.name) if c.name in asked else len(asked))
+    # a broken app first, then the desks; a card with both has both lines
+    broken = [c for c in cards if c.app and c.app.needs_you]
     for_you = [c for c in cards if c.for_you]
-    needs_you = [c for c in cards if c.app and c.app.needs_you]
-    needs_you.extend(for_you)
-    needs_you_count = sum(c.for_you for c in for_you) + len(needs_you) - len(for_you)
+    needs_you = broken + [c for c in for_you if c not in broken]
+    needs_you_count = len(broken) + sum(c.for_you for c in for_you)
     return render(
         request,
         conn,

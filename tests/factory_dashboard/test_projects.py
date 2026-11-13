@@ -352,6 +352,19 @@ def test_a_crashed_project_adds_its_line_to_needs_you(crashed_project):
     assert "in all" in needs_you
 
 
+def test_a_crashed_app_and_desk_items_are_two_lines_counted_once(crashed_project, monkeypatch):
+    """A project with desk items and a crashed app shows both lines, once each; the first draft
+    drew its desk line twice and hid the crash."""
+    from factory_dashboard import planning
+
+    monkeypatch.setattr(planning, "desk", lambda conn, name, now: ["a", "b"] if name == APP else [])
+    monkeypatch.setattr(planning, "waiting_for_you", lambda items: items)
+    needs_you = section(crashed_project.get("/projects").text, "projects-needs-you")
+    assert needs_you.count(f"{APP} 's app crashed") == 1  # `section` spaces out the link
+    assert needs_you.count(f"{APP} · 2 items on the Planning desk") == 1
+    assert "3 in all" in needs_you
+
+
 def test_needs_you_shows_even_with_no_desk_items(crashed_project, db_path):
     """The Needs you panel shows when there are no items on any desk, only a crashed app."""
     conn = metrics.open_db(db_path)

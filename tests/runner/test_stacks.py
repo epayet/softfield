@@ -304,7 +304,7 @@ def test_start_makes_the_checkout_at_main_then_brings_the_stack_up(stack, docker
     assert git(stack.checkout, "branch", "--show-current").strip() == ""  # detached
     assert stack.data.is_dir()
     args, cwd, env = docker.calls[-1]
-    assert args == ["compose", "-p", "coaster-ranker", "up", "-d"]
+    assert args == ["compose", "-p", "coaster-ranker", "up", "-d", "--build"]
     assert cwd == stack.checkout
     assert env["APP_DATA"] == str(stack.data)
 
@@ -331,7 +331,7 @@ def test_every_compose_call_carries_the_project_and_its_data(stack, docker):
         assert cwd == stack.checkout
         assert env["APP_DATA"] == str(stack.data)
     assert [c[0][3:] for c in compose] == [
-        ["up", "-d"],
+        ["up", "-d", "--build"],
         ["ps", "--all", "--format", "json"],
         ["logs", "--no-color", "--tail", "200"],
         ["logs", "--no-color", "--tail", "30", "db"],
@@ -457,6 +457,26 @@ def test_a_stopped_apps_checkout_follows_main_and_nothing_starts(stack, docker):
     assert git(stack.checkout, "rev-parse", "HEAD").strip() == main
     assert _ups(docker) == []
     assert not stack.result_file.exists()
+
+
+def test_a_stopped_app_after_a_failed_update_says_stopped(stack, docker):
+    """Stop is how the owner clears a failed update: it leaves Needs you (f239-07)."""
+    commit = _checkout(stack)
+    _result(stack, commit, ok=False)
+    docker.answers = {"ps": _ps(_container(state="exited", code=0))}
+    assert stacks.state(stack).word == "stopped"
+
+
+def test_a_start_after_a_failed_update_builds_and_clears_it(stack, docker):
+    """Run builds main's image (a stopped app's checkout moved without one), and a start that
+    works is main's good result."""
+    commit = _checkout(stack)
+    _result(stack, commit, ok=False)
+    stacks.start(stack)
+    assert _ups(docker) == [["compose", "-p", "coaster-ranker", "up", "-d", "--build"]]
+    assert _record(stack)["ok"] is True and _record(stack)["commit"] == commit
+    docker.answers = {"ps": _ps(_container())}
+    assert stacks.state(stack).word == "running"
 
 
 def test_without_a_checkout_follow_main_leaves_it_to_start(stack, docker):

@@ -862,6 +862,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** Qwen's failure mode here was pure reading: about 2.6M tokens in and no edit across three attempts. The escalation added developer note 12 (first edit within ten steps, a worked example to copy). If a wide UI ticket stalls this way again, split it by surface at planning time and direct after the first empty attempt.
 - **Decisions affected:** none.
 
+### F239 (2026-11-13): Run, stop and open each product's app from the Projects page ([review](../reviews/f239-i-want-to-be-able-to-3.md))
+
+- **Q1:** eight tickets. The lead's five (01 to 04, 08: `runner/stacks.py`, following main, the routes, the replan, a gap the replan found) all passed on their first real attempt (03 after a park for Claude's limit). Qwen failed 05 (difficulty 4, four files across a page, a partial and the routes) three times, about 3.7 hours, one attempt keeping an edit to protected `runner/stacks.py`; Claude finished it. Qwen merged 06 (attempt 2) and 07 (attempt 1), each with a real defect past green gates: 06's logs page never refreshed and answered 500 on Docker's real time format, and 07 drew a card's desk line twice and hid its crash. No checkpoint finding. Review round 1: one blocking, three should-fix (two in the lead's own runner code: Run reused an old image; a failed update outlived Stop), all fixed by the review; one nit reported. Score 6.
+- **Q3:** Claude built 01 to 04 and 08 and finished 05; see the review's numbers.
+- **Q5:** see the review's numbers.
+- **Anything else:** the replan step (04) paid for itself: it found two things developers needed in protected `runner/` and queued a lead ticket before they started. Same lesson as F210, again: a UI ticket that promises behaviour (a poll, a pause, a chooser that sends) passes on text assertions while doing nothing; its `tests:` must read the behaviour's markup or drive the browser.
+- **Decisions affected:** ADR 46 item 6 (Run is now `up -d --build`, decided in review: the same fixed command).
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.

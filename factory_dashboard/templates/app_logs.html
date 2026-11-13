@@ -1,35 +1,60 @@
 {# The app's logs page (ADR 46 item 9, F239 D5): the app's state on top, then the last 200
-   lines of its stack's logs, refreshed every 5 s while the page is open, for all services or
-   one. The log block is a partial the page polls with htmx every 5 s; it stays scrolled to the
-   bottom unless the owner scrolled up. #}
+   lines of its stack's logs, for all services or one. `#logs-poll` asks for this page every
+   5 s, unless paused, and swaps in its `#logs-live`; the lines stay scrolled to the bottom
+   unless the owner scrolled up. #}
 {% extends "base.html" %}
 {% block title %}{{ name }} · app logs{% endblock %}
-{% block crumbs %}
-<a href="/projects">{{ projects | first }}</a> · <a href="/projects?project={{ name | urlencode }}">Projects</a>
-{% endblock %}
+{% block crumbs %}<a href="/projects">Projects</a>{% endblock %}
 {% block content %}
 <div class="page logs-page">
 
-<div class="panel">
+<section class="panel logs">
   <h2>{{ name }} · app logs <span class="src">/projects/{{ name | urlencode }}/logs</span></h2>
   <div class="logs-bar">
-    <span class="app-state" role="status"><span class="app-lamp" aria-hidden="true"></span>{{ word }}</span>
     {% if services %}
-    <select aria-label="Service" hx-get="/projects/{{ name | urlencode }}/logs" hx-target="#logs-content" hx-indicator="#logs-content">
-      <option value="">All services</option>
-      {% for s in services %}
-      <option value="{{ s }}" {% if s == service %}selected{% endif %}>{{ s }}</option>
-      {% endfor %}
-    </select>
+    <form method="get" action="/projects/{{ name | urlencode }}/logs">
+      <select name="service" aria-label="Service" onchange="this.form.submit()">
+        <option value="">All services</option>
+        {% for s in services %}
+        <option value="{{ s }}" {% if s == service %}selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+      </select>
+    </form>
     {% endif %}
-    <button type="button" class="btn plain" id="pause-btn" aria-pressed="false">Pause</button>
-    <span class="muted" id="updated-at">{% if since %}updated at {{ since | local("%H:%M:%S") }}{% endif %}</span>
+    <button type="button" class="btn plain" id="logs-pause" aria-pressed="false">Pause</button>
   </div>
-</div>
+  <div id="logs-poll"
+    hx-get="/projects/{{ name | urlencode }}/logs{% if service %}?service={{ service | urlencode }}{% endif %}"
+    hx-trigger="every 5s [!window.logsPaused]" hx-select="#logs-live" hx-swap="innerHTML" hx-disinherit="hx-select">
+    <div id="logs-live">
+      <div class="logs-bar">
+        <span class="app-state{% if app.word == 'running' %} running{% elif app.word in ('crashed', 'update failed') %} broken{% endif %}" role="status"><span class="app-lamp" aria-hidden="true"></span>{{ word }}</span>
+        <span class="muted">updated at {{ updated | local("%H:%M:%S") }} · every 5 s</span>
+      </div>
+      <pre>{{ logs }}</pre>
+    </div>
+  </div>
+</section>
 
-<div id="logs-content" class="panel logs">
-  <pre>{{ logs }}</pre>
 </div>
-
-</div>
+<script>
+(() => {
+  const poll = document.getElementById("logs-poll");
+  const pause = document.getElementById("logs-pause");
+  const lines = () => poll.querySelector("pre");
+  let atBottom = true;
+  const toBottom = () => { const pre = lines(); if (pre && atBottom) pre.scrollTop = pre.scrollHeight; };
+  poll.addEventListener("htmx:beforeSwap", () => {
+    const pre = lines();
+    atBottom = !pre || pre.scrollHeight - pre.scrollTop - pre.clientHeight < 8;
+  });
+  poll.addEventListener("htmx:afterSwap", toBottom);
+  pause.addEventListener("click", () => {
+    window.logsPaused = !window.logsPaused;
+    pause.setAttribute("aria-pressed", String(window.logsPaused));
+    pause.textContent = window.logsPaused ? "Resume" : "Pause";
+  });
+  toBottom();
+})();
+</script>
 {% endblock %}

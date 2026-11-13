@@ -14,7 +14,7 @@ import shutil
 import subprocess
 import time
 from collections.abc import Iterator, Mapping, Sequence
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -185,7 +185,10 @@ def _locked(stack: Stack) -> Iterator[None]:
 
 
 def start(stack: Stack) -> None:
-    """Run the app: the checkout at main if there is none yet, then ``up -d``."""
+    """Run the app: the checkout at main if there is none yet, then ``up -d --build``. The build
+    is there because `follow_main` moves a stopped app's checkout without building it: a plain
+    ``up -d`` would start the image of an older main. A start that works clears a failed update
+    of that commit."""
     with _locked(stack):
         if not stack.checkout.is_dir():
             try:
@@ -193,7 +196,9 @@ def start(stack: Stack) -> None:
             except GitError as exc:
                 raise StackError(f"the checkout of {stack.project}'s main failed: {exc}") from exc
         stack.data.mkdir(parents=True, exist_ok=True)
-        _check(_compose(stack, "up", "-d"), f"starting {stack.project}'s app")
+        _check(_compose(stack, "up", "-d", "--build"), f"starting {stack.project}'s app")
+        with suppress(GitError):  # the app runs; only the record of it would be missing
+            _write_result(stack, Git(stack.checkout).head(), True)
 
 
 def stop(stack: Stack) -> None:
@@ -377,7 +382,9 @@ def state(stack: Stack) -> StackState:
     main = next((c for c in containers if c.get("Service") == stack.service), None)
     port = _port(main) if main else None
     since = str(main.get("CreatedAt", "")) if main else ""
-    if failed := _failed_update(stack):
+    up = any(c.get("State") in ("running", "restarting") for c in containers)
+    # a failed update matters while the old app still runs; stopped, it is just stopped
+    if up and (failed := _failed_update(stack)):
         return StackState(
             UPDATE_FAILED,
             port,

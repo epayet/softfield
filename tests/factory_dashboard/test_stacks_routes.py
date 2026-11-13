@@ -216,6 +216,30 @@ def test_an_unknown_project_answers_404(client, docker):
     assert client.get("/projects/nowhere/logs").status_code == 404
 
 
+def test_the_logs_page_escapes_lines_and_takes_dockers_own_time(client, docker, app_repo):
+    """Docker's ``CreatedAt`` isn't ISO ("2026-11-12 09:00:00 +0100 CET"): the page never
+    parses it (the first draft did, and answered 500 for every real app)."""
+    web = json.loads(_running())
+    web["CreatedAt"] = "2026-11-12 09:00:00 +0100 CET"
+    docker.ps = json.dumps(web) + "\n"
+    docker.logs = "web-1 | <script>alert(1)</script>\n"
+    response = client.get(f"/projects/{APP}/logs")
+    assert response.status_code == 200
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in response.text
+    assert "updated at" in response.text
+
+
+def test_the_logs_page_polls_itself_for_its_service_and_can_pause(client, docker, app_repo):
+    docker.ps = _running()
+    docker.config_services = "web\nworker\n"
+    page = client.get(f"/projects/{APP}/logs?service=worker").text
+    assert f'hx-get="/projects/{APP}/logs?service=worker"' in page
+    assert 'hx-trigger="every 5s [!window.logsPaused]"' in page
+    assert 'hx-select="#logs-live"' in page and 'id="logs-live"' in page
+    assert 'name="service"' in page  # the chooser sends its choice
+    assert 'id="logs-pause"' in page
+
+
 def test_an_unknown_service_answers_404(client, docker, app_repo):
     docker.ps = _running()
     assert client.get(f"/projects/{APP}/logs?service=ghost").status_code == 404

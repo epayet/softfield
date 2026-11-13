@@ -19,7 +19,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
-from factory_dashboard.app import Db, render, templates
+from factory_dashboard.app import Db, Now, render, templates
 from factory_dashboard.requests import from_the_dashboard
 from runner import metrics, stacks
 from runner.config import ConfigError
@@ -174,16 +174,18 @@ def stop_app(name: str, request: Request, conn: Db) -> HTMLResponse:
 
 
 @router.get("/projects/{name}/logs")
-def logs_page(name: str, request: Request, conn: Db, service: str | None = None) -> HTMLResponse:
-    """The app's logs page: state on top, last 200 lines, service chooser, refreshed every 5 s."""
+def logs_page(
+    name: str, request: Request, conn: Db, now: Now, service: str | None = None
+) -> HTMLResponse:
+    """The app's logs page: state on top, last 200 lines, service chooser; the page polls
+    itself every 5 s and swaps in its ``#logs-live`` part."""
     stack = stack_of(conn, name)
     if stack is None:
         raise HTTPException(404, "no project with an app the dashboard can run")
-    if service is not None and service not in stacks.services(stack):
+    services = stacks.services(stack)
+    if service and service not in services:
         raise HTTPException(404, "service not in stack")
-    svc = service if service else None
     app_state = stacks.state(stack)
-    all_services = stacks.services(stack)
     return render(
         request,
         conn,
@@ -193,9 +195,9 @@ def logs_page(name: str, request: Request, conn: Db, service: str | None = None)
             "name": name,
             "app": app_state,
             "word": STATE_WORDS.get(app_state.word, app_state.word),
-            "logs": stacks.logs(stack, service=svc),
-            "service": service,
-            "services": all_services,
-            "since": app_state.since,
+            "logs": stacks.logs(stack, service=service or None),
+            "service": service or "",
+            "services": services,
+            "updated": now,
         },
     )
