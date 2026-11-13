@@ -4410,6 +4410,47 @@ def test_an_escalation_of_a_card_asked_out_of_the_lane_stays_in_the_run_order(bo
     assert "Escalation: f23-06-escalated" in row_text(after)
 
 
+def test_a_review_of_a_fast_lane_card_shows_in_the_bay(board_db, tmp_path):
+    """F242 D4: an open review row for F172's full key, with F172 in the fast lane, shows in the
+    Fast lane bay, above the planner jobs."""
+    conn = metrics.open_db(board_db)
+    try:
+        project_id = metrics.find_project(conn, PROJECT)
+        assert project_id is not None
+        metrics.upsert_milestone(
+            conn, project_id, "f172", title="The review of a fast lane", state="ready", priority=10
+        )
+    finally:
+        conn.close()
+    (tmp_path / ".softfield" / "cards").mkdir(parents=True, exist_ok=True)
+    (tmp_path / ".softfield" / "cards" / "f172.md").write_text(
+        "# Milestone f172: a card\n\n> **State:** ready · **Area:** factory"
+        " · **Reserve:** yes\n\n## Goal\nIt.\n",
+        encoding="utf-8",
+    )
+    _ask_lane(board_db, "f172", "on")
+    _queue_on(board_db, "review", "f172-the-review-of-a-fast-lane")
+    bay, _ = _lane_bay(_reserve_client(board_db, tmp_path, "f172", "f23-planted").get("/").text)
+    rows = _rows(bay)
+    assert "Review: f172-the-review-of-a-fast-lane" in rows[0]
+
+
+def test_a_review_of_a_card_asked_out_stays_in_the_run_order(board_db, tmp_path):
+    """F242 D4: the same row with F172 out of the lane, or on its way out, shows where it does
+    today."""
+    (tmp_path / ".softfield" / "cards").mkdir(parents=True, exist_ok=True)
+    (tmp_path / ".softfield" / "cards" / "f172.md").write_text(
+        "# Milestone f172: a card\n\n> **State:** ready · **Area:** factory"
+        " · **Reserve:** yes\n\n## Goal\nIt.\n",
+        encoding="utf-8",
+    )
+    _ask_lane(board_db, "f172", "off")
+    _queue_on(board_db, "review", "f172-the-review-of-a-fast-lane")
+    bay, after = _lane_bay(_reserve_client(board_db, tmp_path, "f172", "f23-planted").get("/").text)
+    assert "Review: f172-the-review-of-a-fast-lane" not in bay
+    assert "Review: f172-the-review-of-a-fast-lane" in row_text(after)
+
+
 def test_no_card_in_the_fast_lane_leaves_next_in_line_as_the_run_order(board_db, tmp_path):
     from factory_dashboard.line import live_line
 

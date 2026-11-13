@@ -364,12 +364,13 @@ def queued_jobs(
         row for row in rows if row["started_job"] is None or row["started_job"] not in running_jobs
     ]
     queued = [dispatch.Queued.from_row(row) for row in open_queues]
-    # Escalations and directions for a fast-lane card whose ticket has left ready/ (F191 D3)
+    # Escalations, directions and reviews for a fast-lane card whose ticket has left ready/
+    # (F191 D3, F242 D4).
     if card_keys:
         lane_subjects: set[str] = set()
         for q in queued:
             if (
-                q.kind in dispatch.GOES_WITH
+                q.kind in dispatch.LANE_KINDS
                 and q.subject not in first
                 and any(q.subject.upper().startswith(k + "-") for k in card_keys)
             ):
@@ -408,7 +409,7 @@ def queued_jobs(
                                 text = next(iter(comments.values()), "")
                         if text:
                             message = text
-        lane = pick.kind in dispatch.GOES_WITH and pick.subject in first
+        lane = pick.kind in dispatch.LANE_KINDS and pick.subject in first
         found.append(QueuedJob(plain, pick.subject, pick.reason, line.waits, message, lane=lane))
     # Open plant requests from owner_requests.
     plant_rows = conn.execute(
