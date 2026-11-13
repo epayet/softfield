@@ -26,3 +26,12 @@ Read the `#primary` block and the page's script in `factory_dashboard/templates/
 - the browser test: with a comment typed on the waiting plan page, after the poll Send back still shows and Approve plan and the Approve first fold stay hidden
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 2
+duration_s: 3757
+gate_failures: ['stopped']
+tokens: 3352296
+```
