@@ -1,5 +1,7 @@
 # F75 review: a thread shows it's archiving once its last proposal is approved or rejected
 
+- **Status:** done, signed off by the owner on 2026-11-13.
+
 ## Sign-off sheet
 
 ### 1. What changed

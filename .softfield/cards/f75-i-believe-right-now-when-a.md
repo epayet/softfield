@@ -1,6 +1,7 @@
 # Milestone F75: I believe right now, when a plan gets approved or…
 
-> **State:** ready · **Priority:** 18 · **Area:** factory
+> **State:** done · **Priority:** 18 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-13. Base: git tag `f75-i-believe-right-now-when-a-start`. Report: [`.softfield/reviews/f75-i-believe-right-now-when-a.md`](../reviews/f75-i-believe-right-now-when-a.md).
 > Planted by the owner on 2026-10-09.
 
 ## Notes
