@@ -577,12 +577,20 @@ def test_a_live_review_links_to_the_card_and_a_live_planner_links_to_the_convers
     assert "F25" in keys
     assert "F22" in keys
     html = _page(board_client)
+    plate = re.search(r'id="board-now"(.*?)</section>', html, re.S)
+    assert plate
+    rows = dict(re.findall(r'<a class="board-now [a-z]+" href="([^"]*)">(.*?)</a>', plate[1], re.S))
     # review: links to the card
-    assert re.search(r'href="/milestones/f25-unreviewed\?[^"]*"', html)
-    assert "Working now · the lead reviews it" in html
-    # planner: links to the conversation
-    assert re.search(r'href="/planning/f22[^"]*"', html)
-    assert "Working now · the lead answers you" in html
+    review_row = next(text for href, text in rows.items() if "/milestones/f25-unreviewed?" in href)
+    assert "Working now · the lead reviews it" in review_row
+    assert "open the card ›" in review_row
+    # planner: links to the conversation, in the page's project, and says so
+    planner_href = next(href for href in rows if href.startswith("/planning/f22?"))
+    assert "project=" in planner_href
+    assert "Working now · the lead answers you" in rows[planner_href]
+    assert "open the conversation ›" in rows[planner_href]
+    # each job is one plate, and the section holding them is no plate itself (review r1 F1)
+    assert 'id="board-now" class="board-now-rows"' in html
 
 
 def test_a_job_waiting_for_claude_says_until_when_and_has_no_lit_lamp(

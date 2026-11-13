@@ -78,15 +78,17 @@
 
 {# The plate: what works now (F209 D3). board.js fetches it again every 10 s and writes each
    .fresh line: refreshing, held by moves not sent, or not updated since (D4–D6) #}
-<section id="board-now" class="board-now{{ ' idle' if not found.now }}">
+{# one plate per live job: the section is a plate itself only when it holds the idle line #}
+<section id="board-now" class="{{ 'board-now-rows' if found.now else 'board-now idle' }}" aria-label="What the factory is doing">
   {% if found.now %}
   {% for c in found.now %}
   {% set w = c.at_work %}
-  <a class="board-now {{ w.who }}" href="{% if w.waiting_clock %}{{ card_href(c) }}{% elif w.role == 'planner' %}/planning/{{ c.key | lower }}{% else %}{{ card_href(c) }}{% endif %}">
+  {% set talk = w.role == 'planner' and not w.waiting_clock %}
+  <a class="board-now {{ w.who }}" href="{% if talk %}/planning/{{ c.key | lower }}{{ q }}{% else %}{{ card_href(c) }}{% endif %}">
     <span class="row">{% if not w.waiting_clock %}<i class="lamp lit"></i>{% endif %}{% if w.waiting_clock %}<span class="what">Waits for Claude until {{ w.waiting_clock }}</span>{% else %}<span class="what">{% if w.role == 'planner' %}Working now · the lead answers you{% elif w.role == 'review' %}Working now · the lead reviews it{% else %}Working now · {{ "a developer" if w.who == "developer" else "the lead" }}{% endif %}</span><span class="when">{{ w.elapsed | ago }}</span>{% endif %}</span>
-    <span class="name">{{ c.key }} · {{ (c.title or c.key)[:40] }}</span>
+    <span class="name">{{ c.key }} · {{ (c.title or c.key) | truncate(40, True, '…', 0) }}</span>
     {% if not w.waiting_clock %}<span class="doing">{% if w.ticket %}<code>{{ w.ticket }}</code>{% if w.goal %} · {{ w.goal }}{% endif %}{% else %}{{ w.role }}{% endif %} · {{ w.agent }}, attempt {{ w.attempt }}</span>{% endif %}
-    <span class="foot"><span class="fresh">refreshes every 10 s</span>{% if c.place %}<span class="go">{{ '#%d in %s' | format(c.place, words[c.stage][0]) }} · open the card ›</span>{% endif %}</span>
+    <span class="foot"><span class="fresh">refreshes every 10 s</span>{% if c.place %}<span class="go">{{ '#%d in %s' | format(c.place, words[c.stage][0]) }} · {{ 'open the conversation' if talk else 'open the card' }} ›</span>{% endif %}</span>
   </a>
   {% endfor %}
   {% else %}
