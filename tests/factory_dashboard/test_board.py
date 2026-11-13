@@ -3102,3 +3102,275 @@ def test_moving_a_card_keeps_the_plate_showing(page, board_db):
     assert plate.is_visible()
     classes = plate.get_attribute("class") or ""
     assert "on-its-way" in classes
+
+
+# --- the field follows the work (F209 D4–D6) -------------------------------------------------
+
+EVERY = "refreshes every 10 s"
+HELD = "Refresh held: your moves aren't sent yet"
+
+
+def _is_board_fetch(response) -> bool:
+    return bool(
+        response.request.resource_type == "fetch" and response.url.startswith(f"{ORIGIN}/board")
+    )
+
+
+def _board_fetches(page) -> list[str]:
+    """The board's own fetches from now on, not the page's loads nor the other polls."""
+    fetches: list[str] = []
+    page.on(
+        "request",
+        lambda r: (
+            fetches.append(r.url)
+            if r.resource_type == "fetch" and r.url.startswith(f"{ORIGIN}/board")
+            else None
+        ),
+    )
+    return fetches
+
+
+def _tick(page) -> None:
+    """One 10 s tick on the page's clock (``page.clock.install()`` before the page opens)."""
+    page.clock.run_for(10_100)
+
+
+def _fetched_tick(page) -> None:
+    """One tick, and its answer drawn."""
+    with page.expect_response(_is_board_fetch):
+        _tick(page)
+    page.wait_for_timeout(200)
+
+
+def _fresh(page) -> list[tuple[str, bool]]:
+    """Each plate row's small line, and whether it is marked stale."""
+    rows: list[tuple[str, bool]] = page.evaluate(
+        """() => [...document.querySelectorAll('#board-now .fresh')]
+            .map((s) => [s.textContent, s.classList.contains('stale')])"""
+    )
+    return [(text, stale) for text, stale in rows]
+
+
+def _idle(page) -> None:
+    """liveIdle says yes, whatever the test's own scrolling did, so only what it tests holds."""
+    page.evaluate("() => { window.liveIdle = () => true; }")
+
+
+def test_a_changed_answer_shows_within_one_tick_with_the_phones_stage_kept(page, board_db):
+    """D4: F20 planted and F23's ticket started after the page opened. One tick later the plate,
+    the columns, the plot counts and #board-line say so; F20 has one grip and a working ⋯, the
+    plots still answer a press, and the phone keeps the stage the owner picked."""
+    page.clock.install()
+    _three_planted(page, board_db)
+    page.locator(".plot.at-seed").click()
+    assert page.locator(".plot.at-seed b").text_content() == "2"
+    planted = int(page.locator(".plot.at-planted b").text_content() or "")
+    write(board_db, _planted(("f20-duck-pond", 9)))
+    write(board_db, _live_job("lead-ticket", ticket="f23-01-first"))
+    _idle(page)
+    _fetched_tick(page)
+    assert "f23-01-first" in (page.locator("#board-now").text_content() or "")
+    assert _order(page, "seed") == ["bug-01-duck-count"]
+    assert "f20" in _order(page, "planted")
+    assert page.locator(".plot.at-seed b").text_content() == "1"
+    assert page.locator(".plot.at-planted b").text_content() == str(planted + 1)
+    line = page.evaluate("() => JSON.parse(document.getElementById('board-line').textContent)")
+    assert ["f20", "planted"] in line
+    assert page.locator("#field").get_attribute("data-shown") == "seed"
+    assert page.locator("#stage-seed").is_visible()
+    assert page.locator("#stage-planted").is_hidden()
+    page.locator(".plot.at-planted").click()
+    assert page.locator(".slot[data-key=f20] .grip").count() == 1
+    assert page.locator(".slot[data-key=f24] .grip").count() == 1
+    page.locator(".slot[data-key=f20] .more").click()
+    assert page.locator("#order-sheet").evaluate("(d) => d.open")
+    assert _fresh(page) == [(EVERY, False), (EVERY, False)]
+
+
+def test_an_unchanged_answer_leaves_the_same_nodes_in_place(page, board_db):
+    """D4: the plate, the columns, a card's grip and a plot's count are the nodes first drawn."""
+    page.clock.install()
+    page.set_viewport_size(PHONE)
+    open_page(page, _client(board_db), "/board")
+    _idle(page)
+    page.evaluate(
+        """() => { window.kept = [
+            document.getElementById('board-now'),
+            document.querySelector('#field .stages'),
+            document.querySelector('.slot[data-key=f24] .grip'),
+            document.querySelector('.plot.at-planted b').firstChild,
+        ]; }"""
+    )
+    _fetched_tick(page)
+    same = page.evaluate(
+        """() => [
+            document.getElementById('board-now'),
+            document.querySelector('#field .stages'),
+            document.querySelector('.slot[data-key=f24] .grip'),
+            document.querySelector('.plot.at-planted b').firstChild,
+        ].map((node, i) => node === window.kept[i])"""
+    )
+    assert same == [True, True, True, True]
+
+
+def test_no_fetch_while_the_page_is_hidden_and_one_at_once_when_it_comes_back(page, board_db):
+    """D5: two ticks while hidden fetch nothing; coming back fetches once, before any tick."""
+    page.clock.install()
+    page.set_viewport_size(PHONE)
+    open_page(page, _client(board_db), "/board")
+    _idle(page)
+    page.evaluate(
+        """() => {
+            window.away = true;
+            const hidden = { configurable: true, get: () => window.away };
+            Object.defineProperty(document, 'hidden', hidden);
+        }"""
+    )
+    fetches = _board_fetches(page)
+    page.clock.run_for(20_100)
+    page.wait_for_timeout(200)
+    assert fetches == []
+    with page.expect_response(_is_board_fetch):
+        page.evaluate(
+            "() => { window.away = false; document.dispatchEvent(new Event('visibilitychange')); }"
+        )
+    page.wait_for_timeout(200)
+    assert len(fetches) == 1
+
+
+def test_no_fetch_during_a_drag(page, board_db):
+    """D5: a tick fetches; with a card held by its grip, the next one doesn't."""
+    page.clock.install()
+    _three_planted(page, board_db)
+    grip = page.locator(".slot[data-key=f23] .grip")
+    grip.scroll_into_view_if_needed()
+    box = grip.bounding_box()
+    assert box
+    _idle(page)
+    fetches = _board_fetches(page)
+    _fetched_tick(page)
+    x, y = box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
+    page.mouse.move(x, y)
+    page.mouse.down()
+    page.mouse.move(x, y + 4)
+    assert page.locator(".slot[data-key=f23].dragging").count() == 1
+    _tick(page)
+    page.wait_for_timeout(200)
+    assert len(fetches) == 1
+    page.mouse.up()
+
+
+def test_no_fetch_with_the_menu_open(page, board_db):
+    """D5: a tick fetches; with a card's ⋯ menu open, the next one doesn't."""
+    page.clock.install()
+    _three_planted(page, board_db)
+    _idle(page)
+    fetches = _board_fetches(page)
+    _fetched_tick(page)
+    page.locator(".slot[data-key=f24] .more").click()
+    assert page.locator("#order-sheet").evaluate("(d) => d.open")
+    _tick(page)
+    page.wait_for_timeout(200)
+    assert len(fetches) == 1
+
+
+def test_no_fetch_while_live_idle_says_no(page, board_db):
+    """D5: a tick fetches; once ``window.liveIdle()`` says no, the next one doesn't."""
+    page.clock.install()
+    page.set_viewport_size(PHONE)
+    open_page(page, _client(board_db), "/board")
+    _idle(page)
+    fetches = _board_fetches(page)
+    _fetched_tick(page)
+    page.evaluate("() => { window.liveIdle = () => false; }")
+    _tick(page)
+    page.wait_for_timeout(200)
+    assert len(fetches) == 1
+
+
+def test_a_drag_begun_during_a_fetch_is_not_disturbed_by_its_answer(page, board_db):
+    """D5: the answer, F20 planted, comes while F23 is held: the held card is the same node,
+    still dragging, and the field is not redrawn."""
+    page.clock.install()
+    _three_planted(page, board_db)
+    grip = page.locator(".slot[data-key=f23] .grip")
+    grip.scroll_into_view_if_needed()
+    box = grip.bounding_box()
+    assert box
+    _idle(page)
+    page.evaluate(
+        """() => {
+            const real = window.fetch;
+            window.fetch = (...args) =>
+                new Promise((resolve) => { window.answer = () => resolve(real(...args)); });
+            window.held = document.querySelector('.slot[data-key=f23]');
+        }"""
+    )
+    write(board_db, _planted(("f20-duck-pond", 9)))
+    _tick(page)
+    page.wait_for_function("() => typeof window.answer === 'function'")
+    x, y = box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
+    page.mouse.move(x, y)
+    page.mouse.down()
+    page.mouse.move(x, y + 4)
+    with page.expect_response(_is_board_fetch):
+        page.evaluate("() => window.answer()")
+    page.wait_for_timeout(200)
+    assert page.evaluate("() => window.held === document.querySelector('.slot[data-key=f23]')")
+    assert page.locator(".slot[data-key=f23].dragging").count() == 1
+    assert "f20" not in _order(page, "planted")
+    assert page.locator(".plot.at-seed b").text_content() == "2"
+    page.mouse.up()
+
+
+def test_moves_not_sent_hold_the_refresh_and_the_plate_says_so(page, board_db):
+    """D5, D6: with F27 moved and not sent, a tick fetches nothing, the move stays, and the
+    plate says the refresh is held; Cancel brings back its usual words."""
+    page.clock.install()
+    _three_planted(page, board_db)
+    assert _fresh(page) == [(EVERY, False)]
+    _drag(page, "f27", "f23")
+    moved = ["f24", "f27", "f23", "bug-02-stale", *STARTED]
+    assert _order(page, "planted") == moved
+    assert _fresh(page) == [(HELD, True)]
+    _idle(page)
+    fetches = _board_fetches(page)
+    write(board_db, _planted(("f20-duck-pond", 9)))
+    _tick(page)
+    page.wait_for_timeout(200)
+    assert fetches == []
+    assert _order(page, "planted") == moved
+    assert page.locator(".card.moved").count() > 0
+    assert _fresh(page) == [(HELD, True)]
+    page.locator('[data-order="cancel"]').click()
+    assert _fresh(page) == [(EVERY, False)]
+
+
+def test_a_failed_fetch_says_since_when_and_the_next_good_one_clears_it(page, board_db):
+    """D6: the time is the last good answer's, not the failure's: a minute of failures later it
+    still says it; the next good answer brings back the usual words."""
+    page.clock.install(time=NOW.replace(second=0, microsecond=0))
+    page.set_viewport_size(PHONE)
+    open_page(page, _client(board_db), "/board")
+    _idle(page)
+    _fetched_tick(page)
+    good = page.evaluate(
+        """() => { const d = new Date(), two = (n) => String(n).padStart(2, '0');
+            return `${two(d.getHours())}:${two(d.getMinutes())}`; }"""
+    )
+    page.route(
+        f"{ORIGIN}/board",
+        lambda route: (
+            route.fulfill(status=500, body="no")
+            if route.request.resource_type == "fetch"
+            else route.fallback()
+        ),
+    )
+    page.clock.run_for(60_000)
+    page.wait_for_function(
+        "() => document.querySelector('#board-now .fresh').textContent.startsWith('Not updated')"
+    )
+    assert _fresh(page) == [(f"Not updated since {good}: the dashboard doesn't answer", True)]
+    page.unroute(f"{ORIGIN}/board")
+    _fetched_tick(page)
+    assert _fresh(page) == [(EVERY, False)]

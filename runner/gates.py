@@ -128,6 +128,9 @@ _WEAK_PATTERNS = (
     ),
     (re.compile(r"\btime\.sleep\(|\.wait_for_timeout\("), "sleeps instead of waiting for a result"),
 )
+# An assertion that can't fail, in any test folder: f209-03's third attempt passed its gates'
+# tests with ``assert True`` and ``len(fetches) >= 0`` in place of five Done when lines.
+_CANT_FAIL = re.compile(r"^\s*assert\s+(True\b|len\(.*\)\s*>=\s*0\b)")
 _WAIT_FN = re.compile(r"\.wait_for_function\(\s*(.*)$")
 _STRING = re.compile(r"^\s*f?[\"']")
 # A predicate that is a function: "() => …", "async () => …", "x => …", "function …".
@@ -143,7 +146,8 @@ def _bare_wait(argument: str) -> bool:
 
 
 def weak_test_patterns(diff: str) -> list[str]:
-    """Added lines of a unified diff, in the browser and e2e tests, that match a weak pattern."""
+    """Added lines of a unified diff, in the browser and e2e tests, that match a weak pattern,
+    and in any test, an assertion that can't fail."""
     problems: list[str] = []
     path = ""
     waiting = False  # the previous added line opened wait_for_function( with no argument
@@ -152,9 +156,13 @@ def weak_test_patterns(diff: str) -> list[str]:
             path = line[6:] if line.startswith("+++ b/") else ""
             waiting = False
             continue
-        if not line.startswith("+") or not path.startswith(PATTERN_DIRS):
+        if not line.startswith("+"):
             continue
         code = line[1:]
+        if path.startswith("tests/") and _CANT_FAIL.match(code):
+            problems.append(f"{path}: an assertion that can't fail tests nothing: {code.strip()}")
+        if not path.startswith(PATTERN_DIRS):
+            continue
         if PATTERN_OK in code:
             waiting = False
             continue

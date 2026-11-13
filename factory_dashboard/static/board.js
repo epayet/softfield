@@ -9,10 +9,22 @@
 // shows dashed until sent. "Send new order" posts one reorder: the page's whole open line
 // (#board-line), each moved card just before the card it was dropped above. Then the field is
 // fetched again and shows the order on its way.
+//
+// The field follows the work (F209 D4–D6): every 10 s, and at once on coming back to the page,
+// it fetches itself and swaps only the parts whose text changed since the last answer, so an
+// unchanged board touches nothing. A drag, moves not sent, the ⋯ menu or liveIdle hold it, and
+// the plate's small line says when it isn't fresh.
 (() => {
   const field = document.getElementById("field");
   const plots = [...document.querySelectorAll(".plot")];
   if (!field || !plots.length) return;
+  // The parts as the server last sent them: setUp and show change the page's own copy.
+  const textOf = (doc) => ({
+    now: doc.getElementById("board-now")?.outerHTML,
+    stages: doc.querySelector("#field .stages")?.outerHTML,
+    line: doc.getElementById("board-line")?.textContent,
+  });
+  let last = textOf(document);
   const stages = plots.map((plot) => plot.dataset.stage);
   const named = () => {
     const stage = location.hash.replace(/^#stage-/, "");
@@ -42,6 +54,20 @@
   let came = []; // the open line as the page came
   let line = []; // and as moved now
   let moved = new Set();
+
+  // The plate's small line (D6): moves not sent hold the refresh; a failed fetch says since when
+  const EVERY = "refreshes every 10 s";
+  let goodAt = new Date(); // the last good answer, the page's own load at first
+  let failed = false;
+  const clock = (d) => `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  const sayFresh = () => {
+    const text = moved.size ? "Refresh held: your moves aren't sent yet"
+      : failed ? `Not updated since ${clock(goodAt)}: the dashboard doesn't answer` : EVERY;
+    for (const s of document.querySelectorAll("#board-now .fresh")) {
+      s.textContent = text;
+      s.classList.toggle("stale", text !== EVERY);
+    }
+  };
 
   const inStage = (keys, stage) => keys.filter((key) => stageOf[key] === stage);
   const slot = (key) => field.querySelector(`.slot[data-key="${CSS.escape(key)}"]`);
@@ -97,6 +123,7 @@
     document.body.classList.toggle("has-order-bar", !bar.hidden);
     bar.querySelector("p").textContent =
       `${moved.size} card${moved.size === 1 ? "" : "s"} moved. Nothing is sent yet.`;
+    sayFresh();
   };
 
   // ``key`` goes just before ``before`` in the whole line, or just after ``after``
@@ -239,9 +266,14 @@
     work();
   });
 
-  // Redraw the field as it is now, past the browser's cache: after a send, and on the way back.
-  // False, with the page left as it is, when no board came.
-  const refresh = async () => {
+  // What holds the 10 s fetch, and drops an answer that comes back into it (D5)
+  const busy = () => Boolean(drag || moved.size || sheet.open);
+
+  // Redraw the field as it is now, past the browser's cache: after a send, on the way back, and
+  // every 10 s (``follow``). False, with the page left as it is, when no board came; null when
+  // a followed answer came into a drag, moves or the menu, and was dropped. A send redraws the
+  // field whatever came; the 10 s fetch swaps only the parts whose text changed.
+  const refresh = async (follow = false) => {
     let page;
     try {
       const answer = await fetch(location.href, { cache: "no-cache" });
@@ -250,15 +282,46 @@
     } catch {
       return false;
     }
-    const stages = page.querySelector("#field .stages");
-    const sent = page.getElementById("board-line");
-    if (!stages || !sent) return false;
-    field.querySelector(".stages").replaceWith(stages);
-    document.getElementById("board-line").textContent = sent.textContent;
-    show(field.dataset.shown);
-    setUp();
+    const fresh = textOf(page);
+    if (fresh.stages === undefined || fresh.line === undefined) return false;
+    if (follow && busy()) return null;
+    if (!follow || fresh.stages !== last.stages || fresh.line !== last.line) {
+      field.querySelector(".stages").replaceWith(page.querySelector("#field .stages"));
+      document.getElementById("board-line").textContent = fresh.line;
+      show(field.dataset.shown);
+      setUp(); // the grips and ⋯ of the new cards, only after a swap of .stages
+    }
+    const now = page.getElementById("board-now");
+    if (now && fresh.now !== last.now) document.getElementById("board-now").replaceWith(now);
+    // each plot keeps its node and its listener; only its count and its ripe light change
+    for (const plot of plots) {
+      const came = page.querySelector(`.plot[data-stage="${plot.dataset.stage}"]`);
+      if (!came) continue;
+      const count = came.querySelector("b").textContent;
+      if (plot.querySelector("b").textContent !== count) plot.querySelector("b").textContent = count;
+      plot.classList.toggle("ripe", came.classList.contains("ripe"));
+    }
+    last = fresh;
+    sayFresh(); // a new plate comes with the template's words
     return true;
   };
+
+  // Every 10 s, and at once on coming back to the page, unless something holds it (D5)
+  let fetching = false;
+  const follow = async () => {
+    if (fetching || document.hidden || busy() || !window.liveIdle()) return;
+    fetching = true;
+    try {
+      const drawn = await refresh(true);
+      if (drawn === false) failed = true;
+      else if (drawn) { failed = false; goodAt = new Date(); }
+    } finally {
+      fetching = false;
+      sayFresh();
+    }
+  };
+  setInterval(follow, 10000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) follow(); });
 
   const send = bar.querySelector('[data-order="send"]');
   const say = bar.querySelector("p");

@@ -76,7 +76,8 @@
   <p>Every feature starts as a seed in the field. Planning sprouts it, the factory grows it ticket by ticket, you harvest it at sign-off. Each card shows its place in its stage: #1 is first in line. Drag a card by its grip, or use ⋯, to change the order inside a stage; nothing is sent until you press Send new order, and the runner follows it from its next pick.</p>
 </header>
 
-{# The plate: what works now (F209 D3) #}
+{# The plate: what works now (F209 D3). board.js fetches it again every 10 s and writes each
+   .fresh line: refreshing, held by moves not sent, or not updated since (D4–D6) #}
 <section id="board-now" class="board-now{{ ' idle' if not found.now }}">
   {% if found.now %}
   {% for c in found.now %}
@@ -85,11 +86,11 @@
     <span class="row">{% if not w.waiting_clock %}<i class="lamp lit"></i>{% endif %}{% if w.waiting_clock %}<span class="what">Waits for Claude until {{ w.waiting_clock }}</span>{% else %}<span class="what">{% if w.role == 'planner' %}Working now · the lead answers you{% elif w.role == 'review' %}Working now · the lead reviews it{% else %}Working now · {{ "a developer" if w.who == "developer" else "the lead" }}{% endif %}</span><span class="when">{{ w.elapsed | ago }}</span>{% endif %}</span>
     <span class="name">{{ c.key }} · {{ (c.title or c.key)[:40] }}</span>
     {% if not w.waiting_clock %}<span class="doing">{% if w.ticket %}<code>{{ w.ticket }}</code>{% if w.goal %} · {{ w.goal }}{% endif %}{% else %}{{ w.role }}{% endif %} · {{ w.agent }}, attempt {{ w.attempt }}</span>{% endif %}
-    <span class="foot"><span>refreshes every 10 s</span>{% if c.place %}<span class="go">{{ '#%d in %s' | format(c.place, words[c.stage][0]) }} · open the card ›</span>{% endif %}</span>
+    <span class="foot"><span class="fresh">refreshes every 10 s</span>{% if c.place %}<span class="go">{{ '#%d in %s' | format(c.place, words[c.stage][0]) }} · open the card ›</span>{% endif %}</span>
   </a>
   {% endfor %}
   {% else %}
-  <span class="row"><span class="what">Nothing is being worked on now</span><span class="when">refreshes every 10 s</span></span>
+  <span class="row"><span class="what">Nothing is being worked on now</span><span class="when fresh">refreshes every 10 s</span></span>
   {% endif %}
 </section>
 

@@ -320,6 +320,24 @@ def test_weak_test_patterns_let_good_waits_and_other_folders_through():
     assert gates.weak_test_patterns(good + elsewhere) == []
 
 
+def test_an_assertion_that_cant_fail_is_flagged_in_any_test_folder():
+    """f209-03: ``assert True`` and ``len(x) >= 0`` stood for five Done when lines."""
+    diff = _diff(
+        "tests/factory_dashboard/test_board.py",
+        "    assert True",
+        "    assert len(fetches) >= 0  # listener is installed",
+        "    assert len(fetches) >= 1",
+        "    assert Truthy",
+    ) + _diff("coucou/test_x.py", "    assert True")
+    problems = gates.weak_test_patterns(diff)
+    assert problems == [
+        "tests/factory_dashboard/test_board.py: an assertion that can't fail tests nothing: "
+        "assert True",
+        "tests/factory_dashboard/test_board.py: an assertion that can't fail tests nothing: "
+        "assert len(fetches) >= 0  # listener is installed",
+    ]
+
+
 def test_empty_modules_are_flagged(tmp_path: Path):
     (tmp_path / "coucou").mkdir()
     (tmp_path / "coucou" / "real.py").write_text('"""Doc."""\n\nX = 1\n')
