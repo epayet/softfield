@@ -1,4 +1,4 @@
-# Milestone F248: 'this card's steps' in at the top for proposals but bottom…
+# Milestone F248: This card's steps at the top of the thread too, as on a proposal's page
 
 > **State:** idea · **Priority:** 100 · **Area:** factory
 > Planted by the owner on 2026-11-14.
