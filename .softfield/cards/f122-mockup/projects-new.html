@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F122 mock-up: start a project from the Projects page</title>
+<style>
+  /* The dashboard's own tokens (factory_dashboard/static/dashboard.css), dark theme */
+  :root {
+    --floor: #12161b; --bay: #181e25; --plate: #1f2730; --grid: #222b34; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+    --hazard: #f2b10a; --hazard-ink: #1a1405; --fail: #ec5458; --good: #5fd17a; --opus: #ff9640; --sonnet: #ffc48a;
+    --tick: var(--ink-2);
+    --stripe: repeating-linear-gradient(-45deg, var(--hazard) 0 6px, transparent 6px 12px);
+    --notch: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
+    --display: "Chakra Petch", "Bahnschrift", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+  body { margin: 0; background: var(--floor); color: var(--fg); font: 15px/1.5 var(--body); padding: 20px; }
+  h1.top { font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 4px; }
+  h3.cap { font: 600 13px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 18px 0 8px; }
+  p.lede { color: var(--ink-2); max-width: 820px; margin: 0 0 8px; }
+  a { color: var(--sonnet); text-decoration: none; }
+  .switch { display: inline-flex; margin: 12px 0 0; border: 1px solid var(--rule); }
+  .switch button { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 10px 18px;
+    background: var(--bay); color: var(--muted); border: 0; cursor: pointer; min-height: 44px; }
+  .switch button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+  .versions { display: grid; gap: 24px; grid-template-columns: 1fr; margin-top: 12px; }
+  @media (min-width: 900px) { .versions { grid-template-columns: 1fr 1fr; } .versions > [hidden] { display: block !important; } .switch { display: none; } }
+  .new { outline: 1px dashed var(--good); outline-offset: 3px; position: relative; }
+  .note { display: block; font: 600 11px/1.35 var(--mono); color: var(--good); margin: 4px 0 0; }
+  .legend { color: var(--ink-2); font-size: 13px; margin: 14px 0 0; }
+  [hidden] { display: none !important; }
+
+  /* ---- copied from dashboard.css: panels and the Projects page ---- */
+  .page { display: grid; gap: 14px; }
+  .panel { background: var(--bay); border: 1px solid var(--rule); padding: 0 14px 12px; min-width: 0; position: relative; }
+  .panel.needs { border-color: var(--hazard); }
+  .panel::before, .panel::after { content: ""; position: absolute; width: 10px; height: 10px; border: 0 solid var(--tick); }
+  .panel::before { top: -1px; left: -1px; border-top-width: 2px; border-left-width: 2px; }
+  .panel::after { bottom: -1px; right: -1px; border-bottom-width: 2px; border-right-width: 2px; }
+  .panel > h2 { display: flex; align-items: center; gap: 10px; margin: 0 -14px 10px; padding: 7px 14px;
+    background: var(--plate); border-bottom: 1px solid var(--rule); font: 600 14px var(--display); text-transform: uppercase; letter-spacing: .1em; }
+  .panel > h2::after { content: ""; order: 1; flex: 1; height: 8px; background: var(--stripe); opacity: .5; }
+  .panel > h2 .src { order: 2; font: 11px var(--mono); text-transform: none; letter-spacing: 0; color: var(--muted); }
+  .panel.needs > h2 { background: var(--hazard); color: var(--hazard-ink); }
+  .panel.needs > h2::after { background: repeating-linear-gradient(-45deg, var(--hazard-ink) 0 6px, transparent 6px 12px); opacity: .35; }
+  .panel.needs > h2 .src { color: var(--hazard-ink); }
+  .steps { list-style: none; margin: 0; padding: 0; }
+  .steps li { padding: 5px 0; }
+  .muted { color: var(--muted); }
+  .mono { font-family: var(--mono); font-size: 12.5px; }
+  .rank { list-style: none; margin: 0; padding: 0; }
+  .proj { display: grid; grid-template-columns: 52px 1fr; gap: 4px 12px; padding: 12px 0; border-bottom: 1px solid var(--grid); }
+  .proj:last-child { border-bottom: 0; }
+  .place { grid-row: 1 / 6; display: flex; flex-direction: column; align-items: center; }
+  .place input { width: 44px; text-align: center; font: 700 18px var(--display); background: var(--plate); color: var(--fg); border: 1px solid var(--rule); padding: 4px 0; }
+  .place small { font: 500 11px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .plate { display: grid; gap: 3px; min-width: 0; }
+  .head { display: flex; align-items: baseline; gap: 10px; }
+  .rankno { font: 700 20px var(--display); color: var(--hazard); min-width: 30px; }
+  .name { font: 700 17px var(--display); letter-spacing: .03em; }
+  .what { color: var(--ink-2); font-size: 13.5px; }
+  .facts { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13.5px; }
+  .facts b { font-family: var(--display); }
+  .links { display: flex; flex-wrap: wrap; gap: 6px 14px; font: 600 13px var(--display); letter-spacing: .04em; text-transform: uppercase; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; min-height: 44px; padding: 0 16px; border: 0; cursor: pointer; text-decoration: none; }
+  .btn.go { background: var(--hazard); color: var(--hazard-ink); clip-path: var(--notch); }
+  .btn.plain { background: transparent; color: var(--fg); border: 1px solid var(--rule); }
+  .send-order { margin-top: 10px; }
+  .send-order:disabled { background: var(--plate); color: var(--muted); }
+  .app { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-top: 6px; padding: 6px 8px 6px 12px;
+    background: var(--plate); border: 1px solid var(--rule); position: relative; }
+  .app .tag { font: 600 10.5px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  .app .acts { display: flex; gap: 8px; margin-left: auto; flex-wrap: wrap; }
+  .app .btn { min-height: 36px; padding: 0 12px; font-size: 12px; }
+  .app.none { background: transparent; border-style: dashed; }
+  .way { outline: 2px dashed var(--opus); outline-offset: 2px; }
+  .way-words { font: 12px var(--mono); color: var(--opus); }
+
+  /* ---- proposed: the intake bay, a machine plate with a hopper for the idea ---- */
+  .intake { display: grid; gap: 10px; }
+  .intake label.f { display: grid; gap: 4px; font: 600 11px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+  .intake input[type=text], .intake textarea { font: 15px var(--body); color: var(--fg); background: var(--floor);
+    border: 1px solid var(--rule); padding: 10px; min-height: 44px; box-sizing: border-box; width: 100%; }
+  .intake textarea { min-height: 150px; resize: vertical; line-height: 1.45; }
+  .intake .hopper { position: relative; padding: 10px 10px 12px; background: var(--plate); border: 1px solid var(--rule); }
+  .intake .hopper::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 4px; background: var(--stripe); opacity: .6; }
+  .intake .row { display: grid; gap: 10px; grid-template-columns: 1fr; }
+  @media (min-width: 560px) { .intake .row { grid-template-columns: 1fr 1fr; } }
+  .intake .check { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; color: var(--ink-2); }
+  .intake .check input { width: 20px; height: 20px; margin-top: 2px; accent-color: var(--hazard); }
+  .intake .where { font: 12.5px var(--mono); color: var(--ink-2); display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
+  .intake .where .tag { font: 600 10.5px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  .intake .send { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+
+  /* ---- proposed: a project being set up, its line of stations ---- */
+  .line { display: flex; gap: 0; margin: 6px 0 2px; counter-reset: st; }
+  .line .st { flex: 1; position: relative; padding: 6px 6px 6px 10px; font: 600 10.5px/1.25 var(--display); letter-spacing: .06em;
+    text-transform: uppercase; color: var(--muted); background: var(--floor); border: 1px solid var(--rule); border-right: 0; min-width: 0; }
+  .line .st:last-child { border-right: 1px solid var(--rule); }
+  .line .st::before { counter-increment: st; content: counter(st); display: block; font: 700 14px var(--display); color: var(--rule); }
+  .line .st.past { color: var(--ink-2); }
+  .line .st.past::before { color: var(--ink-2); }
+  .line .st.here { color: var(--hazard-ink); background: var(--hazard); }
+  .line .st.here::before { color: var(--hazard-ink); }
+</style>
+</head>
+<body>
+<h1 class="top">F122: start a project from the Projects page</h1>
+<p class="lede">The Projects page with its real projects and counts from 2026-11-13. Proposed adds the intake bay at the bottom and shows two plates that don't exist yet: <b>bird-log</b> just sent (on its way), and <b>pantry</b> being set up, its ADR 00 waiting for the owner. Both names and ideas are examples. Dashed green marks what this card adds; dashed orange is the dashboard's own "on its way".</p>
+<div class="switch" role="group" aria-label="Which version">
+  <button type="button" data-show="today" aria-pressed="false">Today</button>
+  <button type="button" data-show="proposed" aria-pressed="true">Proposed</button>
+</div>
+
+<div class="versions">
+
+<!-- Today: copied from factory_dashboard/templates/projects.html, values from `softfield look page /projects` -->
+<div data-version="today" hidden>
+  <h3 class="cap">Today</h3>
+  <div class="page">
+    <section class="panel">
+      <h2>Now</h2>
+      <div><b>softfield</b> · planner · <span class="mono">claude-opus</span> · 0 min</div>
+    </section>
+    <section class="panel needs">
+      <h2>Needs you <span class="src">3 in all</span></h2>
+      <ul class="steps">
+        <li><a href="#">softfield</a> · 2 items on the Planning desk</li>
+        <li><a href="#">coucou</a> · 1 item on the Planning desk</li>
+      </ul>
+    </section>
+    <section class="panel">
+      <h2>Projects <span class="src">the runner works in this order</span></h2>
+      <ol class="rank">
+        <li class="proj">
+          <label class="place"><input type="number" value="1"><small>place</small></label>
+          <div class="plate">
+            <div class="head"><span class="rankno">#1</span><span class="name">coaster-ranker</span></div>
+            <div class="what">Rank the Universal Orlando coasters you've ridden by dragging them into order, and compare your list with your partner's.</div>
+            <div class="facts"><span><b>4</b> ready</span><span><b>9</b> done</span><span class="muted">nothing for you</span></div>
+            <div class="links"><a href="#">Planning</a><a href="#">Board</a><a href="#">Overview</a></div>
+            <div class="app none"><span class="tag">App</span><span class="muted">No stack yet: the factory can't run it.</span><span class="acts"><button type="button" class="btn plain">Plant a card for a stack</button></span></div>
+          </div>
+        </li>
+        <li class="proj">
+          <label class="place"><input type="number" value="2"><small>place</small></label>
+          <div class="plate">
+            <div class="head"><span class="rankno">#2</span><span class="name">travel-companion</span></div>
+            <div class="what">Stampu: trip ideas from a prompt, shown visually, remembering what you like and where you've been.</div>
+            <div class="facts"><span><b>14</b> ready</span><span><b>2</b> ideas</span><span><b>8</b> done</span><span class="muted">nothing for you</span></div>
+            <div class="links"><a href="#">Planning</a><a href="#">Board</a><a href="#">Overview</a></div>
+            <div class="app none"><span class="tag">App</span><span class="muted">No stack yet: the factory can't run it.</span><span class="acts"><button type="button" class="btn plain">Plant a card for a stack</button></span></div>
+          </div>
+        </li>
+        <li class="proj">
+          <label class="place"><input type="number" value="3"><small>place</small></label>
+          <div class="plate">
+            <div class="head"><span class="rankno">#3</span><span class="name">softfield</span></div>
+            <div class="what">The software factory itself: the runner, the dashboard and the workflow that build every project.</div>
+            <div class="facts"><span><b>123</b> ready</span><span><b>2</b> building</span><span><b>18</b> ideas</span><span><b>99</b> done</span><span><b>2</b> for you</span></div>
+            <div class="links"><a href="#">Planning</a><a href="#">Board</a><a href="#">Overview</a></div>
+          </div>
+        </li>
+        <li class="proj">
+          <label class="place"><input type="number" value="4"><small>place</small></label>
+          <div class="plate">
+            <div class="head"><span class="rankno">#4</span><span class="name">coucou</span></div>
+            <div class="what">A small, private way to send a photo or a note to an always-on screen in someone's home.</div>
+            <div class="facts"><span><b>0</b> ready</span><span><b>1</b> building</span><span><b>1</b> ideas</span><span><b>4</b> done</span><span><b>1</b> for you</span></div>
+            <div class="links"><a href="#">Planning</a><a href="#">Board</a><a href="#">Overview</a></div>
+            <div class="app none"><span class="tag">App</span><span class="muted">No stack yet: the factory can't run it.</span><span class="acts"><button type="button" class="btn plain">Plant a card for a stack</button></span></div>
+          </div>
+        </li>
+      </ol>
+      <button type="button" class="btn go send-order" disabled>Send new order</button>
+      <p class="muted" style="font-size: 13px">A new project is set up on its computer, in its folder; it shows here once it's ready.</p>
+    </section>
+  </div>
+</div>
+
+<!-- Proposed -->
+<div data-version="proposed">
+  <h3 class="cap">Proposed</h3>
+  <div class="page">
+    <section class="panel">
+      <h2>Now</h2>
+      <div><b>softfield</b> · planner · <span class="mono">claude-opus</span> · 0 min</div>
+    </section>
+    <section class="panel needs">
+      <h2>Needs you <span class="src">4 in all</span></h2>
+      <ul class="steps">
+        <li class="new"><a href="#">pantry</a> · 1 item on the Planning desk<span class="note">no new code: ADR 00's proposal on M1's thread counts as a desk item, as any proposal does</span></li>
+        <li><a href="#">softfield</a> · 2 items on the Planning desk</li>
+        <li><a href="#">coucou</a> · 1 item on the Planning desk</li>
+      </ul>
+    </section>
+    <section class="panel">
+      <h2>Projects <span class="src">the runner works in this order</span></h2>
+      <ol class="rank">
+        <li class="proj">
+          <label class="place"><input type="number" value="1"><small>place</small></label>
+          <div class="plate">
+            <div class="head"><span class="rankno">#1</span><span class="name">coaster-ranker</span></div>
+            <div class="what">Rank the Universal Orlando coasters you've ridden by dragging them into order, and compare your list with your partner's.</div>
+            <div class="facts"><span><b>4</b> ready</span><span><b>9</b> done</span><span class="muted">nothing for you</span></div>
+            <div class="links"><a href="#">Planning</a><a href="#">Board</a><a href="#">Overview</a></div>
+            <div class="app none"><span class="tag">App</span><span class="muted">No stack yet: the factory can't run it.</span><span class="acts"><button type="button" class="btn plain">Plant a card for a stack</button></span></div>
+          </div>
+        </li>
+        <li class="proj">
+          <label class="place"><input type="number" value="2"><small>place</small></label>
+          <div class="plate">
+            <div class="head"><span class="rankno">#2</span><span class="name">travel-companion</span></div>
+            <div class="what">Stampu: trip ideas from a prompt, shown visually, remembering what you like and where you've been.</div>
+            <div class="facts"><span><b>14</b> ready</span><span><b>2</b> ideas</span><span><b>8</b> done</span><span class="muted">nothing for you</span></div>
+            <div class="links"><a href="#">Planning</a><a href="#">Board</a><a href="#">Overview</a></div>
+            <div class="app none"><span class="tag">App</span><span class="muted">No stack yet: the factory can't run it.</span><span class="acts"><button type="button" class="btn plain">Plant a card for a stack</button></span></div>
+          </div>
+        </li>
+        <li class="proj">
+          <label class="place"><input type="number" value="3"><small>place</small></label>
+          <div class="plate">
+            <div class="head"><span class="rankno">#3</span><span class="name">softfield</span></div>
+            <div class="what">The software factory itself: the runner, the dashboard and the workflow that build every project.</div>
+            <div class="facts"><span><b>123</b> ready</span><span><b>2</b> building</span><span><b>18</b> ideas</span><span><b>99</b> done</span><span><b>2</b> for you</span></div>
+            <div class="links"><a href="#">Planning</a><a href="#">Board</a><a href="#">Overview</a></div>
+          </div>
+        </li>
+        <li class="proj">
+          <label class="place"><input type="number" value="4"><small>place</small></label>
+          <div class="plate">
+            <div class="head"><span class="rankno">#4</span><span class="name">coucou</span></div>
+            <div class="what">A small, private way to send a photo or a note to an always-on screen in someone's home.</div>
+            <div class="facts"><span><b>0</b> ready</span><span><b>1</b> building</span><span><b>1</b> ideas</span><span><b>4</b> done</span><span><b>1</b> for you</span></div>
+            <div class="links"><a href="#">Planning</a><a href="#">Board</a><a href="#">Overview</a></div>
+            <div class="app none"><span class="tag">App</span><span class="muted">No stack yet: the factory can't run it.</span><span class="acts"><button type="button" class="btn plain">Plant a card for a stack</button></span></div>
+          </div>
+        </li>
+        <li class="proj new">
+          <label class="place"><input type="number" value="5"><small>place</small></label>
+          <div class="plate">
+            <div class="head"><span class="rankno">#5</span><span class="name">pantry</span></div>
+            <div class="what">What's in the cupboards, and what to cook with it before it goes off.</div>
+            <div class="line" aria-label="Its setup: step 3 of 4">
+              <span class="st past">Asked</span><span class="st past">Set up by the lead</span><span class="st here">ADR 00 for you</span><span class="st">In the factory</span>
+            </div>
+            <div class="facts"><span><b>1</b> for you</span></div>
+            <div class="links"><a href="#">Answer on its first card →</a></div>
+            <span class="note">new: a project being set up shows where its setup is, and the link opens M1's thread (/planning/m1?project=pantry), where ADR 00 and the lead's questions wait. Board and Overview come once it's in the factory; so does its place in the order.</span>
+          </div>
+        </li>
+        <li class="proj new">
+          <label class="place"><input type="number" value="6" disabled><small>place</small></label>
+          <div class="plate way">
+            <div class="head"><span class="rankno">#6</span><span class="name">bird-log</span></div>
+            <div class="what">I want a tiny app where I note the birds I see from the balcony, with the date and a photo, and later see which ones come back each season…</div>
+            <div class="line" aria-label="Its setup: step 1 of 4">
+              <span class="st here">Asked</span><span class="st">Set up by the lead</span><span class="st">ADR 00 for you</span><span class="st">In the factory</span>
+            </div>
+            <span class="way-words">On its way: the runner makes its folder at its next pick</span>
+            <span class="note">new: drawn the moment Start is pressed, from the request itself, not editable; the words are the owner's, cut to two lines</span>
+          </div>
+        </li>
+      </ol>
+      <button type="button" class="btn go send-order" disabled>Send new order</button>
+    </section>
+
+    <section class="panel new" id="start">
+      <h2>Start a project <span class="src">the lead sets it up from your words</span></h2>
+      <div class="intake">
+        <div class="hopper">
+          <label class="f">The idea
+            <textarea placeholder="As long or short as you like. Kept word for word as the project's seed.">I want a tiny app where I note the birds I see from the balcony, with the date and a photo, and later see which ones come back each season. Just for me and my partner, on the home Wi-Fi.</textarea>
+          </label>
+        </div>
+        <div class="row">
+          <label class="f">Name
+            <input type="text" value="bird-log" autocomplete="off">
+          </label>
+          <label class="f">Built with <span style="text-transform:none;letter-spacing:0;font-weight:400">(optional)</span>
+            <input type="text" placeholder="the lead recommends one" autocomplete="off">
+          </label>
+        </div>
+        <label class="check"><input type="checkbox" checked>
+          <span>It's an app I open in a browser: give it a Docker stack from the start, so Run works on its plate on day one.</span></label>
+        <div class="where"><span class="tag">Goes in</span><span>~/projects/epayet/bird-log</span></div>
+        <div class="send">
+          <button type="button" class="btn go">Start it</button>
+          <span class="muted" style="font-size:13px">Its plate shows at once; the lead's questions and ADR 00 come on its first card.</span>
+        </div>
+      </div>
+      <span class="note">new: replaces the line "A new project is set up on its computer…". The folder is the machine's [projects] root (here, the folder every project already lives in) plus the name; a taken name gets -2 instead of a refusal.</span>
+    </section>
+  </div>
+</div>
+
+</div>
+<p class="legend">Every name and count on the four real plates is from 2026-11-13. pantry and bird-log, their ideas and the bird-log form's words are examples.</p>
+
+<script>
+  function wireSwitch() {
+    const buttons = document.querySelectorAll(".switch button");
+    for (const button of buttons) {
+      button.addEventListener("click", () => {
+        for (const b of buttons) b.setAttribute("aria-pressed", String(b === button));
+        for (const v of document.querySelectorAll("[data-version]")) v.hidden = v.dataset.version !== button.dataset.show;
+      });
+    }
+  }
+  wireSwitch();
+</script>
+</body>
+</html>
