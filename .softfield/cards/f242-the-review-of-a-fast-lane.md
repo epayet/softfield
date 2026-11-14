@@ -1,6 +1,7 @@
 # Milestone F242: A fast-lane card's review goes in the fast lane
 
-> **State:** ready · **Priority:** 6 · **Area:** factory
+> **State:** done · **Priority:** 6 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-14. Base: git tag `f242-the-review-of-a-fast-lane-start`. Report: [`.softfield/reviews/f242-the-review-of-a-fast-lane.md`](../reviews/f242-the-review-of-a-fast-lane.md).
 > Planted by the owner on 2026-11-11.
 
 ## Notes

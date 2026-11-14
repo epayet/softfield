@@ -1,5 +1,7 @@
 # Review: F242, a fast-lane card's review goes in the fast lane
 
+- **Status:** done, signed off by the owner on 2026-11-14.
+
 ## Sign-off sheet
 
 ### 1. What changed
