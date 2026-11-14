@@ -632,6 +632,7 @@ tr.few .gauge { opacity: .35; }
 .steps a[aria-current="page"] small { color: var(--hazard-ink); }
 .steps i { font-style: normal; color: var(--muted); }
 .thread-page #steps-note { margin: -6px 0 0; }
+.thread-page .card-head-note { margin-top: -4px; }
 .proposal-page .revising { margin: 0; padding: 8px 10px; border: 1px dashed var(--hazard); font-size: 13.5px; color: var(--ink-2); }
 .proposal-page .revising b { display: block; font: 600 11px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--hazard); }
 

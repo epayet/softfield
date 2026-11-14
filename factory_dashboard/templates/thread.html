@@ -16,6 +16,11 @@
       {% for link in merged_here %}
       <a href="{{ link.link }}{{ q }}" class="merged-here">Merged here: {{ link.key | upper }}, {{ link.title }} · {{ link.date }}</a>
       {% endfor %}
+      {# F248 D1: the card's steps strip, as on a proposal's page #}
+      {% if proposals %}
+      {% include "_partials/card_steps.html" %}
+      <p id="steps-note" class="aside card-head-note">{% if proposals | selectattr("state", "equalto", "being revised") | list %}The lead is revising these after your message. {% endif %}Nothing becomes a ticket until you approve it.</p>
+      {% endif %}
     </header>
 
     {% if note %}
@@ -154,13 +159,6 @@
     {% endif %}
     {% for msg in messages %}{{ draw(msg) }}{% endfor %}
 
-    {# F210 D3: the card's steps under the latest exchange, above the reply box; the
-       conversation's redraws carry it (F100's "being revised" too) #}
-    {% if proposals %}
-    {% include "_partials/card_steps.html" %}
-    <p id="steps-note" class="aside">{% if proposals | selectattr("state", "equalto", "being revised") | list %}The lead is revising these after your message. {% endif %}Nothing becomes a ticket until you approve it.</p>
-    {% endif %}
-
     {% if merged_on %}
     <div id="merged-on" class="panel">
     {% for card in merged_on %}
@@ -208,12 +206,24 @@
         if (event.detail.successful) {
           if (event.detail.elt === event.currentTarget) event.currentTarget.elements.again.value = "";
           window.sentComments(); // F210 D5: sent, so nothing waits in the tab any more
-          setTimeout(() => {
+          setTimeout(async () => {
             htmx.ajax("GET", window.location.href, {
               target: "#conversation",
               select: "#conversation",
               swap: "innerHTML"
             });
+            // F248 D2: the strip is outside #conversation; also replace it from the page
+            const resp = await fetch(window.location.href);
+            if (!resp.ok) return;
+            const page = new DOMParser().parseFromString(await resp.text(), "text/html");
+            const freshSteps = page.getElementById("card-steps");
+            const steps = document.getElementById("card-steps");
+            if (freshSteps && steps) htmx.swap(steps, freshSteps.outerHTML, {swapStyle: "outerHTML"});
+            else if (steps) steps.remove();
+            const freshNote = page.getElementById("steps-note");
+            const note = document.getElementById("steps-note");
+            if (freshNote && note) htmx.swap(note, freshNote.outerHTML, {swapStyle: "outerHTML"});
+            else if (note) note.remove();
           }, 100);
         }
       });
@@ -248,6 +258,15 @@
         const stamp = (c) => c.querySelector("#conversation-stamp").dataset.stamp;
         if (!fresh || !shown || stamp(fresh) === stamp(shown) || !window.liveIdle()) return;
         htmx.swap(shown, fresh.outerHTML, {swapStyle: "outerHTML"});
+        // F248 D2: the strip is outside #conversation; also replace it from the page
+        const freshSteps = page.getElementById("card-steps");
+        const steps = document.getElementById("card-steps");
+        if (freshSteps && steps) htmx.swap(steps, freshSteps.outerHTML, {swapStyle: "outerHTML"});
+        else if (steps) steps.remove();
+        const freshNote = page.getElementById("steps-note");
+        const note = document.getElementById("steps-note");
+        if (freshNote && note) htmx.swap(note, freshNote.outerHTML, {swapStyle: "outerHTML"});
+        else if (note) note.remove();
       }, 5000);
       // f23-01: the summary on a point's details opens the box and focuses the textarea in the
       // tap itself (iOS Safari only raises the keyboard on the tap that touches the element).

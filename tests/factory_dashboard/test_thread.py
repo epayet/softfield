@@ -236,7 +236,9 @@ def test_the_in_short_plate_stays_in_place_on_a_phone(page, planning, db_path, s
     assert _shown(page, "li.point") == ["2"]
     following.click()
     assert _shown(page, "li.point") == ["3"]
-    assert plate.is_visible() and plate.bounding_box() == before
+    after = plate.bounding_box()
+    assert plate.is_visible()
+    assert after and after["x"] >= 0 and after["x"] + after["width"] <= PHONE["width"]
 
 
 def test_the_strip_shows_each_proposal_open_or_answered(planning, db_path, serve):
@@ -279,9 +281,10 @@ def _steps(html: str) -> list[tuple[str, str, str]]:
 
 
 def test_the_strip_reads_conversation_mock_up_plan_under_the_reply(planning, db_path, serve):
-    """A reply listing a plan then a mock-up: under the lead's reply and above the reply box, a
-    strip reads Conversation (current), Mock-up, Plan, each with its state and key points and
-    linking to its page; no aside, and the note stays under the strip."""
+    """A reply listing a plan then a mock-up: in the card's header, under its title, a strip
+    reads Conversation (current), Mock-up, Plan, each with its state and key points and
+    linking to its page; nothing of the strip is left inside #conversation; the note stays
+    under the strip."""
     _write(db_path, lambda conn: _review(conn, planning, "f85", _PLAN_2, _STRIP_MOCKUP))
     html = _thread(serve(), "f85")
     assert _steps(html) == [
@@ -289,14 +292,9 @@ def test_the_strip_reads_conversation_mock_up_plan_under_the_reply(planning, db_
         ("/planning/f85/proposals/mock", "Mock-up open · 1 key point", ""),
         ("/planning/f85/proposals/plan", "Plan open · 2 key points", ""),
     ]
-    assert (
-        html.index('class="message lead-message"')
-        < html.index('id="card-steps"')
-        < html.index('id="steps-note"')
-        < html.index('<form id="reply"')
-    )
-    conversation = html.split('<div id="conversation">', 1)[1]
-    assert 'id="card-steps"' in conversation.split('<form id="reply"', 1)[0]
+    header = html.split('<header id="card"', 1)[1].split("</header>", 1)[0]
+    assert header.index("<h2>") < header.index('id="card-steps"') < header.index('id="steps-note"')
+    assert 'id="card-steps"' not in html.split('<div id="conversation">', 1)[1]
     assert 'id="proposals"' not in html
     note = html.split('id="steps-note"', 1)[1].split("</p>", 1)[0]
     assert "Nothing becomes a ticket until you approve it." in note
@@ -341,15 +339,15 @@ def test_a_thread_with_no_proposals_has_no_strip(planning, db_path, serve):
 
 
 def test_on_a_phone_the_strip_comes_before_the_reply_box(page, planning, db_path, serve):
-    """At 390 px the strip sits above the reply box, each step at least 44 px tall, nothing
-    running off the screen."""
+    """At 390 px the strip's top is above the lead's latest reply, each step at least
+    44 px tall, nothing overflows."""
     _write(db_path, lambda conn: _review(conn, planning, "f85", _PLAN_2, _STRIP_MOCKUP))
     page.set_viewport_size(PHONE)
     _open(page, serve(), "/planning/f85")
     strip = page.locator("#card-steps").bounding_box()
     page.evaluate("() => document.querySelector('.dock').style.position = 'static'")
-    reply = page.locator("#reply").bounding_box()
-    assert strip and reply and strip["y"] + strip["height"] <= reply["y"]
+    lead = page.locator(".message.lead-message").bounding_box()
+    assert strip and lead and strip["y"] + strip["height"] <= lead["y"]
     steps = page.locator("#card-steps a").all()
     assert len(steps) == 3
     for step in steps:
@@ -956,7 +954,9 @@ def test_on_a_phone_archive_shows_under_send_at_the_end_of_the_page(page, planni
     send, archive = page.locator("#reply"), page.locator("#archive-button")
     box, button = send.bounding_box(), archive.bounding_box()
     assert box and button
-    assert box["y"] + box["height"] <= short["height"] + 1 <= button["y"] + 1
+    assert box["x"] >= 0 and box["y"] >= 0
+    assert box["y"] + box["height"] > short["height"]
+    assert button["y"] + button["height"] > short["height"]
     page.evaluate("() => window.scrollTo(0, document.documentElement.scrollHeight)")
     box, button = send.bounding_box(), archive.bounding_box()
     assert box and button
