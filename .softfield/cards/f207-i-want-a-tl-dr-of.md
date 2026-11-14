@@ -6,6 +6,9 @@
 ## Notes
 I want a tl;dr of a planner response, whether it's chat or proposals. Then I can dig into all the points
 
+### From F247: I want tldrs in plans as well not just conversations (merged by the lead on 2026-11-14)
+I want tldrs in plans as well not just conversations
+
 ## Outcome
 Every reply of the lead on a thread, and every proposal's review, opens with "In short": a few plain sentences saying what it comes to and what it needs from the owner. The points follow, for digging in.
 
