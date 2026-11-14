@@ -29,3 +29,12 @@ The picture to build: `.softfield/cards/f248-mockup/steps-at-the-top.html` (Prop
 - a thread with no proposals has no strip
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 3598
+gate_failures: []
+tokens: 4187306
+```
