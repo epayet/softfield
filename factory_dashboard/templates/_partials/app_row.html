@@ -9,7 +9,7 @@
   <span class="app-state" role="status"><span class="app-lamp" aria-hidden="true"></span>{{ row.word }}</span>
   <div class="app-acts">
     {% if row.running and row.app.url_port %}
-    <a class="btn go" href="http://{{ request.url.hostname }}:{{ row.app.url_port }}{{ row.path }}">Open ↗ :{{ row.app.url_port }}</a>
+    <a class="btn go" href="http://{{ request.url.hostname }}:{{ row.app.url_port }}{{ row.path }}" target="_blank" rel="noopener">Open ↗ :{{ row.app.url_port }}</a>
     {% endif %}
     {% if row.up %}
     <button type="button" class="btn plain" hx-post="/projects/{{ row.name | urlencode }}/stop" hx-target="closest .app-row" hx-swap="outerHTML" hx-indicator="closest .app-row">Stop</button>

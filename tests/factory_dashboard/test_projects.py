@@ -293,9 +293,8 @@ def test_a_running_app_shows_running_stop_open_and_logs(projects_client, docker,
     assert f'hx-post="/projects/{APP}/stop"' in row
     assert f'hx-post="/projects/{APP}/run"' not in row
     # the page's host, the main service's published port, `[run]`'s path ("/" by default)
-    assert '<a class="btn go" href="http://127.0.0.1:8123/">' in row
+    assert '<a class="btn go" href="http://127.0.0.1:8123/" target="_blank" rel="noopener">' in row
     assert f'href="/projects/{APP}/logs">Logs</a>' in row
-    assert 'target="_blank"' not in row
     assert "Plant a card" not in row
 
 
