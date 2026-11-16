@@ -23,3 +23,12 @@ The app row's "Open ↗ :<port>" button on the Projects page opens the app in a 
 - the Logs link still opens in the same tab
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 710
+gate_failures: []
+tokens: 79968
+```
