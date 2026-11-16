@@ -28,3 +28,12 @@ Read "Plan" and D1 to D3 in `.softfield/cards/f249-a-plan-is-being-sent-back.md`
 - a card with no send-back and no message looks as today
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 2
+duration_s: 5068
+gate_failures: ['stopped']
+tokens: 6496792
+```
