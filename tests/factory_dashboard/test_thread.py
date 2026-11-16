@@ -229,16 +229,20 @@ def test_the_in_short_plate_stays_in_place_on_a_phone(page, planning, db_path, s
     plate = page.locator(".in-short")
     said = "Short enough to show in the plate above the points."
     assert plate.inner_text().split() == f"IN SHORT {said}".split()
-    before = plate.bounding_box()
-    assert before and before["x"] >= 0 and before["x"] + before["width"] <= PHONE["width"]
+    # on the page, not the screen: a click scrolls the arrows into view (F248's strip in the
+    # header pushes them under the fold), and the page moving is not the plate moving
+    on_page = (
+        "e => { const r = e.getBoundingClientRect();"
+        " return [r.x, r.y + scrollY, r.width, r.height]; }"
+    )
+    before = plate.evaluate(on_page)
+    assert before[0] >= 0 and before[0] + before[2] <= PHONE["width"]
     following = page.locator(".deck-arrows button").all()[1]
     following.click()
     assert _shown(page, "li.point") == ["2"]
     following.click()
     assert _shown(page, "li.point") == ["3"]
-    after = plate.bounding_box()
-    assert plate.is_visible()
-    assert after and after["x"] >= 0 and after["x"] + after["width"] <= PHONE["width"]
+    assert plate.is_visible() and plate.evaluate(on_page) == before
 
 
 def test_the_strip_shows_each_proposal_open_or_answered(planning, db_path, serve):
@@ -382,6 +386,27 @@ def test_the_owners_message_dashes_the_open_steps_without_a_reload(page, plannin
             "e => [getComputedStyle(e).borderTopStyle, getComputedStyle(e).borderTopColor]"
         )
         assert border == ["dashed", hazard]
+    assert page.evaluate("() => window.loadedOnce") is True
+
+
+def test_a_first_proposal_brings_the_strip_into_the_header_through_the_poll(
+    page, planning, db_path, serve
+):
+    """F248 D2: a thread with no proposal is open; the lead's reply listing a plan and a
+    mock-up arrives through the 5 s poll, and the strip and its note show in the card's
+    header, under the title, without a reload."""
+    _open(page, serve(), "/planning/f85")
+    page.evaluate("() => { window.loadedOnce = true; }")
+    assert page.locator("#card-steps").count() == 0
+    _write(db_path, lambda conn: _review(conn, planning, "f85", _PLAN_2, _STRIP_MOCKUP))
+    page.locator("header#card #card-steps").wait_for(timeout=LIVE)
+    assert page.locator("#card-steps a").count() == 3
+    assert page.locator("#conversation #card-steps").count() == 0
+    order = page.evaluate(
+        "() => Array.from(document.querySelectorAll('#card > h2, #card-steps, #steps-note'),"
+        " e => e.id || e.tagName)"
+    )
+    assert order == ["H2", "card-steps", "steps-note"]
     assert page.evaluate("() => window.loadedOnce") is True
 
 
@@ -951,12 +976,12 @@ def test_on_a_phone_archive_shows_under_send_at_the_end_of_the_page(page, planni
     short = {"width": PHONE["width"], "height": 500}
     page.set_viewport_size(short)
     _open(page, serve(), "/planning/f6")
+    # into the thread: the card's header (F248's strip in it) can fill a short screen alone
+    page.locator(".message.lead-message").first.evaluate("e => e.scrollIntoView()")
     send, archive = page.locator("#reply"), page.locator("#archive-button")
     box, button = send.bounding_box(), archive.bounding_box()
     assert box and button
-    assert box["x"] >= 0 and box["y"] >= 0
-    assert box["y"] + box["height"] > short["height"]
-    assert button["y"] + button["height"] > short["height"]
+    assert box["y"] + box["height"] <= short["height"] + 1 <= button["y"] + 1
     page.evaluate("() => window.scrollTo(0, document.documentElement.scrollHeight)")
     box, button = send.bounding_box(), archive.bounding_box()
     assert box and button

@@ -212,18 +212,8 @@
               select: "#conversation",
               swap: "innerHTML"
             });
-            // F248 D2: the strip is outside #conversation; also replace it from the page
             const resp = await fetch(window.location.href);
-            if (!resp.ok) return;
-            const page = new DOMParser().parseFromString(await resp.text(), "text/html");
-            const freshSteps = page.getElementById("card-steps");
-            const steps = document.getElementById("card-steps");
-            if (freshSteps && steps) htmx.swap(steps, freshSteps.outerHTML, {swapStyle: "outerHTML"});
-            else if (steps) steps.remove();
-            const freshNote = page.getElementById("steps-note");
-            const note = document.getElementById("steps-note");
-            if (freshNote && note) htmx.swap(note, freshNote.outerHTML, {swapStyle: "outerHTML"});
-            else if (note) note.remove();
+            if (resp.ok) window.redrawSteps(new DOMParser().parseFromString(await resp.text(), "text/html"));
           }, 100);
         }
       });
@@ -241,6 +231,19 @@
     <script>
       // F14: Save or Cancel it on a waiting message shows the change at once, and the reply
       // form when nothing waits any more. On the document, outside #conversation: bound once.
+      // F248 D2: the strip and its note sit in the card's header, outside #conversation, so each
+      // redraw also brings them from the page it fetched: replaced, added after the title and the
+      // merged links when the thread had none, removed when the page has none any more.
+      window.redrawSteps = (page) => {
+        const head = document.getElementById("card");
+        for (const id of ["card-steps", "steps-note"]) {
+          const fresh = page.getElementById(id);
+          const shown = document.getElementById(id);
+          if (fresh && shown) htmx.swap(shown, fresh.outerHTML, {swapStyle: "outerHTML"});
+          else if (fresh && head) htmx.swap(head, fresh.outerHTML, {swapStyle: "beforeend"});
+          else if (shown) shown.remove();
+        }
+      };
       document.addEventListener("htmx:afterRequest", (event) => {
         if (!event.detail.successful || !event.detail.elt.closest(".waiting-message")) return;
         htmx.ajax("GET", window.location.href, {target: "#conversation", select: "#conversation", swap: "outerHTML"});
@@ -258,15 +261,7 @@
         const stamp = (c) => c.querySelector("#conversation-stamp").dataset.stamp;
         if (!fresh || !shown || stamp(fresh) === stamp(shown) || !window.liveIdle()) return;
         htmx.swap(shown, fresh.outerHTML, {swapStyle: "outerHTML"});
-        // F248 D2: the strip is outside #conversation; also replace it from the page
-        const freshSteps = page.getElementById("card-steps");
-        const steps = document.getElementById("card-steps");
-        if (freshSteps && steps) htmx.swap(steps, freshSteps.outerHTML, {swapStyle: "outerHTML"});
-        else if (steps) steps.remove();
-        const freshNote = page.getElementById("steps-note");
-        const note = document.getElementById("steps-note");
-        if (freshNote && note) htmx.swap(note, freshNote.outerHTML, {swapStyle: "outerHTML"});
-        else if (note) note.remove();
+        window.redrawSteps(page);
       }, 5000);
       // f23-01: the summary on a point's details opens the box and focuses the textarea in the
       // tap itself (iOS Safari only raises the keyboard on the tap that touches the element).
