@@ -1,5 +1,7 @@
 # Review: F239, Run, stop and open each product's app from the Projects page
 
+- **Status:** done, signed off by the owner on 2026-11-16.
+
 Round 1 of 3, 2026-11-13. Eight tickets: five by the lead (f239-01 to 04, 08), one escalated to the lead (f239-05), two by the local model (f239-06, 07).
 
 ## Sign-off sheet

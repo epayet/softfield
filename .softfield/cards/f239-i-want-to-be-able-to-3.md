@@ -1,6 +1,7 @@
 # Milestone F239: Run, stop and open each product's app from the Projects page, on Docker Compose
 
-> **State:** ready · **Priority:** 0 · **Area:** factory · **Fast lane:** yes
+> **State:** done · **Priority:** 0 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-16. Base: git tag `f239-i-want-to-be-able-to-3-start`. Report: [`.softfield/reviews/f239-i-want-to-be-able-to-3.md`](../reviews/f239-i-want-to-be-able-to-3.md).
 > Planted by the owner on 2026-11-10.
 
 ## Notes
