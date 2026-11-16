@@ -1,4 +1,4 @@
-# Milestone F201: Ticket and card pages render their markdown instead of showing backticks and stars
+# Milestone F201: Ticket pages, card notes and lead replies render code, bold and links
 
 > **State:** idea · **Priority:** 100 · **Area:** factory
 > From docs/backlog.md (f159-review), written by the lead on 2026-11-02.
