@@ -1,6 +1,6 @@
 # Review: F248, this card's steps at the top of the thread too
 
-- **Status:** reviewed (round 1), ready for your sign-off.
+- **Status:** done, signed off by the owner on 2026-11-16.
 
 ## Sign-off sheet
 

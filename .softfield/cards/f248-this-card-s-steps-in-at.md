@@ -1,6 +1,7 @@
 # Milestone F248: This card's steps at the top of the thread too, as on a proposal's page
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** done · **Priority:** 100 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-16. Base: git tag `f248-this-card-s-steps-in-at-start`. Report: [`.softfield/reviews/f248-this-card-s-steps-in-at.md`](../reviews/f248-this-card-s-steps-in-at.md).
 > Planted by the owner on 2026-11-14.
 
 ## Notes
