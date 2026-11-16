@@ -6,6 +6,9 @@
 ## Notes
 If it says running picking the next ticket, but is actually not doing anything, it's not picking up tickets it should be clearer and the dot should not be green
 
+### From F244: the dot is green at the top sometimes it says picking up… (merged by the lead on 2026-11-16)
+the dot is green at the top sometimes it says picking up the next ticket where clearly it's working on something right now, seems like a bug. it's happened a few times i had to ask why is the factory doing nothing, and the reply was usually 'what do you mean, it is doing something right now' but that's not what the dot says. separately, the command line sometimes say 'nothing to do' multiple times in a row in between things it actually has to do very shortly
+
 ## Outcome
 - The top bar says "Running: … picking the next ticket" with the green dot only while a run really is between two steps (a few seconds). A project that is only waiting for its turn, or has nothing it can run, says why it waits, with the grey dot.
 - If a run ever sits on "picking the next ticket" for more than 5 minutes (the runner hung), the bar says "No progress since 16:02 · picking the next ticket" with a steady red dot and red words, never a green one (the owner, 2026-11-09: hazard yellow was too close to the lead's orange).
