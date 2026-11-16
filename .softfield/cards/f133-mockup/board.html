@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F133 mock-up: the board without areas</title>
+<style>
+  /* The dashboard's own tokens (factory_dashboard/static/dashboard.css), dark mode */
+  :root {
+    --floor: #12161b; --bay: #181e25; --plate: #1f2730; --grid: #222b34; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+    --hazard: #f2b10a; --hazard-ink: #1a1405; --fail: #ec5458; --opus: #ff9640; --sonnet: #ffc48a;
+    --qwen: #8ccf62; --good: #5fd17a; --dev: #5b9cf5;
+    --factory: #f2b10a; --product: #4fd1a5;
+    --display: "Chakra Petch", "Bahnschrift", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+  body { margin: 0; background: var(--floor); color: var(--fg); font: 15px/1.5 var(--body); padding: 20px; }
+  h1.mock { font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 4px; }
+  p.lede { color: var(--ink-2); max-width: 760px; margin: 0 0 8px; }
+  .switch { display: inline-flex; margin: 12px 0 16px; border: 1px solid var(--rule); }
+  .switch button { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 10px 18px;
+    background: var(--bay); color: var(--muted); border: 0; cursor: pointer; }
+  .switch button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+  .versions { display: grid; gap: 20px; margin-top: 16px; }
+  .versions > div { min-width: 0; }
+  @media (min-width: 1000px) {
+    .switch { display: none; }
+    .versions { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+    .versions > [hidden] { display: block !important; }
+  }
+  .vlabel { font: 600 13px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 0 0 8px; }
+  h3.part { font: 600 13px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 20px 0 8px; }
+  .new { outline: 1px dashed var(--good); outline-offset: 2px; }   /* what changes */
+  .note { display: block; font: 12px/1.35 var(--body); color: var(--good); margin: 6px 0 0; }
+  .legend-note { color: var(--ink-2); font-size: 13px; margin: 12px 0 0; }
+  [hidden] { display: none !important; }
+
+  /* ---- copied from dashboard.css: the board ---- */
+  .board-filter { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; margin: 0 0 12px; }
+  .board-filter label { display: flex; align-items: center; gap: 8px; font: 500 12px var(--display);
+    letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  .board-filter input { font: 14px var(--body); padding: 9px 12px; width: 160px; min-height: 44px; box-sizing: border-box;
+    background: var(--bay); color: var(--fg); border: 1px solid var(--rule); }
+  .board-filter button { font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase;
+    color: var(--muted); padding: 0 14px; min-width: 44px; min-height: 44px; background: var(--plate); border: 1px solid var(--rule); }
+  .kinds { display: flex; }
+  .kinds button { background: none; }
+  .kinds button + button { border-left: 0; }
+  .kinds button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+  .lever { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 2px 0 6px;
+    color: var(--ink-2); font: 600 11px var(--mono); text-transform: uppercase; letter-spacing: .05em; }
+  .lever .lamp { width: 7px; height: 7px; background: var(--grid); box-shadow: inset 0 0 0 1px var(--rule); }
+  .lever .slot { position: relative; width: 44px; height: 22px; background: var(--plate);
+    border: 1px solid var(--rule); box-shadow: inset 0 2px 3px rgba(0,0,0,.35); }
+  .lever .knob { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px;
+    background: linear-gradient(var(--ink-2), var(--muted)); border: 1px solid var(--rule); }
+  .field { background: var(--bay); border: 1px solid var(--rule); min-width: 0; }
+  .field-head { padding: 10px 14px; border-bottom: 1px solid var(--rule); }
+  .field-head h2 { margin: 0; font: 600 15px var(--display); letter-spacing: .08em; text-transform: uppercase; }
+  .stages { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; background: var(--rule); }
+  .stage { background: var(--bay); display: flex; flex-direction: column; min-width: 0; }
+  .stage-head { padding: 10px 12px; background: var(--plate); border-bottom: 1px solid var(--rule); }
+  .stage-head h3 { margin: 0; font: 600 13px var(--display); letter-spacing: .08em; text-transform: uppercase; }
+  .stage-head span { font: 12px var(--mono); color: var(--muted); }
+  .cards { display: flex; flex-direction: column; gap: 8px; padding: 10px; }
+  .card { display: flex; flex-direction: column; justify-content: center; gap: 5px; min-height: 44px; padding: 9px 10px;
+    background: var(--plate); border: 1px solid var(--rule); border-left: 4px solid var(--c, var(--muted));
+    color: var(--fg); overflow-wrap: anywhere; }
+  .card.factory { --c: var(--factory); } .card.product { --c: var(--product); }
+  .one-edge .card { --c: var(--factory); }
+  .card.bug { border-left: 0; padding-left: 14px;
+    background: linear-gradient(var(--plate), var(--plate)) right / calc(100% - 4px) 100% no-repeat,
+      repeating-linear-gradient(-45deg, var(--fail) 0 4px, var(--plate) 4px 8px); }
+  .card.started { border-color: var(--opus); border-left-color: var(--c, var(--muted)); }
+  .card.bug.started, .card.bug { border-left: 0; }
+  .card.ripe { border-color: var(--hazard); border-left-color: var(--c, var(--muted)); }
+  .stage.harvested .card { border-style: dashed; border-left-style: solid; color: var(--ink-2); }
+  .card-meta { font: 600 11px var(--mono); color: var(--muted); }
+  .card-meta b { color: var(--fg); }
+  .card-growing { display: inline-flex; margin-left: 4px; padding: 1px 6px; font: 600 10.5px var(--display);
+    letter-spacing: .08em; text-transform: uppercase; color: var(--opus); border: 1px solid var(--opus); background: var(--floor); }
+  .card-title { font: 600 14px/1.25 var(--body); }
+  .card .meter { display: block; height: 8px; background: var(--floor); border: 1px solid var(--rule); position: relative; }
+  .card .meter > span { position: absolute; inset: 1px auto 1px 1px; background: var(--c, var(--opus)); }
+  .card-count { font: 12px var(--mono); color: var(--muted); }
+  .card-note { font-size: 12.5px; line-height: 1.35; color: var(--muted); }
+  .card-action { align-self: flex-start; background: var(--floor); color: var(--hazard); padding: 4px 6px; font-size: 12px; }
+  .field-foot { padding: 6px 14px; border-top: 1px solid var(--rule); background: var(--plate); }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font: 12px var(--mono); color: var(--ink-2); margin: 0; }
+  .swatch { display: inline-block; width: 12px; height: 10px; margin-right: 5px; vertical-align: -1px; }
+  .swatch.factory { background: var(--factory); } .swatch.product { background: var(--product); }
+  .swatch.bug { background: repeating-linear-gradient(-45deg, var(--fail) 0 3px, var(--plate) 3px 6px); }
+  .swatch.started, .swatch.lead { background: var(--opus); } .swatch.developer { background: var(--dev); }
+
+  /* a card's page and a thread's title */
+  .card-head { display: flex; flex-wrap: wrap; gap: 10px 20px; align-items: center; background: var(--bay);
+    border: 1px solid var(--rule); border-left: 6px solid var(--c, var(--muted)); padding: 14px 16px; }
+  .card-head.factory, .one-edge .card-head { --c: var(--factory); }
+  .card-name { display: flex; flex-direction: column; gap: 2px; flex: 1 1 220px; min-width: 0; }
+  .card-name b { font: 700 18px/1.15 var(--display); text-transform: uppercase; overflow-wrap: anywhere; }
+  .card-head dl { margin: 0; display: grid; grid-template-columns: auto auto; gap: 4px 14px; font: 13px var(--mono); }
+  .card-head dt { color: var(--muted); } .card-head dd { margin: 0; min-width: 0; }
+  .thread-head { background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; }
+  .stamp { display: inline-block; font: 600 11px var(--mono); text-transform: uppercase; letter-spacing: .05em;
+    color: var(--ink-2); border: 1px solid var(--rule); padding: 1px 6px; }
+  .thread-head b { display: block; font: 600 16px/1.25 var(--display); margin-top: 4px; }
+</style>
+</head>
+<body>
+<h1 class="mock">F133: the board without areas</h1>
+<p class="lede">The cards are travel-companion's, as its board shows them on 14 Nov (the 4 older harvested cards are left out). The T1 card in Proposed is an example: the next card planted there once its settings say <code>series = "t"</code>. The card page and the thread's title are F133's own.</p>
+<div class="switch" role="group" aria-label="Which version">
+  <button type="button" data-show="today" aria-pressed="false">Today</button>
+  <button type="button" data-show="proposed" aria-pressed="true">Proposed</button>
+</div>
+
+<div class="versions">
+<!-- Today: copied from factory_dashboard/templates/board.html and dashboard.css -->
+<div data-version="today" hidden>
+  <p class="vlabel">Today</p>
+  <div class="board-filter">
+    <label>Search <input type="search" placeholder="memory drift, f4, duck…"></label>
+    <div class="kinds"><button type="button" aria-pressed="true">All</button><button type="button" aria-pressed="false">Factory</button><button type="button" aria-pressed="false">Product</button><button type="button" aria-pressed="false">Bugs</button></div>
+    <span class="lever">developer's view <i class="lamp"></i><span class="slot"><span class="knob"></span></span></span>
+  </div>
+  <section class="field">
+    <div class="field-head"><h2>The field</h2></div>
+    <div class="stages">
+      <section class="stage">
+        <div class="stage-head"><h3>Seed</h3><span>an idea, or a ticket set aside · 2</span></div>
+        <div class="cards">
+          <div class="card bug product"><span class="card-meta"><b>#1</b> <span>bug-01-container-backups</span> <span>bug · product</span></span><span class="card-title">Stampu in its container can put its daily database copies in a synced folder (Dropbox, say), as it can when run by hand.</span><span class="card-action">Set aside, won't run until you queue it ›</span></div>
+          <div class="card factory"><span class="card-meta"><b>#2</b> <span>F7</span> <span>factory</span></span><span class="card-title">a map view of my trips with the stamps on it</span></div>
+        </div>
+      </section>
+      <section class="stage">
+        <div class="stage-head"><h3>Sprouting</h3><span>being planned with the lead · 1</span></div>
+        <div class="cards">
+          <div class="card factory"><span class="card-meta"><b>#1</b> <span>F9</span> <span>factory</span></span><span class="card-title">Market scan: is Stampu new, who comes closest, could it sell?</span><span class="card-note">waits for your answer since 14 Nov</span></div>
+        </div>
+      </section>
+      <section class="stage">
+        <div class="stage-head"><h3>Planted</h3><span>in line for the factory, #1 first · 3, 1 growing</span></div>
+        <div class="cards">
+          <div class="card factory"><span class="card-meta"><b>#1</b> <span>F10</span> <span>factory</span></span><span class="card-title">Retire the backlog file: its fixes become bug seeds on the board</span><span class="meter"></span><span class="card-count">0 of 1 ticket</span></div>
+          <div class="card factory"><span class="card-meta"><b>#2</b> <span>F12</span> <span>factory</span></span><span class="card-title">Browse past trips, brought in from Wanderlog, and read them in Obsidian</span><span class="meter"></span><span class="card-count">0 of 9 tickets</span></div>
+          <div class="card product started"><span class="card-meta"><b>#3</b> <span>M2</span> <span>product</span><span class="card-growing">growing</span></span><span class="card-title">Stamps and the Stampu seal that hold their kanji and place names inside</span><span class="meter"><span style="width: 67%"></span></span><span class="card-count">4 of 6 tickets</span></div>
+        </div>
+      </section>
+      <section class="stage">
+        <div class="stage-head"><h3>Ripe</h3><span>needs your sign-off · 1</span></div>
+        <div class="cards">
+          <div class="card factory ripe"><span class="card-meta"><span>F11</span> <span>factory</span></span><span class="card-title">One command to run Stampu: it follows main and migrates by itself</span><span class="meter"><span style="width: 100%"></span></span><span class="card-count">2 of 2 tickets</span><span class="card-action">Read the review and sign off ›</span></div>
+        </div>
+      </section>
+      <section class="stage harvested">
+        <div class="stage-head"><h3>Harvested</h3><span>signed off or fixed · 8, latest 4</span></div>
+        <div class="cards">
+          <div class="card factory"><span class="card-meta"><span>F2</span> <span>factory</span></span><span class="card-title">A README with the commands to start Tabi and open it on a phone</span></div>
+          <div class="card product"><span class="card-meta"><span>F6</span> <span>product</span></span><span class="card-title">Fix a noted chip in place: Edit beside Undo</span></div>
+        </div>
+      </section>
+    </div>
+    <div class="field-foot"><p class="legend">
+      <span><i class="swatch factory"></i>factory</span>
+      <span><i class="swatch product"></i>product (for Mum)</span>
+      <span><i class="swatch bug"></i>bug (striped edge, and says "bug")</span>
+      <span><i class="swatch started"></i>growing (orange edge: a ticket has started)</span>
+      <span><i class="swatch lead"></i>working now: the lead</span>
+      <span><i class="swatch developer"></i>working now: a developer</span>
+    </p></div>
+  </section>
+  <p class="legend-note">F7, a map of trips, is "factory" and M2, stamps, is "product" on the same app, and the legend says "product (for Mum)" on a project that isn't Mum's. M2 is also a key Coucou and coaster-ranker use.</p>
+
+  <h3 class="part">A card's page</h3>
+  <header class="card-head factory">
+    <div class="card-name"><span class="card-meta">F133 · f133-each-project-has-its-own-series</span><b>Each project gets its own card letter, and the factory/product area goes</b></div>
+    <dl><dt>Stage</dt><dd>Seed: an idea, or a ticket set aside</dd><dt>Priority</dt><dd>P100</dd><dt>Area</dt><dd>factory</dd><dt>Tickets</dt><dd>none yet</dd></dl>
+  </header>
+
+  <h3 class="part">A thread's title</h3>
+  <div class="thread-head"><span class="stamp">factory</span><b>Each project gets its own card letter, and the factory/product area goes</b></div>
+</div>
+
+<!-- Proposed -->
+<div data-version="proposed" class="one-edge">
+  <p class="vlabel">Proposed</p>
+  <div class="board-filter">
+    <label>Search <input type="search" placeholder="memory drift, f4, duck…"></label>
+    <div class="kinds new"><button type="button" aria-pressed="true">All</button><button type="button" aria-pressed="false">Bugs</button></div>
+    <span class="lever">developer's view <i class="lamp"></i><span class="slot"><span class="knob"></span></span></span>
+  </div>
+  <section class="field">
+    <div class="field-head"><h2>The field</h2></div>
+    <div class="stages">
+      <section class="stage">
+        <div class="stage-head"><h3>Seed</h3><span>an idea, or a ticket set aside · 3</span></div>
+        <div class="cards">
+          <div class="card bug"><span class="card-meta new"><b>#1</b> <span>bug-01-container-backups</span> <span>bug</span></span><span class="card-title">Stampu in its container can put its daily database copies in a synced folder (Dropbox, say), as it can when run by hand.</span><span class="card-action">Set aside, won't run until you queue it ›</span></div>
+          <div class="card"><span class="card-meta new"><b>#2</b> <span>F7</span></span><span class="card-title">a map view of my trips with the stamps on it</span></div>
+          <div class="card new"><span class="card-meta"><b>#3</b> <span>T1</span></span><span class="card-title">(example) the next card planted here</span></div>
+        </div>
+      </section>
+      <section class="stage">
+        <div class="stage-head"><h3>Sprouting</h3><span>being planned with the lead · 1</span></div>
+        <div class="cards">
+          <div class="card"><span class="card-meta"><b>#1</b> <span>F9</span></span><span class="card-title">Market scan: is Stampu new, who comes closest, could it sell?</span><span class="card-note">waits for your answer since 14 Nov</span></div>
+        </div>
+      </section>
+      <section class="stage">
+        <div class="stage-head"><h3>Planted</h3><span>in line for the factory, #1 first · 3, 1 growing</span></div>
+        <div class="cards">
+          <div class="card"><span class="card-meta"><b>#1</b> <span>F10</span></span><span class="card-title">Retire the backlog file: its fixes become bug seeds on the board</span><span class="meter"></span><span class="card-count">0 of 1 ticket</span></div>
+          <div class="card"><span class="card-meta"><b>#2</b> <span>F12</span></span><span class="card-title">Browse past trips, brought in from Wanderlog, and read them in Obsidian</span><span class="meter"></span><span class="card-count">0 of 9 tickets</span></div>
+          <div class="card started new"><span class="card-meta"><b>#3</b> <span>M2</span><span class="card-growing">growing</span></span><span class="card-title">Stamps and the Stampu seal that hold their kanji and place names inside</span><span class="meter"><span style="width: 67%"></span></span><span class="card-count">4 of 6 tickets</span></div>
+        </div>
+      </section>
+      <section class="stage">
+        <div class="stage-head"><h3>Ripe</h3><span>needs your sign-off · 1</span></div>
+        <div class="cards">
+          <div class="card ripe"><span class="card-meta"><span>F11</span></span><span class="card-title">One command to run Stampu: it follows main and migrates by itself</span><span class="meter"><span style="width: 100%"></span></span><span class="card-count">2 of 2 tickets</span><span class="card-action">Read the review and sign off ›</span></div>
+        </div>
+      </section>
+      <section class="stage harvested">
+        <div class="stage-head"><h3>Harvested</h3><span>signed off or fixed · 8, latest 4</span></div>
+        <div class="cards">
+          <div class="card"><span class="card-meta"><span>F2</span></span><span class="card-title">A README with the commands to start Tabi and open it on a phone</span></div>
+          <div class="card new"><span class="card-meta"><span>F6</span></span><span class="card-title">Fix a noted chip in place: Edit beside Undo</span></div>
+        </div>
+      </section>
+    </div>
+    <div class="field-foot"><p class="legend new">
+      <span><i class="swatch bug"></i>bug (striped edge, and says "bug")</span>
+      <span><i class="swatch started"></i>growing (orange edge: a ticket has started)</span>
+      <span><i class="swatch lead"></i>working now: the lead</span>
+      <span><i class="swatch developer"></i>working now: a developer</span>
+    </p></div>
+  </section>
+  <p class="legend-note"><span class="new">Dashed green</span> marks a change. The filter is All and Bugs; a card's small line is its place and key, and "bug" alone on a bug; every card that isn't a bug has the same yellow edge (M2 and F6 were green); the legend loses factory and product. Old keys stay as they are; T1 shows the new letter.</p>
+
+  <h3 class="part">A card's page</h3>
+  <header class="card-head">
+    <div class="card-name"><span class="card-meta">F133 · f133-each-project-has-its-own-series</span><b>Each project gets its own card letter, and the factory/product area goes</b></div>
+    <dl class="new"><dt>Stage</dt><dd>Seed: an idea, or a ticket set aside</dd><dt>Priority</dt><dd>P100</dd><dt>Tickets</dt><dd>none yet</dd></dl>
+  </header>
+  <span class="note">The Area row is gone. (F222 replaces Priority with the card's place before this lands.)</span>
+
+  <h3 class="part">A thread's title</h3>
+  <div class="thread-head new"><b>Each project gets its own card letter, and the factory/product area goes</b></div>
+  <span class="note">The "factory" stamp is gone. A card with a status still shows it here.</span>
+</div>
+</div>
+
+<script>
+  (function () {
+    document.querySelectorAll(".switch button").forEach(function (button) {
+      button.addEventListener("click", function () {
+        document.querySelectorAll(".switch button").forEach(function (b) { b.setAttribute("aria-pressed", String(b === button)); });
+        document.querySelectorAll("[data-version]").forEach(function (v) { v.hidden = v.dataset.version !== button.dataset.show; });
+      });
+    });
+  })();
+</script>
+</body>
+</html>
