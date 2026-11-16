@@ -40,3 +40,32 @@ The planning thread behind F234's plan, oldest first, as it was when the owner a
 > Proposals:
 > - F234 mock-up: "picking the next ticket" only while it picks (mockup)
 > - F234: the bar says "picking the next ticket" only while the runner is really picking (plan)
+
+## The lead, 2026-11-09 23:05
+
+> Approved by the owner on 2026-11-09: approved plan/f234: queued f234-01-turn-says-why-it-waits, f234-02-stuck-picking-in-amber, f234-02-stuck-picking-in-red
+
+## The lead, 2026-11-16 19:28
+
+> Merged F244 here: the dot is green at the top sometimes it says picking up…
+
+## The owner, 2026-11-16 19:28
+
+> From F244, merged here:
+> the dot is green at the top sometimes it says picking up the next ticket where clearly it's working on something right now, seems like a bug. it's happened a few times i had to ask why is the factory doing nothing, and the reply was usually 'what do you mean, it is doing something right now' but that's not what the dot says. separately, the command line sometimes say 'nothing to do' multiple times in a row in between things it actually has to do very shortly
+
+## The lead, 2026-11-16 19:36
+
+> I've reworked F234's first ticket to also stop the repeated "Nothing to do." lines, which needs your approval as a change to its ready tickets. The cause of the wrong green dot is confirmed on the live runs right now.
+>
+> 1. **The green "picking the next ticket" while it works: confirmed right now**: While I write this, softfield's run is answering you, but coucou's, travel-companion's and coaster-ranker's runs have all said "picking the next ticket" since the runner started at 19:17. None of them is doing anything. Whenever softfield is busy with something other than an agent's job, such as check-all, the gates or a merge, the top bar takes the first project in order that says "Running: …". That is one of these stale lines, shown with a green dot. So the words describe a project that is doing nothing, while the work goes on in another one. This is exactly what F234's first ticket fixes: a project that ran nothing in its turn ends on its real reason ("Idle: …", grey dot), so the bar shows what softfield is really doing.
+>    Action: Nothing new to decide: f234-01 already covers it (D1).
+> 2. **The repeated "Nothing to do." in the terminal**: Each project has its own session in the runner. When the runner restarts (after a merged lead ticket, a review or a new day), it closes all of them. Each session that ran nothing prints "[runner] Nothing to do." without naming its project. With four projects, that is up to three of those lines in a row, just before the work starts again. They're true but useless. I'd drop them when the runner works across several projects; the database still records each of those runs as "nothing to do". A single project's run keeps the line, because there it is the whole answer.
+>    Action: Added as D5 to F234's first ticket (f234-01, the lead's), in the change below. It is the same file and the same kind of fix, so I kept it as one ticket rather than a new one.
+> 3. **Move F234 up the board so the fix arrives**: F234 is approved but sits at 100 on the board, behind about 50 cards. At about 27 minutes a ticket, that is many days away, and you have already lost several questions to this bug. Its two tickets are small and depend on nothing else.
+>    Action: Drag F234 up on the board, right under F245 ("I accepted a plan as go"). The runner picks the new order up at its next pick.
+> 4. **Pause before approving? Not needed**: This changes a ticket that is already in the queue. It can only start once F234 is near the top of the board, so it won't start while you read this. If you drag F234 up first, pause the factory from the top bar before you approve; approving the change lifts the pause.
+>    Action: Approve the change below, then drag F234 up.
+>
+> Proposals:
+> - F234: f234-01 also stops the repeated "Nothing to do." lines (replan)

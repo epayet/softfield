@@ -25,12 +25,13 @@ Read on 2026-11-09 from the metrics database: travel-companion's run (run 688) a
 - **D1 A turn never ends on "picking the next ticket"** (lead, `runner/`): when `work_queue` returns without running anything under `wait=False`, the run's activity is the idle line (`_idle_line`), whatever `take_tickets` was. When it held tickets back only because the turn took no tickets, the line says they wait their turn ("Idle: 2 tickets wait for their turn"), not "nothing can run". `PICKING` stays the words of the seconds in between.
 - **D2 The run records since when** (lead, `runner/metrics.py`): `runs` gains `activity_since` (a migration, UTC ISO time), written by `update_run_activity` whenever the activity's text changes, cleared with it. Nothing else reads it yet.
 - **D3 A stale pick is said, in red** (developer, `factory_dashboard/`): in `factory_status`, a live run whose activity is `PICKING` and whose `activity_since` is more than 5 minutes old returns "No progress since HH:MM · picking the next ticket", tone `fail`, dot `stuck`: a steady `--fail` dot, no halo, no breathing, and the words in `--critical-ink` (the existing `.words.fail`). Red, not hazard yellow: yellow sits beside the lead's orange dot and the waiting ring, and no other dot is red (the owner, 2026-11-09). `factory_wide_status` ranks it with Idle (after any "Running: …"). Only `PICKING` is checked: check-all and the gates can rightly take many minutes, and they have their own words.
+- **D5 One quiet close per idle project** (lead, `runner/`, from F244 on 2026-11-16): `close_session` prints "[runner] Nothing to do." for each session that ran nothing, and `run_projects` closes every project's session at each restart (a merged lead ticket, a review, a new day), so the terminal shows several in a row, unnamed, just before work starts. Under `run_projects` such a close prints nothing (the run still ends "nothing to do" in the database); a single project's `runner run` keeps the line.
 - **D4 What doesn't change:** the green dot's meaning (F184), the order of the other statuses (F132 D1), the heartbeat.
 
 ## Tickets
 | # | Ticket | Who | d | Depends on | What |
 |---|---|---|---|---|---|
-| 01 | turn-says-why-it-waits | L | 3 | – | D1, D2 |
+| 01 | turn-says-why-it-waits | L | 4 | – | D1, D2, D5 |
 | 02 | stuck-picking-in-red | D | 2 | 01 | D3 |
 
 ## Before and after
