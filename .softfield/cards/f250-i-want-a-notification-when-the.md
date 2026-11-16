@@ -1,4 +1,4 @@
-# Milestone F250: I want a notification when the factory is completely done…
+# Milestone F250: Tell the phone when the factory is done for the week, so you can switch off
 
 > **State:** idea · **Priority:** 100 · **Area:** factory
 > Planted by the owner on 2026-11-14.
