@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F254 mock-up: the allowance on a phone</title>
+<style>
+  /* The dashboard's own tokens (factory_dashboard/static/dashboard.css), dark mode */
+  :root {
+    --floor: #12161b; --bay: #181e25; --plate: #1f2730; --grid: #222b34; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+    --hazard: #f2b10a; --hazard-ink: #1a1405; --fail: #ec5458; --good: #5fd17a; --sonnet: #ffc48a;
+    --ink: var(--fg); --surface: var(--bay); --warn-ink: var(--hazard);
+    --ghost: repeating-linear-gradient(135deg, transparent 0 5px, rgba(255,255,255,.07) 5px 7px);
+    --display: "Chakra Petch", "Bahnschrift", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--floor); color: var(--fg); font: 15px/1.5 var(--body); padding: 16px; }
+  h1 { font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 4px; }
+  h3 { font: 600 13px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 18px 0 8px; }
+  p.lede { color: var(--ink-2); max-width: 760px; margin: 0 0 8px; }
+  .switch { display: inline-flex; margin: 10px 0 0; border: 1px solid var(--rule); }
+  .switch button { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 10px 18px;
+    background: var(--bay); color: var(--muted); border: 0; cursor: pointer; }
+  .switch button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+  .versions { display: grid; gap: 24px; }
+  @media (min-width: 860px) {
+    .switch { display: none; }
+    .versions { grid-template-columns: repeat(2, 390px); align-items: start; }
+    .versions > [hidden] { display: block !important; }
+  }
+  [hidden] { display: none !important; }
+  .phone { width: 390px; max-width: 100%; }
+  .new { outline: 1px dashed var(--good); outline-offset: 2px; }   /* what this card changes */
+  .note { display: block; color: var(--good); font: 11px var(--mono); margin: 4px 0 0; }
+  .legend-note { color: var(--ink-2); font-size: 13px; margin: 12px 0 0; max-width: 390px; }
+  .height { font: 12px var(--mono); color: var(--muted); margin: 6px 0 0; }
+
+  /* ---- the panel, the meter and the lever as drawn (dashboard.css) ---- */
+  .panel { background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; min-width: 0; }
+  .meter { height: 12px; background: var(--floor); border: 1px solid var(--rule); position: relative; margin-bottom: 6px; }
+  .meter > span { position: absolute; inset: 1px auto 1px 1px; max-width: 100%; }
+  .meter > .mark { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--ink); outline: 1px solid var(--surface); z-index: 1; }
+  .meter > .ahead { background: var(--ghost), var(--plate); box-shadow: inset 0 0 0 1px var(--rule); }
+  .meter > .under-mark { background: var(--good); }
+  .meter > .past-mark { background: var(--hazard); }
+  .meter > .pace { inset: -6px auto -6px 1px; width: 0; border-left: 2px dashed var(--hazard); background: none; z-index: 2; }
+  .lever { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 2px 0 6px;
+    border: 1px solid transparent; background: none; color: var(--ink-2); cursor: pointer;
+    font: 600 11px var(--mono); text-transform: uppercase; letter-spacing: .05em; }
+  .lever .lamp { width: 7px; height: 7px; background: var(--grid); box-shadow: inset 0 0 0 1px var(--rule); }
+  .lever .slot { position: relative; width: 44px; height: 22px; background: var(--plate); border: 1px solid var(--rule); box-shadow: inset 0 2px 3px rgba(0,0,0,.35); }
+  .lever .knob { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; background: linear-gradient(var(--ink-2), var(--muted)); border: 1px solid var(--rule); }
+  details.legend summary { color: var(--sonnet); font-size: 13px; cursor: pointer; }
+
+  /* Today, under 640px (dashboard.css, f9-17) */
+  .today #allowance { padding: 4px 14px; }
+  .today .allow { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
+  .today .allow > div { background: var(--bay); border: 1px solid var(--rule); padding: 6px 8px; }
+  .today .line { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; margin-bottom: 4px; flex-wrap: wrap; align-items: center; }
+  .today .line small { color: var(--muted); font-size: 12px; }
+  .today .line .rate { flex-basis: 100%; font: 12px var(--mono); }
+  .today .line .rate.out { color: var(--warn-ink); }
+  .today .meter { height: 8px; }
+
+  /* Proposed, under 640px only: a row per window, no box; the name, the reading and the
+     meter share the lever's 44px band; the small words run on as one line of text */
+  .proposed #allowance { padding: 4px 14px; }
+  .proposed .allow { display: flex; flex-direction: column; margin-bottom: 8px; }
+  .proposed .allow > div { padding: 6px 0; border-bottom: 1px solid var(--grid); }
+  .proposed .allow > div:last-child { border-bottom: 0; }
+  .proposed .band { display: grid; grid-template-columns: 1fr auto; column-gap: 10px; align-items: center; }
+  .proposed .reading { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+  .proposed .reading .agent { font: 600 12px var(--display); text-transform: uppercase; letter-spacing: .08em; }
+  .proposed .reading .agent em { font-style: normal; color: var(--ink-2); font-weight: 500; }
+  .proposed .reading b { font: 600 13px var(--mono); }
+  .proposed .meter { height: 8px; margin: 3px 0 0; }
+  .proposed .words { font-size: 12px; color: var(--muted); line-height: 1.4; margin-top: 3px; }
+  .proposed .words small { font-size: 12px; }
+  .proposed .words small + small::before { content: " · "; color: var(--rule); }
+  .proposed .words .rate { display: block; font: 12px var(--mono); }
+  .proposed .words .rate.out { color: var(--warn-ink); }
+  .proposed .words .rate::before { content: none; }
+</style>
+</head>
+<body>
+<h1>F254: the allowance on a phone</h1>
+<p class="lede">The Overview's Agent allowance at 390px wide, with tonight's readings (22:26). On a wide screen nothing changes.</p>
+<div class="switch" role="group" aria-label="Which version">
+  <button type="button" data-show="today" aria-pressed="false">Today</button>
+  <button type="button" data-show="proposed" aria-pressed="true">Proposed</button>
+</div>
+
+<div class="versions">
+<!-- Today: copied from factory_dashboard/templates/_partials/allowance.html, with the phone rules of dashboard.css -->
+<div data-version="today" class="today" hidden>
+  <h3>Today</h3>
+  <section id="allowance" class="panel phone">
+    <div class="allow">
+      <div>
+        <div class="line">
+          <span class="agent">Claude</span>
+          <span>5-hour window: 84%</span>
+          <button type="button" class="lever" role="switch" aria-checked="false">use reserve <i class="lamp"></i><span class="slot"><span class="knob"></span></span></button>
+        </div>
+        <div class="meter"><span class="ahead" style="width:100%"></span><span class="past-mark" style="width:84%"></span><span class="mark" style="left:75%"></span></div>
+        <div class="line">
+          <small>resets on Nov 17 00:10</small>
+          <small>read at 22:26</small>
+          <small>kept for you from here</small>
+          <small class="rate out">at this rate: out 23:03, 1 h before the reset</small>
+        </div>
+      </div>
+      <div>
+        <div class="line">
+          <span class="agent">Claude</span>
+          <span>week: 7%</span>
+          <button type="button" class="lever" role="switch" aria-checked="false">use reserve <i class="lamp"></i><span class="slot"><span class="knob"></span></span></button>
+        </div>
+        <div class="meter"><span class="under-mark" style="width:7%"></span><span class="pace" style="left:13%"></span><span class="mark" style="left:70%"></span></div>
+        <div class="line">
+          <small>resets on Nov 23 16:00</small>
+          <small>read at 22:26</small>
+          <small>reserve kept for planning and reviews from here</small>
+          <small>on pace · today's 13%</small>
+        </div>
+      </div>
+      <div>
+        <div class="line">
+          <span class="agent">Copilot</span>
+          <span>month: 7%</span>
+        </div>
+        <div class="meter"><span class="under-mark" style="width:7%"></span></div>
+        <div class="line">
+          <small>resets on Dec 1 00:00</small>
+          <small>read on Nov 13 09:24</small>
+        </div>
+      </div>
+    </div>
+    <details class="legend"><summary>How to read the allowance</summary></details>
+  </section>
+  <p class="height">about 420px tall: three boxes, each a 44px lever line, a meter and two to three lines of small words</p>
+</div>
+
+<!-- Proposed -->
+<div data-version="proposed" class="proposed">
+  <h3>Proposed</h3>
+  <section id="allowance" class="panel phone">
+    <div class="allow">
+      <div>
+        <div class="band new">
+          <div>
+            <div class="reading"><span class="agent">Claude <em>5-hour window</em></span><b>84%</b></div>
+            <div class="meter"><span class="ahead" style="width:100%"></span><span class="past-mark" style="width:84%"></span><span class="mark" style="left:75%"></span></div>
+          </div>
+          <button type="button" class="lever" role="switch" aria-checked="false">use reserve <i class="lamp"></i><span class="slot"><span class="knob"></span></span></button>
+        </div>
+        <span class="note">the name, the reading and the meter share the lever's band</span>
+        <div class="words new">
+          <small>resets on Nov 17 00:10</small><small>read at 22:26</small><small>kept for you from here</small>
+          <small class="rate out">at this rate: out 23:03, 1 h before the reset</small>
+        </div>
+        <span class="note">the small words run on as text, "·" between; "at this rate" keeps its own line</span>
+      </div>
+      <div>
+        <div class="band">
+          <div>
+            <div class="reading"><span class="agent">Claude <em>week</em></span><b>7%</b></div>
+            <div class="meter"><span class="under-mark" style="width:7%"></span><span class="pace" style="left:13%"></span><span class="mark" style="left:70%"></span></div>
+          </div>
+          <button type="button" class="lever" role="switch" aria-checked="false">use reserve <i class="lamp"></i><span class="slot"><span class="knob"></span></span></button>
+        </div>
+        <div class="words">
+          <small>resets on Nov 23 16:00</small><small>read at 22:26</small><small>reserve kept for planning and reviews from here</small><small>on pace · today's 13%</small>
+        </div>
+      </div>
+      <div>
+        <div class="band">
+          <div>
+            <div class="reading"><span class="agent">Copilot <em>month</em></span><b>7%</b></div>
+            <div class="meter"><span class="under-mark" style="width:7%"></span></div>
+          </div>
+        </div>
+        <div class="words">
+          <small>resets on Dec 1 00:00</small><small>read on Nov 13 09:24</small>
+        </div>
+      </div>
+    </div>
+    <details class="legend"><summary>How to read the allowance</summary></details>
+  </section>
+  <p class="height">about 260px tall without the green notes: no boxes, thin rules between the windows</p>
+  <p class="legend-note"><span class="new">Dashed green</span> marks what changes. Every word stays, and so do the lever's size, the colours, the "Over pace" and "Last hours" plates and the Fast lane line.</p>
+</div>
+</div>
+
+<script>
+  function wireSwitch() {
+    document.querySelectorAll(".switch button").forEach((button) => {
+      button.addEventListener("click", () => {
+        document.querySelectorAll(".switch button").forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
+        document.querySelectorAll("[data-version]").forEach((v) => { v.hidden = v.dataset.version !== button.dataset.show; });
+      });
+    });
+  }
+  wireSwitch();
+</script>
+</body>
+</html>
