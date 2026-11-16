@@ -59,6 +59,7 @@ from runner.planner import (
     OPEN,
     PLANNER,
     REJECTED,
+    SENT_BACK,
     PlannerError,
     is_proposed,
     merge_cards,
@@ -91,14 +92,28 @@ def reading_order[T](
 
 def _asked(conn: sqlite3.Connection, project_id: int) -> list[str]:
     """The cards an open ``plan_message`` request names, the runner not yet having stored the
-    message; a message the owner cancelled (F14) waits for no reply."""
+    message; a message the owner cancelled (F14) waits for no reply. Also the cards from open
+    ``send_back`` requests (subject: ``<card>/<proposal id>``)."""
     cancelled = {s for s, change in open_changes(conn, project_id).items() if change.cancel}
     rows = conn.execute(
-        "SELECT id, subject FROM owner_requests"
-        " WHERE project_id = ? AND kind = 'plan_message' AND done IS NULL ORDER BY id",
+        "SELECT id, kind, subject FROM owner_requests"
+        " WHERE project_id = ? AND kind IN ('plan_message', 'send_back') AND done IS NULL"
+        " ORDER BY id",
         (project_id,),
     ).fetchall()
-    return [str(r["subject"]) for r in rows if r["subject"] and str(r["id"]) not in cancelled]
+    found: list[str] = []
+    for r in rows:
+        if str(r["id"]) in cancelled:
+            continue
+        subject = str(r["subject"] or "")
+        if not subject:
+            continue
+        if r["kind"] == "send_back":
+            card = subject.split("/")[0]
+            found.append(card)
+        else:
+            found.append(subject)
+    return found
 
 
 def _last_messages(conn: sqlite3.Connection, project_id: int) -> list[sqlite3.Row]:
@@ -306,7 +321,19 @@ def _listed(
             if proposal.get(APPLIED) or _gone_merge(proposal, known):
                 continue
             state = proposal_state(proposal, row["card"], later)
-            if state in (OPEN, ON_ITS_WAY):
+            if state in (OPEN, ON_ITS_WAY, SENT_BACK):
+                # A worked ``send_back`` settles the proposal (F249 D2): it leaves the list.
+                worked = any(
+                    r["kind"] == "send_back"
+                    and r["done"] is not None
+                    and str(r["result"] or "").startswith(
+                        ("queued for the lead", "approved", "accepted ", "planted ", "rejected")
+                    )
+                    and str(r["subject"] or "") == f"{row['card']}/{proposal.get('id', '')}"
+                    for r in later
+                )
+                if worked:
+                    continue
                 parts.append((proposal, state))
         if parts:
             found.append((str(row["card"]), since, parts))

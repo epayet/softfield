@@ -652,6 +652,43 @@ def test_a_done_plan_message_with_lead_reply_shows_once(planning, db_path, serve
     assert "data-waiting" not in html
 
 
+def test_an_open_send_back_shows_as_the_owner_waiting_message(planning, db_path, serve):
+    """An open ``send_back``: the owner's message element has the text, "On N: <comment>",
+    "Sent", a dashed hazard border, ``#waiting`` present and ``#reply`` absent."""
+    _write(db_path, lambda conn: _seven_points(conn, planning))
+    _write(
+        db_path,
+        lambda conn: metrics.add_request(
+            conn,
+            planning,
+            "send_back",
+            "f6/plan",
+            json.dumps(
+                {
+                    "text": "Revised.",
+                    "comments": {"2": "Inside, but say how it stops.", "4": 'Keep "general" too.'},
+                }
+            ),
+            _at(timedelta(minutes=5)),
+        ),
+    )
+    html = _thread(serve(), "f6")
+    msg_html = ""
+    msg_style = ""
+    for m in re.finditer(r'<article class="message"([^>]*)>(.*?)</article>', html, re.S):
+        if "Revised." in m[2]:
+            msg_html = m[2]
+            msg_style = m[1]
+            break
+    assert msg_html, "no message with 'Revised.' found"
+    assert "Revised." in _text(msg_html)
+    assert "On 2:" in _text(msg_html) and "Inside, but say how it stops." in _text(msg_html)
+    assert "Sent" in _text(msg_html)
+    assert "data-waiting" in msg_style
+    assert '<p id="waiting"' in html
+    assert 'id="reply"' not in html
+
+
 def test_a_pending_reply_hides_send_and_shows_the_wait(planning, db_path, serve):
     """An open planner row about this thread: the wait instead of Send and the Comment…
     boxes; one about another thread changes nothing here."""

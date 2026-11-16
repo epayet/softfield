@@ -3144,3 +3144,37 @@ def test_the_desk_draws_its_boxes_without_inline_styles(planning, db_path, serve
     assert '<article class="desk-box">' in desk_html
     for style in re.findall(r'style="([^"]*)"', desk_html):
         assert re.fullmatch(r"--c: var\(--[a-z0-9-]+\)|width: \d+%", style), style
+
+
+def test_a_box_whose_message_waits_for_the_lead_is_dashed_and_keeps_its_links_with_send_back(
+    planning, db_path, db, serve
+):
+    """An open ``send_back`` on the card's plan: the box is dashed, says "being revised",
+    is left out of ``waiting_for_you`` and the desk's count, and still links the
+    sent-back proposal, dashed."""
+    _write(db_path, lambda conn: _review(conn, planning, "f30", _REVIEW_PLAN, _BOX_MOCKUP))
+    client = serve()
+    before = _desk_number(_page(client))
+    _write(
+        db_path,
+        lambda conn: metrics.add_request(
+            conn,
+            planning,
+            "send_back",
+            "f30/plan",
+            '{"text": "Revised.", "comments": {}}',
+            NOW.isoformat(),
+        ),
+    )
+    item = _box(db, "f30")
+    assert item.on_its_way and item not in waiting_for_you(desk(db, PROJECT, NOW))
+    assert "being revised" in item.words
+    html = _page(client)
+    assert _desk_number(html) == before - 1
+    box = _desk_box(html, "f30")
+    assert box.startswith('<article class="desk-box on-its-way">')
+    assert 'class="desk-item on-its-way-item' in box
+    assert [link for link, _, _ in _box_links(box)] == [
+        "/planning/f30/proposals/mockup",
+        "/planning/f30/proposals/plan",
+    ]

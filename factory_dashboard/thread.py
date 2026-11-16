@@ -388,6 +388,22 @@ def thread_page(
             messages.append(
                 Message("owner", req["created"], text, points, False, True, req["id"], change)
             )
+        # Append open send_back requests as waiting messages (D3)
+        for req in conn.execute(
+            "SELECT * FROM owner_requests"
+            " WHERE project_id = ? AND kind = 'send_back'"
+            " AND subject LIKE ? || '/%' AND done IS NULL ORDER BY id",
+            (project_id, thread),
+        ).fetchall():
+            try:
+                text, comments = message(req["value"])
+            except PlannerError:
+                text, comments = "", {}
+            pending = True
+            points = [{"n": n, "comment": c} for n, c in comments.items()]
+            messages.append(
+                Message("owner", req["created"], text, points, False, True, req["id"], None)
+            )
     repo = _repo(conn, project)
     # F37 D3: the lead's and the runner's words link their paths, cards and tickets; the
     # owner's stay plain
