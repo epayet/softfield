@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F201 mock-up: ticket and card pages render their markdown</title>
+<style>
+  /* The dashboard's own tokens (factory_dashboard/static/dashboard.css), dark mode */
+  :root {
+    --floor: #12161b; --bay: #181e25; --plate: #1f2730; --grid: #222b34; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+    --hazard: #f2b10a; --hazard-ink: #1a1405; --sonnet: #ffc48a; --good: #5fd17a;
+    --tick: var(--ink-2); --accent: var(--sonnet);
+    --stripe: repeating-linear-gradient(-45deg, var(--hazard) 0 6px, transparent 6px 12px);
+    --display: "Chakra Petch", "Bahnschrift", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--floor); color: var(--fg); font: 15px/1.5 var(--body); padding: 20px; }
+  h1 { font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 4px; }
+  h3 { font: 600 13px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 24px 0 8px; }
+  p.lede { color: var(--ink-2); max-width: 760px; margin: 0 0 8px; }
+  a { color: var(--accent); text-decoration: none; }
+  .switch { display: inline-flex; margin: 12px 0 0; border: 1px solid var(--rule); }
+  .switch button { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 10px 18px;
+    background: var(--bay); color: var(--muted); border: 0; cursor: pointer; }
+  .switch button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+  .new { outline: 1px dashed var(--good); outline-offset: 2px; }   /* what this card changes */
+  .legend { color: var(--ink-2); font-size: 13px; margin: 14px 0 0; }
+  .legend .new { padding: 0 4px; }
+  .versions { display: grid; gap: 24px; }
+  .version > .tag { font: 600 12px var(--mono); color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+  [hidden] { display: none !important; }
+  /* a wide screen shows both side by side, and the switch goes */
+  @media (min-width: 1100px) {
+    .switch { display: none; }
+    .versions { grid-template-columns: 1fr 1fr; }
+    .version[hidden] { display: block !important; }
+  }
+
+  /* ---- copied from dashboard.css: code, .panel, .readable, .about ---- */
+  .mono, code { font-family: var(--mono); font-size: 12.5px; }
+  code { background: var(--floor); padding: 1px 5px; }
+  .panel { background: var(--bay); border: 1px solid var(--rule); padding: 0 14px 12px; min-width: 0; position: relative; }
+  .panel::before, .panel::after, .about::before, .about::after { content: ""; position: absolute; width: 10px; height: 10px; border: 0 solid var(--tick); }
+  .panel::before, .about::before { top: -1px; left: -1px; border-top-width: 2px; border-left-width: 2px; }
+  .panel::after, .about::after { bottom: -1px; right: -1px; border-bottom-width: 2px; border-right-width: 2px; }
+  .panel > h2 { display: flex; align-items: center; gap: 10px; margin: 0 -14px 10px; padding: 7px 14px;
+    background: var(--plate); border-bottom: 1px solid var(--rule);
+    font: 600 14px var(--display); text-transform: uppercase; letter-spacing: .1em; }
+  .panel > h2::after { content: ""; order: 1; flex: 1; height: 8px; background: var(--stripe); opacity: .5; }
+  .panel > h2 .src { order: 2; font: 11px var(--mono); text-transform: none; letter-spacing: 0; color: var(--muted); }
+  .readable h4 { font: 600 12px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 10px 0 4px; }
+  .readable h4:first-child { margin-top: 0; }
+  .readable p, .readable ul { margin: 0; } .readable ul { padding-left: 18px; }
+  .readable details { margin-top: 10px; color: var(--ink-2); font-size: 13.5px; }
+  .readable summary { color: var(--accent); }
+  .about { background: var(--bay); border: 1px solid var(--rule); position: relative; margin-top: 18px; }
+  .about > header { display: flex; align-items: center; gap: 10px; padding: 8px 14px; background: var(--plate); border-bottom: 1px solid var(--rule); }
+  .about > header h2 { font: 600 14px var(--display); text-transform: uppercase; letter-spacing: .1em; margin: 0; }
+  .about > header .stripe { flex: 1; height: 8px; background: var(--stripe); opacity: .55; }
+  .about .body { padding: 10px 14px 12px; }
+  .about .label { font: 600 11px var(--mono); color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin: 0 0 4px; }
+  .about .note { white-space: pre-line; border-left: 2px solid var(--rule); padding: 2px 0 2px 10px; color: var(--fg); margin: 0; }
+  .about .later { color: var(--muted); font-size: 13.5px; margin: 8px 0 0; }
+</style>
+</head>
+<body>
+<h1>F201: ticket and card pages render their markdown</h1>
+<p class="lede">The Goal panel of <span class="mono">/tickets/f216-02-findings-costs-and-markdown</span> and the note on <span class="mono">/milestones/f201-ticket-pages-render-markdown</span>, with their real text. Only the text changes: no panel, colour or layout moves.</p>
+<div class="switch" role="group" aria-label="Which version">
+  <button type="button" data-show="today" aria-pressed="false">Today</button>
+  <button type="button" data-show="proposed" aria-pressed="true">Proposed</button>
+</div>
+
+<div class="versions">
+<!-- Today: copied from factory_dashboard/templates/ticket.html (#goal) and milestone.html (.about) -->
+<div class="version" data-version="today" hidden>
+  <p class="tag">Today</p>
+  <section id="goal" class="panel readable">
+    <h2>Goal &amp; Done when <span class="src">from the ticket</span></h2>
+    <h4>Goal</h4><p>The card's page has what its redesign needs: the card's findings with what happened to each, its dollars by job role, and a `_to_html` that renders numbered lists, nested bullets, inline code and links.</p>
+    <h4>Done when</h4><ul>
+      <li>a card's `caught` lists its findings with "fixed", "left", "ticket" or "for you" as D11 says, blocking first</li>
+      <li>`_to_html` renders `1. x` lines as `&lt;ol&gt;`, an indented `- x` under a bullet as a nested `&lt;ul&gt;`, `**x**` in a paragraph as `&lt;strong&gt;`, `` `x` `` as `&lt;code&gt;`</li>
+      <li>`&lt;script&gt;` in the sheet's text still comes out escaped, inside `code` too</li>
+      <li>the listed `tests:` pass, and fail without the change</li>
+    </ul>
+    <details open><summary>The lead's notes for the agent</summary>
+      <p>Read `.softfield/cards/f216-let-s-redesign-the-milestone-review.md` (D10, D11, D12). Nothing in a template changes here: f216-03 draws them.</p>
+      <ul><li>`_to_html` in the same file, per D12. It escapes first, as it does now. F164's handling of quoted lines stays as it is.</li></ul>
+    </details>
+  </section>
+  <section class="about">
+    <header><h2>What it's about</h2><span class="stripe" aria-hidden="true"></span></header>
+    <div class="body">
+      <p class="label">Your note</p>
+      <p class="note">A ticket page's parsed Goal, Done when and notes show markdown as typed (`` `git show …` ``, `**not from the code**`): the dashboard has no markdown rendering.</p>
+      <p class="later">The lead writes what it will do when it plans the card.</p>
+    </div>
+  </section>
+  <p class="legend">Backticks and stars show as typed.</p>
+</div>
+
+<!-- Proposed -->
+<div class="version" data-version="proposed">
+  <p class="tag">Proposed</p>
+  <section id="goal" class="panel readable">
+    <h2>Goal &amp; Done when <span class="src">from the ticket</span></h2>
+    <h4>Goal</h4><p>The card's page has what its redesign needs: the card's findings with what happened to each, its dollars by job role, and a <code class="new">_to_html</code> that renders numbered lists, nested bullets, inline code and links.</p>
+    <h4>Done when</h4><ul>
+      <li>a card's <code class="new">caught</code> lists its findings with "fixed", "left", "ticket" or "for you" as D11 says, blocking first</li>
+      <li><code class="new">_to_html</code> renders <code>1. x</code> lines as <code>&lt;ol&gt;</code>, an indented <code>- x</code> under a bullet as a nested <code>&lt;ul&gt;</code>, <code>**x**</code> in a paragraph as <code>&lt;strong&gt;</code>, <code>`x`</code> as <code>&lt;code&gt;</code></li>
+      <li><code class="new">&lt;script&gt;</code> in the sheet's text still comes out escaped, inside <code>code</code> too</li>
+      <li>the listed <code>tests:</code> pass, and fail without the change</li>
+    </ul>
+    <details open><summary>The lead's notes for the agent</summary>
+      <p>Read <code class="new">.softfield/cards/f216-let-s-redesign-the-milestone-review.md</code> (D10, D11, D12). Nothing in a template changes here: f216-03 draws them.</p>
+      <ul><li><code>_to_html</code> in the same file, per D12. It escapes first, as it does now. F164's handling of quoted lines stays as it is.</li></ul>
+    </details>
+  </section>
+  <section class="about">
+    <header><h2>What it's about</h2><span class="stripe" aria-hidden="true"></span></header>
+    <div class="body">
+      <p class="label">Your note</p>
+      <p class="note">A ticket page's parsed Goal, Done when and notes show markdown as typed (<code class="new">`git show …`</code>, <strong class="new">not from the code</strong>): the dashboard has no markdown rendering.</p>
+      <p class="later">The lead writes what it will do when it plans the card.</p>
+    </div>
+  </section>
+  <p class="legend"><span class="new">Dashed green</span> marks a change (the first few only). Backticks become the dashboard's existing <code>code</code> chip, <code>**x**</code> becomes bold, <code>[text](https://…)</code> a link; a note keeps its own line breaks. Text that isn't markdown is unchanged, and anything like <code>&lt;script&gt;</code> still shows as typed.</p>
+</div>
+</div>
+
+<script>
+  function wireSwitch() {
+    document.querySelectorAll(".switch button").forEach((button) => {
+      button.addEventListener("click", () => {
+        document.querySelectorAll(".switch button").forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
+        document.querySelectorAll("[data-version]").forEach((v) => { v.hidden = v.dataset.version !== button.dataset.show; });
+      });
+    });
+  }
+  wireSwitch();
+</script>
+</body>
+</html>
