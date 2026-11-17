@@ -12,5 +12,5 @@
 - `runner milestone bugs`, `runner review --milestone bugs` and `runner signoff bugs` refuse: there is nothing to plan, review or sign off.
 
 ## Where bugs come from
-- A review's finding worth a run (route `later`, ADR 35). The first pass (f5-13, 2026-10-23) set aside bug-05 to bug-47 from the old backlog file, retired by F149.
+- A review's finding is no longer one (ADR 43): it is a quoted line the owner plants, and a planted fix the lead writes as a bug ticket can be. The first pass (f5-13, 2026-10-23) set aside bug-05 to bug-47 from the old backlog file, retired by F149.
 - A finding that doesn't belong to a running milestone.

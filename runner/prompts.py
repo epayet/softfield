@@ -365,10 +365,11 @@ Grade each finding blocking / should-fix / nit and route it:
 - adr: only for what the owner is asked for (their preferences, above). Draft an ADR (status
   Proposed) and set "stop": "adr-needed". Decide everything else yourself; never park a
   finding for the owner.
-- later: a nit or a should-fix point about untouched code, worth a run: write a bug ticket set
-  aside in .softfield/tasks/later/ (runner/instructions/task-format.md: `milestone: bugs`, `area:`,
-  `finding: <id>`, the next free `bug-<nn>`, no `priority:`), and run
-  `softfield check-tickets <its files>` until it passes. The board shows it as a seed.
+- later: a nit or a should-fix point about untouched code, worth a run (ADR 43): write no
+  ticket. Write one quoted `> ` line under the right bullet of "6. What next": one sentence
+  naming the file, the problem and the fix, under Product for a project's own code, or under
+  Factory when the project is the factory. The owner plants it from its plate. A security
+  finding never takes this route: it goes local, claude or adr.
 - report: not worth a run: say it once, in the review report, and nowhere else.
 Recurring findings (fix these yourself): {recurring}
 

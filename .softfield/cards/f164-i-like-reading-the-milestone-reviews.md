@@ -28,8 +28,10 @@ Every idea a review suggests shows as a plate with Plant and Plant and ask the l
 - **D4. The buttons post the Plant box's request**, `plant` with value `{text: "<idea>\n\nFrom F19's review.", ask, area, from: "<id>"}` and the target project. On press the plate turns dashed hazard, "On its way · planted at the runner's next pick", and its buttons go (Sign off's `hx-on::before-request` swap). Nothing changes in `runner/` or `factory_dashboard/requests.py`.
 - **D5. Where they show.** The thread's "The review" gets "Ideas from this review · N" after its sections; the milestone page draws each quoted line in place as a plate instead of "&gt; …". Plate: the board's area colour on its left edge, corner ticks in the rules' ink, no new token. Mock-up: `.softfield/cards/f164-mockup/review-ideas.html`.
 - **D6. Who builds.** 01 lead (`runner/prompts.py`, `runner/instructions/lead.md` are protected); 02 developer (Python and its tests, `_review` is the example); 03 lead: template-and-script work on these pages cost developers hours in F19 and F28, and both reviews ask for the lead to take it.
+- **D7. A fix worth a run is a quoted line too** (ADR 43): a nit or should-fix point about untouched code keeps the route `later` but is one quoted line under Product or Factory, planted from its plate, not a bug ticket set aside. A security finding never takes it.
 
 ## Tickets
 - f164-01-reviews-quote-their-ideas (lead)
 - f164-02-review-ideas-and-their-state (developer)
 - f164-03-idea-plates-with-plant (lead, after 02)
+- f164-07-review-fixes-are-quoted-too (lead, after 01 and 03)

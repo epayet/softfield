@@ -300,6 +300,16 @@ def test_the_review_asks_for_each_card_suggestion_as_one_quoted_line():
     assert "already did itself is not quoted" in text
 
 
+def test_the_later_route_is_a_quoted_line_and_never_for_security():
+    """ADR 43 items 1 and 5: no bug ticket, and a security finding never takes `later`."""
+    text = " ".join(prompts.REVIEW.split())
+    later = text.split("- later:")[1].split("- report:")[0]
+    assert 'quoted `> ` line under the right bullet of "6. What next"' in later
+    assert "A security finding never takes this route" in later
+    assert "bug ticket" not in later
+    assert ".softfield/tasks/later/" not in later
+
+
 def test_the_planner_prompts_still_fill_in():
     """The new rules add no stray brace: both prompts format with the same fields."""
     for template in (prompts.PLANNER, prompts.PLANNER_GENERAL):
