@@ -37,7 +37,7 @@ The planning thread behind F69's plan, oldest first, as it was when the owner ap
 > I've drawn the button as a themed switch: a moon and a sun on a metal plate, with a yellow knob over the theme that's on. The picture is in the mock-up, and one small ticket builds it. Its pre-flight check passes.
 >
 > 1. **The image button: a moon-and-sun switch**: In place of the grey word "Light", the top bar gets a small switch on a metal plate with a cut corner. The moon is on the left, the sun on the right, and the hazard-yellow knob sits over the theme that's on, the same yellow as the page tab you're on. Pressing it slides the knob across and switches the theme. In the mock-up you can press the switches and flip Today and Proposed.
->    Action: Mock-up .softfield/cards/f69-mockup/theme-switch.html
+>    Action: Mock-up .factory/cards/f69-mockup/theme-switch.html
 > 2. **Why a switch rather than a single icon**: The simpler option is one square button like Pause, showing a sun or a moon. It's in the mock-up as the calmer variant. The catch is that a sun on the night page can read as "it's day now" as easily as "tap for day". The switch shows both themes and which one is on, so it never reads backwards. I recommend the switch. Say "the single icon" if you prefer the smaller one.
 >    Action: Nothing unless you choose the single icon
 > 3. **Words stay where you can't see them**: The switch has no words on it now, but hovering still says "Switch to the light theme", and a screen reader hears "Night theme, on". That keeps the rule that every mark explains itself without putting a label on the bar.
@@ -69,3 +69,34 @@ The planning thread behind F69's plan, oldest first, as it was when the owner ap
 > Proposals:
 > - F69: the theme switch in the top bar (mockup)
 > - F69: the button becomes a compact moon-and-sun switch (plan)
+
+## The lead, 2026-10-29 07:50
+
+> Approved by the owner on 2026-10-29: approved plan/f69: queued f69-07-theme-switch-plate
+
+## The lead, 2026-11-17 12:15
+
+> Merged F257 here: I want the night/light switch to follow system by default,…
+
+## The owner, 2026-11-17 12:15
+
+> From F257, merged here:
+> I want the night/light switch to follow system by default, while still allowing to change it manually
+
+## The lead, 2026-11-17 12:18
+
+> I've added one lead ticket so that a choice made with the switch only lasts until it matches your device again, or until your device next changes its theme. It passes its pre-flight check. The switch looks the same.
+>
+> 1. **It already follows the device, until the first press**: With nothing pressed, the switch already follows your phone's or computer's own theme. The catch is that one press is kept on that device for good, and the only way back is clearing the browser's storage. That came from an earlier decision of F69, I want a button to switch from light to night theme: two positions, no "follow the device" choice. Your note replaces that decision.
+>    Action: Decision replaced on the card
+> 2. **How it works: a press is a temporary override**: The switch keeps its two positions. Pressing it away from your device's theme overrides it on that device. The override ends, and the switch follows the device again, in two cases: you press it back to match the device, or the device changes its own theme. Example: your phone goes dark at sunset and you switch to light; the next morning, when the phone turns light, the page follows the phone again. If the device never changes theme on its own, your override simply stays. Hovering over the switch says which is true: "as your device" or "your choice until your device changes".
+>    Action: Ticket f69-13-back-to-following-the-device
+> 3. **Why not a third "follow device" position**: The other way is a three-position switch, with "follow the device" in the middle. It would need a third mark to explain (a letter A, say), a third press, and a taller plate, and you asked for the switch to stay compact. The rule above gives the same result with nothing new on screen. I recommend the rule. Say "three positions" if you'd rather see the choice, and I'll draw it.
+>    Action: Nothing unless you want three positions
+> 4. **No mock-up this time**: Nothing on screen changes except the hover text on the switch, so there's nothing new to draw. The current switch is still the one in f69-mockup/theme-switch.html.
+>    Action: Nothing
+> 5. **The lead builds this one, after the test fix ahead of it**: This card has had 9 follow-up tickets for 2 features, almost all of them to fix the tests. So I'm writing this one as a lead ticket rather than handing it to a developer and then fixing it again. It waits for f69-11, the test fix already in the queue, because both change the same test file. It only adds a ticket in the set-aside list, so you don't need to pause the factory.
+>    Action: Lead ticket, waiting for f69-11
+>
+> Proposals:
+> - F69: the switch follows the device, a press overrides it (plan)
