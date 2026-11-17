@@ -1,4 +1,4 @@
-# Milestone F263: On the console run you can see the advice the lead gave a…
+# Milestone F263: Show the lead's direction to a developer's last attempt on the Overview
 
 > **State:** idea · **Area:** factory
 > Planted by the owner on 2026-11-17.
