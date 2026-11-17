@@ -46,3 +46,10 @@ Read `.softfield/cards/f222-when-milestones-plans-get-approved-do.md`: D7, D8, a
 - `softfield check-tickets` passes
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
