@@ -35,3 +35,10 @@ Read `.softfield/adr/43-the-owner-plants-a-reviews-fixes.md`. The plate and its 
 - `docs/workflow.md`, `docs/how-it-works.md`, `runner/instructions/lead.md` and `.softfield/cards/bugs.md` say the same, and none says a review sets a bug ticket aside
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
