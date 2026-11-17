@@ -29,3 +29,12 @@ Tests should compare the whole output string for each case, not count tags.
 - text inside `` `code` `` isn't turned into bold or links
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 2
+duration_s: 5918
+gate_failures: ['stopped']
+tokens: 3147262
+```
