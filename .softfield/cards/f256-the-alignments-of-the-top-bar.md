@@ -1,4 +1,4 @@
-# Milestone F256: the alignments of the top bar on desktop is very wonky,…
+# Milestone F256: The top bar on a wide screen: every part on one line, one height, edges matched
 
 > **State:** idea · **Area:** factory
 > Planted by the owner on 2026-11-17.
