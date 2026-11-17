@@ -22,3 +22,12 @@ Add a test that reads `factory_dashboard/static/dashboard.css` and checks that n
 - a bug card's striped edge is unchanged
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 1630
+gate_failures: []
+tokens: 2031402
+```
