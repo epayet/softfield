@@ -2650,7 +2650,31 @@ def test_to_html_nested_list_followed_by_plain_line():
     from factory_dashboard.milestones import _to_html
 
     result = _to_html("- Top\n  - A\n  - B\nplain text")
-    assert result == "<ul><li>Top<ul><li>A</li><li>B</li></ul></li><p>plain text</p></ul>"
+    assert result == "<ul><li>Top<ul><li>A</li><li>B</li></ul></li></ul><p>plain text</p>"
+
+
+def test_to_html_plain_line_after_simple_bullet():
+    """``- a\nplain`` gives ``<ul><li>a</li></ul><p>plain</p>``."""
+    from factory_dashboard.milestones import _to_html
+
+    result = _to_html("- a\nplain")
+    assert result == "<ul><li>a</li></ul><p>plain</p>"
+
+
+def test_to_html_plain_line_after_numbered_list():
+    """``1. a\nplain`` gives ``<ol><li>a</li></ol><p>plain</p>``."""
+    from factory_dashboard.milestones import _to_html
+
+    result = _to_html("1. a\nplain")
+    assert result == "<ol><li>a</li></ol><p>plain</p>"
+
+
+def test_to_html_blank_line_closes_list():
+    """A blank line after a list still closes it."""
+    from factory_dashboard.milestones import _to_html
+
+    result = _to_html("- a\n\nplain")
+    assert result == "<ul><li>a</li></ul><p>plain</p>"
 
 
 def test_to_html_numbered_and_bullet_whole_string():

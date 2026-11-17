@@ -505,6 +505,24 @@ def _to_html(text: str | None, ideas: Iterator[Idea] | None = None) -> str:
                 html_parts.append(f"<li>{text_part}")
                 open_li_depths.append(0)
             continue
+        # Blank line closes open lists.
+        if not stripped:
+            while open_li_depths and open_li_depths[-1] > 0:
+                html_parts.append("</li>")
+                open_li_depths.pop()
+            while nesting > 0:
+                html_parts.append("</ul>")
+                nesting -= 1
+            while open_li_depths:
+                html_parts.append("</li>")
+                open_li_depths.pop()
+            if in_ul:
+                html_parts.append("</ul>")
+                in_ul = False
+            if in_ol:
+                html_parts.append("</ol>")
+                in_ol = False
+            continue
         # Regular line
         while open_li_depths and open_li_depths[-1] > 0:
             html_parts.append("</li>")
@@ -515,14 +533,14 @@ def _to_html(text: str | None, ideas: Iterator[Idea] | None = None) -> str:
         while open_li_depths:
             html_parts.append("</li>")
             open_li_depths.pop()
+        if in_ul:
+            html_parts.append("</ul>")
+            in_ul = False
         if in_ol:
             html_parts.append("</ol>")
             in_ol = False
         if stripped:
             html_parts.append(f"<p>{_inline_markup(stripped)}</p>")
-        if in_ul:
-            html_parts.append("</ul>")
-            in_ul = False
     while open_li_depths and open_li_depths[-1] > 0:
         html_parts.append("</li>")
         open_li_depths.pop()
