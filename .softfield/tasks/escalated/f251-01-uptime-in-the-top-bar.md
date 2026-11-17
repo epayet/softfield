@@ -32,3 +32,12 @@ Read `.softfield/cards/f251-i-want-to-see-computer-uptime.md` (D1–D3) and buil
 - `on_for` gives "42 min", "5 h 12 min" and "6 d 4 h" for those spans
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: protected-paths)
+attempts: 3
+tokens: 3426827
+logs: .softfield/var/runs/20261116-205926/f251-01-uptime-in-the-top-bar
+```
