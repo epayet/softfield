@@ -24,3 +24,28 @@ The planning thread behind F251's plan, oldest first, as it was when the owner a
 > Proposals:
 > - F251, Show how long the computer has been on in the top bar (plan)
 > - F251 mock-up: how long the computer has been on, in the top bar (mockup)
+
+## The lead, 2026-11-16 20:59
+
+> Approved by the owner on 2026-11-16: approved plan/f251: queued f251-01-uptime-in-the-top-bar; F251 goes last on the board
+
+## The owner, 2026-11-17 08:04
+
+> The text overflows on the left on mobile I can't see the beginning
+
+## The lead, 2026-11-17 12:11
+
+> I found why the start of the text is cut off on your phone, and I've drafted a fix as one small ticket for F251, Show how long the computer has been on in the top bar. It passes the ticket check, and it runs once you approve the replan.
+>
+> 1. **Why the beginning is cut off**: When you tap the dot on a phone, the status words open in a box under the top row. The box is lined up on the right edge of the status, and the status sits second in the row, just after the SoftField name, close to the left of the screen. So a wide box can only grow leftwards, past the screen's edge. The 'Computer on … · since …' line made the box wider, so the overflow is easy to see now. A long status alone, like 'Paused by you since 19:28 · coaster-ranker', could already cut off.
+>    Action: Fix it with ticket f251-02.
+> 2. **The fix**: On a phone, the box will start from the left edge of the top bar instead, and a long status will wrap onto a second line. Nothing changes on a wide screen. A test on a phone-sized screen checks that the whole box stays on screen. It's a small style change, so a developer builds it.
+>    Action: Ticket f251-02-phone-words-stay-on-screen.
+> 3. **The mock-up had the same fault**: The mock-up's phone picture copied the dashboard's old placement, so its box hung off the left too. I've corrected the picture to match the fix. Nothing else in the design changes.
+>    Action: Nothing.
+> 4. **Pausing first isn't needed**: This adds a new ticket and changes none that are waiting, so the line can't start the wrong thing while we talk. No pause is needed. Approving puts the fix in the queue.
+>    Action: Approve the replan.
+>
+> Proposals:
+> - F251, Show how long the computer has been on in the top bar: the phone's status words stay on screen (replan)
+> - F251 mock-up: how long the computer has been on, in the top bar (mockup)

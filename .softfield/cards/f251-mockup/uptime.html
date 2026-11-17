@@ -75,6 +75,10 @@
   .phone .filters label { grid-area: 1 / 3; font-size: 0; min-width: 0; }
   .phone .filters select { width: 100%; min-width: 0; }
   .phone .factory-status { grid-area: 1 / 2; }
+  /* f251-02: the tapped words hang from the bar's left edge, not the status's right one, so they never start off-screen */
+  .phone .bar-top { position: relative; }
+  [data-version="proposed"] .phone .factory-status { position: static; }
+  [data-version="proposed"] .phone .factory-status .words { left: 4px; right: auto; max-width: calc(100% - 8px); }
   .phone .theme-switch { grid-area: 1 / 4; width: 44px; height: 44px; }
   .phone .factory-status .dot-btn, .phone .factory-status .sign { width: 44px; height: 44px; }
   .phone .factory-status .words { display: block; position: absolute; top: 100%; right: 0; z-index: 6; width: max-content;
