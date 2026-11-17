@@ -1,6 +1,7 @@
 # Milestone F164: Plant a review's ideas straight from the review
 
-> **State:** ready · **Priority:** 0 · **Area:** factory · **Fast lane:** yes
+> **State:** done · **Priority:** 0 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-17. Base: git tag `f164-i-like-reading-the-milestone-reviews-start`. Report: [`.softfield/reviews/f164-i-like-reading-the-milestone-reviews.md`](../reviews/f164-i-like-reading-the-milestone-reviews.md).
 > Planted by the owner on 2026-10-21.
 
 ## Notes

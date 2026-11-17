@@ -1,6 +1,6 @@
 # Review: F164, plant a review's ideas straight from the review
 
-- **Status:** reviewed (round 1), waiting for the owner's sign-off.
+- **Status:** done, signed off by the owner on 2026-11-17.
 
 ## Sign-off sheet
 
