@@ -24,3 +24,12 @@ The picture to build is Proposed's idea plate in `.softfield/cards/f197-mockup/p
 - Plant and ask the lead still posts `ask` true and Plant `ask` false
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 1234
+gate_failures: []
+tokens: 613074
+```
