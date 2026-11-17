@@ -6,7 +6,15 @@ import pytest
 from fastapi.testclient import TestClient
 
 from runner import metrics
-from tests.factory_dashboard.conftest import LOCAL, NOW, PROJECT, write_signoff_button
+from tests.factory_dashboard.conftest import (
+    LOCAL,
+    NOW,
+    OPUS,
+    PROJECT,
+    SONNET,
+    _job,
+    write_signoff_button,
+)
 from tests.factory_dashboard.test_planning import _open as open_page
 from tests.layout import DISPLAY, PHONE, layout_problems
 
@@ -392,7 +400,7 @@ def test_milestone_detail_shows_signoff_parts_by_text(milestone_detail_client):
     html = milestone_detail_client.get("/milestones/f1").text
     for section_name, expected_text in (
         ("what-changed", "A metrics database"),
-        ("how-to-test", "Run `softfield milestone f1`"),
+        ("how-to-test", "Run softfield milestone f1"),
         ("what-next", "Close the factory review"),
         ("later", "Full diffs"),
         ("lessons", "Run the loop before the replan"),
@@ -2198,3 +2206,335 @@ def test_a_planted_idea_on_the_milestone_page_links_to_its_card(db_path, serve):
     page = serve().get("/milestones/f28").text
     assert 'href="/planning/f166?project=' in page
     assert "Plant and ask the lead" not in page
+
+
+# --- f216-02: caught, spend, and _to_html -----------------------------------------------
+
+
+def test_caught_lists_findings_with_outcomes_ordered_by_severity(db_path):
+    """The card's ``caught`` lists findings with "fixed", "left", "ticket" or "for you"
+    as D11 says, blocking first, should-fix second, nit third, then by key."""
+    from factory_dashboard.milestones import _caught
+
+    conn = metrics.open_db(db_path)
+    try:
+        pid = metrics.find_project(conn, PROJECT)
+        assert pid is not None
+        m_id = metrics.upsert_milestone(conn, pid, "f216-test")
+        # Add findings with different severities and routes
+        metrics.add_finding(
+            conn,
+            m_id,
+            "F1",
+            severity="blocking",
+            route="local",
+            summary="A blocking bug",
+        )
+        metrics.add_finding(
+            conn,
+            m_id,
+            "F2",
+            severity="blocking",
+            route="report",
+            summary="A blocking issue",
+        )
+        metrics.add_finding(
+            conn,
+            m_id,
+            "F3",
+            severity="should-fix",
+            route="later",
+            summary="Should fix this",
+        )
+        metrics.add_finding(
+            conn,
+            m_id,
+            "F4",
+            severity="nit",
+            route="adr",
+            summary="A nit",
+        )
+        metrics.add_finding(
+            conn,
+            m_id,
+            "F5",
+            severity="should-fix",
+            route="backlog",
+            summary="Old backlog",
+        )
+        # A resolved finding
+        metrics.add_finding(
+            conn,
+            m_id,
+            "F6",
+            severity="blocking",
+            route="local",
+            summary="Was fixed",
+            resolved=True,
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    caught = _caught(metrics.open_db(db_path), m_id)
+    # Blocking first, then should-fix, then nit; within same severity by key
+    assert len(caught) == 6
+    assert caught[0].severity == "blocking"
+    assert caught[0].outcome == "ticket"  # F1, route "local"
+    assert caught[1].severity == "blocking"
+    assert caught[1].outcome == "left"  # F2, route "report"
+    assert caught[2].severity == "blocking"
+    assert caught[2].outcome == "fixed"  # F6, resolved
+    assert caught[3].severity == "should-fix"
+    assert caught[3].outcome == "ticket"  # F3, route "later"
+    assert caught[4].severity == "should-fix"
+    assert caught[4].outcome == "ticket"  # F5, route "backlog"
+    assert caught[5].severity == "nit"
+    assert caught[5].outcome == "for you"  # F4, route "adr"
+
+
+def test_caught_handles_backlog_route_as_ticket(db_path):
+    """The old route ``backlog`` reads "ticket" (D11)."""
+    from factory_dashboard.milestones import _caught
+
+    conn = metrics.open_db(db_path)
+    try:
+        pid = metrics.find_project(conn, PROJECT)
+        assert pid is not None
+        m_id = metrics.upsert_milestone(conn, pid, "f216-bl")
+        metrics.add_finding(
+            conn,
+            m_id,
+            "F1",
+            severity="should-fix",
+            route="backlog",
+            summary="Old finding",
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    caught = _caught(metrics.open_db(db_path), m_id)
+    assert len(caught) == 1
+    assert caught[0].outcome == "ticket"
+
+
+def test_spend_gives_dollars_by_role_largest_first_with_share(db_path):
+    """The card's ``spend`` gives dollars by role with plain labels, largest first,
+    and share to scale."""
+    from factory_dashboard.milestones import _milestone_spend
+
+    conn = metrics.open_db(db_path)
+    try:
+        pid = metrics.find_project(conn, PROJECT)
+        assert pid is not None
+        m_id = metrics.upsert_milestone(conn, pid, "f216-spend")
+        run = metrics.upsert_run(conn, pid, "20261001-100000")
+        # Different roles with different costs
+        _job(conn, run, m_id, None, "review", OPUS, 1, "passed", cost_usd=3.0)
+        _job(conn, run, m_id, None, "escalation", OPUS, 1, "passed", cost_usd=1.5)
+        _job(conn, run, m_id, None, "checkpoint", SONNET, 1, "passed", cost_usd=0.5)
+        _job(conn, run, m_id, None, "planner", OPUS, 1, "passed", cost_usd=2.0)
+        conn.commit()
+    finally:
+        conn.close()
+    spend = _milestone_spend(metrics.open_db(db_path), m_id)
+    assert len(spend) == 4
+    # Largest first
+    assert spend[0].label == "The review"
+    assert spend[0].usd == 3.0
+    assert spend[0].share == 1.0
+    assert spend[1].label == "Planning"
+    assert spend[1].usd == 2.0
+    assert spend[1].share == pytest.approx(0.67)
+    assert spend[2].label == "The lead finishing a developer's ticket"
+    assert spend[2].usd == 1.5
+    assert spend[2].share == pytest.approx(0.5)
+    assert spend[3].label == "Checkpoints"
+    assert spend[3].usd == 0.5
+    assert spend[3].share == pytest.approx(0.17)
+
+
+def test_spend_labels_role_names_per_d10(db_path):
+    """D10's plain labels: review, escalation, planner, lead-ticket, direction, checkpoint."""
+    from factory_dashboard.milestones import _milestone_spend
+
+    conn = metrics.open_db(db_path)
+    try:
+        pid = metrics.find_project(conn, PROJECT)
+        assert pid is not None
+        m_id = metrics.upsert_milestone(conn, pid, "f216-labels")
+        run = metrics.upsert_run(conn, pid, "20261001-110000")
+        _job(conn, run, m_id, None, "lead-ticket", OPUS, 1, "passed", cost_usd=1.0)
+        _job(conn, run, m_id, None, "direction", OPUS, 1, "passed", cost_usd=1.0)
+        conn.commit()
+    finally:
+        conn.close()
+    spend = _milestone_spend(metrics.open_db(db_path), m_id)
+    labels = [s.label for s in spend]
+    assert "The lead's tickets" in labels
+    assert "Directions for developers" in labels
+
+
+def test_spend_developer_with_jobs_no_dollars(db_path):
+    """A developer role with jobs and no dollars is "Developers, on your GPU" at $0."""
+    from factory_dashboard.milestones import _milestone_spend
+
+    conn = metrics.open_db(db_path)
+    try:
+        pid = metrics.find_project(conn, PROJECT)
+        assert pid is not None
+        m_id = metrics.upsert_milestone(conn, pid, "f216-dev")
+        run = metrics.upsert_run(conn, pid, "20261001-120000")
+        ticket = metrics.upsert_ticket(
+            conn,
+            pid,
+            "f216-01",
+            milestone_id=m_id,
+            kind="developer",
+            state="done",
+        )
+        _job(conn, run, m_id, ticket, "developer", LOCAL, 1, "passed", tokens_in=10_000)
+        _job(conn, run, m_id, None, "review", OPUS, 1, "passed", cost_usd=2.0)
+        conn.commit()
+    finally:
+        conn.close()
+    spend = _milestone_spend(metrics.open_db(db_path), m_id)
+    labels = [s.label for s in spend]
+    assert "Developers, on your GPU" in labels
+    dev_row = next(s for s in spend if s.label == "Developers, on your GPU")
+    assert dev_row.usd == 0.0
+    assert dev_row.share == 0.0
+
+
+def test_to_html_numbered_becomes_ol():
+    """``1. x`` lines become ``<ol><li>x</li>``."""
+    from factory_dashboard.milestones import _to_html
+
+    result = _to_html("1. First step\n2. Second step\n3. Third step")
+    assert "<ol>" in result
+    assert "<li>First step</li>" in result
+    assert "<li>Second step</li>" in result
+    assert "<li>Third step</li>" in result
+    assert "</ol>" in result
+
+
+def test_to_html_nested_bullet_becomes_nested_ul():
+    """An indented ``- x`` under a bullet becomes a nested ``<ul>``."""
+    from factory_dashboard.milestones import _to_html
+
+    result = _to_html("- Top level\n  - Nested item\n- Another top")
+    assert "<ul>" in result
+    # Should have two <ul> tags (outer and nested)
+    assert result.count("<ul>") == 2
+    assert "<li>Top level</li>" in result
+    assert "<li>Nested item</li>" in result
+    assert "<li>Another top</li>" in result
+
+
+def test_to_html_bold_works_everywhere():
+    """`` **x** `` becomes ``<strong>x</strong>`` in paragraphs and list items."""
+    from factory_dashboard.milestones import _to_html
+
+    # In a paragraph
+    result = _to_html("This is **bold** text.")
+    assert "<strong>bold</strong>" in result
+
+    # In a list item
+    result2 = _to_html("- Item with **bold**")
+    assert "<strong>bold</strong>" in result2
+
+
+def test_to_html_inline_code():
+    """`` `x` `` becomes ``<code>x</code>``."""
+    from factory_dashboard.milestones import _to_html
+
+    result = _to_html("Use `run_order` for the list.")
+    assert "<code>run_order</code>" in result
+
+
+def test_to_html_http_link_becomes_anchor():
+    """``[text](https://x)`` becomes a link."""
+    from factory_dashboard.milestones import _to_html
+
+    result = _to_html("See [ADR 1](https://example.com/adr1).")
+    assert '<a href="https://example.com/adr1">ADR 1</a>' in result
+
+
+def test_to_html_non_http_link_becomes_text():
+    """``[text](../sessions/x.md)`` and ``[text](javascript:x)`` become text alone."""
+    from factory_dashboard.milestones import _to_html
+
+    result1 = _to_html("See [session](../sessions/1.md).")
+    assert "session" in result1
+    assert "href=" not in result1
+
+    result2 = _to_html("Run [this](javascript:alert(1)).")
+    assert "this" in result2
+    assert "href=" not in result2
+
+
+def test_to_html_script_stays_escaped():
+    """``<script>`` in the sheet's text still comes out escaped, inside ``code`` too."""
+    from factory_dashboard.milestones import _to_html
+
+    result = _to_html("Run <script>alert(1)</script>.")
+    assert "&lt;script&gt;" in result
+    assert "<script>" not in result
+
+    result2 = _to_html("Use ``<script>`` in code.")
+    assert "&lt;script&gt;" in result2
+
+
+def test_to_html_ideas_still_work():
+    """With ``ideas``, quoted lines become idea plates in place."""
+    from factory_dashboard.milestones import Idea, _to_html
+
+    ideas = iter(
+        [
+            Idea(
+                id="f1/1",
+                text="Idea one",
+                area="factory",
+                project="coucou",
+                state="plant",
+                card=None,
+                said=None,
+            )
+        ]
+    )
+    result = _to_html("- Before\n> Idea text\n- After", ideas=ideas)
+    assert "Idea one" in result
+    assert "&gt;" not in result
+
+
+def test_to_html_mixed_numbered_and_bullets():
+    """Numbered and bullet lists separate properly."""
+    from factory_dashboard.milestones import _to_html
+
+    result = _to_html("1. First\n- Bullet\n2. Second")
+    # Should have both <ol> and <ul>
+    assert "<ol>" in result
+    assert "<ul>" in result
+    # The lists should be properly closed
+    assert result.count("<ol>") == 1
+    assert result.count("</ol>") == 1
+    assert result.count("<ul>") == 1
+    assert result.count("</ul>") == 1
+
+
+def test_to_html_inline_code_and_bold_together():
+    """`` `code` `` and `` **bold** `` work together in one line."""
+    from factory_dashboard.milestones import _to_html
+
+    result = _to_html("Use **`run_order`** for the list.")
+    assert "<strong>" in result
+    assert "<code>run_order</code>" in result
+
+
+def test_to_html_link_with_bold_and_code():
+    """Links work alongside bold and code."""
+    from factory_dashboard.milestones import _to_html
+
+    result = _to_html("See **`ADR 1`** at [link](https://example.com).")
+    assert "<strong>" in result
+    assert "<code>ADR 1</code>" in result
+    assert '<a href="https://example.com">link</a>' in result

@@ -354,41 +354,102 @@ def idea_plate(idea: Idea) -> str:
     )
 
 
+def _inline_markup(text: str) -> str:
+    """Process ``[text](url)`` links, `` `code` ``, and `` **bold** `` in text."""
+
+    # Links: http/https only become <a>; others become plain text
+    def _replace_link(m: re.Match[str]) -> str:
+        link_text = m.group(1)
+        url = m.group(2)
+        if url.startswith(("http://", "https://")):
+            return f'<a href="{url}">{link_text}</a>'
+        return link_text
+
+    text = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", _replace_link, text)
+    text = re.sub(r"`([^`]+)`", r"<code>\1</code>", text)
+    text = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", text)
+    return text
+
+
 def _to_html(text: str | None, ideas: Iterator[Idea] | None = None) -> str:
-    """Turn ``- item`` lines into ``<ul><li>`` and ``**x**`` into ``<strong>x</strong>``,
-    escaping the text first. With ``ideas``, each quoted line (``> …``) is drawn in place as
-    the next idea's plate (F164 D5); with none left it stays a plain line."""
+    """Turn ``1. x`` numbered lines into ``<ol>``, an indented ``- x`` under a bullet into a
+    nested ``<ul>``, `` **x** `` into ``<strong>x</strong>``, `` `x` `` into ``<code>x</code>``,
+    and ``[text](url)`` into links (http/https only). Escapes first. With ``ideas``, each
+    quoted line (``> …``) is drawn in place as the next idea's plate (F164 D5); with none
+    left it stays a plain line."""
     if text is None:
         return ""
     escaped = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
     lines = escaped.split("\n")
     html_parts: list[str] = []
-    in_list = False
+    in_ol: bool = False
+    in_ul: bool = False
+    in_nested_ul: bool = False
     for line in lines:
         stripped = line.strip()
+        # Idea plates
         if ideas is not None and stripped.startswith("&gt;") and len(stripped) > len("&gt;"):
             idea = next(ideas, None)
             if idea is not None:
-                if in_list:
+                if in_nested_ul:
                     html_parts.append("</ul>")
-                    in_list = False
+                    in_nested_ul = False
+                if in_ul:
+                    html_parts.append("</ul>")
+                    in_ul = False
+                if in_ol:
+                    html_parts.append("</ol>")
+                    in_ol = False
                 html_parts.append(idea_plate(idea))
                 continue
-        if stripped.startswith("- "):
-            if not in_list:
-                html_parts.append("<ul>")
-                in_list = True
-            item_text = stripped[2:]
-            item_text = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", item_text)
-            html_parts.append(f"<li>{item_text}</li>")
-        else:
-            if in_list:
+        # Numbered list item
+        ol_match = re.match(r"^(\s*)(\d+)\.\s+(.*)", line)
+        if ol_match:
+            if not in_ol:
+                html_parts.append("<ol>")
+                in_ol = True
+            text_part = _inline_markup(ol_match.group(3))
+            html_parts.append(f"<li>{text_part}</li>")
+            continue
+        # Bullet list item (with optional indent for nesting)
+        ul_match = re.match(r"^(\s*)(- )(.*)", line)
+        if ul_match:
+            indent = ul_match.group(1)
+            text_part = ul_match.group(3)
+            is_nested = bool(indent) and not in_nested_ul
+            # Close nested ul if we were in one
+            if in_nested_ul:
                 html_parts.append("</ul>")
-                in_list = False
-            if stripped:
-                html_parts.append(f"<p>{stripped}</p>")
-    if in_list:
+                in_nested_ul = False
+            # Start nested ul if this item is nested
+            if is_nested:
+                html_parts.append("<ul>")
+                in_nested_ul = True
+            # Start outer ul if we're not in one and this item is not nested
+            elif not in_ul:
+                html_parts.append("<ul>")
+                in_ul = True
+            text_part = _inline_markup(text_part)
+            html_parts.append(f"<li>{text_part}</li>")
+            continue
+        # Regular line
+        if in_nested_ul:
+            html_parts.append("</ul>")
+            in_nested_ul = False
+        if in_ul:
+            html_parts.append("</ul>")
+            in_ul = False
+        if in_ol:
+            html_parts.append("</ol>")
+            in_ol = False
+        if stripped:
+            html_parts.append(f"<p>{_inline_markup(stripped)}</p>")
+    if in_nested_ul:
         html_parts.append("</ul>")
+    if in_ul:
+        html_parts.append("</ul>")
+    if in_ol:
+        html_parts.append("</ol>")
     return "".join(html_parts)
 
 
@@ -478,6 +539,24 @@ def how_it_grew(card: Card | None, started: str | None, ended: str | None) -> li
 
 
 @dataclass(frozen=True)
+class CaughtRow:
+    """One finding from a milestone's review: its severity, summary, and what happened."""
+
+    severity: str
+    summary: str
+    outcome: str
+
+
+@dataclass(frozen=True)
+class SpendRow:
+    """One row of a milestone's spend by role: label, dollars, and share of the largest."""
+
+    label: str
+    usd: float
+    share: float
+
+
+@dataclass(frozen=True)
 class MilestoneDetail:
     key: str
     title: str | None
@@ -494,6 +573,110 @@ class MilestoneDetail:
     tickets: list[TicketRow]
     runs: list[sqlite3.Row]
     findings: dict[str, int]
+    caught: list[CaughtRow]
+    spend: list[SpendRow]
+
+
+_SEVERITY_ORDER = {"blocking": 0, "should-fix": 1, "nit": 2}
+
+_ROLE_LABELS: dict[str, str] = {
+    "review": "The review",
+    "escalation": "The lead finishing a developer's ticket",
+    "planner": "Planning",
+    "lead-ticket": "The lead's tickets",
+    "direction": "Directions for developers",
+    "checkpoint": "Checkpoints",
+}
+
+
+def _outcome(finding: sqlite3.Row) -> str:
+    """The outcome word for a finding, per D11."""
+    if finding["resolved"]:
+        return "fixed"
+    route = str(finding["route"] or "")
+    if route == "report":
+        return "left"
+    if route in ("local", "later", "backlog"):
+        return "ticket"
+    if route == "adr":
+        return "for you"
+    return "left"
+
+
+def _caught(conn: sqlite3.Connection, milestone_id: int) -> list[CaughtRow]:
+    """The milestone's findings, ordered by severity then key (D11)."""
+    rows = conn.execute(
+        "SELECT severity, summary, route, resolved, key FROM findings"
+        " WHERE milestone_id = ? ORDER BY severity, key",
+        (milestone_id,),
+    ).fetchall()
+
+    def _sev_key(r: sqlite3.Row) -> tuple[int, str]:
+        return (_SEVERITY_ORDER.get(r["severity"], 99), r["key"])
+
+    found: list[sqlite3.Row] = sorted(rows, key=_sev_key)
+    return [
+        CaughtRow(
+            severity=str(r["severity"] or ""),
+            summary=str(r["summary"] or ""),
+            outcome=_outcome(r),
+        )
+        for r in found
+    ]
+
+
+def _spend_label(role: str) -> str:
+    """The plain label for a job role (D10)."""
+    label = _ROLE_LABELS.get(role, role)
+    if role == "developer":
+        return "Developers, on your GPU"
+    return label
+
+
+def _milestone_spend(conn: sqlite3.Connection, milestone_id: int) -> list[SpendRow]:
+    """The milestone's dollars by role, largest first, with share (D10)."""
+    rows = conn.execute(
+        "SELECT j.role, sum(j.cost_usd) as total_cost"
+        " FROM jobs j WHERE j.milestone_id = ?"
+        " GROUP BY j.role",
+        (milestone_id,),
+    ).fetchall()
+
+    # Developer roles with jobs but no dollars
+    dev_rows = conn.execute(
+        "SELECT 1 FROM jobs WHERE milestone_id = ? AND role = 'developer' LIMIT 1",
+        (milestone_id,),
+    ).fetchone()
+
+    # Build list of (role, usd)
+    spend: list[tuple[str, float]] = []
+    seen_roles: set[str] = set()
+    for r in rows:
+        role = str(r["role"] or "")
+        usd = float(r["total_cost"] or 0)
+        spend.append((role, usd))
+        seen_roles.add(role)
+
+    # Add developer row if it has jobs but no dollars
+    if dev_rows and "developer" not in seen_roles:
+        spend.append(("developer", 0.0))
+
+    # Sort by dollars descending
+    spend.sort(key=lambda x: -x[1])
+
+    # Compute share
+    max_usd = spend[0][1] if spend else 0.0
+    if max_usd == 0:
+        return []
+
+    return [
+        SpendRow(
+            label=_spend_label(role),
+            usd=round(usd, 2),
+            share=round(usd / max_usd, 2),
+        )
+        for role, usd in spend
+    ]
 
 
 def get_milestone_detail(
@@ -518,6 +701,8 @@ def get_milestone_detail(
         import json as _json
 
         signoff = {k: v for k, v in _json.loads(m["signoff"]).items() if isinstance(v, str)}
+    caught = _caught(conn, m["id"])
+    spend = _milestone_spend(conn, m["id"])
     return MilestoneDetail(
         key=key,
         title=m["title"],
@@ -534,6 +719,8 @@ def get_milestone_detail(
         tickets=tickets,
         runs=runs,
         findings=findings,
+        caught=caught,
+        spend=spend,
     )
 
 
