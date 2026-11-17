@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F256 mock-up: the top bar, in line</title>
+<style>
+  /* The dashboard's own tokens (factory_dashboard/static/dashboard.css), dark theme */
+  :root {
+    color-scheme: dark;
+    --floor: #12161b; --bay: #181e25; --plate: #1f2730; --grid: #222b34; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2; --ink: var(--fg);
+    --hazard: #f2b10a; --hazard-ink: #1a1405; --opus: #ff9640; --good: #5fd17a; --warn-ink: #f2b10a;
+    --tick: var(--ink-2);
+    --stripe: repeating-linear-gradient(-45deg, var(--hazard) 0 6px, transparent 6px 12px);
+    --notch: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
+    --display: "Chakra Petch", "Bahnschrift", "DIN Alternate", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+    /* proposed, new: one height for every control in the bar's top row */
+    --control-h: 36px;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--floor); color: var(--fg); font: 15px/1.5 var(--body); padding: 16px; }
+  h1 { font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 4px; }
+  h3 { font: 600 13px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 20px 0 8px; }
+  p.lede { color: var(--ink-2); max-width: 760px; margin: 0 0 10px; }
+  .switch { display: inline-flex; border: 1px solid var(--rule); margin-bottom: 8px; }
+  .switch button { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 10px 16px;
+    min-height: 44px; background: var(--bay); color: var(--muted); border: 0; border-right: 1px solid var(--rule); cursor: pointer; }
+  .switch button:last-child { border-right: 0; }
+  .switch button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+  .versions { display: grid; gap: 22px; grid-template-columns: minmax(0, 1fr); }
+  .col-head { font: 700 15px var(--display); letter-spacing: .08em; text-transform: uppercase; margin: 4px 0 0; }
+  [data-version][data-off] { display: none; }
+  @media (min-width: 900px) {
+    .versions { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+    .switch { display: none; }
+    [data-version][data-off] { display: block !important; }
+  }
+  .scaler { overflow: hidden; }
+  .frame { border: 1px solid var(--rule); background: var(--floor); position: relative; transform-origin: 0 0; overflow: hidden; }
+  .frame.w1000 { width: 1000px; height: 190px; }
+  .frame.w760 { width: 760px; height: 190px; }
+  ul.notes { list-style: none; margin: 10px 0 0; padding: 0; color: var(--ink-2); font-size: 13.5px; max-width: 640px; }
+  ul.notes li { padding: 4px 0 4px 12px; border-left: 2px solid var(--rule); margin-bottom: 6px; }
+  .legend-new { outline: 1px dashed var(--good); padding: 0 4px; }
+  .legend-guide { border-bottom: 1px dashed var(--opus); padding: 0 2px; }
+  code { font: 12.5px var(--mono); background: var(--bay); padding: 1px 5px; }
+
+  /* ================= TODAY: copied from dashboard.css (lines 87-167) ================= */
+  .today header.bar { background: var(--floor); border-bottom: 1px solid var(--rule); display: grid; gap: 10px;
+    grid-template-columns: minmax(0, 1fr); padding: 12px 16px 10px; position: relative; z-index: 5; }
+  .today .bar-top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 18px; }
+  .brand { font: 700 22px/1.1 var(--display); letter-spacing: .04em; display: flex; align-items: center; gap: 4px;
+    text-decoration: none; color: var(--ink); min-height: 44px; }
+  .brand svg { flex: none; width: 28px; height: 28px; }
+  .brand-soft { color: var(--warn-ink); }
+  .brand-field { color: var(--good); }
+  .brand small { font: 400 12px var(--mono); letter-spacing: 0; text-transform: none; color: var(--muted); margin-left: 8px; }
+  .brand svg .sprout { stroke: var(--good); }
+  .brand svg .crate { fill: var(--hazard); stroke: var(--hazard-ink); }
+  .hazard { height: 6px; background: repeating-linear-gradient(-45deg, var(--hazard) 0 10px, var(--floor) 10px 20px); opacity: .85; }
+  .factory-status { display: flex; align-items: center; gap: 4px; align-self: center; position: relative;
+    border: 1px solid transparent; padding: 0 2px; }
+  .factory-status .dot-btn { width: 28px; height: 44px; display: grid; place-items: center; flex: none;
+    background: none; border: 0; padding: 0; }
+  .factory-status .dot { width: 14px; height: 14px; border-radius: 50%; background: var(--opus);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--opus) 18%, transparent); }
+  .factory-status .words { font: 600 15px/1.3 var(--display); letter-spacing: .03em; padding-right: 6px; }
+  .factory-status .sign { width: 36px; height: 36px; display: grid; place-items: center; flex: none;
+    border: 1px solid var(--hazard); background: var(--hazard); color: var(--hazard-ink); font-size: 18px; padding: 0; }
+  .factory-status .uptime { display: inline-flex; align-items: stretch; align-self: center; border: 1px solid var(--rule);
+    background: var(--plate); clip-path: var(--notch); font: 12px/1 var(--mono); color: var(--fg); white-space: nowrap; margin-left: 14px; }
+  .factory-status .uptime .key { display: inline-flex; align-items: center; gap: 5px; padding: 5px 7px; border-right: 1px solid var(--rule);
+    font: 600 11px/1 var(--display); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+  .factory-status .uptime .key svg { width: 11px; height: 11px; color: var(--ink-2); }
+  .factory-status .uptime .val { padding: 5px 14px 5px 8px; font-variant-numeric: tabular-nums; }
+  .filters { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 0 auto; }
+  .filters label { font: 500 12px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  select, button { font: inherit; font-size: 13px; padding: 3px 6px; text-transform: none;
+    letter-spacing: 0; border: 1px solid var(--rule); border-radius: 0; background: var(--plate); color: var(--ink); }
+  .theme-switch { flex: none; width: 36px; height: 36px; padding: 0; background: none; border: 0; display: grid; place-items: center; }
+  .theme-switch .plate { position: relative; width: 24px; height: 36px; background: var(--plate); border: 1px solid var(--rule);
+    border-radius: 4px; display: grid; grid-template-rows: 1fr 1fr; place-items: center; }
+  .theme-switch svg { width: 12px; height: 12px; position: relative; z-index: 1; color: var(--muted); }
+  .theme-switch .moon { color: var(--hazard-ink); }
+  .theme-switch .knob { position: absolute; left: 2px; right: 2px; top: 2px; height: 15px; border-radius: 2px;
+    background: var(--hazard); box-shadow: inset 0 -2px 0 rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.35); }
+  nav.tabs { display: flex; flex-wrap: wrap; justify-self: start; border-top: 1px solid var(--rule); border-left: 1px solid var(--rule); }
+  nav.tabs a { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--muted);
+    padding: 8px 14px; border: solid var(--rule); border-width: 0 1px 1px 0; white-space: nowrap; text-decoration: none; }
+  nav.tabs a[aria-current="page"] { background: var(--hazard); color: var(--hazard-ink); }
+
+  /* ================= PROPOSED: the same bar, every part on one centre line ================= */
+  .proposed header.bar { background: var(--floor); border-bottom: 1px solid var(--rule); display: grid; gap: 10px;
+    grid-template-columns: minmax(0, 1fr); padding: 12px 16px 10px; position: relative; z-index: 5; }
+  /* 1. one row, centred, never wrapping */
+  .proposed .bar-top { display: flex; flex-wrap: nowrap; align-items: center; gap: 0 14px; min-height: 44px; }
+  /* 2. the crate's own 2 px inset is taken back: its edge meets the stripe's and the tabs' */
+  .proposed .brand { margin-left: -2px; flex: none; }
+  /* 3. the host is a small tag on the same centre line */
+  .proposed .brand small { margin-left: 10px; height: 22px; line-height: 20px; padding: 0 6px; border: 1px solid var(--rule); color: var(--muted); }
+  /* 4. the status takes the squeeze: its words end in "…" rather than pushing the row onto two lines */
+  .proposed .factory-status { flex: 0 1 auto; min-width: 0; gap: 6px; }
+  .proposed .factory-status .words { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .proposed .factory-status .sign { height: var(--control-h); width: var(--control-h); }
+  /* 5. every control the same height */
+  .proposed .factory-status .uptime { height: var(--control-h); margin-left: 8px; flex: none; }
+  .proposed .factory-status .uptime .key, .proposed .factory-status .uptime .val { padding-top: 0; padding-bottom: 0; display: inline-flex; align-items: center; }
+  /* 6. the picker is a plate like the "On" one: its key, then the project */
+  .proposed .filters { margin-left: auto; flex: none; flex-wrap: nowrap; }
+  .proposed .filters label { display: inline-flex; align-items: stretch; height: var(--control-h); border: 1px solid var(--rule);
+    background: var(--plate); clip-path: var(--notch); }
+  .proposed .filters .key { display: inline-flex; align-items: center; padding: 0 8px; border-right: 1px solid var(--rule);
+    font: 600 11px/1 var(--display); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+  .proposed .filters select { border: 0; height: 100%; padding: 0 18px 0 8px; font: 600 13px var(--display); letter-spacing: .03em; background: transparent; }
+  /* 7. the switch is as wide as its plate, so its right edge is the bar's */
+  .proposed .theme-switch { width: auto; height: var(--control-h); }
+  /* the tabs as F194 leaves them (four slots): not this card's change */
+  .proposed nav.tabs.slots { display: grid; grid-template-columns: 120px 150px 92px 130px; }
+  .proposed nav.tabs.slots a { display: flex; align-items: center; justify-content: center; }
+
+  /* the marks */
+  .new { outline: 1px dashed var(--good); outline-offset: 3px; }
+  .guide-h { position: absolute; left: 0; right: 0; border-top: 1px dashed var(--opus); pointer-events: none; z-index: 9; }
+  .guide-v { position: absolute; top: 0; bottom: 0; border-left: 1px dashed var(--opus); pointer-events: none; z-index: 9; }
+  .tag { position: absolute; z-index: 10; font: 600 10px/1 var(--mono); color: var(--floor); background: var(--good);
+    padding: 2px 4px; pointer-events: none; }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute"><symbol id="moon" viewBox="0 0 16 16"><path d="M10.5 1.5a6.5 6.5 0 1 0 4 11.2A5.2 5.2 0 0 1 10.5 1.5z" fill="currentColor"/></symbol><symbol id="sun" viewBox="0 0 16 16"><g fill="currentColor"><circle cx="8" cy="8" r="3.2"/><rect x="7.2" y="0" width="1.6" height="3"/><rect x="7.2" y="13" width="1.6" height="3"/><rect x="0" y="7.2" width="3" height="1.6"/><rect x="13" y="7.2" width="3" height="1.6"/><rect x="7.2" y="0" width="1.6" height="3" transform="rotate(45 8 8)"/><rect x="7.2" y="13" width="1.6" height="3" transform="rotate(45 8 8)"/><rect x="0" y="7.2" width="3" height="1.6" transform="rotate(45 8 8)"/><rect x="13" y="7.2" width="3" height="1.6" transform="rotate(45 8 8)"/></g></symbol></svg>
+
+<h1>F256: the top bar, in line</h1>
+<p class="lede">The top bar on a wide screen, with what it read on 17 Nov at noon. Today's picture uses the live stylesheet's rules for the top bar, so it's off in the same places the real one is.</p>
+<div class="switch" role="group" aria-label="Which version">
+  <button type="button" data-show="today" aria-pressed="false">Today</button>
+  <button type="button" data-show="proposed" aria-pressed="true">Proposed</button>
+</div>
+
+<div class="versions">
+  <section data-version="today" data-off>
+    <p class="col-head">Today</p>
+    <h3>Wide screen, 1000 px</h3>
+    <div class="scaler"><div class="frame w1000 today">
+      <header class="bar">
+        <div class="bar-top">
+          <a class="brand"><svg viewBox="0 0 28 28" aria-hidden="true"><rect class="crate" x="2" y="12" width="24" height="14" rx="2" stroke-width="1.5"/><line x1="10" y1="12" x2="10" y2="26" stroke="#1a1405" stroke-width="1.5"/><line x1="18" y1="12" x2="18" y2="26" stroke="#1a1405" stroke-width="1.5"/><path class="sprout" d="M14 12 L14 6" stroke-width="2" stroke-linecap="round"/><path class="sprout" d="M14 8 Q10 6 10 3" stroke-width="1.5" fill="none" stroke-linecap="round"/><path class="sprout" d="M14 10 Q18 8 18 5" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg><span class="brand-soft">Soft</span><span class="brand-field">Field</span><small>127.0.0.1</small></a>
+          <div class="factory-status"><button type="button" class="dot-btn"><i class="dot"></i></button><span class="words">Running: softfield · planner, job 2308</span><button type="button" class="sign">⏸</button><span class="uptime"><span class="key"><svg viewBox="0 0 12 12" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M6 1v4.5"/><path d="M3.2 3a4 4 0 1 0 5.6 0"/></g></svg>On</span><span class="val">16 h 57 min</span></span></div>
+          <div class="filters"><label>Project
+            <select><option>coaster-ranker</option><option>travel-companion</option><option selected>softfield</option><option>coucou</option></select></label></div>
+          <button type="button" class="theme-switch"><span class="plate"><span class="knob"></span><svg class="moon"><use href="#moon"/></svg><svg class="sun"><use href="#sun"/></svg></span></button>
+        </div>
+        <div class="hazard" aria-hidden="true"></div>
+        <nav class="tabs"><a>Projects</a><a aria-current="page">Overview</a><a>Planning · 2</a><a>Board</a><a>Tickets</a><a>Jobs</a><a>Runs</a><a>Timeline</a><a>Agents</a><a>Bench</a></nav>
+      </header>
+    </div></div>
+    <ul class="notes">
+      <li>The row lines its parts up on their text's <b>baseline</b> (<code>.bar-top { align-items: baseline }</code>), but only some of them: the status is centred, the brand is centred in its own 44 px box, the "Project" word and its select sit on the text line, and the theme switch, having no text, puts its bottom edge on that line, so it rides high.</li>
+      <li>Five heights side by side: the dot's 44, the sign's and the switch's 36, the "On" plate's 24, the select's about 24.</li>
+      <li>The switch's plate is 24 px wide inside a 36 px button, so it stops 6 px short of the stripe's right end; the crate in the logo starts 2 px in from the stripe's left end.</li>
+    </ul>
+    <h3>Narrower window, 760 px</h3>
+    <div class="scaler"><div class="frame w760 today">
+      <header class="bar">
+        <div class="bar-top">
+          <a class="brand"><svg viewBox="0 0 28 28" aria-hidden="true"><rect class="crate" x="2" y="12" width="24" height="14" rx="2" stroke-width="1.5"/><line x1="10" y1="12" x2="10" y2="26" stroke="#1a1405" stroke-width="1.5"/><line x1="18" y1="12" x2="18" y2="26" stroke="#1a1405" stroke-width="1.5"/><path class="sprout" d="M14 12 L14 6" stroke-width="2" stroke-linecap="round"/><path class="sprout" d="M14 8 Q10 6 10 3" stroke-width="1.5" fill="none" stroke-linecap="round"/><path class="sprout" d="M14 10 Q18 8 18 5" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg><span class="brand-soft">Soft</span><span class="brand-field">Field</span><small>127.0.0.1</small></a>
+          <div class="factory-status"><button type="button" class="dot-btn"><i class="dot"></i></button><span class="words">Running: softfield · planner, job 2308</span><button type="button" class="sign">⏸</button><span class="uptime"><span class="key"><svg viewBox="0 0 12 12" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M6 1v4.5"/><path d="M3.2 3a4 4 0 1 0 5.6 0"/></g></svg>On</span><span class="val">16 h 57 min</span></span></div>
+          <div class="filters"><label>Project
+            <select><option>coaster-ranker</option><option>travel-companion</option><option selected>softfield</option><option>coucou</option></select></label></div>
+          <button type="button" class="theme-switch"><span class="plate"><span class="knob"></span><svg class="moon"><use href="#moon"/></svg><svg class="sun"><use href="#sun"/></svg></span></button>
+        </div>
+        <div class="hazard" aria-hidden="true"></div>
+        <nav class="tabs"><a>Projects</a><a aria-current="page">Overview</a><a>Planning · 2</a><a>Board</a><a>Tickets</a><a>Jobs</a><a>Runs</a><a>Timeline</a><a>Agents</a></nav>
+      </header>
+    </div></div>
+    <ul class="notes">
+      <li>A narrower window wraps the row (<code>flex-wrap: wrap</code>) and puts the parts on two lines, each lined up its own way.</li>
+    </ul>
+  </section>
+
+  <section data-version="proposed">
+    <p class="col-head">Proposed</p>
+    <h3>Wide screen, 1000 px</h3>
+    <div class="scaler"><div class="frame w1000 proposed">
+      <header class="bar">
+        <div class="bar-top">
+          <a class="brand new"><svg viewBox="0 0 28 28" aria-hidden="true"><rect class="crate" x="2" y="12" width="24" height="14" rx="2" stroke-width="1.5"/><line x1="10" y1="12" x2="10" y2="26" stroke="#1a1405" stroke-width="1.5"/><line x1="18" y1="12" x2="18" y2="26" stroke="#1a1405" stroke-width="1.5"/><path class="sprout" d="M14 12 L14 6" stroke-width="2" stroke-linecap="round"/><path class="sprout" d="M14 8 Q10 6 10 3" stroke-width="1.5" fill="none" stroke-linecap="round"/><path class="sprout" d="M14 10 Q18 8 18 5" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg><span class="brand-soft">Soft</span><span class="brand-field">Field</span><small>127.0.0.1</small></a>
+          <div class="factory-status"><button type="button" class="dot-btn"><i class="dot"></i></button><span class="words">Running: softfield · planner, job 2308</span><button type="button" class="sign">⏸</button><span class="uptime new"><span class="key"><svg viewBox="0 0 12 12" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M6 1v4.5"/><path d="M3.2 3a4 4 0 1 0 5.6 0"/></g></svg>On</span><span class="val">16 h 57 min</span></span></div>
+          <div class="filters"><label class="new"><span class="key">Project</span>
+            <select><option>coaster-ranker</option><option>travel-companion</option><option selected>softfield</option><option>coucou</option></select></label></div>
+          <button type="button" class="theme-switch new"><span class="plate"><span class="knob"></span><svg class="moon"><use href="#moon"/></svg><svg class="sun"><use href="#sun"/></svg></span></button>
+        </div>
+        <div class="hazard" aria-hidden="true"></div>
+        <nav class="tabs slots"><a aria-current="page">Overview</a><a>Planning · 2</a><a>Board</a><a>More ▾</a></nav>
+      </header>
+      <div class="guide-h" style="top: 34px"></div>
+      <div class="guide-v" style="left: 16px"></div>
+      <div class="guide-v" style="left: 983px"></div>
+      <span class="tag" style="left: 22px; top: 2px">edge</span>
+      <span class="tag" style="left: 440px; top: 2px">one centre line, one height</span>
+      <span class="tag" style="left: 945px; top: 2px">edge</span>
+    </div></div>
+    <ul class="notes">
+      <li><span class="legend-guide">Dashed orange</span> lines are the guides, not part of the page; <span class="legend-new">dashed green</span> marks what changes.</li>
+      <li><b>One centre line:</b> every part of the top row is centred on it (<code>align-items: center</code>), the brand, the dot, the words, the sign, the "On" plate, the picker and the switch.</li>
+      <li><b>One height:</b> the sign, the "On" plate, the picker and the switch are all 36 px (a new <code>--control-h</code> token), so their tops and bottoms line up too.</li>
+      <li><b>The picker is a plate</b> like the "On" one: a small "Project" key, then the project's name, with the same cut corner. The word no longer floats beside a bare box.</li>
+      <li><b>The edges:</b> the logo's crate, the stripe and the tabs start on the same left line; the switch ends where the stripe ends.</li>
+      <li>The tabs are drawn as F194 (The menu: Overview, Planning, Board in fixed places) leaves them; this card doesn't change them.</li>
+    </ul>
+    <h3>Narrower window, 760 px</h3>
+    <div class="scaler"><div class="frame w760 proposed">
+      <header class="bar">
+        <div class="bar-top">
+          <a class="brand"><svg viewBox="0 0 28 28" aria-hidden="true"><rect class="crate" x="2" y="12" width="24" height="14" rx="2" stroke-width="1.5"/><line x1="10" y1="12" x2="10" y2="26" stroke="#1a1405" stroke-width="1.5"/><line x1="18" y1="12" x2="18" y2="26" stroke="#1a1405" stroke-width="1.5"/><path class="sprout" d="M14 12 L14 6" stroke-width="2" stroke-linecap="round"/><path class="sprout" d="M14 8 Q10 6 10 3" stroke-width="1.5" fill="none" stroke-linecap="round"/><path class="sprout" d="M14 10 Q18 8 18 5" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg><span class="brand-soft">Soft</span><span class="brand-field">Field</span><small>127.0.0.1</small></a>
+          <div class="factory-status"><button type="button" class="dot-btn"><i class="dot"></i></button><span class="words new">Running: softfield · planner, job 2308</span><button type="button" class="sign">⏸</button><span class="uptime"><span class="key"><svg viewBox="0 0 12 12" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M6 1v4.5"/><path d="M3.2 3a4 4 0 1 0 5.6 0"/></g></svg>On</span><span class="val">16 h 57 min</span></span></div>
+          <div class="filters"><label><span class="key">Project</span>
+            <select><option>coaster-ranker</option><option>travel-companion</option><option selected>softfield</option><option>coucou</option></select></label></div>
+          <button type="button" class="theme-switch"><span class="plate"><span class="knob"></span><svg class="moon"><use href="#moon"/></svg><svg class="sun"><use href="#sun"/></svg></span></button>
+        </div>
+        <div class="hazard" aria-hidden="true"></div>
+        <nav class="tabs slots"><a aria-current="page">Overview</a><a>Planning · 2</a><a>Board</a><a>More ▾</a></nav>
+      </header>
+      <div class="guide-h" style="top: 34px"></div>
+    </div></div>
+    <ul class="notes">
+      <li><b>Never two lines:</b> when the window is narrow, the status words give way and end in "…" (the whole sentence stays in the dot's hover title). The phone's bar, under 640 px, stays as it is.</li>
+    </ul>
+  </section>
+</div>
+
+<script>
+  // The pictures are plain HTML above; this only flips Today and Proposed and scales the frames.
+  (function () {
+    function fit() {
+      document.querySelectorAll(".scaler").forEach(function (box) {
+        if (!box.offsetWidth) return;
+        var frame = box.querySelector(".frame");
+        var width = frame.offsetWidth;
+        var scale = Math.min(1, box.clientWidth / width);
+        frame.style.transform = "scale(" + scale + ")";
+        box.style.height = (frame.offsetHeight * scale) + "px";
+      });
+    }
+    document.querySelectorAll(".switch button").forEach(function (button) {
+      button.addEventListener("click", function () {
+        document.querySelectorAll(".switch button").forEach(function (b) { b.setAttribute("aria-pressed", String(b === button)); });
+        document.querySelectorAll("[data-version]").forEach(function (v) { v.toggleAttribute("data-off", v.dataset.version !== button.dataset.show); });
+        fit();
+      });
+    });
+    addEventListener("resize", fit);
+    fit();
+  })();
+</script>
+</body>
+</html>
