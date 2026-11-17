@@ -25,3 +25,12 @@ Read the "Regular line" branch of `_to_html` in `factory_dashboard/milestones.py
 - a blank line after a list still closes it, and `"1. a\nplain"` still gives `<ol><li>a</li></ol><p>plain</p>`
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 1119
+gate_failures: []
+tokens: 626993
+```
