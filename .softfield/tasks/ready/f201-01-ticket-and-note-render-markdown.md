@@ -2,7 +2,7 @@
 id: f201-01-ticket-and-note-render-markdown
 milestone: f201-ticket-pages-render-markdown
 difficulty: 3
-depends_on: [f216-02-findings-costs-and-markdown, f216-03-review-page-plates-and-folds]
+depends_on: [f216-02-findings-costs-and-markdown, f216-03-review-page-plates-and-folds, f216-06-fix-plain-line-after-list-outside-ul]
 files:
   - factory_dashboard/milestones.py
   - factory_dashboard/app.py
