@@ -886,6 +886,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** an existing test row encoded the rule that D2 replaced. Qwen kept the row and added code that worked around it, so the gates stayed green and D2 stayed undone. Lesson: when a decision contradicts a test that already exists, the plan names the test, so the ticket says to update it. The plan also waited about 57 hours parked for Claude's limit, for a 1.5-minute Opus job.
 - **Decisions affected:** none.
 
+### F251 (2026-11-17): the top bar says how long the computer has been on ([review](../reviews/f251-i-want-to-see-computer-uptime.md))
+
+- **Q1:** one ticket. Qwen's attempts 1 and 2 stopped with no edit. Then an Opus direction ($0.78), but it waited 1.5 h parked for Claude's window. Attempt 3 was rejected only by protected-paths, and the lead finished the ticket ($2.06). No checkpoint ran. Review round 1: no defect, three nits kept in the report. Score 8.
+- **Q3:** Qwen built most of it in attempt 3. Claude replaced its eight bent assertions with a conftest fixture and added the page tests. See the review's numbers.
+- **Q5:** see the review's numbers.
+- **Anything else:** the direction itself put a protected test file in the developer's ticket, and pre-flight let it through. bug-64 makes pre-flight refuse that. Lesson: when a change spills into existing tests, look for a fixture before editing them.
+- **Decisions affected:** none.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.
