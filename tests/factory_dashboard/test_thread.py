@@ -1169,6 +1169,25 @@ def test_an_idea_with_no_plant_has_both_buttons_that_post_it(planning, db_path, 
     assert review.index("Ideas from this review") < review.index("The whole review")
 
 
+def test_an_idea_plate_puts_plant_and_ask_before_plant_with_the_right_classes(
+    planning, db_path, serve
+):
+    """F197-02 D2: on an idea with no plant, "Plant and ask the lead" comes first with btn go,
+    and "Plant" comes second with btn plain; ask is true on the first, false on the second."""
+    _sheet(db_path, "f28")
+    review = _review_section(_thread(serve(), "f28"))
+    buttons = _idea_buttons(review)
+    plant, ask = buttons["Plant"], buttons["Plant and ask the lead"]
+    assert ask["value"]["ask"] is True
+    assert plant["value"]["ask"] is False
+    actions = re.findall(r'<button[^>]*class="([^"]*)"[^>]*>([^<]*)</button>', review)
+    labels = [b[1] for b in actions]
+    assert labels.index("Plant and ask the lead") < labels.index("Plant")
+    classes = {b[1]: b[0] for b in actions}
+    assert "btn go" in classes["Plant and ask the lead"]
+    assert "btn plain" in classes["Plant"]
+
+
 def test_a_planted_idea_links_to_its_card_with_no_buttons(planning, db_path, serve):
     _sheet(db_path, "f28")
     _plant(

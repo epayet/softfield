@@ -13,7 +13,7 @@
   <span class="done-note">Didn't go through: {{ idea.said }}</span>
   {% endif %}
   <div class="actions">
-    {% for label, vals, cls in (("Plant", vals_plant, "solid"), ("Plant and ask the lead", vals_ask, "line")) %}
+    {% for label, vals, cls in (("Plant and ask the lead", vals_ask, "go"), ("Plant", vals_plant, "plain")) %}
     <button type="button" class="btn {{ cls }}"
       hx-post="/requests" hx-target="#idea-status-{{ slug }}" hx-swap="innerHTML"
       hx-vals='{{ vals }}'
