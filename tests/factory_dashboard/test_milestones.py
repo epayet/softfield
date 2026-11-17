@@ -2419,14 +2419,15 @@ def test_to_html_numbered_becomes_ol():
 
 
 def test_to_html_nested_bullet_becomes_nested_ul():
-    """An indented ``- x`` under a bullet becomes a nested ``<ul>``."""
+    """An indented ``- x`` under a bullet becomes a nested ``<ul>`` inside the parent's ``<li>``."""
     from factory_dashboard.milestones import _to_html
 
     result = _to_html("- Top level\n  - Nested item\n- Another top")
     assert "<ul>" in result
     # Should have two <ul> tags (outer and nested)
     assert result.count("<ul>") == 2
-    assert "<li>Top level</li>" in result
+    # Nested <ul> sits inside the parent's <li>, not between </li> and <ul>
+    assert "<li>Top level<ul>" in result
     assert "<li>Nested item</li>" in result
     assert "<li>Another top</li>" in result
 
@@ -2626,3 +2627,52 @@ def test_to_html_code_is_protected_from_bold_and_links():
     code_end2 = result2.index("</code>") + len("</code>")
     code_content2 = result2[code_start2:code_end2]
     assert "href=" not in code_content2, f"link should not be applied inside code: {code_content2}"
+
+
+def test_to_html_nested_list_inside_parent_li():
+    """A nested ``<ul>`` sits inside its parent's ``<li>``, not between ``</li>`` and ``<ul>``."""
+    from factory_dashboard.milestones import _to_html
+
+    result = _to_html("- Top\n  - A\n  - B\n- Bottom")
+    assert result == "<ul><li>Top<ul><li>A</li><li>B</li></ul></li><li>Bottom</li></ul>"
+
+
+def test_to_html_nested_list_ends_text():
+    """A nested list that ends the text closes ``</ul></li>`` before the outer ``</ul>``."""
+    from factory_dashboard.milestones import _to_html
+
+    result = _to_html("- Top\n  - A\n  - B")
+    assert result == "<ul><li>Top<ul><li>A</li><li>B</li></ul></li></ul>"
+
+
+def test_to_html_nested_list_followed_by_plain_line():
+    """A nested list followed by a plain line closes ``</ul></li>`` before the outer ``</ul>``."""
+    from factory_dashboard.milestones import _to_html
+
+    result = _to_html("- Top\n  - A\n  - B\nplain text")
+    assert result == "<ul><li>Top<ul><li>A</li><li>B</li></ul></li><p>plain text</p></ul>"
+
+
+def test_to_html_numbered_and_bullet_whole_string():
+    """``1. a``, ``- b``, ``2. c`` produces balanced tags on the full string."""
+    from factory_dashboard.milestones import _to_html
+
+    result = _to_html("1. a\n- b\n2. c")
+    assert result == "<ol><li>a</li></ol><ul><li>b</li></ul><ol><li>c</li></ol>"
+
+
+def test_to_html_url_with_quote():
+    """A URL with a ``\\\"`` is encoded and the whole string is correct."""
+    from factory_dashboard.milestones import _to_html
+
+    result = _to_html('See [link](https://a\\"onmouseover="y).')
+    assert result == '<p>See <a href="https://a\\%22onmouseover=%22y">link</a>.</p>'
+
+
+def test_to_html_nested_bullet_then_numbered():
+    """A nested bullet followed by a numbered item closes the nested list before the
+    numbered one starts, checked on the full string."""
+    from factory_dashboard.milestones import _to_html
+
+    result = _to_html("- Top\n  - A\n1. n")
+    assert result == "<ul><li>Top<ul><li>A</li></ul></li></ul><ol><li>n</li></ol>"

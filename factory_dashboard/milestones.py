@@ -406,12 +406,16 @@ def _to_html(text: str | None, ideas: Iterator[Idea] | None = None) -> str:
     in_ul: bool = False
     nesting: int = 0  # current nested <ul> depth inside an <li>
     current_indent: int = 0  # indent level of the current list context
+    open_li_depths: list[int] = []  # stack of nesting depths where open <li>s were opened
     for line in lines:
         stripped = line.strip()
         # Idea plates
         if ideas is not None and stripped.startswith("&gt;") and len(stripped) > len("&gt;"):
             idea = next(ideas, None)
             if idea is not None:
+                while open_li_depths:
+                    html_parts.append("</li>")
+                    open_li_depths.pop()
                 while nesting > 0:
                     html_parts.append("</ul>")
                     nesting -= 1
@@ -426,6 +430,16 @@ def _to_html(text: str | None, ideas: Iterator[Idea] | None = None) -> str:
         # Numbered list item
         ol_match = re.match(r"^(\s*)(\d+)\.\s+(.*)", line)
         if ol_match:
+            while open_li_depths and open_li_depths[-1] == nesting:
+                html_parts.append("</li>")
+                open_li_depths.pop()
+            while nesting > 0:
+                html_parts.append("</ul>")
+                nesting -= 1
+            while open_li_depths:
+                html_parts.append("</li>")
+                open_li_depths.pop()
+            current_indent = 0
             if in_ul:
                 html_parts.append("</ul>")
                 in_ul = False
@@ -446,19 +460,40 @@ def _to_html(text: str | None, ideas: Iterator[Idea] | None = None) -> str:
                     nesting += 1
                     html_parts.append("<ul>")
                     current_indent = indent_len
+                    text_part = _inline_markup(text_part)
+                    html_parts.append(f"<li>{text_part}")
+                    open_li_depths.append(nesting)
                 elif indent_len < current_indent:
+                    # Un-nesting: close <li>s opened at deeper depth, close <ul>s.
+                    while open_li_depths and open_li_depths[-1] > nesting:
+                        html_parts.append("</li>")
+                        open_li_depths.pop()
                     while nesting > 0 and current_indent > indent_len:
                         html_parts.append("</ul>")
                         nesting -= 1
-                        current_indent = 0
-                # Same indent: already in the right <ul>, just add <li>.
-                text_part = _inline_markup(text_part)
-                html_parts.append(f"<li>{text_part}</li>")
+                    current_indent = 0
+                    text_part = _inline_markup(text_part)
+                    html_parts.append(f"<li>{text_part}")
+                    open_li_depths.append(nesting)
+                else:
+                    # Same indent: close the previous open <li>, open a new one.
+                    while open_li_depths and open_li_depths[-1] == nesting:
+                        html_parts.append("</li>")
+                        open_li_depths.pop()
+                    text_part = _inline_markup(text_part)
+                    html_parts.append(f"<li>{text_part}")
+                    open_li_depths.append(nesting)
             else:
-                # Top-level item: close all nested <ul>s first.
+                # Top-level item: close <li>s, then nested <ul>s, then parent <li>s.
+                while open_li_depths and open_li_depths[-1] > 0:
+                    html_parts.append("</li>")
+                    open_li_depths.pop()
                 while nesting > 0:
                     html_parts.append("</ul>")
                     nesting -= 1
+                while open_li_depths:
+                    html_parts.append("</li>")
+                    open_li_depths.pop()
                 current_indent = 0
                 if in_ol:
                     html_parts.append("</ol>")
@@ -467,23 +502,36 @@ def _to_html(text: str | None, ideas: Iterator[Idea] | None = None) -> str:
                     html_parts.append("<ul>")
                     in_ul = True
                 text_part = _inline_markup(text_part)
-                html_parts.append(f"<li>{text_part}</li>")
+                html_parts.append(f"<li>{text_part}")
+                open_li_depths.append(0)
             continue
         # Regular line
+        while open_li_depths and open_li_depths[-1] > 0:
+            html_parts.append("</li>")
+            open_li_depths.pop()
         while nesting > 0:
             html_parts.append("</ul>")
             nesting -= 1
-        if in_ul:
-            html_parts.append("</ul>")
-            in_ul = False
+        while open_li_depths:
+            html_parts.append("</li>")
+            open_li_depths.pop()
         if in_ol:
             html_parts.append("</ol>")
             in_ol = False
         if stripped:
             html_parts.append(f"<p>{_inline_markup(stripped)}</p>")
+        if in_ul:
+            html_parts.append("</ul>")
+            in_ul = False
+    while open_li_depths and open_li_depths[-1] > 0:
+        html_parts.append("</li>")
+        open_li_depths.pop()
     while nesting > 0:
         html_parts.append("</ul>")
         nesting -= 1
+    while open_li_depths:
+        html_parts.append("</li>")
+        open_li_depths.pop()
     if in_ul:
         html_parts.append("</ul>")
     if in_ol:
