@@ -4,7 +4,6 @@ milestone: bugs
 difficulty: 3
 depends_on: []
 area: factory
-priority: 61
 finding: f4-always-on-F5
 files:
   - factory_dashboard/templates/tickets.html

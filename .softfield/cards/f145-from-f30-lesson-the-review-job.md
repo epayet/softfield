@@ -1,6 +1,6 @@
 # Milestone F145: Review jobs read wait times from the metrics database (already fixed)
 
-> **State:** idea · **Priority:** 100 · **Area:** factory
+> **State:** idea · **Area:** factory
 > Planted by the owner on 2026-10-16.
 
 ## Notes

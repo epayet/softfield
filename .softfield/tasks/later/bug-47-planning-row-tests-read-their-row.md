@@ -4,7 +4,6 @@ milestone: bugs
 difficulty: 2
 depends_on: []
 area: factory
-priority: 75
 finding: f6-planning-room-C542-1
 tests_only: true
 files:

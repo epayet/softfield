@@ -1,6 +1,6 @@
 # Milestone F211: Open plans survive a card's closing, and new ideas don't join a planned card
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** ready · **Area:** factory
 > Planted by the owner on 2026-11-03.
 
 ## Notes

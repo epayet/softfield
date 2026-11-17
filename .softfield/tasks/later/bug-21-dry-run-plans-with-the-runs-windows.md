@@ -5,7 +5,6 @@ difficulty: 3
 depends_on: []
 agent: lead
 area: factory
-priority: 47
 finding: f8-one-queue-F4
 files:
   - runner/loop.py

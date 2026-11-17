@@ -1,6 +1,6 @@
 # Milestone F195: I've reduced the context window size recently due to…
 
-> **State:** idea · **Priority:** 100 · **Area:** factory
+> **State:** idea · **Area:** factory
 > Planted by the owner on 2026-11-02.
 
 ## Notes

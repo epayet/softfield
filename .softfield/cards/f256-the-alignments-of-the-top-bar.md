@@ -1,6 +1,6 @@
 # Milestone F256: the alignments of the top bar on desktop is very wonky,…
 
-> **State:** idea · **Priority:** 100 · **Area:** factory
+> **State:** idea · **Area:** factory
 > Planted by the owner on 2026-11-17.
 
 ## Notes

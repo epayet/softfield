@@ -1,6 +1,6 @@
 # Milestone F86: idea: tracking time the human spent on a project
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** ready · **Area:** factory
 > Planted by the owner on 2026-10-09.
 
 ## Notes

@@ -4,7 +4,6 @@ milestone: bugs
 difficulty: 2
 depends_on: []
 area: factory
-priority: 74
 finding: f7-factory-fixes-F3
 tests_only: true
 files:

@@ -5,7 +5,6 @@ difficulty: 4
 depends_on: []
 agent: lead
 area: factory
-priority: 52
 finding: f106-where-do-blocked-tickets-go-for-F3
 files:
   - factory_dashboard/planning.py

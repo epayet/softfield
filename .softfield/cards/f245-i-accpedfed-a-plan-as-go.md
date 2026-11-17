@@ -1,6 +1,6 @@
 # Milestone F245: An approved card shows as Seed until the runner's next round
 
-> **State:** ready · **Priority:** 4 · **Area:** factory
+> **State:** ready · **Area:** factory
 > Planted by the owner on 2026-11-13.
 
 ## Notes

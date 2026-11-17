@@ -4,7 +4,6 @@ milestone: bugs
 difficulty: 3
 depends_on: []
 area: factory
-priority: 51
 finding: f106-where-do-blocked-tickets-go-for
 files:
   - factory_dashboard/overview.py

@@ -4,7 +4,6 @@ milestone: bugs
 difficulty: 4
 depends_on: []
 area: factory
-priority: 63
 finding: f50-the-data-safety-review-it-asks-F3
 files:
   - factory_dashboard/line.py

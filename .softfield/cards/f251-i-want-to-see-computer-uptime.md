@@ -1,6 +1,6 @@
 # Milestone F251: Show how long the computer has been on in the top bar
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** ready · **Area:** factory
 > Planted by the owner on 2026-11-14.
 
 ## Notes

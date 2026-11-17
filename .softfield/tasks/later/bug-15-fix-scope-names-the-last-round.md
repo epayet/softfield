@@ -5,7 +5,6 @@ difficulty: 3
 depends_on: []
 agent: lead
 area: factory
-priority: 40
 finding: f53-F3
 files:
   - runner/milestone.py

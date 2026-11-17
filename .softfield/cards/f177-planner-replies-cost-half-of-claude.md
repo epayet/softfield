@@ -1,6 +1,6 @@
 # Milestone F177: Planner replies: record their real cost, start cold threads fresh
 
-> **State:** ready · **Priority:** 10 · **Area:** factory
+> **State:** ready · **Area:** factory
 > Planted by the owner on 2026-10-27.
 
 ## Notes

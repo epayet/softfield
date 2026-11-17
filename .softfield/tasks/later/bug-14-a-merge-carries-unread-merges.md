@@ -5,7 +5,6 @@ difficulty: 4
 depends_on: []
 agent: lead
 area: factory
-priority: 38
 finding: f49-don-t-ask-me-to-merge-F2
 files:
   - runner/requests.py

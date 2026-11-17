@@ -1,6 +1,6 @@
 # Milestone F201: Ticket pages, card notes and lead replies render code, bold and links
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** ready · **Area:** factory
 > From docs/backlog.md (f159-review), written by the lead on 2026-11-02.
 
 ## Notes

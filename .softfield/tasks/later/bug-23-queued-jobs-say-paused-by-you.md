@@ -4,7 +4,6 @@ milestone: bugs
 difficulty: 2
 depends_on: []
 area: factory
-priority: 50
 finding: f8-one-queue-F5
 files:
   - factory_dashboard/overview.py

@@ -5,7 +5,6 @@ difficulty: 3
 depends_on: []
 agent: lead
 area: factory
-priority: 32
 finding: f31-F7
 files:
   - runner/requests.py

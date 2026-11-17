@@ -5,7 +5,6 @@ difficulty: 1
 depends_on: []
 agent: lead
 area: factory
-priority: 72
 finding: f8-one-queue-F6
 commands: [rm .softfield/tasks/later/f9-12-fix-the-desktop-test-does.md]
 files:

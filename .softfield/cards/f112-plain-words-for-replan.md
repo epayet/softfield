@@ -1,6 +1,6 @@
 # Milestone F112: Plain words for "replan"
 
-> **State:** ready · **Priority:** 101 · **Area:** factory
+> **State:** ready · **Area:** factory
 > Planned with the owner on 2026-10-13, in a terminal session.
 
 ## Notes

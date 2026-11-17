@@ -4,7 +4,6 @@ milestone: bugs
 difficulty: 2
 depends_on: []
 area: factory
-priority: 67
 finding: f1-C165-2
 tests_only: true
 files:

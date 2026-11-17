@@ -5,7 +5,6 @@ difficulty: 4
 depends_on: []
 agent: lead
 area: factory
-priority: 41
 finding: f41-F3
 files:
   - factory_dashboard/queries.py

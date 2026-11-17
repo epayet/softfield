@@ -1,6 +1,6 @@
 # Milestone F123: Projects page: drag projects into order, as on the board
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** ready · **Area:** factory
 > Planted by the owner on 2026-10-14.
 
 ## Notes

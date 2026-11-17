@@ -1,6 +1,6 @@
 # Milestone F204: Publish Softfield as a versioned package, with CI
 
-> **State:** idea · **Priority:** 100 · **Area:** factory
+> **State:** idea · **Area:** factory
 > From the owner's terminal session of 2026-11-02.
 
 ## Notes

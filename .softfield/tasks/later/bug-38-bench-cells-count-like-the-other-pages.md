@@ -4,7 +4,6 @@ milestone: bugs
 difficulty: 2
 depends_on: []
 area: factory
-priority: 66
 finding: f1-S166-1
 files:
   - factory_dashboard/bench.py

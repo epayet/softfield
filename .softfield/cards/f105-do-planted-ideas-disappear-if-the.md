@@ -1,6 +1,6 @@
 # Milestone F105: do planted ideas disappear if the runner didn't pick up…
 
-> **State:** idea · **Priority:** 100 · **Area:** factory
+> **State:** idea · **Area:** factory
 > Planted by the owner on 2026-10-12.
 
 ## Notes

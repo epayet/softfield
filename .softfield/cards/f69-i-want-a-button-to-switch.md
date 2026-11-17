@@ -1,6 +1,6 @@
 # Milestone F69: I want a button to switch from light to night theme
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** ready · **Area:** factory
 > Planted by the owner on 2026-10-09. One developer ticket on the dashboard's existing themes (f5-14).
 
 ## Outcome

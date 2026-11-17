@@ -4,7 +4,6 @@ milestone: bugs
 difficulty: 3
 depends_on: []
 area: factory
-priority: 64
 finding: f172-i-d-like-to-be-able-F3
 files:
   - factory_dashboard/overview.py

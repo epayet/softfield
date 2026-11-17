@@ -4,7 +4,6 @@ milestone: bugs
 difficulty: 3
 depends_on: []
 area: factory
-priority: 68
 finding: f12-F9
 files:
   - factory_dashboard/templates/base.html

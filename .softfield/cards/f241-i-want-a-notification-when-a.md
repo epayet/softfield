@@ -1,6 +1,6 @@
 # Milestone F241: A phone notification when Claude's limit pauses work, saying when it resumes
 
-> **State:** ready · **Priority:** 6 · **Area:** factory
+> **State:** ready · **Area:** factory
 > Planted by the owner on 2026-11-11.
 
 ## Notes

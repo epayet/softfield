@@ -1,6 +1,6 @@
 # Milestone F163: A browser check for htmx parts: swap, then post again
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** ready · **Area:** factory
 > Planted by the owner on 2026-10-21.
 
 ## Notes

@@ -1,6 +1,6 @@
 # Milestone F124: Pause one project from the Projects page
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** ready · **Area:** factory
 > Planted by the owner on 2026-10-14.
 
 ## Notes

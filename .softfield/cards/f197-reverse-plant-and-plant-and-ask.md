@@ -1,6 +1,6 @@
 # Milestone F197: Plant and ask the lead comes first and yellow; Plant turns plain
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** ready · **Area:** factory
 > Planted by the owner on 2026-11-02.
 
 ## Notes

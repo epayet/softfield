@@ -5,7 +5,6 @@ difficulty: 5
 depends_on: []
 agent: lead
 area: factory
-priority: 48
 finding: f3-review
 files:
   - runner/loop.py

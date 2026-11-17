@@ -1,6 +1,6 @@
 # Milestone F178: Backups on the dashboard: copies, size, last copy, and a desk item on failure
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** ready · **Area:** factory
 > Planted by the owner on 2026-10-27.
 
 ## Notes

@@ -4,7 +4,6 @@ milestone: bugs
 difficulty: 2
 depends_on: []
 area: factory
-priority: 73
 finding: f4-always-on-F6
 tests_only: true
 files:

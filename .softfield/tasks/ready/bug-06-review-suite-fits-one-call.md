@@ -5,7 +5,6 @@ difficulty: 3
 depends_on: []
 agent: lead
 area: factory
-priority: 26
 files:
   - runner/prompts.py
   - runner/milestone.py

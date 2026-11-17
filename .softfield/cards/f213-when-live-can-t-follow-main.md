@@ -1,6 +1,6 @@
 # Milestone F213: When live can't follow main, say so and why
 
-> **State:** idea · **Priority:** 100 · **Area:** factory
+> **State:** idea · **Area:** factory
 > Planted by the owner on 2026-11-03.
 
 ## Notes

@@ -5,7 +5,6 @@ difficulty: 2
 depends_on: []
 agent: lead
 area: factory
-priority: 36
 finding: f55-dismiss-all-conversations-where-the-related-F2
 files:
   - runner/requests.py

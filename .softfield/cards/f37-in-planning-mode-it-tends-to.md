@@ -1,6 +1,6 @@
 # Milestone F37: Every number the lead writes says what it is, and links to it
 
-> **State:** ready · **Priority:** 90 · **Area:** factory
+> **State:** ready · **Area:** factory
 > Planted by the owner on 2026-10-08.
 
 ## Notes

@@ -5,7 +5,6 @@ difficulty: 4
 depends_on: []
 agent: lead
 area: factory
-priority: 34
 finding: f31-F5
 files:
   - runner/planner.py

@@ -1,6 +1,6 @@
 # Milestone F133: Each project gets its own card letter, and the factory/product area goes
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** ready · **Area:** factory
 > Planted by the owner on 2026-10-15.
 
 ## Notes

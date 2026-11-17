@@ -5,7 +5,6 @@ difficulty: 3
 depends_on: []
 agent: lead
 area: factory
-priority: 58
 finding: f48-F3
 files:
   - factory_dashboard/templates/_partials/request.html

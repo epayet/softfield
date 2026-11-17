@@ -1,6 +1,6 @@
 # Milestone F243: Pull a fast lane lever back before the runner takes it
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** ready · **Area:** factory
 > Planted by the owner on 2026-11-13.
 
 ## Notes

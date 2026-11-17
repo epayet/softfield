@@ -1,6 +1,6 @@
 # Milestone F228: The Overview and Milestones pages draw in about a second, softfield's too
 
-> **State:** ready · **Priority:** 11 · **Area:** factory
+> **State:** ready · **Area:** factory
 > Planted by the owner on 2026-11-05.
 
 ## Notes

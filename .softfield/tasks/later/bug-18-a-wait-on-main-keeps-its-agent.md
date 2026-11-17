@@ -5,7 +5,6 @@ difficulty: 4
 depends_on: []
 agent: lead
 area: factory
-priority: 43
 finding: f153-i-wonder-if-sonnet-would-be-F2
 files:
   - runner/loop.py

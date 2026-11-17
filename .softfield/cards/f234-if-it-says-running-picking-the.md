@@ -1,6 +1,6 @@
 # Milestone F234: The bar says "picking the next ticket" only while the runner is really picking
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** ready · **Area:** factory
 > Planted by the owner on 2026-11-06.
 
 ## Notes

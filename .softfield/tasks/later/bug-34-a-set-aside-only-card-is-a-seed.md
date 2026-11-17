@@ -4,7 +4,6 @@ milestone: bugs
 difficulty: 3
 depends_on: []
 area: factory
-priority: 62
 finding: f110-i-don-t-understand-why-there-F2
 files:
   - factory_dashboard/board.py

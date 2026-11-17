@@ -5,7 +5,6 @@ difficulty: 4
 depends_on: []
 agent: lead
 area: factory
-priority: 54
 finding: f14-coming-planted-ideas-not-clickable-F3
 files:
   - factory_dashboard/templates/thread.html

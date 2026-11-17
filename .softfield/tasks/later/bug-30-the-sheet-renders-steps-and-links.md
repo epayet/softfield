@@ -5,7 +5,6 @@ difficulty: 4
 depends_on: []
 agent: lead
 area: factory
-priority: 57
 finding: f50-the-data-safety-review-it-asks-F5
 files:
   - factory_dashboard/milestones.py

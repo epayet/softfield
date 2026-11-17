@@ -1,6 +1,6 @@
 # Milestone F81: Bring the factory theme to the older pages, the Planning room first
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** ready · **Area:** factory
 > Planted by the owner on 2026-10-09.
 
 ## Notes

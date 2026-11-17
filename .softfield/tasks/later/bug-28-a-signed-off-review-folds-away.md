@@ -5,7 +5,6 @@ difficulty: 4
 depends_on: []
 agent: lead
 area: factory
-priority: 55
 finding: f30-on-conversations-i-want-to-the-F3
 files:
   - factory_dashboard/templates/thread.html

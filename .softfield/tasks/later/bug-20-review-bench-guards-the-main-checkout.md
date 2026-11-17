@@ -5,7 +5,6 @@ difficulty: 4
 depends_on: []
 agent: lead
 area: factory
-priority: 46
 finding: f7-factory-fixes-F4
 files:
   - runner/bench.py

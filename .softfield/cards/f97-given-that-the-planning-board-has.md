@@ -1,6 +1,6 @@
 # Milestone F97: Needs you steps aside: Now first, a box of desk counts at the bottom
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** ready · **Area:** factory
 > Planted by the owner on 2026-10-10.
 
 ## Notes

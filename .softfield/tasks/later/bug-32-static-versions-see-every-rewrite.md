@@ -4,7 +4,6 @@ milestone: bugs
 difficulty: 2
 depends_on: []
 area: factory
-priority: 60
 finding: f48-F4
 files:
   - factory_dashboard/app.py

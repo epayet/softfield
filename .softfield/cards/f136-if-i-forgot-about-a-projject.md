@@ -1,6 +1,6 @@
 # Milestone F136: softfield init asks what to do with a forgotten project of the same name
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** ready · **Area:** factory
 > Planted by the owner on 2026-10-15.
 
 ## Notes

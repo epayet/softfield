@@ -1,6 +1,6 @@
 # Milestone F38: The new-version notice becomes a tag on the top bar, so no page moves
 
-> **State:** ready · **Priority:** 90 · **Area:** factory
+> **State:** ready · **Area:** factory
 > Planted by the owner on 2026-10-08.
 
 ## Notes

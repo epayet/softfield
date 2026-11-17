@@ -1,6 +1,6 @@
 # Milestone F138: Run again right after Ctrl-C, without the 2-minute refusal
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** ready · **Area:** factory
 > Planted by the owner on 2026-10-15.
 
 ## Notes

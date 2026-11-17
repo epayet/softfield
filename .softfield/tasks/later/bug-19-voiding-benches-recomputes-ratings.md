@@ -5,7 +5,6 @@ difficulty: 3
 depends_on: []
 agent: lead
 area: factory
-priority: 45
 finding: f7-factory-fixes-F5
 files:
   - runner/cli.py

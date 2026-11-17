@@ -4,7 +4,6 @@ milestone: bugs
 difficulty: 3
 depends_on: []
 area: factory
-priority: 70
 finding: f3-review
 files:
   - factory_dashboard/overview.py

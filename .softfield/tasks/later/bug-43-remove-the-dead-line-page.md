@@ -5,7 +5,6 @@ difficulty: 2
 depends_on: []
 agent: lead
 area: factory
-priority: 71
 finding: f3-review
 commands: [rm factory_dashboard/templates/line.html]
 files:

@@ -1,6 +1,6 @@
 # Milestone F167: Is the split between local developers and the lead smart and cheap?
 
-> **State:** idea · **Priority:** 100 · **Area:** factory
+> **State:** idea · **Area:** factory
 > Planted by the owner on 2026-10-21.
 
 ## Notes

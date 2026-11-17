@@ -1,6 +1,6 @@
 # Milestone F215: A plain floor: the grid comes off the dashboard's background
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** ready · **Area:** factory
 > Planted by the owner on 2026-11-04.
 
 ## Notes

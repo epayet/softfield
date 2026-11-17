@@ -5,7 +5,6 @@ difficulty: 3
 depends_on: []
 agent: lead
 area: factory
-priority: 56
 finding: f50-the-data-safety-review-it-asks-F6
 files:
   - factory_dashboard/templates/thread.html

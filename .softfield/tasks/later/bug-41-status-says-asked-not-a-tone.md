@@ -4,7 +4,6 @@ milestone: bugs
 difficulty: 3
 depends_on: []
 area: factory
-priority: 69
 finding: f17-tighter-running-and-pause-presence-in-F3
 files:
   - factory_dashboard/app.py

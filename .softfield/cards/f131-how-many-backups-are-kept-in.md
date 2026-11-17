@@ -1,6 +1,6 @@
 # Milestone F131: How many metrics backups the Dropbox folder keeps, and whether it grows
 
-> **State:** idea · **Priority:** 100 · **Area:** factory
+> **State:** idea · **Area:** factory
 > Planted by the owner on 2026-10-14.
 
 ## Notes

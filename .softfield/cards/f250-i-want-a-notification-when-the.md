@@ -1,6 +1,6 @@
 # Milestone F250: Tell the phone when the factory is done for the week, so you can switch off
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** ready · **Area:** factory
 > Planted by the owner on 2026-11-14.
 
 ## Notes

@@ -1,6 +1,6 @@
 # Milestone F140: Copilot does the checkpoints first, within its monthly pace
 
-> **State:** idea · **Priority:** 100 · **Area:** factory
+> **State:** idea · **Area:** factory
 > Planted by the owner on 2026-10-15.
 
 ## Notes
