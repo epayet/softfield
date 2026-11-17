@@ -26,3 +26,10 @@ Read `.softfield/cards/f164-i-like-reading-the-milestone-reviews.md` (D1).
 - a test in `tests/runner/test_prompts.py` checks `REVIEW` asks for the quoted line
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
