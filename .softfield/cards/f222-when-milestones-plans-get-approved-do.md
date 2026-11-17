@@ -1,6 +1,6 @@
 # Milestone F222: A newly approved plan goes last on the board
 
-> **State:** ready · **Priority:** 3 · **Area:** factory
+> **State:** ready · **Priority:** 3 · **Area:** factory · **Fast lane:** yes
 > Planted by the owner on 2026-11-05.
 
 ## Notes
