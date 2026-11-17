@@ -878,6 +878,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** the card that makes reviews go with the lane wasn't in the lane itself: 02 waited about 4 h 40 min behind other cards' tickets after 01 merged, and its review was queued two seconds after the merge. A small ticket that copies an existing test pattern still filled Qwen's whole context; worth watching whether that repeats before acting.
 - **Decisions affected:** none.
 
+### F249 (2026-11-17): a sent-back plan shows on its way on the desk and its thread ([review](../reviews/f249-a-plan-is-being-sent-back.md))
+
+- **Q1:** one ticket. Qwen merged it on attempt 2; attempt 1 stopped with no edit after 20 minutes. No checkpoint ran. Review round 1 found two should-fix problems, both fixed by the review. First, a sent-back proposal left its box once the runner picked the send-back up, and was never drawn dashed: half of D2 was missing. Second, the tests missed that case. Two nits went in the report only. Score 6.
+- **Q3:** Qwen built 01, and Claude finished D2 in the review. See the review's numbers.
+- **Q5:** see the review's numbers.
+- **Anything else:** an existing test row encoded the rule that D2 replaced. Qwen kept the row and added code that worked around it, so the gates stayed green and D2 stayed undone. Lesson: when a decision contradicts a test that already exists, the plan names the test, so the ticket says to update it. The plan also waited about 57 hours parked for Claude's limit, for a 1.5-minute Opus job.
+- **Decisions affected:** none.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.

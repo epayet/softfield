@@ -101,19 +101,11 @@ def _asked(conn: sqlite3.Connection, project_id: int) -> list[str]:
         " ORDER BY id",
         (project_id,),
     ).fetchall()
-    found: list[str] = []
-    for r in rows:
-        if str(r["id"]) in cancelled:
-            continue
-        subject = str(r["subject"] or "")
-        if not subject:
-            continue
-        if r["kind"] == "send_back":
-            card = subject.split("/")[0]
-            found.append(card)
-        else:
-            found.append(subject)
-    return found
+    return [
+        str(r["subject"]).partition("/")[0] if r["kind"] == "send_back" else str(r["subject"])
+        for r in rows
+        if r["subject"] and str(r["id"]) not in cancelled
+    ]
 
 
 def _last_messages(conn: sqlite3.Connection, project_id: int) -> list[sqlite3.Row]:
@@ -321,19 +313,9 @@ def _listed(
             if proposal.get(APPLIED) or _gone_merge(proposal, known):
                 continue
             state = proposal_state(proposal, row["card"], later)
-            if state in (OPEN, ON_ITS_WAY, SENT_BACK):
-                # A worked ``send_back`` settles the proposal (F249 D2): it leaves the list.
-                worked = any(
-                    r["kind"] == "send_back"
-                    and r["done"] is not None
-                    and str(r["result"] or "").startswith(
-                        ("queued for the lead", "approved", "accepted ", "planted ", "rejected")
-                    )
-                    and str(r["subject"] or "") == f"{row['card']}/{proposal.get('id', '')}"
-                    for r in later
-                )
-                if worked:
-                    continue
+            if state == SENT_BACK:  # F249 D2: dashed until the lead's next reply replaces the set
+                state = ON_ITS_WAY
+            if state in (OPEN, ON_ITS_WAY):
                 parts.append((proposal, state))
         if parts:
             found.append((str(row["card"]), since, parts))

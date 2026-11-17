@@ -133,7 +133,9 @@ def test_an_idea_card_with_a_thread_is_not_a_seed(planning, db):
         ("approve_plan", "f6", None, None, None, ["adr-20"]),
         # refused: the proposal stays open
         ("approve_plan", "f6", None, True, "plan/f6 has no draft", ["adr-20", "plan"]),
+        # sent back, picked up or not: it stays, dashed, until the lead's reply (F249 D2)
         ("send_back", "f6/adr-20", '{"text": "Shorter."}', True, "queued for the lead", ["plan"]),
+        ("send_back", "f6/adr-20", '{"text": "Shorter."}', None, None, ["plan"]),
         # another thread's request
         ("approve_plan", "f7", None, None, None, ["adr-20", "plan"]),
     ],
@@ -161,10 +163,11 @@ def test_a_proposal_the_owner_settled_is_not_among_the_proposals(
     item = _box(db, "f6")  # the card's parts are in its one box (F51 D1, F210 D1)
     names = {"adr-20": "ADR 20", "plan": "plan"}
     assert [p.name for p in item.parts if not p.on_its_way] == [names[p] for p in still_open]
-    # a pending one stays, dashed and on its way (the owner, 2026-10-08)
-    assert [p.name for p in item.parts if p.on_its_way] == (
-        ["plan"] if kind == "approve_plan" and subject == "f6" and done is None else []
-    )
+    # a pending one stays, dashed and on its way (the owner, 2026-10-08); a sent-back one too,
+    # picked up or not, until the lead's next reply (F249 D2)
+    pending = kind == "approve_plan" and subject == "f6" and done is None
+    expected = ["plan"] if pending else ["ADR 20"] if kind == "send_back" else []
+    assert [p.name for p in item.parts if p.on_its_way] == expected
 
 
 def test_a_request_older_than_the_reply_settles_nothing(planning, db_path, db):
@@ -3174,7 +3177,21 @@ def test_a_box_whose_message_waits_for_the_lead_is_dashed_and_keeps_its_links_wi
     box = _desk_box(html, "f30")
     assert box.startswith('<article class="desk-box on-its-way">')
     assert 'class="desk-item on-its-way-item' in box
-    assert [link for link, _, _ in _box_links(box)] == [
-        "/planning/f30/proposals/mockup",
-        "/planning/f30/proposals/plan",
+    assert [(link, cls) for link, cls, _ in _box_links(box)] == [
+        ("/planning/f30/proposals/mockup", "part"),
+        ("/planning/f30/proposals/plan", "part on-its-way"),
+    ]
+
+
+def test_a_picked_up_send_back_keeps_its_proposal_dashed_until_the_lead_replies(
+    planning, db_path, serve
+):
+    """F249 D2: the runner has turned the send-back into a message; the plan stays in the box,
+    dashed, until the lead's next reply replaces the set."""
+    _write(db_path, lambda conn: _review(conn, planning, "f30", _REVIEW_PLAN, _BOX_MOCKUP))
+    _finished(db_path, planning, "send_back", "f30/plan", '{"text": ""}', "queued for the lead")
+    box = _desk_box(_page(serve()), "f30")
+    assert [(link, cls) for link, cls, _ in _box_links(box)] == [
+        ("/planning/f30/proposals/mockup", "part"),
+        ("/planning/f30/proposals/plan", "part on-its-way"),
     ]
