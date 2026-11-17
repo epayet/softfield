@@ -355,19 +355,39 @@ def idea_plate(idea: Idea) -> str:
 
 
 def _inline_markup(text: str) -> str:
-    """Process ``[text](url)`` links, `` `code` ``, and `` **bold** `` in text."""
+    """Process ``[text](url)`` links, `` `code` ``, and `` **bold** `` in text.
+
+    Code blocks are protected: bold and links are not applied inside them.
+    Quotes in http/https URLs are percent-encoded to prevent attribute breaking.
+    """
+    # Extract code blocks first so bold and links don't apply inside them.
+    code_blocks: list[str] = []
+
+    def _replace_code(m: re.Match[str]) -> str:
+        code_blocks.append(m.group(1))
+        return f"__CODE_{len(code_blocks) - 1}__"
+
+    text = re.sub(r"`([^`]+)`", _replace_code, text)
+    if not text.strip():
+        for i, block in enumerate(code_blocks):
+            text = text.replace(f"__CODE_{i}__", f"<code>{block}</code>")
+        return text
 
     # Links: http/https only become <a>; others become plain text
     def _replace_link(m: re.Match[str]) -> str:
         link_text = m.group(1)
         url = m.group(2)
         if url.startswith(("http://", "https://")):
-            return f'<a href="{url}">{link_text}</a>'
+            # Escape quotes in the URL to prevent attribute breaking.
+            safe_url = url.replace('"', "%22")
+            return f'<a href="{safe_url}">{link_text}</a>'
         return link_text
 
     text = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", _replace_link, text)
-    text = re.sub(r"`([^`]+)`", r"<code>\1</code>", text)
     text = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", text)
+    # Restore code blocks.
+    for i, block in enumerate(code_blocks):
+        text = text.replace(f"__CODE_{i}__", f"<code>{block}</code>")
     return text
 
 
@@ -384,16 +404,17 @@ def _to_html(text: str | None, ideas: Iterator[Idea] | None = None) -> str:
     html_parts: list[str] = []
     in_ol: bool = False
     in_ul: bool = False
-    in_nested_ul: bool = False
+    nesting: int = 0  # current nested <ul> depth inside an <li>
+    current_indent: int = 0  # indent level of the current list context
     for line in lines:
         stripped = line.strip()
         # Idea plates
         if ideas is not None and stripped.startswith("&gt;") and len(stripped) > len("&gt;"):
             idea = next(ideas, None)
             if idea is not None:
-                if in_nested_ul:
+                while nesting > 0:
                     html_parts.append("</ul>")
-                    in_nested_ul = False
+                    nesting -= 1
                 if in_ul:
                     html_parts.append("</ul>")
                     in_ul = False
@@ -405,6 +426,9 @@ def _to_html(text: str | None, ideas: Iterator[Idea] | None = None) -> str:
         # Numbered list item
         ol_match = re.match(r"^(\s*)(\d+)\.\s+(.*)", line)
         if ol_match:
+            if in_ul:
+                html_parts.append("</ul>")
+                in_ul = False
             if not in_ol:
                 html_parts.append("<ol>")
                 in_ol = True
@@ -414,28 +438,41 @@ def _to_html(text: str | None, ideas: Iterator[Idea] | None = None) -> str:
         # Bullet list item (with optional indent for nesting)
         ul_match = re.match(r"^(\s*)(- )(.*)", line)
         if ul_match:
-            indent = ul_match.group(1)
+            indent_len = len(ul_match.group(1))
             text_part = ul_match.group(3)
-            is_nested = bool(indent) and not in_nested_ul
-            # Close nested ul if we were in one
-            if in_nested_ul:
-                html_parts.append("</ul>")
-                in_nested_ul = False
-            # Start nested ul if this item is nested
-            if is_nested:
-                html_parts.append("<ul>")
-                in_nested_ul = True
-            # Start outer ul if we're not in one and this item is not nested
-            elif not in_ul:
-                html_parts.append("<ul>")
-                in_ul = True
-            text_part = _inline_markup(text_part)
-            html_parts.append(f"<li>{text_part}</li>")
+            if indent_len > 0:
+                # Nested item: compare indent to current context indent.
+                if indent_len > current_indent:
+                    nesting += 1
+                    html_parts.append("<ul>")
+                    current_indent = indent_len
+                elif indent_len < current_indent:
+                    while nesting > 0 and current_indent > indent_len:
+                        html_parts.append("</ul>")
+                        nesting -= 1
+                        current_indent = 0
+                # Same indent: already in the right <ul>, just add <li>.
+                text_part = _inline_markup(text_part)
+                html_parts.append(f"<li>{text_part}</li>")
+            else:
+                # Top-level item: close all nested <ul>s first.
+                while nesting > 0:
+                    html_parts.append("</ul>")
+                    nesting -= 1
+                current_indent = 0
+                if in_ol:
+                    html_parts.append("</ol>")
+                    in_ol = False
+                if not in_ul:
+                    html_parts.append("<ul>")
+                    in_ul = True
+                text_part = _inline_markup(text_part)
+                html_parts.append(f"<li>{text_part}</li>")
             continue
         # Regular line
-        if in_nested_ul:
+        while nesting > 0:
             html_parts.append("</ul>")
-            in_nested_ul = False
+            nesting -= 1
         if in_ul:
             html_parts.append("</ul>")
             in_ul = False
@@ -444,8 +481,9 @@ def _to_html(text: str | None, ideas: Iterator[Idea] | None = None) -> str:
             in_ol = False
         if stripped:
             html_parts.append(f"<p>{_inline_markup(stripped)}</p>")
-    if in_nested_ul:
+    while nesting > 0:
         html_parts.append("</ul>")
+        nesting -= 1
     if in_ul:
         html_parts.append("</ul>")
     if in_ol:

@@ -2508,18 +2508,25 @@ def test_to_html_ideas_still_work():
 
 
 def test_to_html_mixed_numbered_and_bullets():
-    """Numbered and bullet lists separate properly."""
+    """A bullet between numbered items closes the <ol>, creates a <ul>, then reopens <ol>.
+    Output has balanced, well-formed tags checked on the full string."""
     from factory_dashboard.milestones import _to_html
 
     result = _to_html("1. First\n- Bullet\n2. Second")
-    # Should have both <ol> and <ul>
-    assert "<ol>" in result
-    assert "<ul>" in result
-    # The lists should be properly closed
-    assert result.count("<ol>") == 1
-    assert result.count("</ol>") == 1
+    # Bullet closes <ol>, creates <ul>, then <ol> reopens
+    first_ol_close = result.rindex("</ol>", 0, result.index("<ul>"))
+    ul_open = result.index("<ul>")
+    second_ol_open = result.index("<ol>", ul_open)
+    assert first_ol_close < ul_open < second_ol_open, (
+        f"<ul> must be between two </ol> and <ol>; got: {result}"
+    )
+    assert result.count("<ol>") == 2
+    assert result.count("</ol>") == 2
     assert result.count("<ul>") == 1
     assert result.count("</ul>") == 1
+    assert "<li>First</li>" in result
+    assert "<li>Bullet</li>" in result
+    assert "<li>Second</li>" in result
 
 
 def test_to_html_inline_code_and_bold_together():
@@ -2539,3 +2546,83 @@ def test_to_html_link_with_bold_and_code():
     assert "<strong>" in result
     assert "<code>ADR 1</code>" in result
     assert '<a href="https://example.com">link</a>' in result
+
+
+def test_to_html_consecutive_indented_bullets_nest_in_one_ul():
+    """Two or more consecutive indented bullets under a bullet all sit in one nested
+    <ul>, which is inside the parent's <li>."""
+    from factory_dashboard.milestones import _to_html
+
+    result = _to_html("- Top\n  - Nested 1\n  - Nested 2\n- Another top")
+    # Nested <ul> must be inside the first <li> (opens before, closes after).
+    first_li_end = result.index("</li>")
+    ul_open = result.index("<ul>")
+    ul_close = result.index("</ul>")
+    assert ul_open < first_li_end, f"nested <ul> must open inside parent <li>; got: {result}"
+    assert ul_close > first_li_end, f"nested </ul> must close after parent </li>; got: {result}"
+    # Both nested items are inside the nested <ul>
+    nested_1_start = result.index("Nested 1")
+    nested_2_start = result.index("Nested 2")
+    assert ul_open < nested_1_start < ul_close
+    assert ul_open < nested_2_start < ul_close
+    # Exactly one nested <ul>
+    assert result.count("<ul>") == 2
+    assert result.count("</ul>") == 2
+    # Second top-level item is after </ul>
+    after_nested = result[ul_close + len("</ul>") :]
+    assert "<li>Another top</li>" in after_nested
+
+
+def test_to_html_three_consecutive_indented_bullets_in_one_ul():
+    """Three consecutive indented bullets under a bullet all sit in one nested <ul>."""
+    from factory_dashboard.milestones import _to_html
+
+    result = _to_html("- Top\n  - A\n  - B\n  - C\n- Bottom")
+    assert result.count("<ul>") == 2
+    assert result.count("</ul>") == 2
+    # All three nested items are inside the single nested <ul>
+    ul_open = result.index("<ul>")
+    ul_close = result.index("</ul>")  # first </ul> closes the nested <ul>
+    for item in ("A", "B", "C"):
+        pos = result.index(item)
+        assert ul_open < pos < ul_close, f"{item} not inside nested <ul>: {result}"
+    # Bottom is after the nested </ul> but before the outer </ul>
+    after_nested = result[ul_close + len("</ul>") :]
+    assert "<li>Bottom</li>" in after_nested
+
+
+def test_to_html_url_with_quote_does_not_break_href():
+    """A url containing \\\" never produces an attribute other than href; it is encoded."""
+    from factory_dashboard.milestones import _to_html
+
+    result = _to_html('See [link](https://a\\"onmouseover="y).')
+    # The href must only contain the url with encoded quotes (backslash preserved)
+    assert 'href="https://a\\%22onmouseover=%22y"' in result
+    # onmouseover= is inside the URL string, not a separate attribute
+    href_match = re.search(r'href="([^"]*)"', result)
+    assert href_match
+    url = href_match.group(1)
+    # The URL should not have an unencoded quote that breaks the attribute
+    assert url.count("%22") == 2, f"Expected 2 encoded quotes in URL, got: {url}"
+
+
+def test_to_html_code_is_protected_from_bold_and_links():
+    """Text inside `` `code` `` isn't turned into bold or links."""
+    from factory_dashboard.milestones import _to_html
+
+    # Bold inside code should not be applied
+    result = _to_html("Use **`bold inside code`** here.")
+    assert "<code>bold inside code</code>" in result
+    # The word "bold" inside code should not be wrapped in <strong>
+    code_start = result.index("<code>")
+    code_end = result.index("</code>") + len("</code>")
+    code_content = result[code_start:code_end]
+    assert "<strong>" not in code_content, f"bold should not be applied inside code: {code_content}"
+
+    # Link inside code should not be applied
+    result2 = _to_html("See [`link`](https://example.com) here.")
+    assert "<code>link</code>" in result2
+    code_start2 = result2.index("<code>")
+    code_end2 = result2.index("</code>") + len("</code>")
+    code_content2 = result2[code_start2:code_end2]
+    assert "href=" not in code_content2, f"link should not be applied inside code: {code_content2}"
