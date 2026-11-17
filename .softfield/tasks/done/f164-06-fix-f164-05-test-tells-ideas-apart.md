@@ -27,3 +27,10 @@ f164-05-id-less-test-cannot-tell-ideas-apart: the test asserts the same thing fo
 - the normalising lives in one small helper used by all three places; an idea with empty text matches no request, and a test shows it
 - the listed `tests:` pass, and fail without the change
 - all gates pass
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
