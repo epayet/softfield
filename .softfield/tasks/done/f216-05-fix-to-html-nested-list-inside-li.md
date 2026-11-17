@@ -25,3 +25,12 @@ Read `_to_html` in `factory_dashboard/milestones.py` and the `test_to_html_*` te
 - the same whole-string check for `1. a`, `- b`, `2. c` and for a url with a `"`
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 3
+duration_s: 9114
+gate_failures: ['stopped', 'ruff']
+tokens: 8826023
+```
