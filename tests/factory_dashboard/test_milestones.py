@@ -2104,3 +2104,33 @@ def test_milestones_savings_includes_lead_ticket_without_jobs_in_jobs_in_rate(tm
     expected_rate = 1.70 / 150
     expected_doing_itself = 100 * expected_rate
     assert s.doing_itself == pytest.approx(expected_doing_itself)
+
+
+# --- a review's ideas are plates in place on the milestone page (f164-03) ---------------------
+
+
+def test_the_milestone_page_draws_each_quoted_line_as_a_plate_where_it_stood(db_path, serve):
+    what_next = "- **Factory:** first\n> Idea one text.\n- between the two\n> Idea two text.\n"
+    _make_milestone_with_what_next(db_path, PROJECT, "f28", what_next)
+    page = serve().get("/milestones/f28").text
+    assert "&gt;" not in page
+    assert page.count('class="idea factory"') == 2
+    assert (
+        page.index("Idea one text.") < page.index("between the two") < page.index("Idea two text.")
+    )
+    assert f"for {PROJECT}" in page
+    assert page.count("Plant and ask the lead") == 2
+
+
+def test_a_planted_idea_on_the_milestone_page_links_to_its_card(db_path, serve):
+    _make_milestone_with_what_next(db_path, PROJECT, "f28", "- **Factory:**\n> Idea one text.\n")
+    _make_plant_request(
+        db_path,
+        PROJECT,
+        {"text": "Idea one text. From F28's review.", "from": "f28/1"},
+        done="x",
+        result="planted .softfield/cards/f166-plans.md",
+    )
+    page = serve().get("/milestones/f28").text
+    assert 'href="/planning/f166?project=' in page
+    assert "Plant and ask the lead" not in page

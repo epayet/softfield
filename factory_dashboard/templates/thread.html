@@ -46,6 +46,10 @@
       <h3>{{ heading }}</h3>
       <div class="sheet">{{ html | safe }}</div>
       {% endfor %}
+      {% if review.ideas %}
+      <div class="ideas-head">Ideas from this review · <span class="count">{{ review.ideas | length }}</span></div>
+      {% for plate in review.ideas %}{{ plate | safe }}{% endfor %}
+      {% endif %}
       <a href="/milestones/{{ review.key }}{{ q }}">The whole review</a>
       {% if review.signing_off %}
       <span class="pill asked" id="signing-off">Signing off at the runner's next pick</span>

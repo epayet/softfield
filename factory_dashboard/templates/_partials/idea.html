@@ -1,0 +1,26 @@
+{# F164 D4, D5: one idea of a review, a plate; the thread's review and the milestone page's
+   sheet both draw it. Needs `idea` (an Idea) and `vals_plant`, `vals_ask` (the request's JSON). #}
+{% set slug = idea.id | replace("/", "-") %}
+<div class="idea {{ idea.area }}{% if idea.state == 'on its way' %} on-its-way{% endif %}" id="idea-{{ slug }}">
+  <span class="tag">Idea {{ idea.id.split("/")[1] }} · {{ idea.area }} · <b>for {{ idea.project }}</b></span>
+  <q>{{ idea.text }}</q>
+  {% if idea.state == "planted" and idea.card %}
+  <a class="planted" href="/planning/{{ idea.card }}?project={{ idea.project | urlencode }}"><span class="k">{{ idea.card | upper }}</span> Planted · open its thread ›</a>
+  {% elif idea.state == "on its way" %}
+  <span class="way">On its way · planted at the runner's next pick</span>
+  {% else %}
+  {% if idea.state == "refused" %}
+  <span class="done-note">Didn't go through: {{ idea.said }}</span>
+  {% endif %}
+  <div class="actions">
+    {% for label, vals, cls in (("Plant", vals_plant, "solid"), ("Plant and ask the lead", vals_ask, "line")) %}
+    <button type="button" class="btn {{ cls }}"
+      hx-post="/requests" hx-target="#idea-status-{{ slug }}" hx-swap="innerHTML"
+      hx-vals='{{ vals }}'
+      hx-on::before-request="const plate = this.closest('.idea'); plate.classList.add('on-its-way'); plate.querySelector('.way').hidden = false; plate.querySelector('.actions').remove()">{{ label }}</button>
+    {% endfor %}
+  </div>
+  <span class="way" hidden>On its way · planted at the runner's next pick</span>
+  <span class="done-note" id="idea-status-{{ slug }}"></span>
+  {% endif %}
+</div>

@@ -15,6 +15,7 @@ import contextlib
 import json
 import re
 import sqlite3
+from collections.abc import Iterator
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -25,7 +26,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
 
 from factory_dashboard import queries
-from factory_dashboard.app import Db, Now, Project, render
+from factory_dashboard.app import Db, Now, Project, render, templates
 from factory_dashboard.board import RESERVABLE, STAGES, WORDS, Card, milestone_card
 from factory_dashboard.line import _natural
 from runner import metrics
@@ -333,9 +334,30 @@ def milestones_list(request: Request, conn: Db, project: Project, now: Now) -> H
     )
 
 
-def _to_html(text: str | None) -> str:
+def idea_vals(idea: Idea, ask: bool) -> str:
+    """The JSON ``hx-vals`` of an idea's Plant (``ask`` false) or Plant and ask the lead: a
+    ``plant`` request whose value is ``{text, ask, area, from}`` (D4), to the idea's project."""
+    review = idea.id.split("/")[0].upper()
+    value = {
+        "text": f"{idea.text} From {review}'s review.",
+        "ask": ask,
+        "area": idea.area,
+        "from": idea.id,
+    }
+    return json.dumps({"kind": "plant", "project": idea.project, "value": json.dumps(value)})
+
+
+def idea_plate(idea: Idea) -> str:
+    """The idea drawn as a plate (``_partials/idea.html``), as HTML."""
+    return templates.get_template("_partials/idea.html").render(
+        idea=idea, vals_plant=idea_vals(idea, False), vals_ask=idea_vals(idea, True)
+    )
+
+
+def _to_html(text: str | None, ideas: Iterator[Idea] | None = None) -> str:
     """Turn ``- item`` lines into ``<ul><li>`` and ``**x**`` into ``<strong>x</strong>``,
-    escaping the text first."""
+    escaping the text first. With ``ideas``, each quoted line (``> …``) is drawn in place as
+    the next idea's plate (F164 D5); with none left it stays a plain line."""
     if text is None:
         return ""
     escaped = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
@@ -344,6 +366,14 @@ def _to_html(text: str | None) -> str:
     in_list = False
     for line in lines:
         stripped = line.strip()
+        if ideas is not None and stripped.startswith("&gt;") and len(stripped) > len("&gt;"):
+            idea = next(ideas, None)
+            if idea is not None:
+                if in_list:
+                    html_parts.append("</ul>")
+                    in_list = False
+                html_parts.append(idea_plate(idea))
+                continue
         if stripped.startswith("- "):
             if not in_list:
                 html_parts.append("<ul>")
@@ -721,6 +751,7 @@ def milestone_detail(
     if detail is None:
         return HTMLResponse(status_code=404, content="Not found")
     signoff_html: dict[str, str] = {}
+    ideas = iter(review_ideas(conn, project, key)) if detail.signoff else None
     if detail.signoff:
         for k in (
             "changed",
@@ -732,7 +763,7 @@ def milestone_detail(
             "clogged",
         ):
             if k in detail.signoff:
-                signoff_html[k] = _to_html(detail.signoff[k])
+                signoff_html[k] = _to_html(detail.signoff[k], ideas)
     # the thread page's Sign off, by the same rule (F50 D1); they import this module
     from factory_dashboard.planning import _repo
     from factory_dashboard.thread import _review

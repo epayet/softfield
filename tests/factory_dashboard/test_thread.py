@@ -8,6 +8,7 @@ import sqlite3
 from datetime import timedelta
 from html import unescape
 from pathlib import Path
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
@@ -1100,6 +1101,107 @@ def test_sign_off_shows_on_its_way_at_once(page, planning, db_path, serve):
     finally:
         conn.close()
     assert asked == [("signoff", "m4")]
+
+
+# --- a review's ideas are plates, with Plant (F164 D4, D5) -----------------------------------
+
+_IDEA = "Plans: every Done-when line is carried by a ticket."
+_WHAT_NEXT = f"- **Factory:**\n  - Worth a planted card:\n    > {_IDEA}\n"
+
+
+def _sheet(db_path, key: str, what_next: str = _WHAT_NEXT) -> None:
+    def write(conn):
+        metrics.upsert_milestone(
+            conn,
+            _project_id(conn),
+            key,
+            title=f"Card {key}",
+            status="done",
+            signoff={"changed": "- It changed.", "what_next": what_next},
+        )
+
+    _write(db_path, write)
+
+
+def _project_id(conn) -> int:
+    pid = metrics.find_project(conn, PROJECT)
+    assert pid is not None
+    return pid
+
+
+def _plant(db_path, value: dict[str, str], done=None, result=None) -> None:
+    def write(conn):
+        metrics.add_request(
+            conn, _project_id(conn), "plant", "", json.dumps(value), NOW.isoformat()
+        )
+        if done:
+            conn.execute("UPDATE owner_requests SET done = ?, result = ?", (done, result))
+            conn.commit()
+
+    _write(db_path, write)
+
+
+def _idea_buttons(html: str) -> dict[str, dict[str, Any]]:
+    """Each button of the plates by its label: what it posts, its value parsed."""
+    found = {}
+    for vals, label in re.findall(r"<button[^>]*hx-vals='([^']*)'[^>]*>([^<]*)</button>", html):
+        posted = json.loads(unescape(vals))
+        posted["value"] = json.loads(posted["value"])
+        found[label] = posted
+    return found
+
+
+def test_an_idea_with_no_plant_has_both_buttons_that_post_it(planning, db_path, serve):
+    _sheet(db_path, "f28")
+    review = _review_section(_thread(serve(), "f28"))
+    assert "Ideas from this review · 1" in _text(review)
+    assert f"for {PROJECT}" in _text(review)
+    buttons = _idea_buttons(review)
+    plant, ask = buttons["Plant"], buttons["Plant and ask the lead"]
+    assert plant["kind"] == "plant" and plant["project"] == PROJECT
+    assert plant["value"] == {
+        "text": f"{_IDEA} From F28's review.",
+        "ask": False,
+        "area": "factory",
+        "from": "f28/1",
+    }
+    assert ask["value"]["ask"] is True
+    assert review.index("Ideas from this review") < review.index("The whole review")
+
+
+def test_a_planted_idea_links_to_its_card_with_no_buttons(planning, db_path, serve):
+    _sheet(db_path, "f28")
+    _plant(
+        db_path, {"text": f"{_IDEA} From F28's review.", "from": "f28/1"}, "x", "planted f166-plans"
+    )
+    review = _review_section(_thread(serve(), "f28"))
+    assert "Ideas from this review · 1" in _text(review)
+    assert 'href="/planning/f166?project=' in review
+    assert "<button" not in review.replace("signoff-button", "")
+
+
+def test_an_idea_on_its_way_shows_so_with_no_buttons_after_a_reload(planning, db_path, serve):
+    _sheet(db_path, "f28")
+    _plant(db_path, {"text": f"{_IDEA} From F28's review.", "from": "f28/1"})
+    client = serve()
+    for _ in range(2):
+        review = _review_section(_thread(client, "f28"))
+        assert "On its way · planted at the runner's next pick" in _text(review)
+        assert "idea factory on-its-way" in review
+        assert "Plant and ask the lead" not in review
+
+
+def test_a_refused_idea_says_why_and_has_its_buttons_back(planning, db_path, serve):
+    _sheet(db_path, "f28")
+    _plant(db_path, {"text": f"{_IDEA} From F28's review.", "from": "f28/1"}, "x", "no room")
+    review = _review_section(_thread(serve(), "f28"))
+    assert "Didn't go through: no room" in _text(review)
+    assert set(_idea_buttons(review)) == {"Plant", "Plant and ask the lead"}
+
+
+def test_a_sheet_with_no_quoted_line_shows_no_ideas_heading(planning, db_path, serve):
+    _sheet(db_path, "f28", "- **Factory:** nothing.")
+    assert "Ideas from this review" not in _thread(serve(), "f28")
 
 
 # --- a proposal says where it stands (F31 D3, f31-02) ----------------------------------------

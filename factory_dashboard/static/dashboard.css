@@ -1396,3 +1396,29 @@ textarea { max-height: 60vh; overflow-y: auto; }
 .logs-page .app-state.running .app-lamp { background: var(--good); box-shadow: 0 0 6px var(--good); }
 .logs-page .app-state.broken { color: var(--fail); }
 .logs-page .app-state.broken .app-lamp { background: var(--fail); box-shadow: 0 0 6px var(--fail); }
+
+/* F164: a review's idea as a plate; its left edge is its area's colour, as on the board */
+.ideas-head { display: flex; align-items: baseline; gap: 8px; margin: 6px 0 0; font: 600 12px var(--display);
+  letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.ideas-head .count { font-family: var(--mono); color: var(--fg); }
+.idea { position: relative; background: var(--plate); border: 1px solid var(--rule); border-left: 4px solid var(--c, var(--factory));
+  padding: 10px 12px 10px 14px; display: flex; flex-direction: column; gap: 8px; margin: 6px 0; }
+.idea.factory { --c: var(--factory); }
+.idea.product { --c: var(--product); }
+.idea::before, .idea::after { content: ""; position: absolute; width: 8px; height: 8px; border: 0 solid var(--muted); }
+.idea::before { top: -1px; right: -1px; border-width: 1px 1px 0 0; }
+.idea::after { bottom: -1px; right: -1px; border-width: 0 1px 1px 0; }
+.idea .tag { font: 600 11px var(--mono); letter-spacing: .04em; color: var(--muted); text-transform: uppercase; }
+.idea .tag b { color: var(--ink-2); font-weight: 600; }
+.idea q { quotes: none; font-size: 15px; color: var(--fg); }
+.idea .actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.idea .btn { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; border: 0; padding: 0 14px;
+  min-height: 44px; cursor: pointer; }
+.idea .btn.solid { color: var(--hazard-ink); background: var(--hazard); }
+.idea .btn.line { color: var(--hazard); background: transparent; border: 1px solid var(--hazard); }
+.idea .planted { display: inline-flex; align-items: center; min-height: 44px; font: 600 12px var(--display);
+  letter-spacing: .08em; text-transform: uppercase; }
+.idea .planted .k { font-family: var(--mono); color: var(--fg); margin-right: 6px; }
+.idea.on-its-way { border-style: dashed; border-color: var(--hazard); border-left-style: solid; }
+.idea .way { font: 600 12px/1.35 var(--mono); color: var(--hazard); }
+.idea .done-note { font-size: 12.5px; color: var(--muted); }

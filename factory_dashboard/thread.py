@@ -7,7 +7,7 @@ import json
 import re
 import sqlite3
 from collections.abc import Mapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -41,7 +41,7 @@ from factory_dashboard.merges import (
     _merged_on,
     _text_with_links,
 )
-from factory_dashboard.milestones import _to_html
+from factory_dashboard.milestones import _to_html, idea_plate, review_ideas
 from factory_dashboard.overview import Change, open_changes, running_jobs
 from factory_dashboard.planning import (
     _closing,
@@ -157,6 +157,7 @@ class Review:
     ripe: bool
     signing_off: bool
     refused: str | None = None  # the runner's word on the last sign-off, the card still ripe
+    ideas: list[str] = field(default_factory=list)  # its ideas as plates' HTML (F164 D4)
 
 
 def _review(
@@ -194,7 +195,8 @@ def _review(
     # a done sign-off on a card still ripe was refused (a dirty main, tickets left): its word
     # stays under the button after a reload (F50 D3)
     refused = last["result"] if last is not None and last["done"] and ripe else None
-    return Review(row["key"], sections, ripe, signing_off, refused)
+    ideas = [idea_plate(i) for i in review_ideas(conn, project, row["key"])]
+    return Review(row["key"], sections, ripe, signing_off, refused, ideas)
 
 
 def _messages(rows: list[sqlite3.Row]) -> list[Message]:
