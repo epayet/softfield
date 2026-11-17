@@ -3427,3 +3427,23 @@ def test_a_failed_fetch_says_since_when_and_the_next_good_one_clears_it(page, bo
     page.unroute(f"{ORIGIN}/board")
     _fetched_tick(page)
     assert _fresh(page) == [(EVERY, False)]
+
+
+# --- card edge colour (f133-05) -----------------------------------------------------------
+
+
+def test_a_card_edge_falls_back_to_factory_not_muted():
+    """F133: every board card's left edge falls back to ``var(--factory)``, including started,
+    ripe and at-work cards. The bug card's striped edge is unchanged. No ``.card`` border rule
+    falls back to ``--muted``."""
+    css = (STATIC / "dashboard.css").read_text(encoding="utf-8")
+    # Find all lines that have a .card selector (but not .card.bug) with a border-left-color or
+    # border-left that uses var(--c, var(--muted))
+    for line in css.splitlines():
+        stripped = line.strip()
+        if ".card.bug" in stripped:
+            continue
+        if "border-left" not in stripped:
+            continue
+        if "var(--c, var(--muted))" in stripped or "var(--c,var(--muted))" in stripped:
+            pytest.fail(f"border-left rule falls back to --muted: {stripped}")

@@ -925,7 +925,7 @@ main:has(.board) { max-width: 1360px; }
 .cards .none { margin: 0; color: var(--muted); font-size: 12.5px; }
 .card { display: flex; flex-direction: column; justify-content: center; gap: 5px; min-height: 44px;
   padding: 9px 10px; background: var(--plate); border: 1px solid var(--rule);
-  border-left: 4px solid var(--c, var(--muted)); color: var(--fg); overflow-wrap: anywhere; }
+  border-left: 4px solid var(--c, var(--factory)); color: var(--fg); overflow-wrap: anywhere; }
 .card:hover { text-decoration: none; outline: 1px solid var(--accent); }
 .card.bug { border-left: 0; padding-left: 14px;
   background: linear-gradient(var(--plate), var(--plate)) right / calc(100% - 4px) 100% no-repeat,
@@ -953,18 +953,18 @@ main:has(.board) { max-width: 1360px; }
 .card-action { align-self: flex-start; background: var(--floor); color: var(--warn-ink); padding: 4px 6px;
   font-size: 12px; line-height: 1.35; }
 /* a planted card with a ticket started (F154 D3): the orange edge, and its "growing" tag */
-#field .card.started { border-color: var(--opus); border-left-color: var(--c, var(--muted)); }
+#field .card.started { border-color: var(--opus); border-left-color: var(--c, var(--factory)); }
 .card-growing { display: inline-flex; align-items: center; gap: 3px; margin-left: 4px; padding: 1px 6px 1px 3px;
   vertical-align: middle; font: 600 10.5px var(--display); letter-spacing: .08em; text-transform: uppercase;
   color: var(--opus); border: 1px solid var(--opus); background: var(--floor); }
 .card-growing svg { flex: none; }
 .swatch.started { background: var(--opus); }
-#stage-ripe .card { border-color: var(--hazard); border-left-color: var(--c, var(--muted)); }
+#stage-ripe .card { border-color: var(--hazard); border-left-color: var(--c, var(--factory)); }
 #stage-harvested .card { border-style: dashed; border-left-style: solid; color: var(--ink-2); }
 /* a card an order sent from the board moves, until the runner takes it (F15 D4): the
    planning desk's dashed orange edge, its area's colour kept on the left */
 #field .card.on-its-way { border-style: dashed; border-color: var(--hazard); border-left-style: solid;
-  border-left-color: var(--c, var(--muted)); }
+  border-left-color: var(--c, var(--factory)); }
 .card-way { font: 600 11.5px/1.35 var(--mono); color: var(--hazard); }
 /* Moving cards (F15 D1, D3, after .softfield/cards/f15-mockup/board-edit.html): board.js gives a
    card of a stage the owner orders a grip to drag it by (it alone keeps the page from
@@ -981,7 +981,7 @@ main:has(.board) { max-width: 1360px; }
 .slot.drop-before { box-shadow: 0 -5px 0 var(--hazard); }
 .slot.drop-after { box-shadow: 0 5px 0 var(--hazard); }
 #field .card.moved { border-style: dashed; border-color: var(--hazard); border-left-style: solid;
-  border-left-color: var(--c, var(--muted)); }
+  border-left-color: var(--c, var(--factory)); }
 @media (prefers-reduced-motion: no-preference) { .slot .card { transition: border-color .15s; } }
 .slot.dragging .card { transition: none; }
 /* The developer's view (F146 D3, after .softfield/cards/f146-mockup/developers-only.html): lit when
@@ -1015,7 +1015,7 @@ main:has(.board) { max-width: 1360px; }
 .slot.at-work { --wash: color-mix(in srgb, var(--who) 12%, var(--plate)); position: relative; z-index: 1; }
 .slot.at-work:not(.drop-before, .drop-after, .dragging) {
   box-shadow: 0 0 0 2px var(--who), 0 0 18px color-mix(in srgb, var(--who) 40%, transparent); }
-#field .slot.at-work .card { border-color: var(--who); border-left-color: var(--c, var(--muted));
+#field .slot.at-work .card { border-color: var(--who); border-left-color: var(--c, var(--factory));
   background: var(--wash); }
 #field .slot.at-work .card.bug { border-left: 0;
   background: linear-gradient(var(--wash), var(--wash)) right / calc(100% - 4px) 100% no-repeat,
