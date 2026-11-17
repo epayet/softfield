@@ -1,4 +1,4 @@
-# Milestone F262: I want ability to archive a project so that only active…
+# Milestone F262: Archive a project: off the picker, its tickets wait, unarchive any time
 
 > **State:** idea · **Area:** factory
 > Planted by the owner on 2026-11-17.
