@@ -28,3 +28,12 @@ Read `.softfield/cards/f216-let-s-redesign-the-milestone-review.md` (D10, D11, D
 - `<script>` in the sheet's text still comes out escaped, inside `code` too
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 2
+duration_s: 6333
+gate_failures: ['task-tests']
+tokens: 7747941
+```
