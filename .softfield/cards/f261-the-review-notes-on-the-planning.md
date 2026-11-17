@@ -1,4 +1,4 @@
-# Milestone F261: The review notes on the planning sign off are a sub part…
+# Milestone F261: A short review on the card's thread, with the whole review one tap away
 
 > **State:** idea · **Area:** factory
 > Planted by the owner on 2026-11-17.
