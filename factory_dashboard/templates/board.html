@@ -33,16 +33,16 @@
 </span>
 {%- endmacro %}
 
-{# A card: its edge is its area's colour, a bug's is striped and its label says "bug". A
+{# A card: its edge is yellow (var(--factory)), a bug's is striped and its label says "bug". A
    planted card with a ticket started has the orange edge and a "growing" tag (F154 D3) #}
 {% macro card_href(c) %}{{ '/tickets/' if c.bug else '/milestones/' }}{{ c.full_key | urlencode }}{{ q }}{% if c.stage == "ripe" and not c.bug %}#review{% endif %}{% endmacro %}
 {% macro card_link(c) %}
-<a class="card {{ c.area }}{% if c.bug %} bug{% endif %}{% if c.started %} started{% endif %}{% if c.on_its_way or c.lane_asked == "first" %} on-its-way{% endif %}" href="{{ card_href(c) }}">
+<a class="card{% if c.bug %} bug{% endif %}{% if c.started %} started{% endif %}{% if c.on_its_way or c.lane_asked == "first" %} on-its-way{% endif %}" href="{{ card_href(c) }}">
   {% set w = c.at_work %}
   {% if w %}
   <span class="at-work-head">{% if w.waiting_clock %}Waits for Claude until {{ w.waiting_clock }}{% else %}<i class="lamp lit"></i>Working now · {{ "a developer" if w.who == "developer" else "the lead" }}{% endif %}</span>
   {% endif %}
-  <span class="card-meta">{% if c.place %}<b>#{{ c.place }}</b> {% endif %}<span>{{ c.key }}</span> <span>{% if c.bug %}bug{% if c.area %} · {% endif %}{% endif %}{{ c.area }}</span>{% if c.started %} <span class="card-growing">{{ icon("growing", 14) }}growing</span>{% endif %}</span>
+  <span class="card-meta">{% if c.place %}<b>#{{ c.place }}</b> {% endif %}<span>{{ c.key }}</span> <span>{% if c.bug %}bug{% endif %}</span>{% if c.started %} <span class="card-growing">{{ icon("growing", 14) }}growing</span>{% endif %}</span>
   <span class="card-title">{{ c.title or c.key }}</span>
   {% if c.total and c.stage != "harvested" %}
   <span class="meter"><span style="width: {{ (100 * c.done / c.total) | round | int }}%"></span></span>
@@ -161,8 +161,6 @@
   <script type="application/json" id="board-line">{{ found.line | tojson }}</script>
   <div class="field-foot">
     <p class="legend">
-      <span><i class="swatch factory"></i>factory</span>
-      <span><i class="swatch product"></i>product (for Mum)</span>
       <span><i class="swatch bug"></i>bug (striped edge, and says "bug")</span>
       <span><i class="swatch started"></i>growing (orange edge: a ticket has started)</span>
       <span><i class="swatch at-work-lead"></i>working now: the lead</span>

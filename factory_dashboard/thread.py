@@ -125,7 +125,7 @@ _STEP = {
 
 
 def _header(conn: sqlite3.Connection, project_id: int, thread: str) -> tuple[str, str, bool]:
-    """The card's title, its status and area, and whether it is a seed (an idea card the
+    """The card's title, its status, and whether it is a seed (an idea card the
     owner may remove, f6-17), from its ``milestones`` row."""
     if thread == GENERAL:
         return "General", "", False
@@ -135,7 +135,7 @@ def _header(conn: sqlite3.Connection, project_id: int, thread: str) -> tuple[str
     ).fetchall()
     for r in rows:
         if short_key(r["key"]) == thread:
-            meta = " · ".join(x for x in (r["status"], r["area"]) if x)
+            meta = r["status"]
             return r["title"] or r["key"], meta, r["state"] == "idea"
     return thread, "", False
 

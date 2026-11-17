@@ -1915,3 +1915,20 @@ def test_next_walks_a_cards_conversation_and_proposals_then_the_next_card(planni
     settled = _trail(_review_page(client, "/planning/f6/proposals/old"))
     assert settled["next"] == "/planning/m4" and "previous" not in settled
     assert "4 waiting for you" in settled["words"] and " of " not in settled["words"]
+
+
+def test_a_card_title_shows_its_status_and_not_its_area(planning, db_path, serve):
+    """The thread page's stamp shows the milestone's status, never its area (f133-03)."""
+    _write(db_path, lambda conn: _seven_points(conn, planning))
+    # f6 has no status set; give it one so the stamp renders
+    _write(
+        db_path,
+        lambda conn: metrics.upsert_milestone(conn, planning, "f6-planning-room", status="done"),
+    )
+    html = _thread(serve(), "f6")
+    header = html.split('<header id="card"', 1)[1].split("</header>")[0]
+    stamp_match = re.search(r'<span class="stamp">([^<]*)</span>', header)
+    assert stamp_match, "no stamp in the thread page header"
+    stamp_text = stamp_match[1]
+    assert "factory" not in stamp_text.lower()
+    assert "product" not in stamp_text.lower()

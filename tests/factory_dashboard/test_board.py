@@ -682,7 +682,7 @@ def test_a_lit_card_keeps_its_place_and_its_growing_tag(board_db, board_client):
         ("bug-02-stale", 3),
     ]
     _, words, _ = _card(_page(board_client), "/milestones/f24-growing")
-    assert "#1 F24 factory growing" in words
+    assert "#1 F24 growing" in words
 
 
 def test_the_legend_names_both_colours_of_work(board_client):
@@ -915,7 +915,7 @@ def test_q_keeps_the_cards_whose_key_or_title_contains_it(board_db):
     assert read(board_db, q="").stages == read(board_db).stages
 
 
-def test_kind_keeps_bugs_or_one_area_s_cards(board_db):
+def test_kind_keeps_bugs_or_one_area_s_cards(board_db, board_client):
     bugs = [c for cards in read(board_db, kind="bug").stages.values() for c in cards]
     assert sorted(c.key for c in bugs) == [
         "bug-01-duck-count",
@@ -924,11 +924,11 @@ def test_kind_keeps_bugs_or_one_area_s_cards(board_db):
         "bug-04-stuck",
         "bug-05-fixed",
     ]
-    product = [c for cards in read(board_db, kind="product").stages.values() for c in cards]
-    assert sorted(c.key for c in product) == ["F20", "M3", "M4"]
-    factory = [c for cards in read(board_db, kind="factory").stages.values() for c in cards]
-    assert all(c.area == "factory" and not c.bug for c in factory)
-    assert "F24" in [c.key for c in factory]
+    html = _page(board_client, query="?kind=factory")
+    every = [c for cards in read(board_db).stages.values() for c in cards]
+    for c in every:
+        if not c.bug:
+            assert f"/milestones/{c.full_key}" in html
 
 
 def test_harvested_keeps_the_latest_four_and_says_how_many_more(db_path):
@@ -1304,21 +1304,21 @@ def test_a_bug_card_says_bug_and_links_to_its_ticket_page(board_client):
     html = _page(board_client)
     classes, words, _ = _card(html, "/tickets/bug-01-duck-count")
     assert "bug" in classes  # the striped edge
-    assert "factory" in classes
-    assert "bug · factory" in words
+    assert "factory" not in classes
+    assert "bug" in words
     assert "Set aside, won't run until you queue it" in words
     classes, words, _ = _card(html, "/milestones/f20-duck-pond")
     assert "bug" not in classes
-    assert "product" in classes
-    assert "bug" not in words
-    assert words.startswith("#1 F20 product The duck pond")
+    assert "product" not in classes
+    assert words.startswith("#1 F20 The duck pond")
 
 
 def test_a_card_shows_its_place_and_no_p_number_on_the_page(board_db):
     write(board_db, _planted(("f27-third", 9)))
     html = _page(_client(board_db))
     _, words, _ = _card(html, "/milestones/f27-third")
-    assert words.startswith("#4 F27 factory")
+    assert words.startswith("#4 F27")
+    assert "factory" not in words
     assert not re.search(r"\bP\d", words)
     for link in ("/milestones/f1", "/milestones/m3"):  # ripe, harvested
         _, words, _ = _card(html, link)

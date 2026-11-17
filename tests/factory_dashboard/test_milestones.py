@@ -579,7 +579,8 @@ def test_the_header_shows_the_card_s_stage_place_and_area(card_client, board_db)
     assert head.startswith("F24 · f24-growing Growing")  # its keys, then its title
     # a ticket started (F154 D1): Planted, growing, and no ``started`` stored to date it
     assert "Stage Planted: in line for the factory · growing Place" in head
-    assert "Place #3 in Planted Area factory" in head
+    assert "Place #3 in Planted" in head
+    assert "Area" not in head
     assert "Tickets 1 of 5 done · 1 set aside" in head
 
     planted = _card_head(card_client.get("/milestones/f23-planted").text)
@@ -588,7 +589,7 @@ def test_the_header_shows_the_card_s_stage_place_and_area(card_client, board_db)
     seed = _card_head(card_client.get("/milestones/f20-duck-pond").text)
     assert "Stage Seed: an idea, or a ticket set aside" in seed
     assert "Place #1 in Seed" in seed
-    assert "Area product" in seed
+    assert "Area" not in seed
     assert "Tickets none yet" in seed
 
     sprouting = _card_head(card_client.get("/milestones/f22-research").text)

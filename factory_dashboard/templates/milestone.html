@@ -11,7 +11,7 @@
 {% block content %}
 <div class="page card-page">
 
-<header id="card-head" class="card-head{% if card %} at-{{ card.stage }} {{ card.area }}{% endif %}">
+<header id="card-head" class="card-head{% if card %} at-{{ card.stage }}{% endif %}">
   {% if card %}{{ icon(card.stage, 48) }}{% endif %}
   <div class="card-name">
     <span class="card-meta">{{ thread | upper }} · {{ milestone.key }}</span>
@@ -21,7 +21,6 @@
   <dl>
     <dt>Stage</dt><dd class="stage-name">{{ words[card.stage][0] }}: {{ words[card.stage][1] }}{% if card.started %} · {{ growing_since or "growing" }}{% endif %}{% if card.review_step %} · {{ card.review_step.label | lower }}: {{ card.review_step.text }}{% endif %}</dd>
     {% if card.place %}<dt>Place</dt><dd id="place">#{{ card.place }} in {{ words[card.stage][0] }}</dd>{% endif %}
-    <dt>Area</dt><dd>{{ card.area }}</dd>
     <dt>Tickets</dt><dd>{% if card.total %}{{ card.done }} of {{ card.total }} done{% else %}none yet{% endif %}{% if card.set_aside %} · {{ card.set_aside }} set aside, won't run{% endif %}</dd>
     {# a planted card's fast lane lever (F172 D8), as the allowance panel's: one pulled
        shows on its way until the runner writes the mark #}

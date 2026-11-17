@@ -60,7 +60,7 @@ WORDS = {
 }
 PLACED = ("seed", "sprouting", "planted")  # the stages whose order the owner sets
 RESERVABLE = ("planted",)  # the stages a card may be marked to use the reserve in
-KINDS = ("factory", "product", "bug")
+KINDS = ("bug",)
 HARVESTED = 4  # the harvested cards shown; the rest are counted
 SET_ASIDE = "Set aside, won't run until you queue it ›"  # its card's action (F159)
 STARTED = ("running", "done", "escalated", "blocked")  # a ticket's states once work began
@@ -137,8 +137,8 @@ class Card:
 
     @property
     def kind(self) -> str:
-        """What the board's filter calls it: ``bug``, else its area."""
-        return "bug" if self.bug else self.area
+        """What the board's filter calls it: ``bug`` for a bug, empty string otherwise."""
+        return "bug" if self.bug else ""
 
 
 @dataclass(frozen=True)
@@ -845,7 +845,7 @@ def board_page(
             "words": WORDS,
             "search": q or "",  # ``q`` is the links' ``?project=`` in every template
             "kind": kind,
-            "kinds": [("", "All"), ("factory", "Factory"), ("product", "Product"), ("bug", "Bugs")],
+            "kinds": [("", "All"), ("bug", "Bugs")],
             "view": view,
             "lever": "/board?" + urlencode({k: v for k, v in lever.items() if v}),
             "dev_time": _hours(minutes) if minutes else "",
