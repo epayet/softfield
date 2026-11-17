@@ -28,3 +28,12 @@ The picture to build is `.softfield/cards/f254-mockup/allowance-phone.html`, Pro
 - every word the allowance shows today is still in the page, at both widths
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: stopped)
+attempts: 3
+tokens: 7087327
+logs: .softfield/var/runs/20261116-205926/f254-01-allowance-rows-on-a-phone
+```
