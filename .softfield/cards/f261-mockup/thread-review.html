@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F261 mock-up: the review on a card's thread</title>
+<style>
+  /* The dashboard's own tokens (factory_dashboard/static/dashboard.css), dark mode */
+  :root {
+    --floor: #12161b; --bay: #181e25; --plate: #1f2730; --grid: #222b34; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+    --hazard: #f2b10a; --hazard-ink: #1a1405; --opus: #ff9640; --sonnet: #ffc48a; --good: #5fd17a;
+    --tick: var(--ink-2);
+    --stripe: repeating-linear-gradient(-45deg, var(--hazard) 0 6px, transparent 6px 12px);
+    --notch: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
+    --display: "Chakra Petch", "Bahnschrift", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+  body { margin: 0; background: var(--floor); color: var(--fg); font: 15px/1.5 var(--body); padding: 20px; }
+  h1 { font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 4px; }
+  .lede { color: var(--ink-2); max-width: 760px; margin: 0 0 8px; }
+  a { color: var(--sonnet); text-decoration: none; }
+  .switch { display: inline-flex; margin: 12px 0 16px; border: 1px solid var(--rule); }
+  .switch button { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 10px 18px;
+    background: var(--bay); color: var(--muted); border: 0; cursor: pointer; }
+  .switch button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+  .versions { display: flex; gap: 32px; align-items: flex-start; }
+  .version { width: 390px; max-width: 100%; display: flex; flex-direction: column; gap: 12px; }
+  .version.off { display: none; }
+  .version > .label { font: 600 13px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 0; }
+  @media (min-width: 900px) { .switch { display: none; } .version.off { display: flex; } }
+  .new { outline: 1px dashed var(--good); outline-offset: 3px; }
+  .note { font: 12px/1.4 var(--mono); color: var(--good); margin: 6px 0 0; }
+  .legend { color: var(--ink-2); font-size: 13px; margin: 18px 0 0; max-width: 820px; }
+
+  /* ---- the thread page as drawn (dashboard.css) ---- */
+  .panel { background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; min-width: 0; position: relative; }
+  .panel::before, .panel::after { content: ""; position: absolute; width: 10px; height: 10px; border: 0 solid var(--tick); }
+  .panel::before { top: -1px; left: -1px; border-top-width: 2px; border-left-width: 2px; }
+  .panel::after { bottom: -1px; right: -1px; border-bottom-width: 2px; border-right-width: 2px; }
+  .panel:has(> h2:first-child) { padding-top: 0; }
+  .panel > h2 { display: flex; align-items: center; gap: 10px; margin: 0 -14px 10px; padding: 7px 14px;
+    background: var(--plate); border-bottom: 1px solid var(--rule);
+    font: 600 14px var(--display); text-transform: uppercase; letter-spacing: .1em; }
+  .panel > h2::after { content: ""; order: 1; flex: 1; height: 8px; background: var(--stripe); opacity: .5; }
+  .panel > h2 .src { order: 2; font: 11px var(--mono); text-transform: none; letter-spacing: 0; color: var(--muted); }
+  .card-head { background: var(--bay); border: 1px solid var(--rule); border-left: 6px solid var(--hazard); padding: 12px 16px; display: flex; flex-direction: column; }
+  .card-head h2 { margin: 0; font: 700 21px/1.2 var(--display); letter-spacing: .03em; text-transform: uppercase; }
+  .stamp { font: 600 12px var(--mono); color: var(--muted); }
+  .fold { font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); min-height: 44px; display: flex; align-items: center; cursor: pointer; }
+  .row-of { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .aside { color: var(--muted); font-size: 13px; }
+  #review h3 { margin: 4px 0 0; font: 600 12px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  #review > a { display: inline-flex; align-items: center; min-height: 44px; }
+  .sheet p, .sheet ul, .sheet ol { margin: 4px 0 8px; }
+  .sheet ul, .sheet ol { padding-left: 20px; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; min-height: 44px; padding: 0 16px; border: 0; cursor: pointer; }
+  .btn.go { background: var(--hazard); color: var(--hazard-ink); clip-path: var(--notch); }
+  .message { background: var(--bay); border: 1px solid var(--opus); padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; }
+  .message .stamp.lead { color: var(--opus); }
+  .said { margin: 0; }
+  .in-short { position: relative; background: var(--plate); clip-path: var(--notch); padding: 10px 14px 12px 20px; display: flex; flex-direction: column; gap: 4px; }
+  .in-short::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 8px; background: var(--stripe); }
+  .in-short > b { font: 700 12px var(--display); letter-spacing: .12em; text-transform: uppercase; color: var(--ink-2); }
+  .in-short > p { margin: 0; font-size: 16px; line-height: 1.45; color: var(--fg); }
+
+  /* ---- proposed: a short plate; the rest is one tap away ---- */
+  .tally { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 4px; }
+  .tally span { font: 600 12px var(--mono); padding: 3px 8px; border: 1px solid var(--rule); background: var(--plate); color: var(--ink-2); }
+  .tally span b { color: var(--fg); }
+  .checks { list-style: none; margin: 0; padding: 0; }
+  .checks li { border-left: 3px solid var(--ink-2); padding: 2px 0 2px 10px; margin: 6px 0; font-size: 14px; }
+  .checks li b { font: 600 11px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-2); display: block; }
+  details.part { border-top: 1px solid var(--grid); }
+  details.part > summary { list-style: none; justify-content: space-between; gap: 10px; }
+  details.part > summary::-webkit-details-marker { display: none; }
+  details.part > summary .gist { font: 12px var(--mono); text-transform: none; letter-spacing: 0; color: var(--ink-2); }
+  .whole { display: flex; flex-direction: column; justify-content: center; min-height: 52px; margin-top: 4px; padding: 6px 12px;
+    background: var(--plate); border: 1px solid var(--rule); border-left: 4px solid var(--ink-2); color: var(--fg); }
+  .whole b { font: 600 13px var(--display); letter-spacing: .08em; text-transform: uppercase; }
+  .whole span { font: 12px var(--mono); color: var(--muted); }
+</style>
+</head>
+<body>
+<h1>F261: the review on a card's thread</h1>
+<p class="lede">The planning room's page for a card waiting for your sign-off: <code>/planning/f251</code>, with F251's real sheet. Today's plate is copied from <code>factory_dashboard/templates/thread.html</code>. "In short" and "Done when, as of now" are sections F251's review didn't have: their wording here is what the next reviews would write.</p>
+<div class="switch" role="group" aria-label="Which version">
+  <button type="button" data-show="today" aria-pressed="false">Today</button>
+  <button type="button" data-show="proposed" aria-pressed="true">Proposed</button>
+</div>
+
+<div class="versions">
+
+<!-- Today: copied from factory_dashboard/templates/thread.html, the {% if review %} section -->
+<div class="version off" data-version="today">
+  <p class="label">Today</p>
+  <header class="card-head">
+    <span class="stamp">softfield · review</span>
+    <h2>Show how long the computer has been on in the top bar</h2>
+  </header>
+  <details><summary class="fold">Your note</summary></details>
+  <section id="review" class="panel">
+    <h2>The review</h2>
+    <h3>What changed</h3>
+    <div class="sheet">
+      <p>Every dashboard page's top bar now says how long the computer has been on since it last started (sleep counts as on). On a wide screen, an "⏻ ON 6 d 4 h" plate sits after the status and the pause sign. Hover over it to see the start time ("since Sat 26 Sep 09:42"). On a phone, the plate is hidden. Tap the dot and the status words gain a second line: "Computer on 6 d 4 h · since …". Both refresh with the status every 5 seconds. Under an hour it reads "42 min", under a day "5 h 12 min", then "6 d 4 h". If the machine can't report its start time, nothing shows.</p>
+      <p>Matches the mock-up. The wide picture shows the plate after the sign, in the plate and rule colours, as drawn. The phone picture is taken with the dot untapped, so it shows the plate hidden, as intended. It can't show the tapped line, which a browser test checks instead.</p>
+    </div>
+    <h3>How to test</h3>
+    <div class="sheet"><ol>
+      <li>On the computer, open the dashboard's Overview. After the status and the ⏸/▶ sign there is an "ON" plate with a power icon and a time.</li>
+      <li>Hover over the plate. It says since when the computer has been on, in your local time.</li>
+      <li>Leave the page open for a couple of minutes. The minutes go up without reloading.</li>
+      <li>On your phone, open the same page. There is no plate in the bar.</li>
+      <li>Tap the coloured dot. Under the status words there is a line: "Computer on … · since …".</li>
+    </ol></div>
+    <h3>Decisions waiting for you</h3>
+    <div class="sheet"><p>None.</p></div>
+    <a href="#">The whole review</a>
+    <div class="row-of">
+      <button type="button" class="btn go">Sign off</button>
+      <span class="aside">Marks it done and tags it, at the runner's next pick.</span>
+    </div>
+  </section>
+  <article class="message">
+    <span class="stamp lead">The lead · 2026-11-17 19:48</span>
+    <p class="said">Approved by the owner on 2026-11-17: approved plan/f251: queued f251-02-phone-words-stay-on-screen</p>
+  </article>
+</div>
+
+<!-- Proposed -->
+<div class="version" data-version="proposed">
+  <p class="label">Proposed</p>
+  <header class="card-head">
+    <span class="stamp">softfield · review</span>
+    <h2>Show how long the computer has been on in the top bar</h2>
+  </header>
+  <details><summary class="fold">Your note</summary></details>
+  <section id="review" class="panel">
+    <h2>The review <span class="src">ready to sign off</span></h2>
+
+    <div class="in-short new">
+      <b>In short</b>
+      <p>Every page's top bar now shows how long the computer has been on: a plate on a wide screen, a line under the tapped dot on a phone. It matches the mock-up.</p>
+    </div>
+    <p class="note">1 · The review's own two lines, a new sheet section. An old review shows the first sentence of What changed.</p>
+
+    <div class="new">
+      <div class="tally"><span><b>3</b> met</span><span><b>1</b> your check</span></div>
+      <ul class="checks">
+        <li><b>Your check</b>The tapped line on a phone: the pictures are taken untapped, a browser test checks it.</li>
+      </ul>
+    </div>
+    <p class="note">2 · Done when, as of now (F216): counted, and only the lines that need you (Your check, Not yet) written out.</p>
+
+    <details class="part new">
+      <summary class="fold">How to test <span class="gist">5 steps</span></summary>
+      <div class="sheet"><ol>
+        <li>On the computer, open the dashboard's Overview. After the status and the ⏸/▶ sign there is an "ON" plate with a power icon and a time.</li>
+        <li>Hover over the plate. It says since when the computer has been on, in your local time.</li>
+        <li>Leave the page open for a couple of minutes. The minutes go up without reloading.</li>
+        <li>On your phone, open the same page. There is no plate in the bar.</li>
+        <li>Tap the coloured dot. Under the status words there is a line: "Computer on … · since …".</li>
+      </ol></div>
+    </details>
+    <p class="note">3 · Folded, with its step count: one tap opens it here.</p>
+
+    <div class="row-of">
+      <button type="button" class="btn go">Sign off</button>
+      <span class="aside">Marks it done and tags it, at the runner's next pick.</span>
+    </div>
+
+    <a class="whole new" href="#"><b>The whole review ›</b><span>What changed · 2 decisions made along the way · what it cost</span></a>
+    <p class="note">4 · Everything else lives on the card's page; the link says what's there. "Decisions waiting for you: None." no longer shows; when one waits, it shows open above In short as "Needs your answer".</p>
+  </section>
+  <article class="message">
+    <span class="stamp lead">The lead · 2026-11-17 19:48</span>
+    <p class="said">Approved by the owner on 2026-11-17: approved plan/f251: queued f251-02-phone-words-stay-on-screen</p>
+  </article>
+</div>
+
+</div>
+
+<p class="legend"><span class="new">Dashed green</span> marks what changes; the green notes belong to the mock-up, not the page. On a phone, the conversation starts about a screen higher. Ideas from the review (F164) fold the same way as How to test, with their count, when a review has some.</p>
+
+<script>
+  function flip() {
+    document.querySelectorAll(".switch button").forEach((button) => {
+      button.addEventListener("click", () => {
+        document.querySelectorAll(".switch button").forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
+        document.querySelectorAll(".version").forEach((v) => v.classList.toggle("off", v.dataset.version !== button.dataset.show));
+      });
+    });
+  }
+  flip();
+</script>
+</body>
+</html>
