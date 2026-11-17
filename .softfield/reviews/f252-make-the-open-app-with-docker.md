@@ -1,5 +1,7 @@
 # Review: F252, the Open button opens a new tab
 
+- **Status:** done, signed off by the owner on 2026-11-17.
+
 ## Sign-off sheet
 
 ### 1. What changed
