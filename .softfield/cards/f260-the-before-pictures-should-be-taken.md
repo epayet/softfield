@@ -1,4 +1,4 @@
-# Milestone F260: The before pictures should be taken on a copy of the…
+# Milestone F260: Before pictures on the data kept from just before the card's first merge
 
 > **State:** idea · **Area:** factory
 > Planted by the owner on 2026-11-17.
