@@ -11,8 +11,9 @@
     {% set wp = pace if a.label == "Claude" and a.window == "seven_day" and not no_data else none %}
     <div id="allow-{{ a.label | lower }}-{{ a.window }}">
       <div class="line">
-        <span class="agent">{{ a.label }}</span>
-        <span>{{ a.display }}{{ ": " ~ a.percent if a.percent else "" }}</span>
+        {# F254: the name and the reading, one cell beside the lever on a phone #}
+        <span class="reading"><span class="agent">{{ a.label }}</span>
+        <span>{{ a.display }}{{ ": " ~ a.percent if a.percent else "" }}</span></span>
         {% set sw = switches.get(a.window) if a.label == "Claude" else none %}
         {% if sw %}
         <button type="button" class="lever{{ ' on-its-way' if sw.asked }}" role="switch"

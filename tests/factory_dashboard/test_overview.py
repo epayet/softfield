@@ -2946,6 +2946,146 @@ def test_allowance_bars_same_width_at_desktop(page, board_db, tmp_path):
         )
 
 
+# --- F254: each allowance window is a compact row on a phone --------------------------------
+
+
+def _open_allowance(page, client, width: int) -> None:
+    """``client``'s Overview in ``page`` at ``width`` px wide, its static files from the repo."""
+    origin = "http://127.0.0.1:8765"
+
+    def serve(route) -> None:
+        url = route.request.url.removeprefix(origin)
+        path = url.split("?", 1)[0]
+        if path.startswith("/static/"):
+            route.fulfill(path=str(STATIC / path.removeprefix("/static/")))
+        elif path in ("/", "/live"):
+            route.fulfill(body=client.get(url).text, content_type="text/html; charset=utf-8")
+        else:
+            route.fulfill(status=404, body="")
+
+    page.route(f"{origin}/**", serve)
+    page.set_viewport_size({"width": width, "height": 1200})
+    page.goto(origin + "/")
+    page.wait_for_selector("#allowance .meter")
+
+
+ALLOWANCE_WINDOWS = ("claude-five_hour", "claude-seven_day", "copilot-month")
+
+
+def test_the_three_allowance_windows_are_at_most_280px_tall_on_a_phone(page, db_path, tmp_path):
+    """F254 D1: at 390 px, Claude's two windows, each with its "use reserve" lever, and
+    Copilot's month take at most 280 px from the first one's top to the last one's bottom
+    (three boxes took about 420). The fixture's week is over pace: its "Over pace" plate,
+    which F254 leaves as it is, is not counted."""
+    _open_allowance(page, allowance_client_with(db_path, tmp_path, {}), 390)
+    assert page.locator("#allowance [id^='allow-'] .lever").count() == 2
+    first = page.locator("#allow-claude-five_hour").bounding_box()
+    last = page.locator("#allow-copilot-month").bounding_box()
+    plate = page.locator("#allow-claude-seven_day > .stop-plate").evaluate(
+        "el => el.getBoundingClientRect().height + parseFloat(getComputedStyle(el).marginTop)"
+    )
+    assert first and last
+    assert last["y"] + last["height"] - first["y"] - plate <= 280
+
+
+def test_allowance_windows_have_no_box_only_a_thin_rule_on_a_phone(page, db_path, tmp_path):
+    """F254 D1: at 390 px no window has a background or a border of its own but a 1 px rule
+    under it, and the last window has none."""
+    _open_allowance(page, allowance_client_with(db_path, tmp_path, {}), 390)
+    for i, row in enumerate(ALLOWANCE_WINDOWS):
+        style = page.locator(f"#allow-{row}").evaluate(
+            "el => { const s = getComputedStyle(el); return [s.backgroundColor,"
+            " s.backgroundImage, s.borderTopWidth, s.borderLeftWidth, s.borderRightWidth,"
+            " s.borderBottomWidth]; }"
+        )
+        assert style[:5] == ["rgba(0, 0, 0, 0)", "none", "0px", "0px", "0px"], row
+        assert style[5] == ("0px" if i == len(ALLOWANCE_WINDOWS) - 1 else "1px"), row
+
+
+def test_name_reading_and_meter_share_the_lever_s_band_on_a_phone(page, db_path, tmp_path):
+    """F254 D2: at 390 px, in each of Claude's windows the name with its reading and the meter
+    sit beside the lever, within its height, and the lever is still at least 44 px tall."""
+    _open_allowance(page, allowance_client_with(db_path, tmp_path, {}), 390)
+    for row in ("claude-five_hour", "claude-seven_day"):
+        lever = page.locator(f"#allow-{row} .lever").bounding_box()
+        assert lever and lever["height"] >= 44, row
+        for part in (".reading", ".meter"):
+            box = page.locator(f"#allow-{row} {part}").bounding_box()
+            assert box, (row, part)
+            assert box["y"] >= lever["y"] - 1, (row, part)
+            assert box["y"] + box["height"] <= lever["y"] + lever["height"] + 1, (row, part)
+            assert box["x"] + box["width"] <= lever["x"], (row, part)
+
+
+def test_small_words_run_on_and_at_this_rate_has_its_own_line_on_a_phone(page, allowance_ghost):
+    """F254 D3: at 390 px, the five-hour window's reset, read and mark words run on as text,
+    the first two on one line and a "·" before each but the first; "at this rate" starts a
+    line of its own, under all of them, with no "·"."""
+    _open_allowance(page, allowance_ghost, 390)
+    words = page.locator("#allow-claude-five_hour > .meter + .line small").evaluate_all(
+        "els => els.map(e => { const r = e.getBoundingClientRect(); return [e.textContent,"
+        " getComputedStyle(e, '::before').content, r.top, r.bottom, r.left]; })"
+    )
+    *others, rate = words
+    assert len(others) >= 3
+    assert rate[0].startswith("at this rate")
+    assert [w[1] for w in others] == ["none"] + ['" · "'] * (len(others) - 1)
+    assert abs(others[0][2] - others[1][2]) <= 1
+    line_left = page.locator("#allow-claude-five_hour > .meter + .line").bounding_box()
+    assert line_left
+    assert rate[1] == "none"
+    assert abs(rate[4] - line_left["x"]) <= 1
+    assert rate[2] >= max(w[3] for w in others) - 1
+
+
+def test_allowance_windows_are_drawn_as_before_on_a_wide_screen(page, db_path, tmp_path):
+    """F254: at 1440 px the three windows sit side by side, in order; in each, the name, its
+    reading and the lever share a line, the meter is under them and the small words under the
+    meter, with no "·" between them."""
+    _open_allowance(page, allowance_client_with(db_path, tmp_path, {}), 1440)
+    boxes = [page.locator(f"#allow-{row}").bounding_box() for row in ALLOWANCE_WINDOWS]
+    assert all(boxes)
+    assert boxes[0]["x"] < boxes[1]["x"] < boxes[2]["x"]
+    assert len({round(b["y"]) for b in boxes}) == 1
+    for row in ALLOWANCE_WINDOWS:
+        w = f"#allow-{row}"
+        name = page.locator(f"{w} .agent").bounding_box()
+        reading = page.locator(f"{w} .reading > span:last-child").bounding_box()
+        bar = page.locator(f"{w} > .meter").bounding_box()
+        small = page.locator(f"{w} > .meter + .line").bounding_box()
+        assert name and reading and bar and small, row
+        assert name["x"] < reading["x"], row
+        assert abs(name["y"] + name["height"] / 2 - reading["y"] - reading["height"] / 2) <= 2, row
+        assert bar["y"] >= max(name["y"] + name["height"], reading["y"] + reading["height"]), row
+        assert small["y"] >= bar["y"] + bar["height"], row
+        if row.startswith("claude"):
+            lever = page.locator(f"{w} .lever").bounding_box()
+            assert lever and lever["x"] > reading["x"] + reading["width"], row
+            assert lever["y"] + lever["height"] <= bar["y"] + 1, row
+        marks = page.locator(f"{w} small").evaluate_all(
+            "els => els.map(e => getComputedStyle(e, '::before').content)"
+        )
+        assert set(marks) == {"none"}, row
+
+
+@pytest.mark.parametrize("width", [390, 1440])
+def test_every_allowance_word_is_on_screen_at_both_widths(page, allowance_ghost, width):
+    """F254: at both widths each window's name, reading and small words are on screen and in
+    the panel's visible text, "at this rate" too, and nothing overlaps or runs off the page."""
+    _open_allowance(page, allowance_ghost, width)
+    shown = " ".join(page.locator("#allowance .allow").inner_text().split())
+    parts = page.locator(
+        "#allowance .allow .agent, #allowance .allow .reading > span:last-child,"
+        " #allowance .allow [id^='allow-'] small"
+    ).evaluate_all("els => els.map(e => [e.textContent, e.getBoundingClientRect().width])")
+    assert len(parts) >= 12
+    for text, wide in parts:
+        assert wide > 0, text
+        assert " ".join(text.split()) in shown, text
+    assert "at this rate" in shown
+    assert layout_problems(page) == []
+
+
 def test_replay_bar_is_just_below_the_floor_on_phone(page, serve, db_path):
     """f9-26: at 390 px the replay bar's top is within 40 px of the floor's bottom."""
     conn = metrics.open_db(db_path)

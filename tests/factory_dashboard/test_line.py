@@ -1830,6 +1830,9 @@ def test_phone_rows_show_the_three_busiest_and_a_toggle_opens_the_rest(page, lin
     assert phone_drawn(page, "[data-row]", "row") == ["f5", "f4", "f3", "f2", "f1"]
     assert toggle.locator("text").text_content() != "Show all 5"
     assert page_top(page, QUEUE_TOP) > closed_top + 40
+    # the click scrolled the page: whatever passes under the sticky top bar isn't an overlap
+    # (f254-01: the shorter allowance put a lever there)
+    page.evaluate("window.scrollTo(0, 0)")
     assert layout_problems(page) == []
     found = page.eval_on_selector("svg#floor-phone", LABELS)
     for n, label in enumerate(found["labels"]):
