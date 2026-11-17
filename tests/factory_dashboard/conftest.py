@@ -37,6 +37,15 @@ def _machine_config(monkeypatch):
     monkeypatch.setenv("SOFTFIELD_CONFIG", str(MACHINE))
 
 
+@pytest.fixture(autouse=True)
+def _no_uptime(monkeypatch):
+    """The top bar never reads the real machine's uptime (F251): no plate, unless a test gives
+    ``machine.booted_at`` a start (``booted`` in test_app.py)."""
+    from factory_dashboard import machine
+
+    monkeypatch.setattr(machine, "booted_at", lambda now: None)
+
+
 def _set_zone(name: str | None) -> None:
     if name is None:
         os.environ.pop("TZ", None)

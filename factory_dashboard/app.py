@@ -27,6 +27,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
+from factory_dashboard import machine
 from factory_dashboard.queries import local
 from runner.usage import short
 
@@ -372,14 +373,22 @@ def top_bar(
     conn: sqlite3.Connection, project: str, now: datetime, *, planning_count: int | None = None
 ) -> dict[str, Any]:
     """The top bar's live facts on every page (f6-16): the factory's status and the Planning
-    tab's count. ``render`` adds them to each page's first paint; ``/live`` refreshes them."""
+    tab's count, and how long the computer has been on (F251), or None when it can't tell.
+    ``render`` adds them to each page's first paint; ``/live`` refreshes them."""
     from factory_dashboard.planning import desk, waiting_for_you  # planning imports this module
 
+    booted = machine.booted_at(now)
+    uptime = (
+        {"for": machine.on_for(booted, now), "since": local(booted).strftime("%a %d %b %H:%M")}
+        if booted is not None
+        else None
+    )
     return {
         "bar_status": factory_wide_status(conn, project, now),
         "planning_count": planning_count
         if planning_count is not None
         else len(waiting_for_you(desk(conn, project, now))),
+        "uptime": uptime,
     }
 
 

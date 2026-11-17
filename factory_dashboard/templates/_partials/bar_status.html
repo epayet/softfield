@@ -1,10 +1,13 @@
-{# The factory's status in the top bar (f6-16): base.html draws it on every page, and the /live partial carries it again, out of band, for each page's poll. A dot says whose job runs (f17; a button: on a phone it shows the words), the words beside it from 640 px, and Pause or Resume as a sign, ⏸ or ▶. The sign posts as Now's does (f5-18); base.html's script shows the asked state at once. #}
+{# The factory's status in the top bar (f6-16): base.html draws it on every page, and the /live partial carries it again, out of band, for each page's poll. A dot says whose job runs (f17; a button: on a phone it shows the words), the words beside it from 640 px, and Pause or Resume as a sign, ⏸ or ▶. The sign posts as Now's does (f5-18); base.html's script shows the asked state at once. After the sign, an "On" plate says how long the computer has been on (F251); a phone hides it and shows the .on line in the tapped words instead. The line is aria-hidden so the status doesn't announce it each minute; the plate's title says it. Nothing when the machine can't tell. #}
 <div id="factory-status" class="factory-status{% if 'asked' in bar_status.tone %} asked{% endif %}" hx-swap-oob="outerHTML">
   <button type="button" class="dot-btn" aria-label="{{ bar_status.words }}" title="{{ bar_status.words }}"><i class="dot {{ bar_status.dot }}"></i></button>
-  <span class="words" role="status">{{ bar_status.words }}</span>
+  <span class="words" role="status">{{ bar_status.words }}{% if uptime %}<span class="on" aria-hidden="true">Computer on {{ uptime.for }} · since {{ uptime.since }}</span>{% endif %}</span>
   {% if bar_status.button == "pause" %}
   <button type="button" class="sign" aria-label="Pause after this job" title="Pause after this job" hx-post="/requests" hx-vals='{"kind": "pause", "project": {{ (bar_status.project or project) | tojson }}}' hx-swap="none" data-asked="{{ bar_status.pausing }}">⏸</button>
   {% elif bar_status.button == "resume" %}
   <button type="button" class="sign" aria-label="Resume" title="Resume" hx-post="/requests" hx-vals='{"kind": "resume", "project": {{ (bar_status.project or project) | tojson }}}' hx-swap="none" data-asked="Resuming…">▶</button>
+  {% endif %}
+  {% if uptime %}
+  <span class="uptime" title="This computer has been on since {{ uptime.since }}, its last start (sleep counts as on)"><span class="key"><svg viewBox="0 0 12 12" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M6 1v4.5"/><path d="M3.2 3a4 4 0 1 0 5.6 0"/></g></svg>On</span><span class="val">{{ uptime.for }}</span></span>
   {% endif %}
 </div>

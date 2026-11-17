@@ -3059,6 +3059,82 @@ def test_on_a_wide_screen_the_words_show_beside_the_dot(page, serve):
     assert abs(middle(dot) - middle(box)) <= 3 and abs(middle(sign) - middle(box)) <= 3
 
 
+# --- how long the computer has been on (F251) ---------------------------------------------------
+
+BOOTED = NOW - timedelta(days=6, hours=4, minutes=18)  # Sat 26 Sep 07:42 UTC, 09:42 in Paris
+
+
+@pytest.fixture
+def booted(monkeypatch):
+    """The machine started at ``BOOTED`` (conftest's ``_no_uptime`` says it can't tell)."""
+    from factory_dashboard import machine
+
+    monkeypatch.setattr(machine, "booted_at", lambda now: BOOTED)
+
+
+def _uptime(html: str) -> tuple[str, str] | None:
+    """The top bar's "On" plate: its words and its title; None when there is none."""
+    block = re.search(r'<div id="factory-status"[^>]*>(.*?)\n</div>', html, re.S)
+    assert block, "no #factory-status"
+    plate = re.search(
+        r'<span class="uptime" title="([^"]*)"><span class="key"><svg[^>]*>.*?</svg>(\w+)</span>'
+        r'<span class="val">([^<]*)</span></span>',
+        block[1],
+        re.S,
+    )
+    return (f"{plate[2]} {plate[3]}", unescape(plate[1])) if plate else None
+
+
+def test_the_top_bar_says_how_long_the_computer_has_been_on(booted, paris, client):
+    """The plate after the sign says "On" and the span; its title says since when, in the
+    machine's local time (Paris: 07:42 UTC is 09:42). The tapped words' line says both; /live
+    carries the same, out of band, for an open page's poll."""
+    since = "This computer has been on since Sat 26 Sep 09:42, its last start (sleep counts as on)"
+    line = "Computer on 6 d 4 h · since Sat 26 Sep 09:42"
+    for path in ("/", "/live"):
+        html = client.get(path).text
+        assert _uptime(html) == ("On 6 d 4 h", since), path
+        assert f'<span class="on" aria-hidden="true">{line}</span>' in html, path
+
+
+def test_a_machine_that_cant_tell_its_start_shows_no_plate_and_no_line(client):
+    """conftest's ``_no_uptime``: ``booted_at`` returns None, and the page still renders with
+    its status and nothing about the computer."""
+    for path in ("/", "/live"):
+        response = client.get(path)
+        assert response.status_code == 200, path
+        assert _status(response.text)[0] == "Running: coucou · f1-04-live", path
+        assert _uptime(response.text) is None, path
+        assert 'class="uptime"' not in response.text and 'class="on"' not in response.text, path
+
+
+def test_on_a_wide_screen_the_plate_follows_the_sign_and_the_line_is_hidden(booted, page, serve):
+    _open_tickets(page, serve(), {"width": 1024, "height": 768})
+    plate = page.locator("#factory-status > .uptime")
+    assert plate.is_visible()
+    assert plate.inner_text().split() == ["ON", "6", "d", "4", "h"]  # the key is in capitals
+    sign = page.get_by_role("button", name="Pause after this job", exact=True).bounding_box()
+    box = plate.bounding_box()
+    assert box["x"] >= sign["x"] + sign["width"], (sign, box)
+    assert abs(box["y"] + box["height"] / 2 - (sign["y"] + sign["height"] / 2)) <= 3
+    assert not page.locator("#factory-status .words .on").is_visible()
+    assert layout_problems(page) == []
+
+
+def test_on_a_phone_the_plate_hides_and_the_tapped_words_say_how_long(booted, page, serve):
+    _open_tickets(page, serve(), PHONE)
+    assert not page.locator("#factory-status > .uptime").is_visible()
+    line = page.locator("#factory-status .words .on")
+    assert not line.is_visible()
+    page.locator("#factory-status .dot-btn").click()
+    assert line.is_visible()
+    assert line.inner_text() == "Computer on 6 d 4 h · since Sat 26 Sep 07:42"
+    words = page.locator("#factory-status [role=status]").bounding_box()
+    box = line.bounding_box()
+    assert words["y"] < box["y"] and box["y"] + box["height"] <= words["y"] + words["height"]
+    assert layout_problems(page) == []
+
+
 # --- ago (f94-02) --------------------------------------------------------------------------------
 
 
