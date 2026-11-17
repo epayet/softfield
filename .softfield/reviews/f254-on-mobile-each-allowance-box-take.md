@@ -1,5 +1,7 @@
 # Review: F254, the allowance takes less height on a phone
 
+- **Status:** done, signed off by the owner on 2026-11-17.
+
 ## Sign-off sheet
 
 ### 1. What changed

@@ -1,6 +1,7 @@
 # Milestone F254: The allowance takes less height on a phone
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** done · **Priority:** 100 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-17. Base: git tag `f254-on-mobile-each-allowance-box-take-start`. Report: [`.softfield/reviews/f254-on-mobile-each-allowance-box-take.md`](../reviews/f254-on-mobile-each-allowance-box-take.md).
 > Planted by the owner on 2026-11-16.
 
 ## Notes
