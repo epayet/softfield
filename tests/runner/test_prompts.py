@@ -293,6 +293,13 @@ def test_the_review_names_the_after_pictures_and_the_mockup_or_none(tmp_path: Pa
     assert line.endswith("mock-up: .softfield/cards/f1-mockup/a.html")
 
 
+def test_the_review_asks_for_each_card_suggestion_as_one_quoted_line():
+    text = " ".join(prompts.REVIEW.split())
+    assert "one quoted `> ` line under its Product or Factory bullet" in text
+    assert "plant-note voice" in text
+    assert "already did itself is not quoted" in text
+
+
 def test_the_planner_prompts_still_fill_in():
     """The new rules add no stray brace: both prompts format with the same fields."""
     for template in (prompts.PLANNER, prompts.PLANNER_GENERAL):

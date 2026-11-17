@@ -391,7 +391,10 @@ Keep ids stable across rounds; mark findings fixed since the last round "resolve
 Give checkpoint_verdicts and score every round, as they stand: the last round's are kept.
 Also create or update .softfield/reviews/{milestone}.md. It starts with the owner's sign-off
 sheet ("Sign-off sheet" above), ending with "6. What next": your product and factory
-suggestions. Then what was built, findings and resolutions, what was set aside and workflow
+suggestions. Write each suggestion that needs a card as one quoted `> ` line under its
+Product or Factory bullet: one self-contained sentence in the owner's plant-note voice, so
+the dashboard can offer to plant it. What this review already did itself is not quoted.
+Then what was built, findings and resolutions, what was set aside and workflow
 observations. The numbers come from `softfield report {milestone}`, between the
 `<!-- runner report -->` markers: leave that block as it is and don't recount them.
 Read-only git (diff, log, show) is fine; don't commit: the runner does.
