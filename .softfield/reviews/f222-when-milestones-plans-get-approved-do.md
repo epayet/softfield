@@ -1,6 +1,6 @@
 # Review: F222, A newly approved plan goes last on the board
 
-- **Status:** review round 1 done, waiting for the owner's sign-off.
+- **Status:** done, signed off by the owner on 2026-11-17.
 
 ## Sign-off sheet
 

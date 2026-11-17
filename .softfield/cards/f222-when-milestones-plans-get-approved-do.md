@@ -1,6 +1,7 @@
 # Milestone F222: A newly approved plan goes last on the board
 
-> **State:** ready · **Area:** factory · **Fast lane:** yes
+> **State:** done · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-17. Base: git tag `f222-when-milestones-plans-get-approved-do-start`. Report: [`.softfield/reviews/f222-when-milestones-plans-get-approved-do.md`](../reviews/f222-when-milestones-plans-get-approved-do.md).
 > Planted by the owner on 2026-11-05.
 
 ## Notes
