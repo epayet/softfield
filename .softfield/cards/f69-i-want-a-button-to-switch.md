@@ -27,3 +27,6 @@
 
 ## Notes
 I want a button to switch from light to night theme
+
+### From F257: I want the night/light switch to follow system by default,… (merged by the lead on 2026-11-17)
+I want the night/light switch to follow system by default, while still allowing to change it manually
