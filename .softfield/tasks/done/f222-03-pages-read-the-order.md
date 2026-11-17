@@ -44,3 +44,10 @@ The picture to build: `.softfield/cards/f222-mockup/no-priority.html`. Read `.so
 - a page test finds no "priority" and no `P<number>` on `/`, `/tickets`, a set-aside ticket's page, a queued ticket's page, `/milestones` and a card's page
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
