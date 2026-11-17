@@ -1467,13 +1467,14 @@ def test_next_in_line_is_the_first_three_of_the_run_order(queue_client, db_path)
     assert "4 f1-" not in rows
 
 
-def test_next_in_line_shows_each_priority_and_sends_reordering_to_the_board(queue_client):
-    """F15 D8: no ↑ and ↓ any more, the board is the one place to reorder; each ticket still
-    shows its priority, all at the default 100 here."""
+def test_next_in_line_shows_each_card_and_sends_reordering_to_the_board(queue_client):
+    """F15 D8: no ↑ and ↓ any more, the board is the one place to reorder; each ticket says
+    its card where it said a priority (F222 D6)."""
     html = queue_client.get("/").text
     rows = section(html, "queue").split("Next in line", 1)[1]
     for ticket in ("f1-05-first", "f1-06-second", "f1-10-queued"):
-        assert re.search(rf"\b{ticket}\b[^·]*· [^·]+ · priority 100\b", rows), ticket
+        assert re.search(rf"\b{ticket}\b[^·]*· [^·]+ · F1(?= \d|$)", rows), ticket
+    assert "priority" not in rows
     assert "↑" not in rows and "↓" not in rows
     markup = html.split("Next in line", 1)[1].split("</section>", 1)[0]
     assert "move-button" not in markup and "<button" not in markup
@@ -1499,7 +1500,7 @@ def test_next_in_line_says_whom_a_ticket_runs_early_for(client, db_path):
     rows = section(client.get("/").text, "queue").split("Next in line", 1)[1]
     assert rows.index("1 f1-06-second") < rows.index("2 f2-01-top")
     assert re.search(r"\bf1-06-second\b[^·]*· [^·]+ · early: f2-01-top waits for it\b", rows)
-    assert re.search(r"\bf2-01-top\b[^·]*· [^·]+ · waits for f1-06-second · priority 1\b", rows)
+    assert re.search(r"\bf2-01-top\b[^·]*· [^·]+ · waits for f1-06-second · F2(?= \d|$)", rows)
 
 
 def _prioritise(db_path: Path, ticket: str, own: int, card: int) -> None:
@@ -1522,15 +1523,44 @@ def test_next_in_line_follows_the_card_not_a_feature_tickets_own_priority(queue_
     rows = section(html, "queue").split("Next in line", 1)[1]
     shown = [t for _, t in re.findall(r"\b(\d) (f1-\d\d-[a-z-]+)", rows)]
     assert shown == ["f1-05-first", "f1-06-second", "f1-10-queued"]
-    assert re.findall(r"· priority (\d+)\b", rows) == ["50"] * len(shown)
+    assert "priority" not in rows
     assert list(waits(db_path))[: len(shown)] == shown
 
 
-def test_a_card_at_0_shows_as_0(queue_client, db_path):
-    _prioritise(db_path, "f1-10-queued", own=7, card=0)
+def test_next_in_line_follows_the_queue_s_list_and_says_bug(queue_client, db_path):
+    """F222 D5, D6: the list's order, whatever the priorities say: a card and a bug the list
+    puts before F1 go first, and the bug's row says ``bug``."""
+    conn = metrics.open_db(db_path)
+    try:
+        project = conn.execute("SELECT id FROM projects WHERE name = ?", (PROJECT,)).fetchone()[0]
+        card = metrics.upsert_milestone(conn, project, "f2", priority=900)
+        metrics.upsert_ticket(conn, project, "f2-01-later", milestone_id=card, state="ready")
+        bugs = metrics.upsert_milestone(conn, project, "bugs")
+        body = "---\npriority: 999\n---\n"
+        metrics.upsert_ticket(
+            conn, project, "bug-09-fix", milestone_id=bugs, state="ready", body=body
+        )
+        metrics.set_board_order(conn, project, ["bug-09-fix", "f2", "f1"])
+    finally:
+        conn.close()
     rows = section(queue_client.get("/").text, "queue").split("Next in line", 1)[1]
-    assert re.search(r"\b1 f1-05-first\b[^·]*· [^·]+ · priority 0\b", rows)
-    assert "priority 7" not in rows
+    assert rows.index("1 bug-09-fix") < rows.index("2 f2-01-later") < rows.index("3 f1-05-first")
+    assert re.search(r"\bbug-09-fix\b[^·]*· [^·]+ · bug(?= \d|$)", rows)
+    assert re.search(r"\bf2-01-later\b[^·]*· [^·]+ · F2(?= \d|$)", rows)
+    assert "priority" not in rows
+
+
+def test_the_overview_shows_no_priority_number(queue_client, db_path):
+    """F222 D6: neither the word nor a ``P<number>``, with or without a list."""
+    for listed in ([], ["f1"]):
+        conn = metrics.open_db(db_path)
+        try:
+            metrics.set_board_order(conn, metrics.upsert_project(conn, PROJECT), listed)
+        finally:
+            conn.close()
+        words = " ".join(re.sub(r"<[^>]+>", " ", queue_client.get("/").text).split())
+        assert "priority" not in words.lower()
+        assert not re.search(r"\bP\d+\b", words)
 
 
 def test_empty_queue_shows_message_once(serve):

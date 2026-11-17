@@ -427,48 +427,112 @@ def test_non_later_state_filter_does_not_leak_to_later_section(db_path, tickets_
     assert "f1-12-escalated" not in later_section
 
 
-def later_priority_rows(html: str) -> list[tuple[str, str]]:
-    """Each later ticket's id and priority cell, in page order."""
-    later_section = section_raw(html, "later")
-    tickets = re.findall(r'<tr[^>]*\bdata-ticket="([^"]+)"', later_section)
-    return [(ticket, later_row(later_section, ticket)["priority"]) for ticket in tickets]
+def later_ids(html: str) -> list[str]:
+    """Each set-aside ticket's id, in page order."""
+    return re.findall(r'<tr[^>]*\bdata-ticket="([^"]+)"', section_raw(html, "later"))
 
 
-def test_later_tickets_sorted_by_priority_then_id(later_priority_client):
+def _list(db_path: Path, keys: list[str]) -> None:
+    """The queue's list, as the runner copies it to ``board_order`` (F222 D5)."""
+    conn = open_db(db_path)
+    try:
+        metrics.set_board_order(conn, metrics.upsert_project(conn, PROJECT), keys)
+    finally:
+        conn.close()
+
+
+def test_later_tickets_keep_today_s_order_before_the_list(later_priority_client):
+    """With no list yet, the order the priorities gave: a bug's own 5, F2's 10, a bug's 50,
+    F1's 100 (F222: today's order doesn't change when the list is made)."""
     html = later_priority_client.get("/tickets").text
-    rows = later_priority_rows(html)
-    tickets = [r[0] for r in rows]
-    priorities = [int(r[1]) for r in rows]
-    # f1-95-low-priority has priority 5 (goes first)
-    assert tickets[0] == "f1-95-low-priority"
-    assert priorities[0] == 5
-    # f1-98-milestone has priority 10 (milestone's priority)
-    assert tickets[1] == "f1-98-milestone"
-    assert priorities[1] == 10
-    # f1-97-bug has priority 50 (bug default)
-    assert tickets[2] == "f1-97-bug"
-    assert priorities[2] == 50
-    # f1-99-later has priority 100 (default)
-    assert tickets[3] == "f1-99-later"
-    assert priorities[3] == 100
+    assert later_ids(html) == [
+        "f1-95-low-priority",
+        "f1-98-milestone",
+        "f1-97-bug",
+        "f1-99-later",
+    ]
 
 
-def test_ticket_with_priority_5_lists_before_earlier_id_no_priority(later_priority_client):
+def test_later_tickets_follow_the_queue_s_list_with_no_priority_column(
+    later_priority_client, db_path
+):
+    """F222 D5, D6: by the list's places, a ticket by its card's, a bug by its own; one it
+    doesn't name after; and the Priority column is gone."""
+    _list(db_path, ["f1", "f1-97-bug", "f2"])
     html = later_priority_client.get("/tickets").text
-    rows = later_priority_rows(html)
-    tickets = [r[0] for r in rows]
-    # f1-95-low-priority (id 95) has priority 5 and comes before f1-99-later (id 99, no priority)
-    assert tickets.index("f1-95-low-priority") < tickets.index("f1-99-later")
+    assert later_ids(html) == [
+        "f1-99-later",
+        "f1-97-bug",
+        "f1-98-milestone",
+        "f1-95-low-priority",  # unlisted
+    ]
+    later = section_raw(html, "later")
+    assert "Priority" not in later and 'data-col="priority"' not in later
 
 
-def test_bug_ticket_without_priority_shows_50(later_priority_client):
-    html = later_priority_client.get("/tickets").text
-    assert dict(later_priority_rows(html))["f1-97-bug"] == "50"
+def test_the_tickets_page_shows_no_priority_number(later_client):
+    """F222 D6: neither the word nor a ``P<number>`` on ``/tickets``."""
+    words = " ".join(re.sub(r"<[^>]+>", " ", later_client.get("/tickets").text).split())
+    assert "f1-99-later" in words
+    assert "priority" not in words.lower()
+    assert not re.search(r"\bP\d+\b", words)
 
 
-def test_milestone_ticket_without_priority_shows_milestone_priority(later_priority_client):
-    html = later_priority_client.get("/tickets").text
-    assert dict(later_priority_rows(html))["f1-98-milestone"] == "10"
+def _board_client(db_path: Path) -> TestClient:
+    from factory_dashboard.app import create_app, get_now
+    from tests.factory_dashboard.conftest import write_board
+
+    conn = open_db(db_path)
+    try:
+        write_board(conn)
+    finally:
+        conn.close()
+    app = create_app(db_path, PROJECT)
+    app.dependency_overrides[get_now] = lambda: NOW
+    return TestClient(app, base_url="http://127.0.0.1:8765")
+
+
+def _in_line(html: str) -> str | None:
+    found = re.search(r'<p id="in-line"[^>]*>(.*?)</p>', html, re.S)
+    return " ".join(found[1].split()) if found else None
+
+
+def test_a_ready_ticket_says_its_card_s_place_in_line(db_path):
+    """F222 D6: above its goal, the card's place in its stage, as the board has it; a bug's
+    by its own card. None for a done, running, escalated or set-aside ticket."""
+    client = _board_client(db_path)
+    _list(db_path, ["bug-02-stale", "f23", "f24"])
+    html = client.get("/tickets/f24-03-next").text
+    assert _in_line(html) == "In line with F24, #3 in Planted"
+    assert html.index('id="in-line"') < html.index('id="result"')
+    assert _in_line(client.get("/tickets/f23-01-first").text) == "In line with F23, #2 in Planted"
+    assert _in_line(client.get("/tickets/bug-02-stale").text) == "In line, #1 in Planted"
+    for other in ("f24-01-merged", "f24-02-working", "bug-04-stuck", "f24-04-later"):
+        assert _in_line(client.get(f"/tickets/{other}").text) is None, other
+
+
+def test_a_ready_ticket_s_place_follows_a_drag(db_path):
+    """F222 D6: worked out from the list when the page opens, nothing stored on the ticket."""
+    client = _board_client(db_path)
+    _list(db_path, ["f23", "f24"])
+    assert _in_line(client.get("/tickets/f24-03-next").text) == "In line with F24, #2 in Planted"
+    _list(db_path, ["f24", "f23"])
+    assert _in_line(client.get("/tickets/f24-03-next").text) == "In line with F24, #1 in Planted"
+
+
+def test_a_set_aside_ticket_says_it_goes_to_the_end_of_the_line(db_path):
+    """F222 D6: no number on a set-aside ticket's page, nor on a queued one's."""
+    client = _board_client(db_path)
+    _list(db_path, ["f23", "f24"])
+    aside = client.get("/tickets/bug-01-duck-count").text
+    assert (
+        "Queued, it goes to the end of the line; move it on the board once it is there."
+        in unescape(section(aside, "aside"))
+    )
+    for html in (aside, client.get("/tickets/f24-03-next").text):
+        text = re.sub(r"<[^>]+>", " ", html)
+        assert "priority" not in text.lower()
+        assert not re.search(r"\bP\d+\b", text)
 
 
 def test_parse_ticket_body_extracts_goal_done_when_context():

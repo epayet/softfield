@@ -7,7 +7,7 @@ ticket and savings per milestone, as small charts (D5). The list has no tab sinc
 (f5-17): the board links to it.
 
 ``/milestones/{key}`` is the milestone's card's page (f5-17, after
-``.softfield/cards/f5-board-mockup/Card.dc.html``): its stage on the board, priority and area,
+``.softfield/cards/f5-board-mockup/Card.dc.html``): its stage on the board, place and area,
 how far it has grown, then what the page showed before, its tickets now in run order.
 """
 
@@ -33,7 +33,7 @@ from runner.config import ConfigError, project_shots
 from runner.milestone import milestone_doc
 from runner.requests import RESERVE
 from runner.shots import FAILED, LIST_FILE, NEW, SHOTS_DIR, TAKEN
-from runner.tasks import full_key, milestone_file, short_key
+from runner.tasks import TaskError, full_key, milestone_file, short_key
 
 router = APIRouter()
 
@@ -98,26 +98,14 @@ class MilestoneRow:
     review_rounds: int
     claude_dollars: float
     net_savings: float
-    priority: int | None = None  # a card not done's (f6-18)
 
 
-UNMOVED = (None, "done", "removed")  # card states without a priority to change
-
-
-def _with_priorities(
-    conn: sqlite3.Connection, project: str, rows: list[MilestoneRow]
-) -> list[MilestoneRow]:
-    """Each card not done with its priority; the others keep none."""
-    cards = {
-        row["key"]: row["priority"]
-        for row in conn.execute(
-            "SELECT m.key, m.state, m.status, m.priority FROM milestones m"
-            " JOIN projects p ON p.id = m.project_id WHERE p.name = ?",
-            (project,),
-        )
-        if row["state"] not in UNMOVED and row["status"] != "done" and row["priority"] is not None
-    }
-    return [replace(r, priority=cards[r.key]) if r.key in cards else r for r in rows]
+def _short(key: str) -> str:
+    """A milestone's short key, the queue's name for it; a key no card has, itself."""
+    try:
+        return short_key(key)
+    except TaskError:
+        return key
 
 
 def milestone_rows(
@@ -126,7 +114,7 @@ def milestone_rows(
     trends: list[queries.Trend] | None = None,
 ) -> list[MilestoneRow]:
     """Every milestone's summary, grouped and sorted: in progress first (by latest job),
-    then not started (by priority), then done (by end date)."""
+    then not started (in the queue's order, F222 D5), then done (by end date)."""
     if trends is None:
         trends = queries.trends(conn, project)
     # Lookup table for milestone status and dates.
@@ -238,9 +226,9 @@ def milestone_rows(
                 )
             )
 
-    # Merge and sort: in progress → not started → done. The priorities first: the not started
-    # sort by them, and a row has none until ``_with_priorities`` gives it.
-    all_rows = _with_priorities(conn, project, [*with_data, *no_data_rows])
+    # Merge and sort: in progress → not started → done
+    all_rows = [*with_data, *no_data_rows]
+    places = queries.board_places(conn, project)
 
     def _ip_key(r: MilestoneRow) -> tuple[int, float, str]:
         mid = milestone_ids.get(r.key)
@@ -251,9 +239,8 @@ def milestone_rows(
             ts = 0.0
         return (0, -ts, r.key)
 
-    def _ns_key(r: MilestoneRow) -> tuple[int, int, str]:
-        p = r.priority if r.priority is not None else 100
-        return (1, p, r.key)
+    def _ns_key(r: MilestoneRow) -> tuple[int, int, list[tuple[int, str]], str]:
+        return (1, queries.place(places, _short(r.key)), _natural(r.key), r.key)
 
     def _done_key(r: MilestoneRow) -> tuple[int, float, str]:
         ended = r.ended

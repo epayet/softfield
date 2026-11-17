@@ -59,7 +59,7 @@
 <section id="aside" class="panel aside{% if on_its_way %} sent{% endif %}">
   <div class="plate"><b>Set aside</b><span>.softfield/tasks/later/</span></div>
   <p class="say">This ticket won't run until you queue it.</p>
-  <p class="then">Queued, it joins the line at priority {{ later_priority }}, behind the tickets that go first; move it on the board once it is there.</p>
+  <p class="then">Queued, it goes to the end of the line; move it on the board once it is there.</p>
   {% if not on_its_way %}
   {# pressed, the plate shows on its way at once; the runner's answer lands below it #}
   <button type="button" class="go btn" id="queue" hx-post="/requests" hx-swap="innerHTML"
@@ -71,6 +71,9 @@
   <div id="ticket-aside-status"></div>
 </section>
 {% endif %}
+
+{# a ready ticket's place, worked out from the queue as the page opens (F222 D6) #}
+{% if in_line %}<p id="in-line" class="sub">{{ in_line }}</p>{% endif %}
 
 {% if parsed and (parsed.goal or parsed.done_when or parsed.context) %}
 <section id="goal" class="panel readable">

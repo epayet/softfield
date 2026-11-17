@@ -14,8 +14,9 @@ card, for its page (f5-17).
 - **A bug ticket's stage** is its ticket's state (ADR 19 item 2): set aside → seed, ready →
   planted, running or stopped → planted and started, done → harvested.
 - **Left out:** a removed card, a removed ticket, and the ``bugs`` row (a standing key).
-- **Order:** by priority, then key; harvested, the latest first, and only the latest
-  ``HARVESTED``. A card in a stage of ``PLACED`` shows its place there, ``#1``… (F15 D1).
+- **Order:** by the queue's place (``queries.board_places``, F222 D5), then key; harvested,
+  the latest first, and only the latest ``HARVESTED``. A card in a stage of ``PLACED`` shows
+  its place there, ``#1``… (F15 D1).
 - **An order on its way** (F15 D4): while the latest ``reorder`` request is open, the cards
   come in its order (the cards it doesn't name after, in theirs), and each card it puts out of
   place says where it was. Places are counted before ``q`` and ``kind`` narrow the cards.
@@ -36,7 +37,7 @@ from fastapi.responses import HTMLResponse
 from factory_dashboard.app import Db, Now, Project, render
 from factory_dashboard.line import _LONG_AGO, DEVELOPER_ROLES, _natural, _when
 from factory_dashboard.overview import Running, running_jobs
-from factory_dashboard.queries import depends_on, local, ticket_priority
+from factory_dashboard.queries import board_places, depends_on, local, place, ticket_priority
 from runner import metrics
 from runner.config import read_protected
 from runner.loop import ticket_minutes
@@ -668,13 +669,17 @@ def _cards(
 
 def milestone_card(conn: sqlite3.Connection, project: str, now: datetime, key: str) -> Card | None:
     """The card of the milestone with this full key, for its page (f5-17); None for a removed
-    one. The board keeps only the latest harvested cards; this finds any."""
-    return next((c for c in milestone_cards(conn, project, now) if c.full_key == key), None)
+    one. The board keeps only the latest harvested cards; this finds any. Its ``place`` is
+    the board's, worked out as the page opens (F222 D6)."""
+    found = placed_card(conn, project, now, key)
+    return None if found is None or found.bug else found
 
 
-def milestone_cards(conn: sqlite3.Connection, project: str, now: datetime) -> list[Card]:
-    """Every milestone's card, bugs left out, in no particular order."""
-    return [c for c, _ in _cards(conn, project, now) if not c.bug]
+def placed_card(conn: sqlite3.Connection, project: str, now: datetime, key: str) -> Card | None:
+    """The card with this full key, a milestone's or a bug ticket's, with its place in its
+    stage as the board has it (F222 D6); None when there is none."""
+    found = _placed(conn, project, _cards(conn, project, now))
+    return next((c for c, _ in found if c.full_key == key), None)
 
 
 def _order_on_its_way(conn: sqlite3.Connection, project: str) -> list[str] | None:
@@ -726,7 +731,10 @@ def _placed(
 ) -> list[tuple[Card, datetime]]:
     """The cards in the board's order, each with its place in its stage, and an open reorder's
     order with its marks (F15 D1, D4)."""
-    line = sorted(found, key=lambda c: (c[0].priority, _natural(c[0].key.lower())))
+    places = board_places(conn, project)
+    line = sorted(
+        found, key=lambda c: (place(places, c[0].key.lower()), _natural(c[0].key.lower()))
+    )
     sent = _order_on_its_way(conn, project)
     shown = line
     if sent is not None:

@@ -15,8 +15,9 @@ from fastapi import APIRouter, Query, Request
 from fastapi.responses import HTMLResponse
 
 from factory_dashboard.app import Db, Now, Project, render
+from factory_dashboard.board import WORDS, placed_card
 from factory_dashboard.planning import BlockedFacts, get_blocked_info
-from factory_dashboard.queries import ticket_priority
+from factory_dashboard.queries import board_places, place, place_key
 from runner import metrics
 from runner.requests import APPROVE_PLAN, QUEUE, SET_ASIDE
 from runner.tasks import BUGS, short_key
@@ -215,7 +216,7 @@ def list_later_tickets(
     where = " AND ".join(conditions)
 
     rows = conn.execute(
-        f"SELECT t.ticket, t.title, t.kind, t.body, m.key AS milestone, m.priority AS card "  # noqa: S608
+        f"SELECT t.ticket, t.title, t.kind, m.key AS milestone "  # noqa: S608
         "FROM tickets t "
         "JOIN projects p ON p.id = t.project_id "
         "LEFT JOIN milestones m ON m.id = t.milestone_id "
@@ -223,18 +224,12 @@ def list_later_tickets(
         f"ORDER BY t.ticket",
         tuple(params),
     ).fetchall()
-    found: list[dict[str, str | int | None]] = []
-    for row in rows:
-        priority = ticket_priority(row["body"], row["milestone"], row["card"])
-        found.append(
-            {
-                "ticket": row["ticket"],
-                "title": row["title"],
-                "kind": row["kind"],
-                "priority": priority,
-            }
-        )
-    return sorted(found, key=lambda t: (t["priority"], t["ticket"]))
+    places = board_places(conn, project)
+    # in the queue's order (F222 D5): a ticket by its card's place, a bug by its own
+    ordered = sorted(
+        rows, key=lambda r: (place(places, place_key(r["milestone"], r["ticket"])), r["ticket"])
+    )
+    return [{"ticket": r["ticket"], "title": r["title"], "kind": r["kind"]} for r in ordered]
 
 
 def list_tickets(
@@ -515,12 +510,29 @@ def _card_name(detail: TicketDetail) -> str | None:
     return f"{key.upper()}, {title[0].upper()}{title[1:]}" if title else key.upper()
 
 
+def in_line(
+    conn: sqlite3.Connection, project: str, now: datetime, detail: TicketDetail
+) -> str | None:
+    """A ready ticket's place in the queue, as the board has it when the page opens (F222 D6):
+    ``In line with F169, #1 in Planted``, a bug's by its own card. None for any other state, or
+    a card the board doesn't place."""
+    if detail.state != "ready" or not detail.milestone:
+        return None
+    bug = detail.milestone == BUGS
+    card = placed_card(conn, project, now, detail.ticket if bug else detail.milestone)
+    if card is None or not card.place:
+        return None
+    where = f"#{card.place} in {WORDS[card.stage][0]}"
+    return f"In line, {where}" if bug else f"In line with {card.key}, {where}"
+
+
 @router.get("/tickets/{ticket_id}", response_class=HTMLResponse)
 def ticket_page(
     ticket_id: str,
     request: Request,
     conn: Db,
     project: Project,
+    now: Now,
 ) -> HTMLResponse:
     detail = get_ticket(conn, project, ticket_id)
     if detail is None:
@@ -552,14 +564,12 @@ def ticket_page(
     # Set-aside info: only for tickets with state "later"
     is_later = detail.state == "later"
     on_its_way = False
-    later_priority: int | None = None
     if is_later and ticket_row:
         project_id = metrics.find_project(conn, project)
         on_its_way = project_id is not None and any(
             r["kind"] == QUEUE and r["subject"] == ticket_id
             for r in metrics.open_requests(conn, project_id)
         )
-        later_priority = ticket_priority(detail.body, detail.milestone, None)
 
     # A blocked ticket's panel (f170-04): the desk's facts, and its answer on its way
     blocked: BlockedFacts | None = None
@@ -590,7 +600,7 @@ def ticket_page(
             "agent_work": agent_work,
             "is_later": is_later,
             "on_its_way": on_its_way,
-            "later_priority": later_priority,
+            "in_line": in_line(conn, project, now, detail),
             "parsed": parsed,
             "blocked": blocked,
             "blocked_sent": blocked_sent,

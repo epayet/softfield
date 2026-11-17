@@ -10,19 +10,23 @@ from factory_dashboard import milestones, overview
 from factory_dashboard.queries import (
     SEED_DOLLARS_PER_LINE,
     Idle,
+    as_task,
+    board_places,
     clog,
     connect,
     eligibility,
+    in_run_order,
     lead_split,
     local,
     milestone_results,
     parse_review_note,
+    place,
     review_note,
     run_order,
     savings,
     trends,
 )
-from runner import metrics
+from runner import metrics, order
 from tests.factory_dashboard.conftest import CLAUDE_TOKENS, LOCAL, OPUS, PROJECT, SONNET, _job
 
 
@@ -78,13 +82,14 @@ def test_run_order_follows_the_board_not_a_feature_tickets_own_priority(tmp_path
         order = run_order(db, PROJECT)
     finally:
         db.close()
-    assert [(u.ticket, u.priority) for u in order] == [
+    # no list yet: the places the priorities give, as the runner's pick then has them
+    assert [(u.ticket, u.place) for u in order] == [
         ("f9-02-b", 0),
         ("f9-01-a", 0),
         ("f9-03-c", 0),
         ("f2-01-a", 1),
         ("bug-01-x", 2),
-        ("bug-02-y", 50),
+        ("bug-02-y", 3),
     ]
 
 
@@ -120,7 +125,65 @@ def test_run_order_puts_what_a_higher_ticket_waits_for_in_its_place(tmp_path):
         ("f132-02-b", None),
         ("f132-01-a", None),
     ]
-    assert [u.priority for u in order] == [14, 6, 4, 5, 5]  # the board's place is kept
+    assert [u.place for u in order] == [3, 2, 0, 1, 1]  # the board's place is kept
+
+
+def _queued(tmp_path: Path) -> sqlite3.Connection:
+    """F222: cards F9 (priority 0), F2 (1) and F5 (2), each with a ready ticket, and bugs
+    ``bug-01-x`` (priority 3) and ``bug-02-y``, also ready; the list names none yet."""
+    db = metrics.open_db(tmp_path / "factory-metrics.sqlite")
+    project = metrics.upsert_project(db, PROJECT)
+    bugs = metrics.upsert_milestone(db, project, "bugs")
+    for n, key in enumerate(("f9", "f2", "f5")):
+        card = metrics.upsert_milestone(db, project, key, priority=n)
+        metrics.upsert_ticket(db, project, f"{key}-01-a", milestone_id=card, state="ready")
+    for ticket in ("bug-01-x", "bug-02-y"):
+        metrics.upsert_ticket(
+            db, project, ticket, milestone_id=bugs, state="ready", body="---\npriority: 3\n---\n"
+        )
+    return db
+
+
+def test_run_order_follows_the_queue_s_list_not_the_priorities(tmp_path):
+    """F222 D5: with a list, its places order the run, whatever the priorities say, and
+    what it doesn't name comes after all it names, by card then id, as the runner's pick."""
+    db = _queued(tmp_path)
+    project = metrics.find_project(db, PROJECT)
+    assert project is not None
+    metrics.set_board_order(db, project, ["bug-02-y", "f5", "f9"])
+    try:
+        order = run_order(db, PROJECT)
+        places = board_places(db, PROJECT)
+    finally:
+        db.close()
+    assert [(u.ticket, u.place) for u in order] == [
+        ("bug-02-y", 0),
+        ("f5-01-a", 1),
+        ("f9-01-a", 2),
+        ("bug-01-x", 3),  # unlisted: after all it names, a bug before a card
+        ("f2-01-a", 3),
+    ]
+    assert places == {"bug-02-y": 0, "f5": 1, "f9": 2}
+    assert place(places, "f2") == 3
+
+
+def test_run_order_is_the_runner_s_dry_run_on_the_same_list(tmp_path):
+    """F222 D5: the pages' order is the one the runner's pick gives from ``order.txt``."""
+    db = _queued(tmp_path)
+    project = metrics.find_project(db, PROJECT)
+    assert project is not None
+    listed = ["f2", "bug-01-x", "f9"]
+    metrics.set_board_order(db, project, listed)
+    try:
+        shown = [u.ticket for u in run_order(db, PROJECT)]
+    finally:
+        db.close()
+    ready = [
+        as_task(t, "bugs" if t.startswith("bug") else t[:2], ())
+        for t in ("f9-01-a", "f2-01-a", "f5-01-a", "bug-01-x", "bug-02-y")
+    ]
+    picked, _ = in_run_order(ready, set(), set(), order.places(listed, ready))
+    assert shown == [t.id for t in picked]
 
 
 def test_run_order_of_an_empty_queue(db):

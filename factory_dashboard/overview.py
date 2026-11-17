@@ -203,11 +203,10 @@ def queue(
     now: datetime,
 ) -> list[Queued]:
     """Tickets whose dependencies are all done first, then the waiting ones, in
-    the order ``pick_next`` would take them (priority first, f6-18).  Tickets with a running
-    job are excluded."""
+    the order ``pick_next`` would take them (the queue's place first, F222 D5).  Tickets with
+    a running job are excluded."""
     rows = conn.execute(
-        "SELECT t.ticket, t.title, t.kind, t.difficulty, t.depends_on, t.body,"
-        " m.key AS milestone, m.priority AS card"
+        "SELECT t.ticket, t.title, t.kind, t.difficulty, t.depends_on, m.key AS milestone"
         " FROM tickets t"
         " JOIN projects p ON p.id = t.project_id"
         " LEFT JOIN milestones m ON m.id = t.milestone_id"
@@ -242,9 +241,7 @@ def queue(
         ).fetchall()
     }
     done = {tid for tid, st in all_states.items() if st == "done"}
-    priority = {
-        r["ticket"]: queries.ticket_priority(r["body"], r["milestone"], r["card"]) for r in rows
-    }
+    places = queries.board_places(conn, project)
     found: list[Queued] = []
     for r in rows:
         if r["ticket"] in running:
@@ -276,7 +273,8 @@ def queue(
     waiting = [q for q in found if q.waits_for is not None]
 
     def order(q: Queued) -> tuple[int, tuple[str, int], str]:
-        return priority[q.ticket], milestone_order(q.milestone or "m0"), q.ticket
+        own = queries.place(places, queries.place_key(q.milestone, q.ticket))
+        return own, milestone_order(q.milestone or "m0"), q.ticket
 
     return sorted(ready_now, key=order) + sorted(waiting, key=order)
 
@@ -986,8 +984,8 @@ def _live_context(
     lane = [
         {
             **r,
-            "card": (card := short_key(str(r["milestone"])).upper()),
-            "on_its_way": card in asked_in,
+            "card": r.get("card") or short_key(str(r["milestone"])).upper(),
+            "on_its_way": short_key(str(r["milestone"])).upper() in asked_in,
         }
         for r in lane[:3]
     ]

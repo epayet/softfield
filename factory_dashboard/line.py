@@ -43,7 +43,7 @@ from factory_dashboard.jobs import _failed_gate
 from factory_dashboard.overview import LIVE, live_runs
 from runner import dispatch, loop, metrics
 from runner.config import Config, load_config
-from runner.tasks import milestone_order, short_key
+from runner.tasks import BUGS, milestone_order, short_key
 
 if TYPE_CHECKING:
     from factory_dashboard.board import Board  # board.py imports from here
@@ -681,7 +681,8 @@ def live_line(
             "kind": _kind(u.kind),
             "milestone": u.milestone,
             "waits": list(u.waits),
-            "priority": u.priority,
+            # what Next in line says in place of a number: the ticket's card, or ``bug`` (F222 D6)
+            "card": "bug" if u.milestone == BUGS else short_key(u.milestone or "m0").upper(),
             "early_for": u.early_for,
         }
         for u in upcoming

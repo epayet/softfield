@@ -266,19 +266,41 @@ def _row_cells(html: str, key: str) -> tuple[list[str], str]:
     raise AssertionError(f"no row {key}")
 
 
-def test_each_milestone_not_done_shows_its_priority_and_no_arrows(milestones_client, db_path):
-    """F15 D8: the board is the one place to reorder, so the list only shows each card's
-    priority; a done milestone, or one with no card, shows –."""
+def test_the_list_has_no_priority_column_and_no_arrows(milestones_client, db_path):
+    """F15 D8: the board is the one place to reorder; F222 D6: no Priority column either."""
     _cards(db_path)
     html = milestones_client.get("/milestones").text
-    assert "<th>Priority</th>" in html or '<th class="num">Priority</th>' in html
-    assert "move-button" not in html and '"priority"' not in html
-    for key, priority in (("F2", "5"), ("F10", "100"), ("F1", "–"), ("M4", "–")):
+    assert "Priority" not in html and '"priority"' not in html
+    assert "move-button" not in html
+    for key in ("F2", "F10", "F1", "M4"):
         cells, row = _row_cells(html, key)
-        assert cells[-1] == priority, key
+        assert cells[-1].startswith("$") or cells[-1].startswith("-$"), key  # Net $ ends it
         assert "<button" not in row and "hx-post" not in row, key
-    # the columns before it are as they were
+    # the other columns are as they were
     assert _row_cells(html, "F1")[0][:4] == ["F1", "The factory measures itself", "done", "3"]
+    words = " ".join(re.sub(r"<[^>]+>", " ", html).split())
+    assert "priority" not in words.lower() and not re.search(r"\bP\d+\b", words)
+
+
+def test_cards_not_started_follow_the_queue_s_list(milestones_client, db_path):
+    """F222 D5: not started, in the list's order, whatever the priorities say."""
+    _cards(db_path)
+    conn = metrics.open_db(db_path)
+    try:
+        project = conn.execute("SELECT id FROM projects WHERE name = ?", (PROJECT,)).fetchone()[0]
+        metrics.upsert_milestone(conn, project, "f11", state="idea", priority=50)
+        metrics.upsert_milestone(conn, project, "f12", state="idea", priority=1)
+    finally:
+        conn.close()
+
+    def shown() -> list[str]:
+        html = milestones_client.get("/milestones").text
+        keys = re.findall(r'<td class="id"><a href="/milestones/([a-z0-9-]+)', html)
+        return [k for k in keys if k in ("f11", "f12")]
+
+    assert shown() == ["f12", "f11"]  # no list yet: the priorities' order
+    _list(db_path, ["f11", "f12"])
+    assert shown() == ["f11", "f12"]
 
 
 def test_an_empty_milestone_with_no_state_and_no_tickets_is_not_in_the_list(db_path):
@@ -532,23 +554,54 @@ def _ticket_rows(page: str) -> list[list[str]]:
     return [c for c in cells if c]
 
 
-def test_the_header_shows_the_card_s_stage_priority_and_area(card_client):
+def _list(db_path, keys: list[str]) -> None:
+    """The queue's list, as the runner copies it to ``board_order`` (F222 D5)."""
+    conn = metrics.open_db(db_path)
+    try:
+        metrics.set_board_order(conn, metrics.upsert_project(conn, PROJECT), keys)
+    finally:
+        conn.close()
+
+
+def test_the_header_shows_the_card_s_stage_place_and_area(card_client, board_db):
+    """F222 D6: the place the board gives it in its stage, from the list, never a priority."""
+    _list(board_db, ["bug-02-stale", "f23", "f24", "f20"])
     head = _card_head(card_client.get("/milestones/f24-growing").text)
     assert head.startswith("F24 · f24-growing Growing")  # its keys, then its title
     # a ticket started (F154 D1): Planted, growing, and no ``started`` stored to date it
-    assert "Stage Planted: in line for the factory · growing Priority" in head
-    assert "Priority P1" in head
-    assert "Area factory" in head
+    assert "Stage Planted: in line for the factory · growing Place" in head
+    assert "Place #3 in Planted Area factory" in head
     assert "Tickets 1 of 5 done · 1 set aside" in head
 
     planted = _card_head(card_client.get("/milestones/f23-planted").text)
-    assert "Stage Planted: in line for the factory Priority" in planted  # none started
+    assert "Stage Planted: in line for the factory Place #2 in Planted" in planted
 
     seed = _card_head(card_client.get("/milestones/f20-duck-pond").text)
     assert "Stage Seed: an idea, or a ticket set aside" in seed
-    assert "Priority P30" in seed
+    assert "Place #1 in Seed" in seed
     assert "Area product" in seed
     assert "Tickets none yet" in seed
+
+    sprouting = _card_head(card_client.get("/milestones/f22-research").text)
+    assert re.search(r"Place #\d in Sprouting", sprouting)
+
+
+def test_a_ripe_or_harvested_card_has_no_place(card_client):
+    for key in ("f1", "m3"):
+        head = _card_head(card_client.get(f"/milestones/{key}").text)
+        assert "Place" not in head, key
+
+
+def test_a_card_s_place_follows_a_drag_and_no_number_shows(card_client, board_db):
+    """F222 D6: worked out from the list as the page opens; no priority anywhere."""
+    _list(board_db, ["f23", "f24"])
+    assert "Place #2 in Planted" in _card_head(card_client.get("/milestones/f24-growing").text)
+    _list(board_db, ["f24", "f23"])
+    page = card_client.get("/milestones/f24-growing").text
+    assert "Place #1 in Planted" in _card_head(page)
+    words = _words(page)
+    assert "priority" not in words.lower()
+    assert not re.search(r"\bP\d+\b", words)
 
 
 def test_the_header_s_stage_is_the_board_s_not_the_doc_s_status(card_client, board_db):

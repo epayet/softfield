@@ -853,7 +853,7 @@ class Upcoming:
     kind: str | None
     milestone: str | None
     waits: tuple[str, ...]  # its dependencies not merged yet
-    priority: int = DEFAULT_PRIORITY  # as the runner reads it (f6-18)
+    place: int = 0  # its card's (or bug's) place in the queue, 0 first, as the runner reads it
     early_for: str | None = None  # the ticket it runs early for: that one waits for it (F173 D7)
 
     @property
@@ -864,6 +864,51 @@ class Upcoming:
 def depends_on(ticket: sqlite3.Row) -> tuple[str, ...]:
     """A ticket row's ``depends_on`` (JSON), as a tuple."""
     return tuple(json.loads(ticket["depends_on"])) if ticket["depends_on"] else ()
+
+
+def place_key(milestone: str | None, ticket: str) -> str:
+    """The key a ticket row is placed by in the queue (`runner.order.place_key`): a bug's own
+    id, else its card's short key."""
+    return ticket if milestone == BUGS else short_key(milestone or "m0")
+
+
+def board_places(conn: sqlite3.Connection, project: str) -> dict[str, int]:
+    """The queue's order (F222 D5): each card's short key (``f222``) and bug ticket's id
+    mapped to its place, 0 first, from ``board_order``, the copy of ``.softfield/order.txt``
+    the runner keeps. `place` puts what the list doesn't name after all it names. A project
+    with no list yet orders as the runner's pick then does: by the cards' and bugs' priorities
+    (removed with the field, F222 D8)."""
+    rows = conn.execute(
+        "SELECT b.key FROM board_order b JOIN projects p ON p.id = b.project_id"
+        " WHERE p.name = ? ORDER BY b.place",
+        (project,),
+    ).fetchall()
+    if rows:
+        return {row["key"]: n for n, row in enumerate(rows)}
+    keyed: list[tuple[int, tuple[str, int], str]] = []
+    for m in conn.execute(
+        "SELECT m.key, m.priority FROM milestones m JOIN projects p ON p.id = m.project_id"
+        " WHERE p.name = ? AND m.key != ?",
+        (project, BUGS),
+    ):
+        try:
+            order = milestone_order(m["key"])
+        except TaskError:
+            continue
+        own = DEFAULT_PRIORITY if m["priority"] is None else m["priority"]
+        keyed.append((own, order, short_key(m["key"])))
+    for t in conn.execute(
+        "SELECT t.ticket, t.body FROM tickets t JOIN projects p ON p.id = t.project_id"
+        " JOIN milestones m ON m.id = t.milestone_id WHERE p.name = ? AND m.key = ?",
+        (project, BUGS),
+    ):
+        keyed.append((ticket_priority(t["body"], BUGS, None), milestone_order(BUGS), t["ticket"]))
+    return {key: n for n, (_, _, key) in enumerate(sorted(keyed))}
+
+
+def place(places: Mapping[str, int], key: str) -> int:
+    """``key``'s place in ``places`` (`board_places`); after all it names when unnamed."""
+    return places.get(key, len(places))
 
 
 def ticket_priority(body: str | None, milestone: str | None, card: int | None) -> int:
@@ -926,10 +971,11 @@ def run_order(
     """The project's ``ready`` tickets in the order the runner will take them, each with the
     dependencies it still waits for (none: ready now); those it can't take yet come last.
     ``states`` overrides tickets' states (the line at a past moment, f3-06). Each has its
-    priority, which orders them as it does the runner's pick (f6-18)."""
+    card's (or bug's) place in the queue (`board_places`), which orders them as it does the
+    runner's pick (F222 D5)."""
     rows = conn.execute(
-        "SELECT t.ticket, t.title, t.kind, t.state, t.depends_on, t.body, m.key AS milestone,"
-        " m.priority AS card FROM tickets t JOIN projects p ON p.id = t.project_id"
+        "SELECT t.ticket, t.title, t.kind, t.state, t.depends_on, m.key AS milestone"
+        " FROM tickets t JOIN projects p ON p.id = t.project_id"
         " LEFT JOIN milestones m ON m.id = t.milestone_id WHERE p.name = ?",
         (project,),
     ).fetchall()
@@ -937,20 +983,10 @@ def run_order(
     done = {r["ticket"] for r in rows if state[r["ticket"]] == "done"}
     stopped = {r["ticket"] for r in rows if state[r["ticket"]] in STOPPED_STATES}
     ready = {r["ticket"]: r for r in rows if state[r["ticket"]] == "ready"}
-    tasks = [
-        as_task(
-            r["ticket"],
-            r["milestone"],
-            depends_on(r),
-            ticket_priority(r["body"], r["milestone"], r["card"]),
-        )
-        for r in ready.values()
-    ]
-    cards = {  # each feature ticket's priority is its card's place
-        short_key(t.milestone): t.priority
-        for t in tasks
-        if t.milestone != BUGS and t.priority is not None
-    }
+    tasks = [as_task(r["ticket"], r["milestone"], depends_on(r)) for r in ready.values()]
+    places = board_places(conn, project)
+    # as `runner.order.places` gives the pick: every ready ticket's key has a place
+    cards = {key: place(places, key) for key in (place_key(t.milestone, t.id) for t in tasks)}
     picked, left = in_run_order(tasks, done, stopped, cards)
     pulled = pulls(tasks, cards)
     return [
@@ -960,7 +996,7 @@ def run_order(
             kind=ready[t.id]["kind"],
             milestone=ready[t.id]["milestone"],
             waits=tuple(d for d in t.depends_on if d not in done),
-            priority=_task_priority(t, cards),
+            place=_task_priority(t, cards),
             early_for=early_for(t, cards, pulled),
         )
         for t in [*picked, *left]

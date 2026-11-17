@@ -710,6 +710,36 @@ def test_cards_within_a_stage_come_in_priority_order_then_by_key(board_db):
     assert keys(found, "ripe") == ["F1", "M4"]  # both 100
 
 
+def _listed(*keys: str) -> Callable[[sqlite3.Connection, int], None]:
+    """The queue's list, as the runner copies it to ``board_order`` (F222 D5)."""
+
+    def change(conn: sqlite3.Connection, p: int) -> None:
+        metrics.set_board_order(conn, p, list(keys))
+
+    return change
+
+
+def test_cards_within_a_stage_follow_the_queue_s_list_not_the_priorities(board_db):
+    """F222 D5: the list's places order every stage, whatever the priorities say; a card it
+    doesn't name comes after all it names, by key."""
+    write(board_db, _listed("f25", "bug-04-stuck", "f23", "f21", "bug-01-duck-count", "f24"))
+    found = read(board_db)
+    assert keys(found, "planted") == [
+        "F25",
+        "bug-04-stuck",
+        "F23",
+        "F24",
+        "bug-02-stale",  # unlisted: after, by key
+        "bug-03-working",
+    ]
+    assert [c.place for c in found.stages["planted"]] == [1, 2, 3, 4, 5, 6]
+    assert keys(found, "sprouting") == ["F21", "F22"]
+    assert keys(found, "seed") == ["bug-01-duck-count", "F20"]
+    # a drag rewrites the list: the board follows, nothing stored on a card
+    write(board_db, _listed("f24", "f23"))
+    assert keys(read(board_db), "planted")[:2] == ["F24", "F23"]
+
+
 def _planted(*cards: tuple[str, int]) -> Callable[[sqlite3.Connection, int], None]:
     """More planted cards, each with its priority."""
 
