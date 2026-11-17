@@ -894,6 +894,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** the direction itself put a protected test file in the developer's ticket, and pre-flight let it through. bug-64 makes pre-flight refuse that. Lesson: when a change spills into existing tests, look for a fixture before editing them.
 - **Decisions affected:** none.
 
+### F252 (2026-11-17): the Projects page's Open button opens a new tab ([review](../reviews/f252-make-the-open-app-with-docker.md))
+
+- **Q1:** one ticket. Qwen merged it on attempt 1 in 12 minutes (4 steps). No checkpoint ran. Review round 1: no findings. Score 9.
+- **Q3:** all Qwen's. See the review's numbers.
+- **Q5:** see the review's numbers.
+- **Anything else:** F249's lesson applied. The plan named the existing assertion that stated the old rule (`'target="_blank"' not in row`) and told the ticket to turn it around, and Qwen did exactly that. The ticket waited about 3 h in the queue behind larger cards for 12 minutes of work.
+- **Decisions affected:** none.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.
