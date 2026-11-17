@@ -9,9 +9,9 @@ bug that is done or gone orders nothing.
 from collections.abc import Iterable, Sequence
 from pathlib import Path
 
-from runner.tasks import BUGS, Task, short_key
+from runner.tasks import ORDER_FILE, Task, place_key
 
-ORDER_FILE = ".softfield/order.txt"
+__all__ = ["ORDER_FILE", "order_path", "order_text", "place_key", "places", "read_order"]
 
 
 def order_path(repo: Path) -> Path:
@@ -33,13 +33,8 @@ def order_text(keys: Iterable[str]) -> str:
     return "".join(f"{key}\n" for key in keys)
 
 
-def place_key(task: Task) -> str:
-    """The key that places ``task`` on the list: a bug's own id, else its card's short key."""
-    return task.id if task.milestone == BUGS else short_key(task.milestone)
-
-
 def places(keys: Sequence[str], tasks: Iterable[Task]) -> dict[str, int]:
     """Each task's `place_key` mapped to its place on the list, 0 first; one the list doesn't
-    name gets a place after all it names. The map `runner.tasks.task_priority` reads."""
+    name gets a place after all it names. The map `runner.tasks.task_place` reads."""
     listed = {key: n for n, key in enumerate(keys)}
     return {place_key(t): listed.get(place_key(t), len(keys)) for t in tasks}

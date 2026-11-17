@@ -38,7 +38,6 @@ from runner.tasks import (
     preflight,
     short_key,
     split_frontmatter,
-    task_priority,
 )
 
 SIGNOFF = "signoff"  # subject: the milestone key
@@ -52,7 +51,6 @@ APPROVE_PLAN = "approve_plan"  # subject: the thread; its plan and its merges (f
 FIRST = "first"  # an approval's value: the card also goes first, in the fast lane (F224)
 PLANT = "plant"  # value: {title, thoughts, area}; or subject: general/<seed id>, value: {area}
 DROP_SEED = "drop_seed"  # subject: the idea card's short key; no value (f6-17)
-PRIORITY = "priority"  # subject: a ticket in ready/ or later/, or a card; value: N (f6-18)
 ARCHIVE = "archive"  # subject: the thread; value: on or off (the owner, 2026-10-07)
 PAUSE = "pause"  # no subject, no value (f5-18); the runner's usage event while it holds too
 RESUME = "resume"
@@ -65,11 +63,13 @@ REORDER = "reorder"  # order (F15 D3)
 PROJECT_ORDER = "project_order"  # value: a JSON list of project names, first first (ADR 30)
 _STATE_ONLY = (RESERVE, PAUSE, RESUME)  # they change state.json alone: a wait takes them
 _APPROVALS = (ACCEPT_ADR, APPROVE_PLAN)  # they commit on main: the only way drafts reach it
-_COMMITS = (SIGNOFF, QUEUE, SET_ASIDE, PLANT, DROP_SEED, PRIORITY, REORDER, REJECT, *_APPROVALS)
+_COMMITS = (SIGNOFF, QUEUE, SET_ASIDE, PLANT, DROP_SEED, REORDER, REJECT, *_APPROVALS)
 _PROPOSAL_ID_RE = re.compile(r"[\w.-]{1,64}")
 _SWITCHED = ("on", "off")
 QUEUED_FOR_THE_LEAD = "queued for the lead"
-CARD_PLACE = "a ticket runs in its card's place: move the card on the board"  # F173 D3
+# f6-18's ``priority`` request, gone with the number (ADR 45): one still waiting is refused
+_RETIRED_PRIORITY = "priority"
+NO_PRIORITY = "there is no priority any more: the board orders the work, so move it on the board"
 _PLAIN = ("100644", "100755", "000000")  # a draft's mode: a file, or none (deleted)
 _MAX_DIFF = 1000  # parse_task needs one; pre-flight doesn't read it
 # The kinds that carry the owner's words (F31 D9). Their value may name, as `again`, the refused
@@ -1220,9 +1220,7 @@ def _plant(
         git.run("reset", "-q", "--", rel, check=False)
         path.unlink(missing_ok=True)
         raise
-    metrics.upsert_milestone(
-        conn, project_id, full, title=title, state=found.state, priority=found.priority, area=area
-    )
+    metrics.upsert_milestone(conn, project_id, full, title=title, state=found.state, area=area)
     if subject or not planner.asks(value):  # a seed the lead wrote, or one the owner sends later
         return f"planted {rel}"
     # "Plant and ask the lead": the owner's words are also the card thread's first message, so
@@ -1434,21 +1432,12 @@ def _change(conn: sqlite3.Connection, project_id: int, now: datetime, row: sqlit
     return CHANGED
 
 
-# --- reprioritising: a ticket's or a card's priority, from the dashboard (f6-18) --------------
+# --- the files a request commits -------------------------------------------------------------
 
 _TICKET_ID_RE = re.compile(r"(?:[a-z]+\d+|bug)-\d+(?:-[a-z0-9]+)*")  # not a card's key
 _MAX_ID = 120
 _MOVABLE = ("ready", LATER)  # the folders whose tickets the owner reorders
-_TICKET_PRIORITY_RE = re.compile(r"^priority:.*$", re.MULTILINE)
-_CARD_PRIORITY_RE = re.compile(r"(\*\*Priority:\*\*[ \t]*)\d+")
 _CARD_STATE_RE = re.compile(r"\*\*State:\*\*[ \t]*[^·*\n]*[^·*\n \t]")
-
-
-def _whole(value: object) -> int:
-    text = str(value) if type(value) is int else value
-    if not (isinstance(text, str) and text.isascii() and text.isdigit() and len(text) <= 6):
-        raise planner.PlannerError(f"a priority is a whole number from 0, not {value!r}")
-    return int(text)
 
 
 def _commit_files(git: Git, texts: Mapping[Path, str], message: str) -> None:
@@ -1480,112 +1469,80 @@ def _commit_file(git: Git, path: Path, text: str, message: str) -> None:
     _commit_files(git, {path: text}, message)
 
 
-def _ticket_with(text: str, priority: int) -> str:
-    """A ticket's text with its frontmatter's ``priority:`` set, added last when it has none."""
-    head, sep, body = text.removeprefix("---\n").partition("\n---\n")
-    if _TICKET_PRIORITY_RE.search(head):
-        head = _TICKET_PRIORITY_RE.sub(f"priority: {priority}", head, count=1)
-    else:
-        head = f"{head}\npriority: {priority}"
-    return f"---\n{head}{sep}{body}"
+# --- the numbers the list replaced (F222 D4, D8): read once by the move, then removed ----------
+
+_OLD_CARD_NUMBER_RE = re.compile(r"\*\*Priority:\*\*[ \t]*(\d+)\b")
+# A card header's number with the " · " that joins it to the field before it, or after it, or
+# on a quoted line of its own: what the move removes, and nothing else
+_CARD_NUMBER_FIELD_RES = (
+    re.compile(r"[ \t]*·[ \t]*\*\*Priority:\*\*[ \t]*\d+\b"),
+    re.compile(r"\*\*Priority:\*\*[ \t]*\d+\b[ \t]*·[ \t]*"),
+    re.compile(r"^>[ \t]*\*\*Priority:\*\*[ \t]*\d+\b[ \t]*\n", re.MULTILINE),
+)
+_TICKET_NUMBER_LINE_RE = re.compile(r"priority:")
+_OLD_CARD, _OLD_BUG = 100, 50  # the numbers a card or bug had when it said none (f5 D4, D5)
 
 
-def _card_with(doc: str, priority: int) -> str:
-    """A card's milestone doc with its header's Priority set: in place, else after its state,
-    else on a line of its own under the title (as ``planner.ready_card``)."""
+def _split_header(doc: str) -> tuple[str, str]:
+    """A card's doc as its header (above its first ``## `` section) and the rest."""
     section = re.search(r"^## ", doc, re.MULTILINE)
     end = section.start() if section else len(doc)
-    header, body = doc[:end], doc[end:]
-    said = f"**Priority:** {priority}"
-    if _CARD_PRIORITY_RE.search(header):
-        return _CARD_PRIORITY_RE.sub(lambda m: f"{m.group(1)}{priority}", header, count=1) + body
-    if (state := _CARD_STATE_RE.search(header)) is not None:
-        return f"{header[: state.end()]} · {said}{header[state.end() :]}{body}"
-    title, _, rest = doc.partition("\n")
-    return f"{title}\n\n> {said}\n{rest}"
+    return doc[:end], doc[end:]
 
 
-def _ticket_priority(
-    repo: Path,
-    conn: sqlite3.Connection,
-    project_id: int,
-    state: State,
-    ticket: str,
-    priority: int,
-) -> str:
-    """A bug ticket's ``priority:``, for one in .softfield/tasks/ready/ or .softfield/tasks/later/
-    that isn't running; the dashboard's row gets its new text at once. A feature ticket runs in
-    its card's place, so its priority is refused (F173 D3)."""
-    if ticket == (state.in_flight or {}).get("ticket"):
-        return f"{ticket} is running: its priority stays"
-    found = sorted((repo / ".softfield" / "tasks").glob(f"*/{ticket}.md"))
-    path = next((p for p in found if p.parent.name in _MOVABLE), None)
-    if path is None:
-        if found:
-            return f"{ticket} is in .softfield/tasks/{found[0].parent.name}/: its priority stays"
-        return f"{ticket} is no ticket in .softfield/tasks/ready/ or .softfield/tasks/later/"
-    task = parse_task(path, _MAX_DIFF)
-    if task.milestone != BUGS:
-        return CARD_PLACE
-    was = task_priority(task, {})
-    if was == priority:
-        return f"priority of {ticket} is {priority} already"
-    changed = _ticket_with(path.read_text(encoding="utf-8"), priority)
-    if split_frontmatter(changed)[0].get("priority") != priority:
-        return f"{ticket}'s frontmatter can't take a priority: not changed"
-    _commit_file(Git(repo), path, changed, f"{ticket}: priority {was} → {priority}, by the owner")
-    row = conn.execute(
-        "SELECT 1 FROM tickets WHERE project_id = ? AND ticket = ?", (project_id, ticket)
-    ).fetchone()
-    if row is not None:  # else the next sync makes it
-        metrics.upsert_ticket(conn, project_id, ticket, body=changed)
-    return f"priority of {ticket} set to {priority}"
+def _old_number(placed: "_Placed") -> int:
+    """The number a card's header or a bug's frontmatter said before the list (100 and 50 when
+    none), for the move alone to keep today's order (F222 D4): nothing else reads it."""
+    if placed.card is not None:
+        said = _OLD_CARD_NUMBER_RE.search(_split_header(placed.text)[0])
+        return int(said.group(1)) if said else _OLD_CARD
+    try:
+        value = split_frontmatter(placed.text)[0].get("priority")
+    except (ValueError, yaml.YAMLError):
+        value = None
+    return value if type(value) is int and value >= 0 else _OLD_BUG
 
 
-def _card_priority(
-    repo: Path, conn: sqlite3.Connection, project_id: int, subject: object, priority: int
-) -> str:
-    """A card's header Priority, for a card not done; the board's row gets it at once."""
-    thread = planner.thread_key(subject)
-    name = planner.thread_name(thread)
-    if thread == planner.GENERAL:
-        return f"{name} has no priority"
-    doc = milestone_file(repo, "cards", full_key(repo, thread))
-    if not doc.is_file():
-        return f"{name} has no card in .softfield/cards/: its priority stays"
-    text = doc.read_text(encoding="utf-8")
-    found = milestone.card(doc.stem, text)
-    if found.state == "done":
-        return f"{name} is done: its priority stays"
-    if found.priority == priority:
-        return f"priority of {name} is {priority} already"
-    changed = _card_with(text, priority)
-    if milestone.card(doc.stem, changed) != replace(found, priority=priority):
-        return f"{name}'s header can't take a priority: not changed"
-    message = f"{name}: priority {found.priority} → {priority}, by the owner"
-    _commit_file(Git(repo), doc, changed, message)
-    metrics.upsert_milestone(conn, project_id, milestone_key(doc.stem), priority=priority)
-    return f"priority of {name} set to {priority}"
+def _card_unnumbered(path: Path, doc: str) -> str | None:
+    """The card's doc without its header's ``**Priority:** N``, and nothing else changed (its
+    card reads the same); None when it says none, or when it can't be taken out cleanly."""
+    header, body = _split_header(doc)
+    if _OLD_CARD_NUMBER_RE.search(header) is None:
+        return None
+    for field in _CARD_NUMBER_FIELD_RES:
+        changed = field.sub("", header, count=1)
+        if changed != header:
+            break
+    else:
+        return None
+    unchanged = milestone.card(path.stem, changed + body) == milestone.card(path.stem, doc)
+    left = _OLD_CARD_NUMBER_RE.search(changed) is not None
+    return changed + body if unchanged and not left else None
 
 
-def _priority(
-    repo: Path,
-    conn: sqlite3.Connection,
-    project_id: int,
-    state: State,
-    subject: object,
-    value: object,
-) -> str:
-    """The owner reorders the work (f6-18): a bug ticket's ``priority:`` or a card's header
-    Priority set, in a commit of its own, for the next pick to follow. Refused, main
-    unchanged, for a ticket done or running, a card done, or a value that isn't a whole
-    number from 0."""
-    if not subject:
-        return "a priority request names a ticket or a card"
-    priority = _whole(value)
-    if isinstance(subject, str) and len(subject) <= _MAX_ID and _TICKET_ID_RE.fullmatch(subject):
-        return _ticket_priority(repo, conn, project_id, state, subject, priority)
-    return _card_priority(repo, conn, project_id, subject, priority)
+def _bug_unnumbered(text: str) -> str | None:
+    """The bug ticket without its frontmatter's ``priority:`` line, and nothing else changed;
+    None when it has none, or when it can't be taken out cleanly."""
+    head, sep, body = text.removeprefix("---\n").partition("\n---\n")
+    lines = head.split("\n")
+    kept = [line for line in lines if not _TICKET_NUMBER_LINE_RE.match(line)]
+    if len(kept) == len(lines) or not sep:
+        return None
+    changed = "---\n" + "\n".join(kept) + sep + body
+    try:
+        before, after = split_frontmatter(text), split_frontmatter(changed)
+    except (ValueError, yaml.YAMLError):
+        return None
+    meta = {key: value for key, value in before[0].items() if key != "priority"}
+    return changed if after == (meta, before[1]) else None
+
+
+def _unnumbered(placed: "_Placed") -> str | None:
+    """The card's doc or bug ticket without its number (F222 D8), or None (`_card_unnumbered`,
+    `_bug_unnumbered`)."""
+    if placed.card is not None:
+        return _card_unnumbered(placed.path, placed.text)
+    return _bug_unnumbered(placed.text)
 
 
 # --- reorder: the board's whole order, sent once (F15 D3, D5, D10) ----------------------------
@@ -1594,17 +1551,16 @@ REPLACED = "replaced by a later order"
 _REORDER_VALUE = "a reorder is a JSON list of card keys and bug ticket ids, first in line first"
 _SHORT_KEY_RE = re.compile(r"[a-z]+\d+")
 
-type _Tie = tuple[tuple[str, int], str]  # what `run_order` sorts by after the priority
+type _Tie = tuple[tuple[str, int], str]  # what orders one the list doesn't name: milestone, id
 
 
 @dataclass(frozen=True)
 class _Placed:
-    """An open card or bug ticket on the board: the file its priority is in, the priority, and
-    what orders it among equals."""
+    """An open card or bug ticket on the board: its file, that file's text, and what orders it
+    when the list doesn't name it."""
 
     path: Path
     text: str
-    priority: int
     tie: _Tie
     card: milestone.Card | None = None  # a bug ticket has none
 
@@ -1626,7 +1582,7 @@ def _board(repo: Path, state: State) -> dict[str, _Placed]:
         card = milestone.card(path.stem, text)
         if card.state != "done":
             tie = (milestone_order(key), "")
-            found.setdefault(short_key(key), _Placed(path, text, card.priority, tie, card))
+            found.setdefault(short_key(key), _Placed(path, text, tie, card))
     running = (state.in_flight or {}).get("ticket")
     for folder in _MOVABLE:
         for path in sorted((repo / ".softfield" / "tasks" / folder).glob("bug-*.md")):
@@ -1638,7 +1594,7 @@ def _board(repo: Path, state: State) -> dict[str, _Placed]:
                 continue
             text = path.read_text(encoding="utf-8")
             tie = (milestone_order(BUGS), task.id)
-            found.setdefault(task.id, _Placed(path, text, task_priority(task, {}), tie))
+            found.setdefault(task.id, _Placed(path, text, tie))
     return found
 
 
@@ -1654,10 +1610,11 @@ def _open_bug(repo: Path, key: str) -> bool:
 def _current(repo: Path, board: Mapping[str, _Placed]) -> list[str]:
     """The open cards and bugs in the order the pick takes them now: the queue's list without
     a line for one done or gone, then what it doesn't name by card number, then ticket id
-    (ADR 45 item 2); with no list, by their numbers, as ``run_order`` sorts them."""
+    (ADR 45 item 2); with no list yet, by the numbers it replaced (`_old_number`), as the pick
+    took them before it, for the move to keep that order."""
     listed = order.read_order(repo)
     if listed is None:
-        return sorted(board, key=lambda key: (board[key].priority, board[key].tie))
+        return sorted(board, key=lambda key: (_old_number(board[key]), board[key].tie))
     kept = [key for key in listed if key in board or _open_bug(repo, key)]
     named = set(kept)
     return kept + sorted((key for key in board if key not in named), key=lambda k: board[k].tie)
@@ -1712,95 +1669,55 @@ def _queue_last(
 
 QUEUED_LAST = "the queued bug goes last on the board, by the owner"
 MOVED = "the board's order, kept in .softfield/order.txt from now on (F222)"
+UNNUMBERED = "the priority numbers leave the open cards and bugs: the board orders the work (F222)"
 
 
 def move_to_list(repo: Path) -> list[str]:
-    """F222 D4, once per project, as the runner's pick applies the owner's requests (just
-    before `apply_requests`, so a reorder reads the list): with no queue list and an open
-    card, the list written in the order the pick takes the work today (`_current`), in a
-    commit of that file alone, on main only. Nothing with no open card, and nothing again once
-    there is a list. The caller copies the list to ``board_order``."""
+    """F222 D4 and D8, as the runner's pick applies the owner's requests (just before
+    `apply_requests`, so a reorder reads the list), on main only, in one commit: with no queue
+    list and an open card or a number to remove, the list written in the order the pick took
+    the work by those numbers (`_current`); and each open card's header ``**Priority:** N`` and
+    each bug's ``priority:`` in .softfield/tasks/ready/ or .softfield/tasks/later/ removed,
+    nothing else in those files. Nothing once there is a list and no number is left, so a
+    second run commits nothing. The caller copies the list to ``board_order``."""
     path = order.order_path(repo)
-    if path.exists() or path.is_symlink():
-        return []
+    listed = path.exists() or path.is_symlink()
     git = Git(repo)
     if git.current_branch() != loop.MAIN:
         return []  # the next apply on main moves it
     board = _board(repo, State())  # the running bug ticket keeps its place too
-    if not any(placed.card is not None for placed in board.values()):
+    files = {
+        placed.path: changed
+        for placed in board.values()
+        if (changed := _unnumbered(placed)) is not None
+    }
+    keys: list[str] = []
+    if not listed and (files or any(placed.card is not None for placed in board.values())):
+        keys = _current(repo, board)  # read before the numbers go
+        files[path] = order.order_text(keys)
+    if not files:
         return []
-    keys = _current(repo, board)
+    message = MOVED if path in files else UNNUMBERED
     try:
-        _commit_file(git, path, order.order_text(keys), MOVED)
+        _commit_files(git, files, message)
     except GitError as exc:
-        return [f"{MOVED}: not yet, {exc}"]
-    return [f"{MOVED}: {len(keys)} cards and bugs in line"]
-
-
-def _numbers(line: list[tuple[int, _Tie]]) -> list[int]:
-    """The priorities that put ``line`` (each one's priority and what orders it among equals)
-    in its order, with as many kept as can be: neighbours may share a number when the tie
-    between them falls the right way. One that changes takes the lowest that fits after the
-    one before it."""
-
-    def lowest(before: tuple[int, _Tie] | None, tie: _Tie) -> int:
-        if before is None:
-            return 0
-        return before[0] if before[1] < tie else before[0] + 1
-
-    # kept[j]: how many keep their number up to j when j keeps its own, and the one kept
-    # before it (-1: none)
-    kept: dict[int, tuple[int, int]] = {-1: (0, -1)}
-    for i in range(-1, len(line)):
-        if i not in kept:  # no numbering lets it stay
-            continue
-        before = None if i < 0 else line[i]
-        for j in range(i + 1, len(line)):
-            priority, tie = line[j]
-            least = lowest(before, tie)
-            if priority >= least and kept[i][0] + 1 > kept.get(j, (0, -1))[0]:
-                kept[j] = (kept[i][0] + 1, i)
-            before = (least, tie)
-    last = max(kept, key=lambda j: kept[j][0])
-    stay = set()
-    while last >= 0:
-        stay.add(last)
-        last = kept[last][1]
-    numbers: list[int] = []
-    before = None
-    for j, (priority, tie) in enumerate(line):
-        number = priority if j in stay else lowest(before, tie)
-        numbers.append(number)
-        before = (number, tie)
-    return numbers
-
-
-def _renumbered(key: str, placed: _Placed, priority: int) -> str:
-    """The card's doc or the bug ticket with its new priority, checked as the ``priority``
-    request checks it."""
-    if placed.card is None:
-        changed = _ticket_with(placed.text, priority)
-        if split_frontmatter(changed)[0].get("priority") != priority:
-            raise planner.PlannerError(f"{key}'s frontmatter can't take a priority: not reordered")
-        return changed
-    changed = _card_with(placed.text, priority)
-    if milestone.card(placed.path.stem, changed) != replace(placed.card, priority=priority):
-        raise planner.PlannerError(f"{key.upper()}'s header can't take a priority: not reordered")
-    return changed
+        return [f"{message}: not yet, {exc}"]
+    lines = [f"{MOVED}: {len(keys)} cards and bugs in line"] if path in files else []
+    if numbered := len(files) - (path in files):
+        lines.append(f"{UNNUMBERED}: {numbered} file{'' if numbered == 1 else 's'}")
+    return lines
 
 
 def _reorder(
     repo: Path, conn: sqlite3.Connection, project_id: int, state: State, value: object
 ) -> str:
     """The board's order, sent whole (F15 D3, D5): the queue's list (.softfield/order.txt,
-    F222 D1) rewritten as the order sent, open keys only, and each card's header Priority and
-    bug ticket's ``priority:`` set to agree with it (F222 D9, until f222-04), in one commit of
-    the files that changed, and none when the order holds already. An open card or bug the
-    order doesn't name comes after the ones it names, in the order it had. A key that is no
-    open card or bug ticket (unknown, done, removed, running, general) is skipped and named.
-    A card's tickets follow it: they have no ``priority:`` of their own (F173,
-    ``task_priority``). Refused, main unchanged, for a value that isn't a JSON list of strings
-    or holds a key twice."""
+    F222 D1) rewritten as the order sent, open keys only, in a commit of that file alone, and
+    none when the order holds already. An open card or bug the order doesn't name comes after
+    the ones it names, in the order it had. A key that is no open card or bug ticket (unknown,
+    done, removed, running, general) is skipped and named. A card's tickets follow it: the
+    list is the only order (ADR 45). Refused, main unchanged, for a value that isn't a JSON
+    list of strings or holds a key twice."""
     try:
         keys = json.loads(value) if isinstance(value, str) else None
     except json.JSONDecodeError:
@@ -1813,37 +1730,19 @@ def _reorder(
             return f"a reorder names each card once: {key[:_MAX_ID]} is there twice"
         seen.add(key)
     board = _board(repo, state)
+    current = _current(repo, board)
     sent = [key for key in keys if key in board]
     placed = set(sent)
-    written = sent + [key for key in _current(repo, board) if key not in placed]
-    line = [key for key in written if key in board]
-    numbers = _numbers([(board[key].priority, board[key].tie) for key in line])
-    moved = {
-        key: number
-        for key, number in zip(line, numbers, strict=True)
-        if number != board[key].priority
-    }
-    texts = {key: _renumbered(key, board[key], number) for key, number in moved.items()}
-    files = {board[key].path: text for key, text in texts.items()}
+    written = sent + [key for key in current if key not in placed]
     listed = order.order_path(repo)
     text = order.order_text(written)
     was = listed.read_text(encoding="utf-8") if listed.is_file() else None
     if text != was and (written or was is not None):  # F222 D1: the list, whole
-        files[listed] = text
-    if files:
-        _commit_files(Git(repo), files, "the board's order, by the owner")
+        _commit_file(Git(repo), listed, text, "the board's order, by the owner")
     metrics.set_board_order(conn, project_id, written)
-    for key, number in moved.items():
-        if board[key].card is not None:
-            stem = board[key].path.stem
-            metrics.upsert_milestone(conn, project_id, milestone_key(stem), priority=number)
-            continue
-        row = conn.execute(
-            "SELECT 1 FROM tickets WHERE project_id = ? AND ticket = ?", (project_id, key)
-        ).fetchone()
-        if row is not None:  # else the next sync makes it
-            metrics.upsert_ticket(conn, project_id, key, body=texts[key])
-    result = f"reordered: {len(moved)} card{'' if len(moved) == 1 else 's'} changed"
+    before = {key: n for n, key in enumerate(current)}
+    moved = sum(before.get(key) != n for n, key in enumerate(written) if key in board)
+    result = f"reordered: {moved} card{'' if moved == 1 else 's'} changed place"
     skipped = [
         key.upper() if _SHORT_KEY_RE.fullmatch(key) else key[:_MAX_ID]
         for key in keys
@@ -1856,7 +1755,6 @@ def _reorder(
 
 _RESERVE_CARD_STATES = ("ready", _BUILDING)  # a card whose tickets may still run
 _CARD_AREA_RE = re.compile(r"\*\*Area:\*\*[ \t]*[^·*\n]*[^·*\n \t]")
-_CARD_PRIORITY_FIELD_RE = re.compile(r"\*\*Priority:\*\*[ \t]*\d+")
 # the field with the " · " before it, up to the next field or the line's end
 _CARD_RESERVE_FIELD_RE = re.compile(
     r"(?:[ \t]*·[ \t]*)?\*\*(?:Fast lane|Reserve):\*\*[^·*\n]*?(?=[ \t]*(?:·|\n|$))"
@@ -1873,15 +1771,12 @@ def _card_reserve_subject(subject: object) -> str | None:
 
 def _card_marked(doc: str, on: bool) -> str:
     """A card's doc with its header's ``**Fast lane:** yes`` (F172 D1): written after its Area,
-    else its Priority, else its State, else on a line of its own under the title; or removed
-    with its `` · ``."""
-    section = re.search(r"^## ", doc, re.MULTILINE)
-    end = section.start() if section else len(doc)
-    header, body = doc[:end], doc[end:]
+    else its State, else on a line of its own under the title; or removed with its `` · ``."""
+    header, body = _split_header(doc)
     header = _CARD_RESERVE_FIELD_RE.sub("", header, count=1)
     if not on:
         return header + body
-    for field in (_CARD_AREA_RE, _CARD_PRIORITY_FIELD_RE, _CARD_STATE_RE):
+    for field in (_CARD_AREA_RE, _CARD_STATE_RE):
         if (found := field.search(header)) is not None:
             return f"{header[: found.end()]} · {_MARK}{header[found.end() :]}{body}"
     title, _, rest = doc.partition("\n")
@@ -2034,8 +1929,8 @@ def _apply(
             return _drop_seed(repo, conn, project_id, now, subject)
         if kind == ARCHIVE:
             return _archive(conn, project_id, now, subject, value)
-        if kind == PRIORITY:
-            return _priority(repo, conn, project_id, state, subject, value)
+        if kind == _RETIRED_PRIORITY:
+            return NO_PRIORITY
         if kind == REORDER:
             return _reorder(repo, conn, project_id, state, value)
         if kind == PROJECT_ORDER:

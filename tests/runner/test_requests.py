@@ -14,7 +14,7 @@ import pytest
 from runner import cli, dispatch, loop, metrics, milestone, planner, requests
 from runner.gitops import Git, GitError
 from runner.state import State, load_state, save_state
-from runner.tasks import append_footer, load_dir, parse_task
+from runner.tasks import append_footer, load_dir
 from tests.runner.conftest import git, write_task
 from tests.runner.test_cli import in_repo  # noqa: F401 - a fixture
 from tests.runner.test_owner import _milestone
@@ -512,14 +512,13 @@ def test_a_reserve_request_on_a_card_already_so_commits_nothing(repo, value):
     assert _marked_doc(repo) == card
 
 
-def test_a_card_without_an_area_is_marked_after_its_priority(repo):
+def test_a_card_without_an_area_is_marked_after_its_state(repo):
+    """A card carries no number any more (ADR 45): an old one left is passed over."""
     card = MARKED_CARD.replace(" · **Area:** factory", "")
     _reserve_card(repo, card)
     _ask(repo, "reserve", "f142", "on")
     _apply(repo)
-    assert _marked_doc(repo) == card.replace(
-        "**Priority:** 1", "**Priority:** 1 · **Fast lane:** yes"
-    )
+    assert _marked_doc(repo) == card.replace("ready", "ready · **Fast lane:** yes", 1)
 
 
 @pytest.mark.parametrize(
@@ -727,7 +726,7 @@ def test_an_empty_first_message_on_a_card_asks_the_lead_to_plan_it(repo):
 
 # --- `approve_plan`, `accept_adr`, `send_back`: the owner approves (ADR 20 items 6–7) -------
 
-CARD = "# Milestone F7: one queue\n\n> **State:** planning · **Priority:** 3\n\n## Outcome\n"
+CARD = "# Milestone F7: one queue\n\n> **State:** planning\n\n## Outcome\n"
 TICKET = """\
 ---
 id: {id}
@@ -806,7 +805,7 @@ def test_approving_a_plan_merges_its_drafts_queues_its_tickets_and_readies_the_c
     assert later == ["f3-09-old.md"]  # set aside by the owner: not this plan's to queue
     doc = (repo / ".softfield" / "cards" / "f7-one-queue.md").read_text()
     assert milestone.card("f7-one-queue", doc).state == "ready"
-    assert "- The plan, drafted." in doc and "**Priority:** 3" in doc
+    assert "- The plan, drafted." in doc and "**Priority:**" not in doc
     assert (repo / ".softfield" / "cards" / "f7-mockup" / "index.html").is_file()
     # one commit on main, by the owner's request; the branch is gone, its drafts merged
     assert git(repo, "rev-parse", "HEAD~1") == head
@@ -924,7 +923,7 @@ def test_two_approvals_first_in_one_pick_leave_the_later_press_first(repo):
 def test_approving_first_on_a_card_already_in_the_lane_marks_it_once_and_moves_it(repo):
     _card(repo)
     card = repo / ".softfield" / "cards" / "f7-one-queue.md"
-    card.write_text(CARD.replace("**Priority:** 3", "**Priority:** 3 · **Fast lane:** yes"))
+    card.write_text(CARD.replace("planning", "planning · **Fast lane:** yes"))
     _board(repo, {"f8": 100})
     _listed(repo, "f8\n")
     _plan(repo, {".softfield/tasks/later/f7-01-a.md": _ticket("f7-01-a")})
@@ -1997,25 +1996,7 @@ def test_sending_a_merge_back_works_as_for_any_proposal(repo):
     assert (repo / ".softfield" / "cards" / "f12-queue-once.md").is_file()
 
 
-# --- `priority`: the owner reorders the work from the dashboard (f6-18) ------------------------
-
-
-def _two_ready(repo: Path) -> str:
-    """m1-01-a and m1-02-b ready, both at the default priority, each with its row; main's
-    head."""
-    for task_id in ("m1-01-a", "m1-02-b"):
-        write_task(repo / ".softfield" / "tasks" / "ready", task_id)
-    git(repo, "add", "-A")
-    git(repo, "commit", "-q", "-m", "two ready")
-    conn = metrics.open_db(_db(repo))
-    try:
-        project = metrics.upsert_project(conn, repo.name, repo=str(repo))
-        for task_id in ("m1-01-a", "m1-02-b"):
-            text = (repo / ".softfield" / "tasks" / "ready" / f"{task_id}.md").read_text()
-            metrics.upsert_ticket(conn, project, task_id, state="ready", body=text)
-    finally:
-        conn.close()
-    return git(repo, "rev-parse", "HEAD")
+# --- `priority`: f6-18's request, gone with the number (ADR 45, F222 D8) ----------------------
 
 
 def _pick_order(repo: Path) -> list[str]:
@@ -2025,209 +2006,22 @@ def _pick_order(repo: Path) -> list[str]:
     return [line.pick.subject for line in dispatch.plan([], tickets, dispatch.Windows(), NOW)]
 
 
-def _body(repo: Path, task_id: str) -> object:
-    conn = metrics.open_db(_db(repo))
-    try:
-        row = conn.execute("SELECT body FROM tickets WHERE ticket = ?", (task_id,)).fetchone()
-        return row["body"]
-    finally:
-        conn.close()
-
-
-BUG_A, BUG_B = "bug-01-a", "bug-02-b"
-
-
-def _two_bugs(repo: Path) -> str:
-    """bug-01-a and bug-02-b ready, both at a bug's default priority, each with its row;
-    main's head."""
-    ready = repo / ".softfield" / "tasks" / "ready"
-    for task_id in (BUG_A, BUG_B):
-        path = write_task(ready, task_id)
-        path.write_text(
-            path.read_text().replace("milestone: 1\n", "milestone: bugs\narea: factory\n")
-        )
-    git(repo, "add", "-A")
-    git(repo, "commit", "-q", "-m", "two bugs")
-    conn = metrics.open_db(_db(repo))
-    try:
-        project = metrics.upsert_project(conn, repo.name, repo=str(repo))
-        for task_id in (BUG_A, BUG_B):
-            text = (ready / f"{task_id}.md").read_text()
-            metrics.upsert_ticket(conn, project, task_id, state="ready", body=text)
-    finally:
-        conn.close()
-    return git(repo, "rev-parse", "HEAD")
-
-
-def test_a_priority_request_sets_a_ready_bugs_priority_in_one_commit_and_the_pick_follows(
-    repo,
-):
-    head = _two_bugs(repo)
-    assert _pick_order(repo) == [BUG_A, BUG_B]
-    asked = _ask(repo, "priority", BUG_B, "4")
-    assert _apply(repo) == [f"priority {BUG_B}: priority of {BUG_B} set to 4"]
-    assert _request(repo, asked) == (NOW.isoformat(), f"priority of {BUG_B} set to 4")
-    path = repo / ".softfield" / "tasks" / "ready" / f"{BUG_B}.md"
-    assert parse_task(path, 400).priority == 4
-    assert path.read_text().count("priority:") == 1
-    assert _pick_order(repo) == [BUG_B, BUG_A]
-    # one commit of that one file, by the owner's request; a clean tree
-    assert git(repo, "rev-parse", "HEAD~1") == head
-    assert git(repo, "log", "-1", "--format=%s").strip() == (
-        f"{BUG_B}: priority 50 → 4, by the owner"
-    )
-    changed = git(repo, "show", "--name-only", "--format=", "HEAD").split()
-    assert changed == [f".softfield/tasks/ready/{BUG_B}.md"]
-    assert git(repo, "status", "--porcelain") == ""
-    # the dashboard's row has the new text at once; the other ticket's is as it was
-    assert "priority: 4" in str(_body(repo, BUG_B))
-    assert "priority:" not in str(_body(repo, BUG_A))
-    assert _apply(repo) == []  # finished once
-
-
-def test_a_priority_request_replaces_a_set_aside_bugs_own_priority(repo):
-    (repo / ".softfield" / "tasks" / "later").mkdir(parents=True)
-    text = TICKET.format(id=BUG_A, context="x").replace(
-        "milestone: f7\n", "milestone: bugs\narea: factory\npriority: 7\n"
-    )
-    assert "priority: 7" in text
-    (repo / ".softfield" / "tasks" / "later" / f"{BUG_A}.md").write_text(text)
-    git(repo, "add", "-A")
-    git(repo, "commit", "-q", "-m", "set aside")
-    _ask(repo, "priority", BUG_A, "2")
-    assert _apply(repo) == [f"priority {BUG_A}: priority of {BUG_A} set to 2"]
-    after = (repo / ".softfield" / "tasks" / "later" / f"{BUG_A}.md").read_text()
-    assert after == text.replace("priority: 7", "priority: 2")
-    assert git(repo, "log", "-1", "--format=%s").strip() == f"{BUG_A}: priority 7 → 2, by the owner"
-
-
-def test_a_priority_request_on_a_feature_ticket_is_refused_for_its_cards_place(repo):
-    """F173 D3: a feature ticket runs in its card's place; main is unchanged."""
-    head = _two_ready(repo)
-    asked = _ask(repo, "priority", "m1-02-b", "4")
-    assert _apply(repo) == [f"priority m1-02-b: {requests.CARD_PLACE}"]
-    assert _request(repo, asked) == (
-        NOW.isoformat(),
-        "a ticket runs in its card's place: move the card on the board",
-    )
-    assert git(repo, "rev-parse", "HEAD") == head
-    assert "priority:" not in (repo / ".softfield" / "tasks" / "ready" / "m1-02-b.md").read_text()
-
-
-def _priority_of(repo: Path, key: str) -> object:
-    conn = metrics.open_db(_db(repo))
-    try:
-        row = conn.execute("SELECT priority FROM milestones WHERE key = ?", (key,)).fetchone()
-        return None if row is None else row["priority"]
-    finally:
-        conn.close()
-
-
-def test_a_priority_request_on_a_card_sets_its_headers_priority(repo):
+@pytest.mark.parametrize(("subject", "value"), [("bug-01-a", "4"), ("f7", "0"), (None, None)])
+def test_a_priority_request_still_waiting_is_refused_and_changes_nothing(repo, subject, value):
+    """A request the dashboard sent before the number went: answered at once, on any branch,
+    saying the board orders the work; no file and no commit."""
     _card(repo)
-    head = git(repo, "rev-parse", "HEAD")
-    asked = _ask(repo, "priority", "f7", "1")
-    assert _apply(repo) == ["priority f7: priority of F7 set to 1"]
-    assert _request(repo, asked)[1] == "priority of F7 set to 1"
-    doc = (repo / ".softfield" / "cards" / "f7-one-queue.md").read_text()
-    assert doc == CARD.replace("**Priority:** 3", "**Priority:** 1")
-    assert milestone.card("f7-one-queue", doc) == milestone.Card("planning", 1, "factory")
-    assert git(repo, "rev-parse", "HEAD~1") == head
-    assert git(repo, "log", "-1", "--format=%s").strip() == "F7: priority 3 → 1, by the owner"
-    changed = git(repo, "show", "--name-only", "--format=", "HEAD").split()
-    assert changed == [".softfield/cards/f7-one-queue.md"]
-    assert git(repo, "status", "--porcelain") == ""
-    assert _priority_of(repo, "f7-one-queue") == 1  # the board's row, at once
-
-
-@pytest.mark.parametrize(
-    ("card", "header"),
-    [
-        (SEED_CARD, "> **State:** idea · **Priority:** 0 · **Area:** factory\n"),
-        (SEED_CARD.replace(" · **Area:** factory", ""), "> **State:** idea · **Priority:** 0\n"),
-        ("# Milestone F11: a test\n\n## Notes\nA test.\n", "> **Priority:** 0\n"),
-    ],
-)
-def test_a_card_without_a_priority_gets_one_in_its_header(repo, card, header):
-    _seeded(repo, card)
-    _ask(repo, "priority", "f11-test", "0")
-    assert _apply(repo) == ["priority f11-test: priority of F11 set to 0"]
-    doc = (repo / ".softfield" / "cards" / "f11-test.md").read_text()
-    assert header in doc and doc.endswith("## Notes\nA test.\n")
-    assert milestone.card("f11-test", doc).priority == 0
-    assert git(repo, "log", "-1", "--format=%s").strip() == "F11: priority 100 → 0, by the owner"
-
-
-def _done_ticket(repo: Path) -> None:
-    _two_ready(repo)
-    write_task(repo / ".softfield" / "tasks" / "done", "m1-00-old")
+    _bug(repo, "ready", "bug-01-a")
     git(repo, "add", "-A")
-    git(repo, "commit", "-q", "-m", "done")
-
-
-def _done_card(repo: Path) -> None:
-    _two_ready(repo)
-    _seeded(repo, SEED_CARD.replace("idea", "done"))
-
-
-@pytest.mark.parametrize(
-    ("before", "subject", "value", "error"),
-    [
-        (
-            _done_ticket,
-            "m1-00-old",
-            "1",
-            "m1-00-old is in .softfield/tasks/done/: its priority stays",
-        ),
-        (_two_ready, "m1-01-a", "1", "m1-01-a is running: its priority stays"),
-        (_done_card, "f11", "1", "F11 is done: its priority stays"),
-        (_two_ready, "m1-02-b", "-1", "a priority is a whole number from 0, not '-1'"),
-        (_two_ready, "m1-02-b", "1.5", "a priority is a whole number from 0, not '1.5'"),
-        (_two_ready, "m1-02-b", "x", "a priority is a whole number from 0, not 'x'"),
-        (_two_ready, "m1-02-b", None, "a priority is a whole number from 0, not None"),
-        (
-            _two_ready,
-            "m1-02-b",
-            "1",
-            "a ticket runs in its card's place: move the card on the board",
-        ),
-        (
-            _two_ready,
-            "m1-02",
-            "1",
-            "m1-02 is no ticket in .softfield/tasks/ready/ or .softfield/tasks/later/",
-        ),
-        (_two_ready, "f13", "1", "F13 has no card in .softfield/cards/: its priority stays"),
-        (_two_ready, "general", "1", "the general thread has no priority"),
-        (_two_ready, "../x", "1", "a thread is a card's key or general, not '../x'"),
-        (_two_ready, None, "1", "a priority request names a ticket or a card"),
-    ],
-)
-def test_a_priority_the_runner_cant_apply_is_refused_and_main_is_unchanged(
-    repo, before, subject, value, error
-):
-    before(repo)
+    git(repo, "commit", "-q", "-m", "a card and a bug")
+    git(repo, "checkout", "-q", "-b", "elsewhere")
     head = git(repo, "rev-parse", "HEAD")
     asked = _ask(repo, "priority", subject, value)
-    _apply(repo, State(in_flight={"ticket": "m1-01-a"}))
-    assert _request(repo, asked) == (NOW.isoformat(), error)
+    _apply(repo)
+    assert _request(repo, asked) == (NOW.isoformat(), requests.NO_PRIORITY)
+    assert "the board orders the work" in requests.NO_PRIORITY
     assert git(repo, "rev-parse", "HEAD") == head
     assert git(repo, "status", "--porcelain", "--untracked-files=all") == ""
-
-
-def test_a_priority_already_set_changes_nothing(repo):
-    head = _two_bugs(repo)
-    _ask(repo, "priority", BUG_B, "50")
-    assert _apply(repo) == [f"priority {BUG_B}: priority of {BUG_B} is 50 already"]
-    assert git(repo, "rev-parse", "HEAD") == head
-
-
-def test_a_priority_waits_for_main(repo):
-    _two_ready(repo)
-    git(repo, "checkout", "-q", "-b", "elsewhere")
-    asked = _ask(repo, "priority", "m1-02-b", "4")
-    assert _apply(repo) == ["priority m1-02-b: waits for the repo to be on main"]
-    assert _request(repo, asked) == (None, None)
 
 
 # --- `reorder`: the board's whole order, sent once (F15 D3, D5, D10) ---------------------------
@@ -2261,111 +2055,105 @@ def _board(repo: Path, cards: dict[str, object], bug: bool = False) -> str:
     return git(repo, "rev-parse", "HEAD")
 
 
-def _card_priorities(repo: Path) -> dict[str, int]:
-    docs = sorted((repo / ".softfield" / "cards").glob("*-card.md"))
-    return {p.stem.split("-")[0]: milestone.card(p.stem, p.read_text()).priority for p in docs}
+def _moved(repo: Path, cards: dict[str, object], bug: bool = False) -> str:
+    """`_board`, then the project's move to its list (F222 D4): the list in the numbers' order,
+    and the numbers gone from the files (D8); main's head."""
+    _board(repo, cards, bug)
+    requests.move_to_list(repo)
+    return git(repo, "rev-parse", "HEAD")
 
 
 def _changed(repo: Path) -> list[str]:
     return sorted(git(repo, "show", "--name-only", "--format=", "HEAD").split())
 
 
-def test_a_reorder_sets_the_cards_priorities_in_one_commit_and_the_pick_follows(repo):
-    head = _board(repo, {"f7": 100, "f8": 100, "f9": 2})
+def _docs(repo: Path) -> dict[str, str]:
+    return {p.name: p.read_text() for p in sorted((repo / ".softfield").rglob("*.md"))}
+
+
+def test_a_reorder_writes_the_list_alone_in_one_commit_and_the_pick_follows(repo):
+    head = _moved(repo, {"f7": 100, "f8": 100, "f9": 2})
     assert _pick_order(repo) == ["f9-01-a", "f7-01-a", "f8-01-a"]
+    docs = _docs(repo)
     asked = _ask(repo, "reorder", None, '["f8", "f9", "f7"]')
-    assert _apply(repo) == ["reorder: reordered: 1 card changed"]
-    assert _request(repo, asked) == (NOW.isoformat(), "reordered: 1 card changed")
+    assert _apply(repo) == ["reorder: reordered: 3 cards changed place"]
+    assert _request(repo, asked) == (NOW.isoformat(), "reordered: 3 cards changed place")
     assert _pick_order(repo) == ["f8-01-a", "f9-01-a", "f7-01-a"]
-    # one commit by the runner, of the one card whose number had to change; a clean tree
+    # one commit by the runner, of the list alone: no card or ticket carries a number
     assert git(repo, "rev-parse", "HEAD~1") == head
     assert git(repo, "log", "-1", "--format=%s").strip() == "the board's order, by the owner"
     assert git(repo, "log", "-1", "--format=%an").strip() == "Softfield runner"
-    assert _changed(repo) == [".softfield/cards/f8-card.md", ORDER]
+    assert _changed(repo) == [ORDER]
     assert (repo / ORDER).read_text() == "f8\nf9\nf7\n"  # F222 D1: the list, as sent
-    assert _card_priorities(repo) == {"f7": 100, "f8": 0, "f9": 2}
+    assert _docs(repo) == docs
+    assert _stored_order(repo) == ["f8", "f9", "f7"]  # the board's copy, at once
     assert git(repo, "status", "--porcelain") == ""
-    assert _priority_of(repo, "f8-card") == 0  # the board's row, at once
     assert _apply(repo) == []  # finished once
 
 
 def test_a_reorder_to_the_order_the_cards_have_changes_nothing(repo):
-    _board(repo, {"f7": 100, "f8": 100, "f9": 2}, bug=True)
-    requests.move_to_list(repo)
-    head = git(repo, "rev-parse", "HEAD")
+    head = _moved(repo, {"f7": 100, "f8": 100, "f9": 2}, bug=True)
     asked = _ask(repo, "reorder", None, json.dumps(["f9", BUG, "f7", "f8"]))
-    assert _apply(repo) == ["reorder: reordered: 0 cards changed"]
-    assert _request(repo, asked)[1] == "reordered: 0 cards changed"
+    assert _apply(repo) == ["reorder: reordered: 0 cards changed place"]
+    assert _request(repo, asked)[1] == "reordered: 0 cards changed place"
     assert git(repo, "rev-parse", "HEAD") == head
     assert git(repo, "status", "--porcelain") == ""
 
 
-def test_a_reorder_sets_a_bug_tickets_priority_and_a_cards_tickets_follow_the_card(repo):
-    """F173: a feature ticket's own number, left from before, doesn't beat its card's place."""
-    _board(repo, {"f7": 3, "f8": 5}, bug=True)
+def test_a_reorder_places_a_bug_ticket_and_a_cards_tickets_follow_the_card(repo):
+    """F173: a feature ticket's own number, left from before, orders nothing."""
+    _moved(repo, {"f7": 3, "f8": 5}, bug=True)
     own = repo / ".softfield" / "tasks" / "ready" / "f8-01-a.md"
-    own.write_text(own.read_text().replace("depends_on", "priority: 1\ndepends_on"))
+    own.write_text(own.read_text().replace("depends_on", "priority: 0\ndepends_on"))
     git(repo, "commit", "-q", "-am", "its own priority")
-    conn = metrics.open_db(_db(repo))
-    try:
-        project = metrics.upsert_project(conn, repo.name, repo=str(repo))
-        text = (repo / ".softfield" / "tasks" / "ready" / f"{BUG}.md").read_text()
-        metrics.upsert_ticket(conn, project, BUG, state="ready", body=text)
-    finally:
-        conn.close()
     assert _pick_order(repo) == ["f7-01-a", "f8-01-a", BUG]
-    _ask(repo, "reorder", None, json.dumps([BUG, "f7", "f8"]))
-    assert _apply(repo) == ["reorder: reordered: 1 card changed"]
-    assert _changed(repo) == [ORDER, f".softfield/tasks/ready/{BUG}.md"]
-    assert parse_task(repo / ".softfield" / "tasks" / "ready" / f"{BUG}.md", 400).priority == 0
-    assert "priority: 0" in str(_body(repo, BUG))  # the dashboard's row, at once
-    # the ticket's file is not touched; its card's place orders it
-    assert parse_task(own, 400).priority == 1
-    assert _pick_order(repo) == [BUG, "f7-01-a", "f8-01-a"]
+    _ask(repo, "reorder", None, json.dumps([BUG, "f8", "f7"]))
+    assert _apply(repo) == ["reorder: reordered: 2 cards changed place"]  # F8 stays second
+    assert _changed(repo) == [ORDER]
+    assert "priority: 0" in own.read_text()  # not touched; its card's place orders it
+    assert _pick_order(repo) == [BUG, "f8-01-a", "f7-01-a"]
 
 
 def test_a_reorder_puts_an_unlisted_card_last_and_names_what_it_skipped(repo):
-    _board(repo, {"f7": 100, "f8": 100, "f9": 2, "f11": "done"})
+    _moved(repo, {"f7": 100, "f8": 100, "f9": 2, "f11": "done"})
     done = (repo / ".softfield" / "cards" / "f11-card.md").read_text()
     value = json.dumps(["f8", "f11", "general", "f13", "../x", "f7"])
     _ask(repo, "reorder", None, value)
-    result = "reordered: 2 cards changed, skipped F11, general, F13, ../x"
+    result = "reordered: 2 cards changed place, skipped F11, general, F13, ../x"
     assert _apply(repo) == [f"reorder: {result}"]
     assert _pick_order(repo) == ["f8-01-a", "f7-01-a", "f9-01-a"]
     assert (repo / ".softfield" / "cards" / "f11-card.md").read_text() == done
-    assert len(_changed(repo)) == 3  # two cards and the list
+    assert _changed(repo) == [ORDER]
     assert (repo / ORDER).read_text() == "f8\nf7\nf9\n"  # open keys only
     assert git(repo, "status", "--porcelain") == ""
 
 
-def test_a_reorder_renumbers_when_there_is_no_room(repo):
-    _board(repo, {"f7": 0, "f8": 0, "f9": 1})
+def test_a_reorder_needs_no_room_between_numbers(repo):
+    _moved(repo, {"f7": 0, "f8": 0, "f9": 1})
     _ask(repo, "reorder", None, '["f9", "f8", "f7"]')
-    assert _apply(repo) == ["reorder: reordered: 2 cards changed"]
+    assert _apply(repo) == ["reorder: reordered: 2 cards changed place"]
     assert _pick_order(repo) == ["f9-01-a", "f8-01-a", "f7-01-a"]
 
 
 def test_a_reorder_skips_the_running_bug_ticket(repo):
-    _board(repo, {"f7": 3}, bug=True)
-    requests.move_to_list(repo)
-    head = git(repo, "rev-parse", "HEAD")
+    head = _moved(repo, {"f7": 3}, bug=True)
     _ask(repo, "reorder", None, json.dumps([BUG, "f7"]))
     lines = _apply(repo, State(in_flight={"ticket": BUG}))
-    assert lines == [f"reorder: reordered: 0 cards changed, skipped {BUG}"]
+    assert lines == [f"reorder: reordered: 0 cards changed place, skipped {BUG}"]
     assert git(repo, "rev-parse", "HEAD") == head
     assert (repo / ORDER).read_text() == f"f7\n{BUG}\n"  # the running one keeps its line
 
 
 def test_a_later_reorder_replaces_an_earlier_one_still_open(repo):
-    head = _board(repo, {"f7": 100, "f8": 100, "f9": 2})
+    head = _moved(repo, {"f7": 100, "f8": 100, "f9": 2})
     first = _ask(repo, "reorder", None, '["f7", "f8", "f9"]')
     second = _ask(repo, "reorder", None, '["f8", "f9", "f7"]')
     assert _apply(repo) == [
         "reorder: replaced by a later order",
-        "reorder: reordered: 1 card changed",
+        "reorder: reordered: 3 cards changed place",
     ]
     assert _request(repo, first) == (NOW.isoformat(), "replaced by a later order")
-    assert _request(repo, second)[1] == "reordered: 1 card changed"
+    assert _request(repo, second)[1] == "reordered: 3 cards changed place"
     assert _pick_order(repo) == ["f8-01-a", "f9-01-a", "f7-01-a"]
     assert git(repo, "rev-parse", "HEAD~1") == head  # one commit, the later order's
 
@@ -2386,22 +2174,22 @@ _REORDER_VALUE = "a reorder is a JSON list of card keys and bug ticket ids, firs
     ],
 )
 def test_a_reorder_the_runner_cant_read_is_refused_and_main_is_unchanged(repo, value, error):
-    head = _board(repo, {"f7": 100, "f8": 100, "f9": 2})
+    head = _moved(repo, {"f7": 100, "f8": 100, "f9": 2})
     asked = _ask(repo, "reorder", None, value)
     assert _apply(repo) == [f"reorder: {error}"]
     assert _request(repo, asked) == (NOW.isoformat(), error)
     assert git(repo, "rev-parse", "HEAD") == head
     assert git(repo, "status", "--porcelain", "--untracked-files=all") == ""
-    assert _card_priorities(repo) == {"f7": 100, "f8": 100, "f9": 2}
+    assert (repo / ORDER).read_text() == "f9\nf7\nf8\n"
 
 
 def test_a_reorder_waits_for_main(repo):
-    _board(repo, {"f7": 100, "f8": 100, "f9": 2})
+    _moved(repo, {"f7": 100, "f8": 100, "f9": 2})
     git(repo, "checkout", "-q", "-b", "elsewhere")
     asked = _ask(repo, "reorder", None, '["f8", "f9", "f7"]')
     assert _apply(repo) == ["reorder: waits for the repo to be on main"]
     assert _request(repo, asked) == (None, None)
-    assert _card_priorities(repo) == {"f7": 100, "f8": 100, "f9": 2}
+    assert (repo / ORDER).read_text() == "f9\nf7\nf8\n"
 
 
 # --- pause and resume (ADR 22 item 5, f5-18) --------------------------------------------------

@@ -293,6 +293,12 @@ CREATE TABLE board_order (
 );
 """
 
+# F222 D8: a card's priority number is gone; the queue's list (``board_order``) orders the cards.
+# ``projects.priority`` stays: it is the Projects page's own order (F123, F193).
+_V16 = """
+ALTER TABLE milestones DROP COLUMN priority;
+"""
+
 UTC_STEP = "f187 utc"  # F187 D5: old local times become UTC, once
 ONCE_STEPS = ("f55 clear-out", UTC_STEP)  # one-off steps an older database still owes (F55 D3)
 
@@ -317,6 +323,7 @@ MIGRATIONS: list[str] = [
     *(_V1, _V2, _V3, _V4, _V5, _V6, _V7, _V8, _V9, _V10, _V11, _V12, _V13),
     _V14,
     _V15,
+    _V16,
 ]
 
 type Value = str | int | float | Sequence[object] | Mapping[str, object] | None
@@ -485,7 +492,6 @@ def upsert_milestone(
     done_when: str | None = None,
     signoff: Mapping[str, object] | None = None,
     state: str | None = None,
-    priority: int | None = None,
     area: str | None = None,
 ) -> int:
     values = _given(
@@ -501,7 +507,6 @@ def upsert_milestone(
         done_when=done_when,
         signoff=signoff,
         state=state,
-        priority=priority,
         area=area,
     )
     return _upsert(

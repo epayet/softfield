@@ -7,7 +7,7 @@ from pathlib import Path
 from runner import loop, metrics, order, requests
 from runner.loop import close_session, open_session
 from runner.state import State
-from runner.tasks import load_dir, parse_task, pick_next, pulls, run_order, task_priority
+from runner.tasks import load_dir, parse_task, pick_next, pulls, run_order, task_place
 from tests.runner.conftest import git, write_task
 from tests.runner.test_loop import _config
 
@@ -95,22 +95,23 @@ def test_places_put_what_the_list_doesnt_name_after_all_it_names(repo):
 # --- the order ------------------------------------------------------------------------------
 
 
-def test_task_priority_places_a_bug_by_its_id_and_a_ticket_by_its_card(repo):
+def test_task_place_places_a_bug_by_its_id_and_a_ticket_by_its_card(repo):
     _board(repo, {"f7": 1}, {BUG: 0})
     ready = repo / ".softfield" / "tasks" / "ready"
     bug, card = parse_task(ready / f"{BUG}.md", 400), parse_task(ready / "f7-01-a.md", 400)
     places = {"f7": 0, BUG: 1}
-    assert (task_priority(card, places), task_priority(bug, places)) == (0, 1)
+    assert (task_place(card, places), task_place(bug, places)) == (0, 1)
     assert pick_next([bug, card], set(), set(), places) == card
     pulled = pulls([bug, card], places)
     assert sorted([bug, card], key=lambda t: run_order(t, places, pulled)) == [card, bug]
-    # with no place for it, a bug's own number, as before the list
-    assert task_priority(bug, {"f7": 0}) == 0
+    # with no place for it, after all the map names: its own number orders nothing (ADR 45)
+    assert task_place(bug, {"f7": 0}) == 1
 
 
 def test_with_a_list_the_pick_and_the_dry_run_follow_it(repo):
-    _board(repo, {"f7": 1, "f8": 2, "f9": 3}, {BUG: 0})
-    assert _pick_order(repo) == [BUG, "f7-01-a", "f8-01-a", "f9-01-a"]  # the numbers
+    _board(repo, {"f9": 1, "f8": 2, "f7": 3}, {BUG: 9})
+    # no list yet: the numbers order nothing, so by card number, a bug before them
+    assert _pick_order(repo) == [BUG, "f7-01-a", "f8-01-a", "f9-01-a"]
     _listed(repo, "f9", "f7", BUG, "f8")
     assert _pick_order(repo) == ["f9-01-a", "f7-01-a", BUG, "f8-01-a"]
 
@@ -132,21 +133,101 @@ def test_dry_run_prints_the_tickets_in_the_lists_order(repo, capsys):
 # --- the move (D4) --------------------------------------------------------------------------
 
 
-def test_the_move_writes_todays_order_in_a_commit_of_the_list_alone(repo):
+def test_the_move_writes_the_numbers_order_and_removes_them_in_one_commit(repo):
     head = _board(repo, {"f7": 100, "f8": 100, "f9": 2, "f10": "idea", "f11": "done"}, {BUG: None})
-    before = _pick_order(repo)
-    assert before == ["f9-01-a", BUG, "f7-01-a", "f8-01-a"]
     lines = requests.move_to_list(repo)
-    assert lines == [f"{requests.MOVED}: 5 cards and bugs in line"]
-    # every open card, the idea too, in the order the pick took them
+    assert lines == [
+        f"{requests.MOVED}: 5 cards and bugs in line",
+        f"{requests.UNNUMBERED}: 3 files",
+    ]
+    # every open card, the idea too, in the order the pick took them by their numbers
     assert (repo / ORDER).read_text() == f"f9\n{BUG}\nf7\nf8\nf10\n"
     assert git(repo, "rev-parse", "HEAD~1") == head
-    assert git(repo, "show", "--name-only", "--format=", "HEAD").split() == [ORDER]
+    changed = git(repo, "show", "--name-only", "--format=", "HEAD").split()
+    cards = [f".softfield/cards/{key}-card.md" for key in ("f7", "f8", "f9")]
+    assert sorted(changed) == sorted([ORDER, *cards])
     assert git(repo, "log", "-1", "--format=%an").strip() == "Softfield runner"
     assert git(repo, "status", "--porcelain") == ""
-    assert _pick_order(repo) == before
+    assert _pick_order(repo) == ["f9-01-a", BUG, "f7-01-a", "f8-01-a"]
     assert requests.move_to_list(repo) == []  # once
     assert git(repo, "rev-parse", "HEAD~1") == head
+
+
+def _numbered(repo: Path) -> str:
+    """A project already moved to its list (f222-02) whose cards and bugs still say a number,
+    in each form a header has held, and a done card's and a done bug's that stay; main's head."""
+    docs, tasks = repo / ".softfield" / "cards", repo / ".softfield" / "tasks"
+    docs.mkdir(parents=True, exist_ok=True)
+    headers = {
+        "f7": "> **State:** ready · **Priority:** 3 · **Area:** factory · **Fast lane:** yes",
+        "f8": "> **Priority:** 0 · **State:** idea · **Area:** product",
+        "f9": "> **State:** building · **Area:** factory\n> **Priority:** 12",
+        "f10": "> **State:** planning · **Area:** factory",  # none
+        "f11": "> **State:** done · **Priority:** 4 · **Area:** factory",
+    }
+    for key, header in headers.items():
+        (docs / f"{key}-card.md").write_text(
+            f"# Milestone {key.upper()}: a card\n\n{header}\n\n## Notes\n**Priority:** 7 stays\n"
+        )
+    for folder, bug, number in (
+        ("ready", BUG, "\npriority: 5"),
+        ("later", "bug-08-set-aside", "\npriority: 0"),
+        ("ready", "bug-09-none", ""),
+        ("done", "bug-06-done", "\npriority: 2"),
+    ):
+        path = write_task(tasks / folder, bug)
+        path.write_text(
+            path.read_text().replace("milestone: 1", f"milestone: bugs{number}\narea: factory")
+        )
+    (repo / ORDER).write_text("f9\nf7\n")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "the board")
+    return git(repo, "rev-parse", "HEAD")
+
+
+def test_a_moved_project_loses_its_numbers_in_one_commit_and_nothing_else(repo):
+    """F222 D8: each open card's header Priority and each bug's in ready/ or later/ go, and
+    only they; a done card's and a done bug's stay, and the list is as it was."""
+    head = _numbered(repo)
+    before = {p: p.read_text() for p in (repo / ".softfield").rglob("*.md")}
+    assert requests.move_to_list(repo) == [f"{requests.UNNUMBERED}: 5 files"]
+    assert git(repo, "rev-parse", "HEAD~1") == head
+    changed = sorted(git(repo, "show", "--name-only", "--format=", "HEAD").split())
+    assert changed == sorted(
+        [
+            ".softfield/cards/f7-card.md",
+            ".softfield/cards/f8-card.md",
+            ".softfield/cards/f9-card.md",
+            f".softfield/tasks/ready/{BUG}.md",
+            ".softfield/tasks/later/bug-08-set-aside.md",
+        ]
+    )
+    docs = repo / ".softfield" / "cards"
+    assert (
+        "> **State:** ready · **Area:** factory · **Fast lane:** yes\n"
+        in (docs / "f7-card.md").read_text()
+    )
+    assert "> **State:** idea · **Area:** product\n" in (docs / "f8-card.md").read_text()
+    assert (docs / "f9-card.md").read_text() == (
+        "# Milestone F9: a card\n\n> **State:** building · **Area:** factory\n\n"
+        "## Notes\n**Priority:** 7 stays\n"
+    )
+    bug = repo / ".softfield" / "tasks" / "ready" / f"{BUG}.md"
+    assert bug.read_text() == before[bug].replace("\npriority: 5", "")
+    for path, text in before.items():  # the rest as it was
+        if path.relative_to(repo).as_posix() not in changed:
+            assert path.read_text() == text, path
+    assert (repo / ORDER).read_text() == "f9\nf7\n"
+    assert git(repo, "status", "--porcelain") == ""
+    assert requests.move_to_list(repo) == []  # the second run commits nothing
+    assert git(repo, "rev-parse", "HEAD~1") == head
+
+
+def test_the_numbers_go_only_on_main(repo):
+    _numbered(repo)
+    git(repo, "checkout", "-q", "-b", "elsewhere")
+    assert requests.move_to_list(repo) == []
+    assert "**Priority:** 3" in (repo / ".softfield" / "cards" / "f7-card.md").read_text()
 
 
 def test_the_move_places_a_bug_by_its_own_number(repo):

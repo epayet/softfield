@@ -70,7 +70,7 @@ def test_a_fresh_path_gets_every_table_and_the_latest_version(tmp_path):
     conn = metrics.open_db(path)
     assert path.is_file()
     assert _tables(conn) >= TABLES
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 15 == len(metrics.MIGRATIONS)
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 16 == len(metrics.MIGRATIONS)
     assert conn.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
     assert conn.execute("PRAGMA foreign_keys").fetchone()[0] == 1
     conn.close()
@@ -182,7 +182,7 @@ def test_a_version_4_database_keeps_its_items_and_gains_an_empty_request_table(t
 
 
 def test_a_version_5_database_keeps_its_milestones_and_gains_empty_cards(tmp_path):
-    """f5 D4: a milestone's card (state, priority, area) starts empty until the runner syncs."""
+    """f5 D4: a milestone's card (state, area) starts empty until the runner syncs."""
     path = tmp_path / "factory-metrics.sqlite"
     old = sqlite3.connect(path, isolation_level=None)
     steps = "\n".join(metrics.MIGRATIONS[:5])
@@ -193,8 +193,32 @@ def test_a_version_5_database_keeps_its_milestones_and_gains_empty_cards(tmp_pat
 
     conn = metrics.open_db(path)
     assert conn.execute("PRAGMA user_version").fetchone()[0] == len(metrics.MIGRATIONS)
-    row = conn.execute("SELECT key, title, state, priority, area FROM milestones").fetchone()
-    assert tuple(row) == ("f4", "Always on", None, None, None)
+    row = conn.execute("SELECT key, title, state, area FROM milestones").fetchone()
+    assert tuple(row) == ("f4", "Always on", None, None)
+    conn.close()
+
+
+def test_a_version_15_database_keeps_its_cards_and_their_numbers_go(tmp_path):
+    """F222 D8: ``milestones.priority`` is dropped, the rest of each card kept;
+    ``projects.priority``, the Projects page's own order, stays."""
+    path = tmp_path / "factory-metrics.sqlite"
+    old = sqlite3.connect(path, isolation_level=None)
+    steps = "\n".join(metrics.MIGRATIONS[:15])
+    old.executescript(f"BEGIN;\n{steps}\nPRAGMA user_version = 15;\nCOMMIT;")
+    old.execute("INSERT INTO projects (name, priority) VALUES ('coucou', 3)")
+    old.execute(
+        "INSERT INTO milestones (project_id, key, title, state, priority, area)"
+        " VALUES (1, 'f4', 'Always on', 'ready', 7, 'factory')"
+    )
+    old.close()
+
+    conn = metrics.open_db(path)
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == len(metrics.MIGRATIONS)
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(milestones)")}
+    assert "priority" not in columns
+    row = conn.execute("SELECT key, title, state, area FROM milestones").fetchone()
+    assert tuple(row) == ("f4", "Always on", "ready", "factory")
+    assert conn.execute("SELECT priority FROM projects").fetchone()[0] == 3
     conn.close()
 
 
@@ -315,12 +339,13 @@ def test_jobs_queued_at_the_same_time_stay_in_the_order_queued(db, ids):
 
 
 def test_a_milestone_keeps_its_card(db, ids):
-    """f5 D4: state, priority and area are upserted like the rest; None keeps them."""
+    """f5 D4: state and area are upserted like the rest; None keeps them. A card has no number
+    (F222 D8): the queue's list orders it."""
     project = ids["project"]
-    metrics.upsert_milestone(db, project, "f1", state="building", priority=2, area="factory")
+    metrics.upsert_milestone(db, project, "f1", state="building", area="factory")
     metrics.upsert_milestone(db, project, "f1", status="review")
-    row = db.execute("SELECT state, priority, area FROM milestones WHERE key = 'f1'").fetchone()
-    assert tuple(row) == ("building", 2, "factory")
+    row = db.execute("SELECT state, area FROM milestones WHERE key = 'f1'").fetchone()
+    assert tuple(row) == ("building", "factory")
 
 
 def test_a_request_is_open_until_finished_once_with_its_result(db, ids):

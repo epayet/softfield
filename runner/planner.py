@@ -23,7 +23,6 @@ from runner import look, prompts
 from runner.tasks import (
     AREAS,
     BUGS,
-    DEFAULT_PRIORITY,
     TaskError,
     milestone_key,
     milestone_order,
@@ -518,10 +517,11 @@ def holds(doc: str, title: str, thoughts: str) -> bool:
 
 
 def seed_card(key: str, title: str, thoughts: str, area: str, note: str) -> str:
-    """A planted card's milestone doc: an idea at the default priority, the owner's words
-    under Notes. A quoted line in them is escaped: a sign-off is read from one anywhere."""
+    """A planted card's milestone doc: an idea, with no place of its own (the queue's list puts
+    it after all it names, ADR 45), the owner's words under Notes. A quoted line in them is
+    escaped: a sign-off is read from one anywhere."""
     notes = _notes(thoughts) or "(none)"
-    header = f"> **State:** {IDEA} · **Priority:** {DEFAULT_PRIORITY} · **Area:** {area}"
+    header = f"> **State:** {IDEA} · **Area:** {area}"
     said = f"\n> {note}" if note else ""
     return f"# Milestone {key.upper()}: {title}\n\n{header}{said}\n\n## Notes\n{notes}\n"
 
@@ -651,19 +651,18 @@ _CARD_STATES = ("building", "needs sign-off", "ready", "planning", "idea", "done
 @dataclass(frozen=True)
 class ReadyTicket:
     """A ready ticket as the block lists it: its milestone, who does it (``lead`` or
-    ``developer``), its priority, what it waits for, if anything, and the ticket it runs
-    early for (``early``, F173 D7), which explains its place ahead of its priority."""
+    ``developer``), what it waits for, if anything, and the ticket it runs early for
+    (``early``, F173 D7), which explains its place ahead of its card's."""
 
     id: str
     milestone: str
     who: str
-    priority: int
     waits: str | None = None
     early: str | None = None
 
     def __str__(self) -> str:
         early = f", early for {self.early}, which waits for it" if self.early else ""
-        return f"{self.id} ({self.milestone}, {self.who}, priority {self.priority}{early})"
+        return f"{self.id} ({self.milestone}, {self.who}{early})"
 
 
 def _in_flight(job: Mapping[str, Any] | None, ready: Mapping[str, ReadyTicket]) -> str:
@@ -675,34 +674,28 @@ def _in_flight(job: Mapping[str, Any] | None, ready: Mapping[str, ReadyTicket]) 
     return f"In flight: {what}, now with {job.get('agent')}."
 
 
-def _card_lines(cards: Collection[tuple[str, str, int]]) -> list[str]:
-    """Each state's cards on one line, lower priority first: ``- building: F8 (1), F7 (3)``."""
-    states = [*_CARD_STATES, *sorted({state for _, state, _ in cards} - set(_CARD_STATES))]
+def _card_lines(cards: Sequence[tuple[str, str]]) -> list[str]:
+    """Each state's cards on one line, in the order given (the queue's): ``- building: F8, F7``."""
+    states = [*_CARD_STATES, *sorted({state for _, state in cards} - set(_CARD_STATES))]
     lines = []
     for state in states:
-        found = sorted(
-            (
-                (priority, milestone_order(key), key)
-                for key, named, priority in cards
-                if named == state
-            )
-        )
+        found = [thread_name(key) for key, named in cards if named == state]
         if found:
-            named = ", ".join(f"{thread_name(key)} ({priority})" for priority, _, key in found)
-            lines.append(f"- {state}: {named}")
+            lines.append(f"- {state}: {', '.join(found)}")
     return lines
 
 
 def where_it_stands(
     in_flight: Mapping[str, Any] | None,
     ready: Sequence[ReadyTicket],
-    cards: Collection[tuple[str, str, int]],
+    cards: Sequence[tuple[str, str]],
     minutes: Sequence[float],
 ) -> str:
     """The "Where the work stands" block of a planner job's prompt (F21 D1), from what the
     runner gives it: the job ``in_flight`` (state.json's entry), the ``ready`` tickets in the
-    runner's order (past 25, a count), every card as (short key, state, priority) and the
-    ``minutes`` the last merged tickets took, as their median. About 40 lines at most."""
+    runner's order (past 25, a count), every card as (short key, state) in the queue's order
+    (ADR 45) and the ``minutes`` the last merged tickets took, as their median. About 40
+    lines at most."""
     running = (in_flight or {}).get("ticket")
     lines = [_in_flight(in_flight, {t.id: t for t in ready})]
     waiting = [t for t in ready if t.id != running]
@@ -718,7 +711,7 @@ def where_it_stands(
     if (more := len(waiting) - _MAX_READY) > 0:
         lines.append(f"… and {more} more ready ticket{'s' if more > 1 else ''}.")
     if cards:
-        lines.append("Cards by state, each with its priority (lower goes first):")
+        lines.append("Cards by state, each state's in the queue's order (first goes first):")
         lines += _card_lines(cards)
     if minutes:
         usual = max(1, round(statistics.median(minutes)))

@@ -18,24 +18,18 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import overload
 
-import yaml
-
 from runner.tasks import (
-    BUG_PRIORITY,
     BUGS,
-    DEFAULT_PRIORITY,
     Task,
-    TaskError,
     blocked_ids,
     early_for,
     milestone_order,
     pick_next,
     pulls,
     short_key,
-    split_frontmatter,
 )
 from runner.tasks import run_order as _run_order
-from runner.tasks import task_priority as _task_priority
+from runner.tasks import task_place as _task_place
 from runner.usage import CACHE_READ_WEIGHT, OUTPUT_WEIGHT
 
 DOLLARS_PER_TOKEN = 4 / 1_000_000  # per token-equivalent (D7)
@@ -875,35 +869,15 @@ def place_key(milestone: str | None, ticket: str) -> str:
 def board_places(conn: sqlite3.Connection, project: str) -> dict[str, int]:
     """The queue's order (F222 D5): each card's short key (``f222``) and bug ticket's id
     mapped to its place, 0 first, from ``board_order``, the copy of ``.softfield/order.txt``
-    the runner keeps. `place` puts what the list doesn't name after all it names. A project
-    with no list yet orders as the runner's pick then does: by the cards' and bugs' priorities
-    (removed with the field, F222 D8)."""
+    the runner keeps. `place` puts what the list doesn't name after all it names, so a project
+    with no list yet is ordered by card number, then ticket id, as the runner's pick then is
+    (ADR 45: no card or bug carries a number)."""
     rows = conn.execute(
         "SELECT b.key FROM board_order b JOIN projects p ON p.id = b.project_id"
         " WHERE p.name = ? ORDER BY b.place",
         (project,),
     ).fetchall()
-    if rows:
-        return {row["key"]: n for n, row in enumerate(rows)}
-    keyed: list[tuple[int, tuple[str, int], str]] = []
-    for m in conn.execute(
-        "SELECT m.key, m.priority FROM milestones m JOIN projects p ON p.id = m.project_id"
-        " WHERE p.name = ? AND m.key != ?",
-        (project, BUGS),
-    ):
-        try:
-            order = milestone_order(m["key"])
-        except TaskError:
-            continue
-        own = DEFAULT_PRIORITY if m["priority"] is None else m["priority"]
-        keyed.append((own, order, short_key(m["key"])))
-    for t in conn.execute(
-        "SELECT t.ticket, t.body FROM tickets t JOIN projects p ON p.id = t.project_id"
-        " JOIN milestones m ON m.id = t.milestone_id WHERE p.name = ? AND m.key = ?",
-        (project, BUGS),
-    ):
-        keyed.append((ticket_priority(t["body"], BUGS, None), milestone_order(BUGS), t["ticket"]))
-    return {key: n for n, (_, _, key) in enumerate(sorted(keyed))}
+    return {row["key"]: n for n, row in enumerate(rows)}
 
 
 def place(places: Mapping[str, int], key: str) -> int:
@@ -911,24 +885,8 @@ def place(places: Mapping[str, int], key: str) -> int:
     return places.get(key, len(places))
 
 
-def ticket_priority(body: str | None, milestone: str | None, card: int | None) -> int:
-    """A ticket row's priority as the runner reads it (`runner.tasks.task_priority`): a bug's
-    ``priority:`` in its text, else 50; a feature ticket's card's, else 100, whatever its text
-    says (F173 D5). Lower goes first."""
-    if milestone != BUGS:
-        return DEFAULT_PRIORITY if card is None else card
-    try:
-        meta = split_frontmatter(body or "")[0]
-    except (TaskError, yaml.YAMLError):
-        meta = {}
-    own = meta.get("priority")
-    return own if type(own) is int and own >= 0 else BUG_PRIORITY
-
-
-def as_task(
-    ticket: str, milestone: str | None, after: Sequence[str], priority: int | None = None
-) -> Task:
-    """Enough of a ``Task`` for ``pick_next``: its id, milestone, dependencies and priority."""
+def as_task(ticket: str, milestone: str | None, after: Sequence[str]) -> Task:
+    """Enough of a ``Task`` for ``pick_next``: its id, milestone and dependencies."""
     return Task(
         id=ticket,
         milestone=milestone or "m0",
@@ -939,7 +897,6 @@ def as_task(
         finding=None,
         sections={},
         path=Path(ticket),
-        priority=priority,
     )
 
 
@@ -996,7 +953,7 @@ def run_order(
             kind=ready[t.id]["kind"],
             milestone=ready[t.id]["milestone"],
             waits=tuple(d for d in t.depends_on if d not in done),
-            place=_task_priority(t, cards),
+            place=_task_place(t, cards),
             early_for=early_for(t, cards, pulled),
         )
         for t in [*picked, *left]

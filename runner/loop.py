@@ -107,6 +107,7 @@ from runner.tasks import (
     load_dir,
     milestone_file,
     milestone_key,
+    milestone_order,
     parse_sections,
     parse_task,
     pick_next,
@@ -117,7 +118,7 @@ from runner.tasks import (
     split_frontmatter,
     stopped_ids,
     task_ids,
-    task_priority,
+    task_place,
     ticket_area,
     ticket_prefix,
 )
@@ -658,7 +659,6 @@ def sync_cards(s: Session) -> None:
             key,
             title=milestone_doc(text).get("title"),
             state=found.state,
-            priority=found.priority,
             area=found.area,
             signoff=sheet or None,
         )
@@ -3898,10 +3898,8 @@ def fix_ticket(repo: Path, milestone: str, findings: Mapping[str, Finding], by: 
     meta: dict[str, Any] = {"id": task_id, "milestone": milestone}
     if source.finding is not None:  # a fix of a fix is the lead's (f68-08)
         meta["agent"] = "lead"
-    if milestone == source.milestone:  # its card and place in the queue (ADR 19)
+    if milestone == source.milestone:  # its card (ADR 19); the list places it (ADR 45)
         meta |= {"area": source.area} if source.area else {}
-        if milestone == BUGS and source.priority is not None:  # a feature's has none (F173)
-            meta["priority"] = source.priority
     if source.difficulty is not None:
         meta["difficulty"] = source.difficulty
     meta |= {
@@ -4790,8 +4788,9 @@ def ticket_minutes(conn: sqlite3.Connection, project_id: int) -> list[float]:
     return list(minutes.values())
 
 
-def _all_cards(repo: Path) -> list[tuple[str, str, int]]:
-    """Every milestone doc's card as (short key, state, priority), as `sync_cards` reads them."""
+def _all_cards(repo: Path) -> list[tuple[str, str]]:
+    """Every milestone doc's card as (short key, state), as `sync_cards` reads them, in the
+    queue's order (ADR 45): the list's, then what it doesn't name by card number."""
     from runner.milestone import card  # runner.milestone imports this module
 
     found = []
@@ -4802,9 +4801,10 @@ def _all_cards(repo: Path) -> list[tuple[str, str, int]]:
         except (TaskError, OSError, UnicodeDecodeError):
             continue
         if key != BUGS:
-            read = card(key, text)
-            found.append((short_key(key), read.state, read.priority))
-    return found
+            found.append((short_key(key), card(key, text).state, milestone_order(key)))
+    places = {key: n for n, key in enumerate(order.read_order(repo) or [])}
+    found.sort(key=lambda c: (places.get(c[0], len(places)), c[2]))
+    return [(key, state) for key, state, _ in found]
 
 
 def work_stands(
@@ -4824,7 +4824,6 @@ def work_stands(
             ticket.id,
             by_id[ticket.id].milestone,
             "lead" if ticket.lead else "developer",
-            ticket.priority,
             # a dependency in the block's words: "waits for <id>"
             ticket.waits and ticket.waits.replace("waiting on ", "waits for ", 1),
             ticket.early_for,
@@ -5230,7 +5229,7 @@ def choose_ticket(
     which local takes. Over the week's pace line a lead ticket is passed over, with no park and
     no desk item, and asks again at the next pick (`allowance.lead_hold`, ADR 44 item 6). At the
     owner's share of the 5-hour window, developer tickets go before lead ones, so a lead ticket
-    parks only when nothing else can run (ADR 16 item 3). Each by priority (f5 D6), a ticket
+    parks only when nothing else can run (ADR 16 item 3). Each by place (f5 D6), a ticket
     waited for in its first waiter's place, read from the whole ready list (F173 D6)."""
     pulled = pulls(ready, cards)
 
@@ -5842,9 +5841,7 @@ def _dispatch_ticket(s: Session, task: Task, ready: list[Task]) -> dispatch.Tick
     cards = _cards(s.repo, ready)
     early = early_for(task, cards, pulls(ready, cards))
     regate = task.id in s.state.regate
-    return dispatch.Ticket(
-        task.id, lead, task_priority(task, cards), early_for=early, regate=regate
-    )
+    return dispatch.Ticket(task.id, lead, task_place(task, cards), early_for=early, regate=regate)
 
 
 def run_session(cfg: Config, *, once: bool, dry_run: bool, escalate: bool) -> SessionReport | None:
@@ -6125,20 +6122,9 @@ def _held(repo: Path, ready: list[Task]) -> dict[str, str]:
 
 
 def _cards(repo: Path, ready: list[Task]) -> dict[str, int]:
-    """The ready tickets' places: from the queue's list when the project has one (F222 D1,
-    each card's short key and bug's id to its place); else each short key to the priority on
-    its milestone doc's card (f5 D4), for the milestones that have a doc."""
-    from runner.milestone import card  # runner.milestone imports this module
-
-    listed = order.read_order(repo)
-    if listed is not None:
-        return order.places(listed, ready)
-    found = {}
-    for key in {t.milestone for t in ready if t.milestone != BUGS}:
-        doc = milestone_file(repo, "cards", key)
-        if doc.is_file():
-            found[short_key(key)] = card(key, doc.read_text(encoding="utf-8")).priority
-    return found
+    """The ready tickets' places, from the queue's list (F222 D1, each card's short key and
+    bug's id to its place); with no list yet, none, so they go by milestone, then id."""
+    return order.places(order.read_order(repo) or [], ready)
 
 
 def reserve_cards(repo: Path, ready: list[Task]) -> set[str]:
@@ -6340,9 +6326,9 @@ def _dispatch_tickets(
         if entry is not None and _still_parked(entry, at):
             not_before = at if entry.get(RETRY) else _resets(entry)
         lead = router.lead_only(task.agent, task.files, protected)
-        priority, early = task_priority(task, cards), early_for(task, cards, pulled)
+        place, early = task_place(task, cards), early_for(task, cards, pulled)
         gates = task.id in regate
-        tickets.append(dispatch.Ticket(task.id, lead, priority, waits, not_before, early, gates))
+        tickets.append(dispatch.Ticket(task.id, lead, place, waits, not_before, early, gates))
     return tickets
 
 

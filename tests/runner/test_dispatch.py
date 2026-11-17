@@ -16,12 +16,13 @@ def _row(kind: str, subject: str, *, minutes_ago: int = 10, not_before: datetime
     return Queued(kind, subject, f"why {kind} {subject}", created, until)
 
 
-def _lead(task_id: str, priority: int = 100, **kw) -> Ticket:
-    return Ticket(task_id, lead=True, priority=priority, **kw)
+def _lead(task_id: str, place: int = 0, **kw) -> Ticket:
+    """A lead ticket at its card's ``place`` in the queue, 0 first (the line says place + 1)."""
+    return Ticket(task_id, lead=True, place=place, **kw)
 
 
-def _dev(task_id: str, priority: int = 100, **kw) -> Ticket:
-    return Ticket(task_id, lead=False, priority=priority, **kw)
+def _dev(task_id: str, place: int = 0, **kw) -> Ticket:
+    return Ticket(task_id, lead=False, place=place, **kw)
 
 
 def _week(used: float) -> allowance.Window:
@@ -53,9 +54,10 @@ def test_a_due_review_goes_before_the_next_ticket():
 
 
 def test_lead_work_goes_before_a_developer_ticket():
-    """ADR 16 item 2: lead work first, even past a developer ticket of higher priority."""
+    """ADR 16 item 2: lead work first, even past a developer ticket placed before it. The
+    line says the place, not a number (F222 D7)."""
     got = pick([], [_dev("f8-07", 1), _lead("f8-02", 2)], OPEN, NOW)
-    assert got == Pick("ticket", "f8-02", "priority 2, lead ticket")
+    assert got == Pick("ticket", "f8-02", "place 3, lead ticket")
 
 
 def test_developers_run_meanwhile_while_claude_is_limited():
@@ -66,7 +68,7 @@ def test_developers_run_meanwhile_while_claude_is_limited():
     assert lines[0].waits == "Claude is limited until Mon 5 Oct 14:00"
     assert lines[1].waits is None
     assert pick([], [_lead("f8-02", 1), _dev("f8-07", 2)], limited, NOW) == Pick(
-        "ticket", "f8-07", "priority 2, developer ticket"
+        "ticket", "f8-07", "place 3, developer ticket"
     )
 
 
@@ -115,7 +117,7 @@ def test_over_the_line_a_ticket_parked_mid_work_goes_at_its_reset():
     """ADR 44 item 7: work already begun goes on, whatever the pace."""
     parked = _lead("f8-02", not_before=NOW - timedelta(minutes=1))
     assert pick([], [parked], Windows(claude=(_week_at_33(0.65),)), NOW) == Pick(
-        "ticket", "f8-02", "priority 100, lead ticket, its reset has passed"
+        "ticket", "f8-02", "place 1, lead ticket, its reset has passed"
     )
 
 
@@ -136,7 +138,7 @@ def test_a_parked_ticket_past_its_reset_goes_before_other_tickets():
     """`_next_task`: due parked tickets go first."""
     parked = _dev("f8-07", 5, not_before=NOW - timedelta(minutes=1))
     got = pick([], [_lead("f8-02", 1), parked], OPEN, NOW)
-    assert got == Pick("ticket", "f8-07", "priority 5, developer ticket, its reset has passed")
+    assert got == Pick("ticket", "f8-07", "place 6, developer ticket, its reset has passed")
 
 
 # --- D2's order --------------------------------------------------------------------------
@@ -172,7 +174,7 @@ def test_the_same_kind_goes_by_age():
 
 
 def test_tickets_keep_the_run_order_they_are_given_within_lead_and_developer():
-    """The caller orders them as `pick_next` does (priority, milestone, id)."""
+    """The caller orders them as `pick_next` does (place, milestone, id)."""
     tickets = [_dev("f8-07", 1), _lead("f8-03", 1), _dev("f8-06", 2), _lead("f8-02", 2)]
     assert [line.pick.subject for line in plan([], tickets, OPEN, NOW)] == [
         "f8-03",
@@ -188,7 +190,7 @@ def test_a_row_not_before_a_future_time_is_skipped_and_says_until_when():
     assert _order(lines) == [("escalation", "f1-21"), ("ticket", "f8-07")]
     assert lines[0].waits == "waits until Mon 5 Oct 15:00"
     assert pick([parked], [_dev("f8-07")], OPEN, NOW) == Pick(
-        "ticket", "f8-07", "priority 100, developer ticket"
+        "ticket", "f8-07", "place 1, developer ticket"
     )
 
 
@@ -299,7 +301,7 @@ def test_a_fast_lane_ticket_goes_before_the_planner_a_checkpoint_and_a_review():
     parked = _dev("f8-07", 1, not_before=NOW - timedelta(minutes=1))
     tickets = [parked, _lead("f8-02", 2), _dev("f172-01", 50)]
     got = pick(LANE_QUEUE, tickets, OPEN, NOW, first={"f172-01"})
-    assert got == Pick("ticket", "f172-01", "fast lane, priority 50, developer ticket")
+    assert got == Pick("ticket", "f172-01", "fast lane, place 51, developer ticket")
     lines = plan(LANE_QUEUE, tickets, OPEN, NOW, first={"f172-01"})
     assert _order(lines)[0] == ("ticket", "f172-01")
     assert len(lines) == 8
@@ -359,7 +361,7 @@ def test_a_lane_lead_ticket_waits_for_a_real_limit_and_the_line_goes_on():
     assert got is not None and got.subject == "f8-07"
     at_reserve = Windows(claude=(_week(0.75),))
     assert pick([], tickets, at_reserve, NOW, first={"f172-01"}) == Pick(
-        "ticket", "f172-01", "fast lane, priority 9, lead ticket"
+        "ticket", "f172-01", "fast lane, place 10, lead ticket"
     )
 
 

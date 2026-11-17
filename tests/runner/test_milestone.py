@@ -164,30 +164,33 @@ CARD_DOC = """\
 
 
 def test_a_card_reads_its_header_line():
-    """f5 D4: a milestone doc's header holds its card."""
-    assert card("f5-board", CARD_DOC) == Card("needs sign-off", 2, "product")
-    building = "# F5\n\n> **State:** building · **Priority:** 2 · **Area:** factory\n"
-    assert card("f5", building) == Card("building", 2, "factory")
+    """f5 D4: a milestone doc's header holds its card. A done card's old number reads as
+    before and counts for nothing (ADR 45)."""
+    assert card("f5-board", CARD_DOC) == Card("needs sign-off", "product")
+    building = "# F5\n\n> **State:** building · **Area:** factory\n"
+    assert card("f5", building) == Card("building", "factory")
+    done = "# F5\n\n> **State:** done · **Priority:** 2 · **Area:** factory\n"
+    assert card("f5", done) == Card("done", "factory")
+    assert "priority" not in Card.__dataclass_fields__
 
 
 def test_a_card_without_its_line_is_derived():
-    """No state: done once signed off, else building; no priority: 100; no area: the key's
-    series."""
-    assert card("f2", "# F2\n\n> **Status: done.** Signed off.\n") == Card("done", 100, "factory")
-    assert card("m4", MILESTONE_DOC) == Card("building", 100, "product")
-    assert card("f6", "# F6\n> **Priority:** 7\n") == Card("building", 7, "factory")
+    """No state: done once signed off, else building; no area: the key's series."""
+    assert card("f2", "# F2\n\n> **Status: done.** Signed off.\n") == Card("done", "factory")
+    assert card("m4", MILESTONE_DOC) == Card("building", "product")
+    assert card("f6", "# F6\n> **Priority:** 7\n") == Card("building", "factory")
     unknown = "# F7\n> **State:** someday · **Area:** garden\n"
-    assert card("f7", unknown) == Card("building", 100, "factory")
+    assert card("f7", unknown) == Card("building", "factory")
 
 
 def test_a_card_marked_reserve_yes_may_use_the_reserve():
     """F172 D1: `**Reserve:** yes` after the Area; anything else, or no field, is no."""
-    marked = "# F9\n\n> **State:** ready · **Priority:** 2 · **Area:** factory · **Reserve:** yes\n"
-    assert card("f9", marked) == Card("ready", 2, "factory", reserve=True)
+    marked = "# F9\n\n> **State:** ready · **Area:** factory · **Reserve:** yes\n"
+    assert card("f9", marked) == Card("ready", "factory", reserve=True)
     assert not card("f9", marked.replace("yes", "no")).reserve
     assert not card("f9", marked.replace(" · **Reserve:** yes", "")).reserve
     lane = marked.replace("**Reserve:**", "**Fast lane:**")  # the name in the card (F172 D10)
-    assert card("f9", lane) == Card("ready", 2, "factory", reserve=True)
+    assert card("f9", lane) == Card("ready", "factory", reserve=True)
     assert not card("f9", lane.replace("yes", "no")).reserve
     below = "# F9\n\n> **State:** ready\n\n## Outcome\n**Reserve:** yes\n"
     assert not card("f9", below).reserve  # only the header counts
@@ -197,7 +200,7 @@ def test_every_milestone_doc_gets_its_card_at_session_start(repo):
     """f5 D4: an idea with no tickets yet is a card on the board too, as a ticket is in the
     queue (`sync_tickets`)."""
     (repo / ".softfield" / "cards").mkdir(parents=True)
-    idea = "# Milestone F9: a garden\n\n> **State:** idea · **Priority:** 3\n"
+    idea = "# Milestone F9: a garden\n\n> **State:** idea\n"
     (repo / ".softfield" / "cards" / "f9-garden.md").write_text(idea)
     (repo / ".softfield" / "cards" / "m1.md").write_text(MILESTONE_DOC)
     (repo / ".softfield" / "cards" / "notes.md").write_text("# Not a milestone\n")
@@ -207,13 +210,8 @@ def test_every_milestone_doc_gets_its_card_at_session_start(repo):
     rows = {r["key"]: r for r in _rows(repo, "milestones")}
     assert set(rows) == {"f9-garden", "m1"}
     garden = rows["f9-garden"]
-    assert (garden["title"], garden["state"], garden["priority"]) == ("a garden", "idea", 3)
-    assert garden["area"] == "factory"
-    assert (rows["m1"]["state"], rows["m1"]["priority"], rows["m1"]["area"]) == (
-        "building",
-        100,
-        "product",
-    )
+    assert (garden["title"], garden["state"], garden["area"]) == ("a garden", "idea", "factory")
+    assert (rows["m1"]["state"], rows["m1"]["area"]) == ("building", "product")
 
 
 def test_the_sign_off_sections_leave_a_missing_heading_out():

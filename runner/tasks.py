@@ -46,8 +46,6 @@ _KEY_RE = re.compile(r"([a-z]+)(0|[1-9]\d*)(-[a-z][a-z0-9]*(?:-[a-z0-9]+)*)?")
 BUGS = "bugs"
 _BUG_ID_RE = re.compile(r"bug-\d{2,}-[a-z0-9]+(?:-[a-z0-9]+)*")
 AREAS = ("factory", "product")  # ADR 19 item 2b
-BUG_PRIORITY = 50  # f5 D5: a bug's default
-DEFAULT_PRIORITY = 100  # f5 D4: a milestone card's default, so a ticket's with neither
 
 
 def milestone_key(value: object) -> str:
@@ -168,7 +166,6 @@ class Task:
     commands: tuple[str, ...] = ()  # a lead ticket's extra Bash prefixes (f1's probes)
     difficulty: int | None = None  # 1 to 10, set at plan time (ADR 14 item 5)
     difficulty_corrected: int | None = None  # set by the lead at review when it was off
-    priority: int | None = None  # a bug's place on the board, 50 by default (F173 D1)
     area: str | None = None  # factory or product (ADR 19 item 2b); required on a bug
     tests_only: bool = False  # a weak test's fix: its tests pass on main (f8-09)
 
@@ -255,17 +252,6 @@ def difficulty(meta: dict[str, Any], key: str) -> int | None:
     return value
 
 
-def _priority(meta: dict[str, Any], milestone: str) -> int | None:
-    """``priority``: absent (a bug's is 50; a milestone ticket's comes from its card) or a
-    whole number from 0, lower first. Pre-flight refuses one on a feature ticket (F173 D2)."""
-    if "priority" not in meta:
-        return BUG_PRIORITY if milestone == BUGS else None
-    value = meta["priority"]
-    if type(value) is not int or value < 0:
-        raise TaskError(f"'priority' must be a whole number from 0, not {value!r}")
-    return value
-
-
 def ticket_area(meta: dict[str, Any]) -> str | None:
     """``area``: absent, or factory or product. A bug without one fails pre-flight."""
     if "area" not in meta:
@@ -317,7 +303,6 @@ def parse_task(path: Path, default_max_diff: int) -> Task:
         commands=_commands(meta, agent),
         difficulty=difficulty(meta, "difficulty"),
         difficulty_corrected=difficulty(meta, "difficulty_corrected"),
-        priority=_priority(meta, milestone),
         area=ticket_area(meta),
         tests_only=tests_only,
     )
@@ -381,24 +366,28 @@ def held_ids(ready: Iterable[Task], waits: Mapping[str, str]) -> dict[str, str]:
     return {t.id: waits[short_key(t.milestone)] for t in ready if short_key(t.milestone) in waits}
 
 
-def task_priority(task: Task, cards: Mapping[str, int]) -> int:
-    """A ticket's place: ``cards`` maps a card's short key, or a bug's id, to it (the queue's
-    list, `runner.order.places`, F222 D1). Without one, a bug's own ``priority:`` (50 when
-    none); a feature ticket's card's, else 100. Lower goes first (ADR 19 item 3). A feature
-    ticket's own ``priority:`` is never read: the board orders the work (F173 D1)."""
-    if task.milestone == BUGS:
-        if task.id in cards:
-            return cards[task.id]
-        return BUG_PRIORITY if task.priority is None else task.priority
-    return cards.get(short_key(task.milestone), DEFAULT_PRIORITY)
+def place_key(task: Task) -> str:
+    """The key that places ``task`` in the queue's list (ADR 45): a bug's own id, else its
+    card's short key."""
+    return task.id if task.milestone == BUGS else short_key(task.milestone)
 
 
-type RunKey = tuple[int, tuple[str, int], str]  # a ticket's own place: priority, milestone, id
+def task_place(task: Task, cards: Mapping[str, int]) -> int:
+    """A ticket's place in the queue, 0 first: ``cards`` maps a card's short key, or a bug's
+    id, to it (the queue's list, `runner.order.places`, F222 D1); one it doesn't name goes after
+    all it names. The list is the only order: no ticket or card carries a number (ADR 45)."""
+    key = place_key(task)
+    if key in cards:
+        return cards[key]
+    return max(cards.values(), default=-1) + 1
+
+
+type RunKey = tuple[int, tuple[str, int], str]  # a ticket's own place: place, milestone, id
 
 
 def own_order(task: Task, cards: Mapping[str, int]) -> RunKey:
-    """f5 D6: priority, then milestone order, then id."""
-    return task_priority(task, cards), milestone_order(task.milestone), task.id
+    """f5 D6: the queue's place, then milestone order, then id."""
+    return task_place(task, cards), milestone_order(task.milestone), task.id
 
 
 def pulls(ready: Iterable[Task], cards: Mapping[str, int]) -> dict[str, RunKey]:
@@ -432,7 +421,7 @@ def early_for(task: Task, cards: Mapping[str, int], pulled: Mapping[str, RunKey]
 def run_order(
     task: Task, cards: Mapping[str, int], pulled: Mapping[str, RunKey] | None = None
 ) -> tuple[RunKey, str]:
-    """f5 D6: priority, then milestone order, then id, or the place of the first ticket that
+    """f5 D6: place, then milestone order, then id, or the place of the first ticket that
     waits for it when that one goes first (F173 D6, ``pulled`` from `pulls`); then its own id.
     ``depends_on`` filters before it (``pick_next``)."""
     own = own_order(task, cards)
@@ -464,10 +453,11 @@ TESTS_ONLY = (
 )
 TESTS_ONLY_CODE = "a `tests_only` ticket lists only tests in `files:`"
 AREA_MISSING = "a bug ticket needs `area:` (factory or product), ADR 19 item 2b"
-FEATURE_PRIORITY = (
-    "a feature ticket has no `priority:`: the board orders the work, and the ticket runs in"
-    " its card's place (F173)"
+NO_PRIORITY = (
+    "a ticket has no `priority:`: the board orders the work, and a feature ticket runs in its"
+    " card's place (ADR 45)"
 )
+ORDER_FILE = ".softfield/order.txt"  # the queue's list (`runner.order`, F222 D1)
 FIX_OF_FIX = "a fix of a fix: the lead does it"
 STALE_BRANCH = (
     '"The branch so far" describes work that `task/<id>` no longer holds (no diff from main):'
@@ -522,6 +512,36 @@ def _stale_branch(task: Task, repo: Path) -> bool:
     return diff.returncode != 1  # 0: no diff; 128: no such branch
 
 
+def _says_priority(path: Path) -> bool:
+    try:
+        meta, _ = split_frontmatter(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, ValueError, yaml.YAMLError):
+        return False
+    return "priority" in meta
+
+
+def _numbered(task: Task, repo: Path) -> bool:
+    """Whether the ticket's frontmatter still says ``priority:`` where it may not (ADR 45 item
+    5): on any feature ticket; on a bug once the runner's move has run for its project, which
+    writes its list and removes every open bug's number at once (F222 D4, D8). So a project
+    not yet moved, with a list still to make or another bug in .softfield/tasks/ready/ or
+    .softfield/tasks/later/ still numbered, isn't refused: the move removes them all."""
+    if not _says_priority(task.path):
+        return False
+    if task.milestone != BUGS:
+        return True
+    if not (repo / ORDER_FILE).is_file():
+        return False
+    tasks = repo / ".softfield" / "tasks"
+    others = (
+        path
+        for folder in ("ready", LATER)
+        for path in sorted((tasks / folder).glob("bug-*.md"))
+        if path.name != task.path.name
+    )
+    return not any(_says_priority(path) for path in others)
+
+
 def preflight(task: Task, repo: Path) -> list[str]:
     """Problems with the task's files and Context/Pattern references. Empty means OK.
 
@@ -538,8 +558,8 @@ def preflight(task: Task, repo: Path) -> list[str]:
         problems.append(TESTS_ONLY)
     if task.milestone == BUGS and task.area is None:
         problems.append(AREA_MISSING)
-    if task.milestone != BUGS and task.priority is not None:
-        problems.append(FEATURE_PRIORITY)
+    if _numbered(task, repo):
+        problems.append(NO_PRIORITY)
     if _fix_of_fix(task, repo, task.sections["Context"]):
         problems.append(FIX_OF_FIX)
     if _stale_branch(task, repo):

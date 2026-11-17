@@ -81,8 +81,6 @@ PLANNING = [  # the planning room's six requests (f6 D1); the runner checks thei
     ("accept_adr", "f7", "23"),
     ("approve_plan", "f7", None),
     ("drop_seed", "f11", None),  # f6-17
-    ("priority", "f1-05-first", "4"),  # f6-18: a ticket's, or a card's
-    ("priority", "f7", "0"),
     ("reject", "f7/plan", None),  # F31 D2: won't do
     ("change", "41", '{"title": "Two queues", "thoughts": ""}'),  # F14 D1: a waiting plant's
     ("change", "41", '{"cancel": true}'),
@@ -163,6 +161,7 @@ def test_a_refused_post_never_opens_the_database_for_writing(client, monkeypatch
     [
         ("kind=rm&subject=f1", 400),  # not a request the runner knows
         ("kind=five_hour&value=yes", 400),  # f5-10's Yes and No, replaced by the switches
+        ("kind=priority&subject=f7&value=0", 400),  # f6-18's, gone with the number (ADR 45)
         ("subject=f1", 400),
         ("kind=signoff&subject=f1&project=nowhere", 404),  # the dashboard makes no project
     ],

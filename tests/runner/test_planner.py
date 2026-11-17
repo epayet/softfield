@@ -511,39 +511,38 @@ def test_a_merged_threads_history_says_whose_it_was():
 
 
 def _ready(n: int) -> list[planner.ReadyTicket]:
-    return [planner.ReadyTicket(f"f7-{i:02}-t", "f7-one-queue", "developer", 3) for i in range(n)]
+    return [planner.ReadyTicket(f"f7-{i:02}-t", "f7-one-queue", "developer") for i in range(n)]
 
 
 def test_the_block_lists_the_ticket_in_flight_then_the_ready_ones_in_the_order_given():
     """F21 D1: the one in flight is named once, with who has it; the others keep their order,
-    each with its milestone, who does it, its priority and what it waits for."""
+    each with its milestone, who does it and what it waits for; no number (F222 D7)."""
     ready = [
-        planner.ReadyTicket("f8-01-x", "f8-the-line", "lead", 1),
-        planner.ReadyTicket("f7-01-a", "f7-one-queue", "developer", 3),
-        planner.ReadyTicket("f7-02-b", "f7-one-queue", "developer", 3, "waits for f7-01-a"),
+        planner.ReadyTicket("f8-01-x", "f8-the-line", "lead"),
+        planner.ReadyTicket("f7-01-a", "f7-one-queue", "developer"),
+        planner.ReadyTicket("f7-02-b", "f7-one-queue", "developer", "waits for f7-01-a"),
     ]
     in_flight = {"kind": "local", "ticket": "f7-01-a", "agent": "local-qwen"}
     lines = planner.where_it_stands(in_flight, ready, [], []).splitlines()
-    assert "In flight: f7-01-a (f7-one-queue, developer, priority 3), now with local-qwen." in lines
-    assert "1. f8-01-x (f8-the-line, lead, priority 1)" in lines
-    assert "2. f7-02-b (f7-one-queue, developer, priority 3): waits for f7-01-a" in lines
+    assert "In flight: f7-01-a (f7-one-queue, developer), now with local-qwen." in lines
+    assert "1. f8-01-x (f8-the-line, lead)" in lines
+    assert "2. f7-02-b (f7-one-queue, developer): waits for f7-01-a" in lines
     assert not any(line.startswith(("1. f7-01-a", "2. f7-01-a", "3.")) for line in lines)
-    assert lines.index("1. f8-01-x (f8-the-line, lead, priority 1)") > lines.index(
-        "In flight: f7-01-a (f7-one-queue, developer, priority 3), now with local-qwen."
+    assert lines.index("1. f8-01-x (f8-the-line, lead)") > lines.index(
+        "In flight: f7-01-a (f7-one-queue, developer), now with local-qwen."
     )
 
 
-def test_a_ticket_pulled_ahead_of_its_priority_says_who_it_runs_early_for():
-    """F21 review F2: F173 D7 places it before tickets of a lower priority; the block says why."""
+def test_a_ticket_pulled_ahead_of_its_card_says_who_it_runs_early_for():
+    """F21 review F2: F173 D7 places it before tickets of a card ahead of its own; the block
+    says why."""
     ready = [
-        planner.ReadyTicket("f9-01-x", "f9-base", "developer", 8, early="f8-02-y"),
-        planner.ReadyTicket("f8-02-y", "f8-the-line", "lead", 1, "waits for f9-01-x"),
+        planner.ReadyTicket("f9-01-x", "f9-base", "developer", early="f8-02-y"),
+        planner.ReadyTicket("f8-02-y", "f8-the-line", "lead", "waits for f9-01-x"),
     ]
     lines = planner.where_it_stands(None, ready, [], []).splitlines()
-    assert "1. f9-01-x (f9-base, developer, priority 8, early for f8-02-y, which waits for it)" in (
-        lines
-    )
-    assert "2. f8-02-y (f8-the-line, lead, priority 1): waits for f9-01-x" in lines
+    assert "1. f9-01-x (f9-base, developer, early for f8-02-y, which waits for it)" in lines
+    assert "2. f8-02-y (f8-the-line, lead): waits for f9-01-x" in lines
 
 
 def test_the_block_says_when_nothing_is_in_flight_or_ready_and_names_another_job():
@@ -555,13 +554,16 @@ def test_the_block_says_when_nothing_is_in_flight_or_ready_and_names_another_job
     )
 
 
-def test_the_block_shows_every_card_with_its_state_and_priority():
-    cards = [("f9", "idea", 100), ("f7", "building", 3), ("f8", "building", 1), ("m4", "done", 100)]
-    lines = planner.where_it_stands(None, [], cards, []).splitlines()
-    assert "- building: F8 (1), F7 (3)" in lines  # lower goes first
-    assert "- idea: F9 (100)" in lines and "- done: M4 (100)" in lines
-    assert lines.index("- building: F8 (1), F7 (3)") < lines.index("- idea: F9 (100)")
+def test_the_block_shows_every_card_with_its_state_in_the_queues_order():
+    """F222 D7: each state's cards in the order given (the queue's), without numbers."""
+    cards = [("f9", "idea"), ("f8", "building"), ("f7", "building"), ("m4", "done")]
+    block = planner.where_it_stands(None, [], cards, [])
+    lines = block.splitlines()
+    assert "- building: F8, F7" in lines  # first in line first, whatever its card number
+    assert "- idea: F9" in lines and "- done: M4" in lines
+    assert lines.index("- building: F8, F7") < lines.index("- idea: F9")
     assert sum(line.startswith("- ") for line in lines) == 3  # a state with no card has no line
+    assert "priority" not in block
 
 
 def test_the_block_gives_the_median_duration_in_minutes_or_says_none_merged():
@@ -574,20 +576,20 @@ def test_the_block_gives_the_median_duration_in_minutes_or_says_none_merged():
 
 
 def test_past_25_ready_tickets_the_rest_are_a_count_and_the_block_stays_short():
-    cards = [(f"f{i}", state, i) for i, state in enumerate(["idea", "ready", "done"] * 40)]
+    cards = [(f"f{i}", state) for i, state in enumerate(["idea", "ready", "done"] * 40)]
     lines = planner.where_it_stands(None, _ready(31), cards, [5.0]).splitlines()
-    assert "25. f7-24-t (f7-one-queue, developer, priority 3)" in lines
+    assert "25. f7-24-t (f7-one-queue, developer)" in lines
     assert not any("f7-25-t" in line for line in lines)
     assert "… and 6 more ready tickets." in lines
     assert len(lines) <= 40
     exact = planner.where_it_stands(None, _ready(25), [], []).splitlines()
-    assert "25. f7-24-t (f7-one-queue, developer, priority 3)" in exact
+    assert "25. f7-24-t (f7-one-queue, developer)" in exact
     assert not any("more ready ticket" in line for line in exact)
     assert "… and 1 more ready ticket." in planner.where_it_stands(None, _ready(26), [], [])
 
 
 def test_the_prompt_carries_where_the_work_stands_before_the_message():
-    stands = planner.where_it_stands(None, _ready(2), [("f7", "building", 3)], [12.0])
+    stands = planner.where_it_stands(None, _ready(2), [("f7", "building")], [12.0])
     for thread in ("f7", "general"):
         prompt = planner.prompt(thread, "When is F7 done?", {1: "Why?"}, stands=stands)
         assert stands in prompt and "On your point 1: Why?" in prompt
@@ -1018,9 +1020,11 @@ def test_a_one_box_note_is_its_heading_and_its_whole_text():
 
 def test_a_seed_card_is_an_idea_with_the_owners_words_under_notes():
     doc = planner.seed_card("f7", "One queue", "Why two?\nOne is enough.", "factory", "Planted.")
-    assert milestone.card("f7-one-queue", doc) == milestone.Card("idea", 100, "factory")
+    assert milestone.card("f7-one-queue", doc) == milestone.Card("idea", "factory")
     assert milestone.milestone_doc(doc) == {"title": "One queue"}
-    assert doc.startswith("# Milestone F7: One queue\n")
+    # no Priority in its header: the queue's list places it (F222 D8)
+    assert doc.startswith("# Milestone F7: One queue\n\n> **State:** idea · **Area:** factory\n")
+    assert "Priority" not in doc
     assert doc.endswith("## Notes\nWhy two?\nOne is enough.\n")
 
 
@@ -1063,11 +1067,11 @@ def _f6(repo: Path) -> None:
     git(repo, "commit", "-q", "-m", "f6")
 
 
-def _board(repo: Path) -> dict[str, tuple[object, object, object, object]]:
+def _board(repo: Path) -> dict[str, tuple[object, object, object]]:
     conn = metrics.open_db(_db(repo))
     try:
         rows = conn.execute("SELECT * FROM milestones").fetchall()
-        return {r["key"]: (r["title"], r["state"], r["priority"], r["area"]) for r in rows}
+        return {r["key"]: (r["title"], r["state"], r["area"]) for r in rows}
     finally:
         conn.close()
 
@@ -1110,7 +1114,8 @@ def test_a_plant_request_writes_and_commits_an_idea_card_with_the_owners_words(r
     assert _request(repo, asked) == (NOW.isoformat(), result)
     doc = (repo / ".softfield" / "cards" / "f7-parallel-planners.md").read_text()
     assert "## Notes\nTwo at once?\nMaybe.\n" in doc
-    assert milestone.card("f7-parallel-planners", doc) == milestone.Card("idea", 100, "factory")
+    assert milestone.card("f7-parallel-planners", doc) == milestone.Card("idea", "factory")
+    assert "**Priority:**" not in doc
     # one commit by the runner, of the card alone
     assert git(repo, "rev-parse", "HEAD~1").strip() == head
     assert git(repo, "log", "-1", "--format=%s").strip() == "F7 planted by the owner"
@@ -1118,7 +1123,7 @@ def test_a_plant_request_writes_and_commits_an_idea_card_with_the_owners_words(r
     changed = git(repo, "show", "--name-only", "--format=", "HEAD").split()
     assert changed == [".softfield/cards/f7-parallel-planners.md"]
     assert git(repo, "status", "--porcelain").strip() == "M coucou/thing.py"
-    assert _board(repo)["f7-parallel-planners"] == ("Parallel planners", "idea", 100, "factory")
+    assert _board(repo)["f7-parallel-planners"] == ("Parallel planners", "idea", "factory")
     # the owner's words are also F7's first message, for the lead to answer (2026-10-07)
     assert _for_the_lead(repo) == [("f7", "Parallel planners\n\nTwo at once?\nMaybe.")]
     assert _apply(repo) == []  # finished once

@@ -101,7 +101,7 @@ def test_signoff_takes_a_planning_room_card_and_a_review_with_no_status_line(rep
         "> **Status: done.** Signed off by the owner on 2026-10-01."
     )
     assert "> Planted by the owner on 2026-10-01.\n" in doc
-    assert milestone.card("f7-one-queue", doc) == milestone.Card("done", 2, "factory")
+    assert milestone.card("f7-one-queue", doc) == milestone.Card("done", "factory")
     assert review.read_text().startswith(
         "# Review: F7 one queue\n\n- **Status:** done, signed off by the owner on 2026-10-01.\n"
         "\n## Sign-off sheet\n"

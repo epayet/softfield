@@ -52,21 +52,23 @@ def test_run_order_is_pick_next_applied_again_and_again(line_db):
     )
 
 
-def test_run_order_follows_the_board_not_a_feature_tickets_own_priority(tmp_path):
-    """F173: the order the runner picks, read from the rows: a card at 0 before one at 1
-    whatever its tickets say, inside a card by what they wait for then id, a bug by its own."""
+def test_run_order_follows_the_board_not_a_ticket_s_own_priority(tmp_path):
+    """F173, ADR 45: the order the runner picks, read from the rows: a card listed first before
+    one listed second whatever its tickets say, inside a card by what they wait for then id, a
+    bug by its own place; an old ``priority:`` orders nothing."""
     db = metrics.open_db(tmp_path / "factory-metrics.sqlite")
     project = metrics.upsert_project(db, PROJECT)
-    first = metrics.upsert_milestone(db, project, "f9", priority=0)
-    second = metrics.upsert_milestone(db, project, "f2", priority=1)
+    first = metrics.upsert_milestone(db, project, "f9")
+    second = metrics.upsert_milestone(db, project, "f2")
     bugs = metrics.upsert_milestone(db, project, "bugs")
+    metrics.set_board_order(db, project, ["f9", "f2", "bug-01-x", "bug-02-y"])
     rows = [
         ("f9-02-b", first, "---\npriority: 100\n---\n", []),
         ("f9-01-a", first, "---\npriority: 100\n---\n", ["f9-02-b"]),
         ("f9-03-c", first, None, []),
         ("f2-01-a", second, "---\npriority: 0\n---\n", []),
-        ("bug-01-x", bugs, "---\npriority: 2\n---\n", []),
-        ("bug-02-y", bugs, None, []),
+        ("bug-01-x", bugs, "---\npriority: 9\n---\n", []),
+        ("bug-02-y", bugs, "---\npriority: 0\n---\n", []),
     ]
     for ticket, milestone_id, body, after in rows:
         metrics.upsert_ticket(
@@ -82,7 +84,6 @@ def test_run_order_follows_the_board_not_a_feature_tickets_own_priority(tmp_path
         order = run_order(db, PROJECT)
     finally:
         db.close()
-    # no list yet: the places the priorities give, as the runner's pick then has them
     assert [(u.ticket, u.place) for u in order] == [
         ("f9-02-b", 0),
         ("f9-01-a", 0),
@@ -94,15 +95,14 @@ def test_run_order_follows_the_board_not_a_feature_tickets_own_priority(tmp_path
 
 
 def test_run_order_puts_what_a_higher_ticket_waits_for_in_its_place(tmp_path):
-    """F173 D6, D7: f15-06 (F15 at 4) waits on f73-01 (F73 at 6), which waits on f63-01
-    (F63 at 14): both go before F132 (at 5), each saying whom it runs early for. A waiter of
+    """F173 D6, D7: f15-06 (F15 first) waits on f73-01 (F73 third), which waits on f63-01
+    (F63 last): both go before F132 (second), each saying whom it runs early for. A waiter of
     its own card says nothing."""
     db = metrics.open_db(tmp_path / "factory-metrics.sqlite")
     project = metrics.upsert_project(db, PROJECT)
-    cards = {
-        key: metrics.upsert_milestone(db, project, key, priority=place)
-        for key, place in (("f15", 4), ("f132", 5), ("f73", 6), ("f63", 14))
-    }
+    line = ("f15", "f132", "f73", "f63")
+    cards = {key: metrics.upsert_milestone(db, project, key) for key in line}
+    metrics.set_board_order(db, project, list(line))
     rows = [
         ("f15-06-card-actions", "f15", ["f73-01-set-aside-list"]),
         ("f73-01-set-aside-list", "f73", ["f63-01-desk-order"]),
@@ -129,13 +129,13 @@ def test_run_order_puts_what_a_higher_ticket_waits_for_in_its_place(tmp_path):
 
 
 def _queued(tmp_path: Path) -> sqlite3.Connection:
-    """F222: cards F9 (priority 0), F2 (1) and F5 (2), each with a ready ticket, and bugs
-    ``bug-01-x`` (priority 3) and ``bug-02-y``, also ready; the list names none yet."""
+    """F222: cards F9, F2 and F5, each with a ready ticket, and bugs ``bug-01-x`` and
+    ``bug-02-y`` (an old ``priority: 3`` each), also ready; the list names none yet."""
     db = metrics.open_db(tmp_path / "factory-metrics.sqlite")
     project = metrics.upsert_project(db, PROJECT)
     bugs = metrics.upsert_milestone(db, project, "bugs")
-    for n, key in enumerate(("f9", "f2", "f5")):
-        card = metrics.upsert_milestone(db, project, key, priority=n)
+    for key in ("f9", "f2", "f5"):
+        card = metrics.upsert_milestone(db, project, key)
         metrics.upsert_ticket(db, project, f"{key}-01-a", milestone_id=card, state="ready")
     for ticket in ("bug-01-x", "bug-02-y"):
         metrics.upsert_ticket(
@@ -184,6 +184,19 @@ def test_run_order_is_the_runner_s_dry_run_on_the_same_list(tmp_path):
     ]
     picked, _ = in_run_order(ready, set(), set(), order.places(listed, ready))
     assert shown == [t.id for t in picked]
+
+
+def test_with_no_list_yet_nothing_is_placed_and_the_run_goes_by_card_then_id(tmp_path):
+    """ADR 45 item 2: a project the runner hasn't moved yet has no copy of a list, and no card
+    or bug carries a number, so every key is unnamed: a bug first, then by card number."""
+    db = _queued(tmp_path)
+    try:
+        order = run_order(db, PROJECT)
+        places = board_places(db, PROJECT)
+    finally:
+        db.close()
+    assert places == {}
+    assert [u.ticket for u in order] == ["bug-01-x", "bug-02-y", "f2-01-a", "f5-01-a", "f9-01-a"]
 
 
 def test_run_order_of_an_empty_queue(db):

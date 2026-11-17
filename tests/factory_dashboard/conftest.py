@@ -717,7 +717,6 @@ def write_milestones(conn: sqlite3.Connection) -> None:
         title="F5 milestone",
         state="idea",
         status="ready",
-        priority=10,
     )
     metrics.upsert_milestone(
         conn,
@@ -726,8 +725,9 @@ def write_milestones(conn: sqlite3.Connection) -> None:
         title="F3 milestone",
         state="idea",
         status="ready",
-        priority=2,
     )
+    # the queue's list (ADR 45): F3, then F5; the rest after, by card number
+    metrics.set_board_order(conn, project, ["f3", "f5"])
 
 
 def write_jobs(conn: sqlite3.Connection) -> None:
@@ -2070,16 +2070,16 @@ def write_board(conn: sqlite3.Connection) -> None:
             conn, project, name, milestone_id=m, state=state, title=f"Goal of {name}.", **values
         )
 
-    milestone("f20-duck-pond", "The duck pond", state="idea", priority=30, area="product")
-    milestone("f21-parallel", "Parallel developers", state="idea", priority=20, area="factory")
+    milestone("f20-duck-pond", "The duck pond", state="idea", area="product")
+    milestone("f21-parallel", "Parallel developers", state="idea", area="factory")
     metrics.planner_thread(conn, project, "f21", _at(timedelta(hours=1)))
-    milestone("f22-research", "Research", state="planning", priority=10, area="factory")
+    milestone("f22-research", "Research", state="planning", area="factory")
 
-    planted = milestone("f23-planted", "Planted", state="ready", priority=5, area="factory")
+    planted = milestone("f23-planted", "Planted", state="ready", area="factory")
     ticket("f23-01-first", "ready", planted)
     ticket("f23-02-second", "ready", planted)
 
-    growing = milestone("f24-growing", "Growing", state="ready", priority=1, area="factory")
+    growing = milestone("f24-growing", "Growing", state="ready", area="factory")
     merged = ticket("f24-01-merged", "done", growing)
     _job(conn, run, growing, merged, "developer", LOCAL, 1, "passed")
     working = ticket("f24-02-working", "running", growing)
@@ -2111,6 +2111,15 @@ def write_board(conn: sqlite3.Connection) -> None:
     fixed = ticket("bug-05-fixed", "done", bugs, area="product")
     _job(conn, run, bugs, fixed, "developer", LOCAL, 1, "passed")
     ticket("bug-06-gone", metrics.REMOVED, bugs, area="factory")
+    # the queue's list (ADR 45); bug-02's old ``priority: 7`` orders nothing
+    metrics.set_board_order(
+        conn,
+        project,
+        [
+            *("f24", "f23", "bug-02-stale", "f22", "f21", "f20", "bug-01-duck-count"),
+            *("bug-03-working", "bug-04-stuck", "bug-05-fixed", "bug-06-gone", "f25", "f26", "m3"),
+        ],
+    )
 
 
 @pytest.fixture
@@ -2152,9 +2161,13 @@ def write_later_priority(conn: sqlite3.Connection) -> None:
     """
     project = metrics.upsert_project(conn, PROJECT)
     f1 = metrics.upsert_milestone(conn, project, "f1")
-    # f2 milestone with priority 10
-    f2 = metrics.upsert_milestone(conn, project, "f2", title="F2 milestone", priority=10)
+    f2 = metrics.upsert_milestone(conn, project, "f2", title="F2 milestone")
     bugs = metrics.upsert_milestone(conn, project, "bugs", state="building")
+    # the queue's list (ADR 45), in the order the old numbers gave: F3 (2), f1-95 (5), F2 and
+    # F5 (10), f1-97 (a bug's 50), F1 (100)
+    metrics.set_board_order(
+        conn, project, ["f3", "f1-95-low-priority", "f2", "f5", "f1-97-bug", "f1"]
+    )
     # f1-95-low-priority: explicit priority 5 (goes first)
     metrics.upsert_ticket(
         conn,

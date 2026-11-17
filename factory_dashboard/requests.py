@@ -29,7 +29,6 @@ from runner.requests import (
     PAUSE,
     PLAN_MESSAGE,
     PLANT,
-    PRIORITY,
     PROJECT_ORDER,
     QUEUE,
     REJECT,
@@ -43,8 +42,8 @@ from runner.requests import (
 
 router = APIRouter()
 
-# The planning room's six (f6 D1) too, Now's pause and resume (f5-18), and the ↑ and ↓ of
-# Next in line and the Milestones page (f6-18), archiving a thread (2026-10-07), dismissing
+# The planning room's six (f6 D1) too, Now's pause and resume (f5-18), archiving a thread
+# (2026-10-07; f6-18's priority went with the number, ADR 45), dismissing
 # words that didn't go through (F31 D9), rejecting a proposal (F31 D2), and editing or
 # cancelling a waiting plant or message (F14 D1), the board's order sent whole (F15 D3), and
 # the Projects page's order (ADR 30 item 6), and a blocked ticket set aside (F106 D3); the runner
@@ -62,7 +61,6 @@ KINDS = (
     DROP_SEED,
     PAUSE,
     RESUME,
-    PRIORITY,
     ARCHIVE,
     DISMISS,
     REJECT,

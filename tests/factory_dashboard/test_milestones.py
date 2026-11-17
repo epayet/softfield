@@ -102,15 +102,16 @@ def test_not_started_ordered_by_priority(milestones_client):
     )
 
 
-def test_not_started_follow_their_priority_not_their_key(milestones_client, db_path):
-    """F9 review: the sort ran before the rows had their priority, so the not started went by
-    key, and F3 before F5 held by chance. F9 (priority 1) goes before F3 (2) and F5 (10)."""
+def test_not_started_follow_the_list_not_their_key(milestones_client, db_path):
+    """F9 review: the not started went by key, and F3 before F5 held by chance. F9, first on
+    the queue's list, goes before F3 and F5."""
     conn = metrics.open_db(db_path)
     try:
         project = metrics.upsert_project(conn, PROJECT)
         metrics.upsert_milestone(
-            conn, project, "f9", title="F9 milestone", state="idea", status="ready", priority=1
+            conn, project, "f9", title="F9 milestone", state="idea", status="ready"
         )
+        metrics.set_board_order(conn, project, ["f9", "f3", "f5"])
     finally:
         conn.close()
     page = milestones_client.get("/milestones").text
@@ -242,16 +243,16 @@ def test_milestone_f2_cells(milestones_client):
 
 
 def _cards(db_path) -> None:
-    """F2 building at 5, F10 an idea at the default 100, F1 done at 1; M4 has no card."""
+    """F2 building, F10 an idea, F1 done; M4 has no card."""
     from runner import metrics
     from tests.factory_dashboard.conftest import PROJECT
 
     conn = metrics.open_db(db_path)
     try:
         project = conn.execute("SELECT id FROM projects WHERE name = ?", (PROJECT,)).fetchone()[0]
-        cards = (("f2", "building", 5), ("f10", "idea", 100), ("f1", "done", 1))
-        for key, state, priority in cards:
-            metrics.upsert_milestone(conn, project, key, state=state, priority=priority)
+        cards = (("f2", "building"), ("f10", "idea"), ("f1", "done"))
+        for key, state in cards:
+            metrics.upsert_milestone(conn, project, key, state=state)
     finally:
         conn.close()
 
@@ -283,13 +284,13 @@ def test_the_list_has_no_priority_column_and_no_arrows(milestones_client, db_pat
 
 
 def test_cards_not_started_follow_the_queue_s_list(milestones_client, db_path):
-    """F222 D5: not started, in the list's order, whatever the priorities say."""
+    """F222 D5: not started, in the list's order, whatever their keys say."""
     _cards(db_path)
     conn = metrics.open_db(db_path)
     try:
         project = conn.execute("SELECT id FROM projects WHERE name = ?", (PROJECT,)).fetchone()[0]
-        metrics.upsert_milestone(conn, project, "f11", state="idea", priority=50)
-        metrics.upsert_milestone(conn, project, "f12", state="idea", priority=1)
+        metrics.upsert_milestone(conn, project, "f11", state="idea")
+        metrics.upsert_milestone(conn, project, "f12", state="idea")
     finally:
         conn.close()
 
@@ -298,9 +299,9 @@ def test_cards_not_started_follow_the_queue_s_list(milestones_client, db_path):
         keys = re.findall(r'<td class="id"><a href="/milestones/([a-z0-9-]+)', html)
         return [k for k in keys if k in ("f11", "f12")]
 
-    assert shown() == ["f12", "f11"]  # no list yet: the priorities' order
-    _list(db_path, ["f11", "f12"])
-    assert shown() == ["f11", "f12"]
+    assert shown() == ["f11", "f12"]  # unlisted: by key
+    _list(db_path, ["f12", "f11"])
+    assert shown() == ["f12", "f11"]
 
 
 def test_an_empty_milestone_with_no_state_and_no_tickets_is_not_in_the_list(db_path):

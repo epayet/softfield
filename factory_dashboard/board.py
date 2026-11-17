@@ -37,14 +37,14 @@ from fastapi.responses import HTMLResponse
 from factory_dashboard.app import Db, Now, Project, render
 from factory_dashboard.line import _LONG_AGO, DEVELOPER_ROLES, _natural, _when
 from factory_dashboard.overview import Running, running_jobs
-from factory_dashboard.queries import board_places, depends_on, local, place, ticket_priority
+from factory_dashboard.queries import board_places, depends_on, local, place
 from runner import metrics
 from runner.config import read_protected
 from runner.loop import ticket_minutes
 from runner.milestone import card as milestone_header
 from runner.requests import REORDER, RESERVE
 from runner.router import lead_only
-from runner.tasks import BUGS, DEFAULT_PRIORITY, milestone_file, short_key
+from runner.tasks import BUGS, milestone_file, short_key
 
 router = APIRouter()
 
@@ -115,7 +115,6 @@ class Card:
     title: str | None
     area: str  # factory or product
     bug: bool
-    priority: int
     stage: str
     done: int = 0  # a milestone's tickets done, of ``total``
     total: int = 0  # set-aside ones aren't in it
@@ -607,7 +606,6 @@ def _cards(
                     title=t["title"],
                     area=t["area"] or "",
                     bug=True,
-                    priority=ticket_priority(t["body"], BUGS, None),
                     stage=stage,
                     note=SET_ASIDE if stage == "seed" else "",
                     started=started,
@@ -633,7 +631,6 @@ def _cards(
             title=m["title"],
             area=m["area"] or ("factory" if m["key"].startswith("f") else "product"),
             bug=False,
-            priority=DEFAULT_PRIORITY if m["priority"] is None else m["priority"],
             stage=stage,
             done=sum(t["state"] == "done" for t in counted),
             total=len(counted),

@@ -243,11 +243,10 @@ def milestone_after(text: str) -> str | None:
     return match.group(1) if match else None
 
 
-# f5 D4 (ADR 19 items 1 and 2b): `> **State:** building · **Priority:** 2 · **Area:** factory`.
+# f5 D4 (ADR 19 items 1 and 2b): `> **State:** building · **Area:** factory`. A done card's
+# old `**Priority:** N` is ignored: the queue's list orders the cards (ADR 45).
 CARD_STATES = ("idea", "planning", "ready", "building", "needs sign-off", "done")
-DEFAULT_PRIORITY = 100
 _CARD_STATE_RE = re.compile(r"\*\*State:\*\*[ \t]*([^·*\n]+)")
-_CARD_PRIORITY_RE = re.compile(r"\*\*Priority:\*\*[ \t]*(\d+)\b")
 _CARD_AREA_RE = re.compile(r"\*\*Area:\*\*[ \t]*(factory|product)\b")
 # F172 D1, D10: the fast lane's mark; the old ``**Reserve:**`` counts as the same
 CARD_RESERVE_RE = re.compile(r"\*\*(?:Fast lane|Reserve):\*\*[ \t]*([^·*\n]*)")
@@ -256,19 +255,17 @@ CARD_RESERVE_RE = re.compile(r"\*\*(?:Fast lane|Reserve):\*\*[ \t]*([^·*\n]*)")
 @dataclass(frozen=True)
 class Card:
     state: str
-    priority: int
     area: str
     reserve: bool = False  # the owner's fast lane (ADR 34, ADR 35): may use Claude's reserve
 
 
 def card(key: str, text: str) -> Card:
     """A milestone doc's card, from its header. A missing (or unknown) state is derived: done
-    once its doc says "Status: done", else building. A missing priority is 100; a missing area
-    is the key's series: ``f`` factory, ``m`` product. It may use the reserve only when it
-    says ``**Fast lane:** yes`` (or the old ``**Reserve:** yes``)."""
+    once its doc says "Status: done", else building. A missing area is the key's series: ``f``
+    factory, ``m`` product. It may use the reserve only when it says ``**Fast lane:** yes``
+    (or the old ``**Reserve:** yes``)."""
     header = _header(text)
     state = _CARD_STATE_RE.search(header)
-    priority = _CARD_PRIORITY_RE.search(header)
     area = _CARD_AREA_RE.search(header)
     reserve = CARD_RESERVE_RE.search(header)
     named = state.group(1).strip() if state else ""
@@ -277,7 +274,6 @@ def card(key: str, text: str) -> Card:
         named = "done" if status and status.group(1).strip() == "done" else "building"
     return Card(
         state=named,
-        priority=int(priority.group(1)) if priority else DEFAULT_PRIORITY,
         area=area.group(1) if area else ("factory" if key.startswith("f") else "product"),
         reserve=reserve is not None and reserve.group(1).strip() == "yes",
     )

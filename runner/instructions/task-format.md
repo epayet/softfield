@@ -21,8 +21,6 @@ agent: lead                         # optional: `lead` for the lead's own ticket
 commands: [ollama list, gh api]     # optional, lead tickets only: extra Bash prefixes for its
                                     # headless job (never git, the owner's commands or the loop)
 difficulty_corrected: 7             # optional: set by the lead at review when `difficulty` was off
-priority: 3                         # a bug's only: its place on the board, written by a drag (F173);
-                                    # a feature ticket runs in its card's place and has none
 area: factory                       # factory or product (ADR 19 item 2b); required on a bug
 tests_only: true                    # optional: a weak test's fix; see "Test-only tickets"
 ---
@@ -39,20 +37,19 @@ A milestone key is `<series><n>`, optionally with a slug: `<series><n>-<slug>` (
 - **Frontmatter and commands take either form:** `softfield milestone f3` and `softfield milestone f3-factory-line` run the same milestone. `f3` resolves to the full key from `.softfield/cards/<full key>.md`, or else from a ticket whose frontmatter names it. Write the full key in frontmatter.
 - **Tags use the key as resolved:** `f3-factory-line-start` and `f3-factory-line-done`.
 - **A milestone can wait for another's sign-off** ([ADR 17](../../.softfield/adr/17-always-on-factory.md) item 4): a line `> **After:** f3-factory-line signed off` in its doc's header (above the first `##`) keeps its tickets from being picked until that milestone's doc says "Status: done" (what `runner signoff` writes; the `<key>-done` tag also counts). `--dry-run` and the verdict say "waits for f3-factory-line's sign-off", and `runner run` goes on with the other milestones. With no `After:` line, milestones are independent.
-- **A milestone doc is a card** ([ADR 19](../../.softfield/adr/19-feature-board.md) items 1 and 2b): a line `> **State:** building · **Priority:** 2 · **Area:** factory` in its header. Any part may be left out:
+- **A milestone doc is a card** ([ADR 19](../../.softfield/adr/19-feature-board.md) items 1 and 2b): a line `> **State:** building · **Area:** factory` in its header. Any part may be left out:
   - **State:** idea, planning, ready, building, needs sign-off or done. Missing, it is done once the doc says "Status: done", else building.
-  - **Priority:** an integer, lower first; 100 if missing. It is the card's place on the board, and its tickets run in it: a feature ticket has no `priority:` of its own (pre-flight refuses one), and inside a card tickets go by `depends_on`, then id ([F173](../../.softfield/cards/f173-dragging-a-card-on-the-board.md)).
   - **Area:** factory or product; missing, it follows the key's series (`f` factory, `m` product).
 
   Every runner command syncs each doc in `.softfield/cards/` to the database at its start, so an idea with no tickets yet is a card too.
+- **The order is in the list:** `.softfield/order.txt`, which only the runner writes; no card or ticket carries a number, and pre-flight refuses `priority:` ([ADR 45](../../.softfield/adr/45-one-queue-order-no-priority.md)).
 
 ### Bug tickets
 A bug lives outside the milestones ([ADR 19](../../.softfield/adr/19-feature-board.md) item 2; [`.softfield/cards/bugs.md`](../../.softfield/cards/bugs.md)):
 - **Id and key:** `bug-<nn>-<slug>` (`bug-07-queue-order`) with `milestone: bugs`, a standing key. Only a bug uses either.
 - **`area:`** factory or product, required: without it the bug fails pre-flight and goes to the lead.
-- **`priority:`** optional, 50 if missing (a milestone's card is 100 if it gives none): the bug's place on the board, written by the board's drag, not by hand.
 - **Done when it merges:** `runner run` takes bugs like any ready ticket, and checkpoints count their merges. There is no plan, review or sign-off: `runner milestone bugs`, `runner review --milestone bugs` and `runner signoff bugs` refuse.
-- A stand-in checkpoint's fix of a bug is a bug too, with its area and priority.
+- A stand-in checkpoint's fix of a bug is a bug too, with its area.
 
 ### Test-only tickets
 `tests_only: true` marks a fix where the code is right and a test is weak (f8-09). Its `files:` are only tests, and it changes nothing outside `tests/`.

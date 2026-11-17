@@ -81,7 +81,7 @@ steers from the dashboard. Your job here is the minimum the dashboard needs to t
    ```
    # Milestone M1: <title>
 
-   > **State:** idea · **Priority:** 1 · **Area:** product
+   > **State:** idea · **Area:** product
    ```
 8. **Commit** everything on `main`.
 9. **ADR 00, made easy to review.** Don't send the owner to the file. In the chat, give it as

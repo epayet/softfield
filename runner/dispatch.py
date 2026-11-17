@@ -7,7 +7,7 @@ callers read the metrics database, ``.softfield/tasks/`` and ``state.json``.
   planner's jobs: its gates need no model, and main moving on would throw its work away.
 - Then by kind: planner, escalation, direction, checkpoint, review, then tickets: a parked
   ticket whose reset has passed, then lead tickets, then developer tickets, each in the run
-  order the caller gives (`pick_next`'s: priority, milestone, id, or the place of the ticket
+  order the caller gives (`pick_next`'s: place, milestone, id, or the place of the ticket
   that waits for it). Queued jobs of one kind
   go by age.
 - A job that can't run now is skipped with its reason, and the next one is taken: a queued
@@ -82,7 +82,7 @@ class Ticket:
 
     id: str
     lead: bool  # only the lead may do it (`router.lead_only`)
-    priority: int
+    place: int  # its card's (or bug's) place in the queue, 0 first (`tasks.task_place`)
     waits: str | None = None  # a dependency, a pause, a sign-off: never picked
     not_before: datetime | None = None  # parked for a Claude limit until then, mid-work
     early_for: str | None = None  # the ticket it runs early for: that one waits for it (F173 D7)
@@ -181,7 +181,7 @@ def _queued_line(
 
 def _ticket_line(t: Ticket, windows: Windows, now: datetime, *, lane: bool = False) -> Line:
     who = "lead" if t.lead else "developer"
-    place = f"early for {t.early_for}" if t.early_for else f"priority {t.priority}"
+    place = f"early for {t.early_for}" if t.early_for else f"place {t.place + 1}"
     reason = "its gates wait" if t.regate else place
     if lane:
         reason = f"fast lane, {reason}"

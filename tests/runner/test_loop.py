@@ -39,7 +39,7 @@ from runner.local_model import STOP_REPEATING, OpencodeRun, StreamFacts, TokenTo
 from runner.report import SessionReport, TaskRecord
 from runner.review import Finding
 from runner.state import State, load_state, save_state
-from runner.tasks import load_dir, parse_task
+from runner.tasks import load_dir, milestone_order, parse_task
 from tests.runner.conftest import git, write_task
 from tests.runner.test_requests import clashing_plan
 
@@ -447,25 +447,41 @@ def test_dry_run_names_a_milestone_waiting_for_a_sign_off(repo, capsys):
     assert "-> m3-01-free: runnable" in out
 
 
-def test_dry_run_picks_by_card_priority_and_prints_each(repo, capsys):
-    """f5 D6: m3's card at priority 1 goes before m1's ticket (no card: 100)."""
-    _milestone_doc(repo, "m3", "> **State:** ready · **Priority:** 1")
+def test_dry_run_picks_by_the_lists_place_and_prints_each(repo, capsys):
+    """F222 D7: m3's card, first on the queue's list, goes before m1's ticket (not on it), and
+    the dry run says each one's place, not a number."""
+    _milestone_doc(repo, "m3", "> **State:** ready")
+    (repo / ".softfield" / "order.txt").write_text("m3\n")
     _add_task(repo, "m1-01-thing")
     path = write_task(repo / ".softfield" / "tasks" / "ready", "m3-01-first")
     path.write_text(path.read_text().replace("milestone: 1\n", "milestone: 3\n"))
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "cards")
     out = _dry_run(repo, capsys)
-    assert "-> m3-01-first: runnable, priority 1" in out
-    assert "   m1-01-thing: runnable, priority 100" in out
+    assert "-> m3-01-first: runnable, place 1" in out
+    assert "   m1-01-thing: runnable, place 2" in out
+    assert "priority" not in out
     assert out.index("m3-01-first") < out.index("m1-01-thing")
     assert "next: m3-01-first" in out
+
+
+_PLACES: dict[Path, dict[str, int]] = {}  # each test repo's cards and where `_placed` put them
+
+
+def _placed(repo: Path, key: str, place: int) -> None:
+    """``key``'s card at ``place`` on the board: the queue's list rewritten with every card
+    placed so far, lower first, ties by card number (ADR 45: the list is the only order)."""
+    places = _PLACES.setdefault(repo, {})
+    places[key] = place
+    line = sorted(places, key=lambda k: (places[k], milestone_order(k)))
+    (repo / ".softfield" / "order.txt").write_text("".join(f"{k}\n" for k in line))
 
 
 def _on_card(repo: Path, task_id: str, place: int, deps: str = "[]", agent: str = "") -> None:
     """A ticket of the card ``task_id`` names, that card at ``place`` on the board."""
     key = task_id.split("-")[0]
-    _milestone_doc(repo, key, f"> **State:** ready · **Priority:** {place}")
+    _milestone_doc(repo, key, "> **State:** ready")
+    _placed(repo, key, place)
     path = write_task(repo / ".softfield" / "tasks" / "ready", task_id, deps)
     extra = f"agent: {agent}\n" if agent else ""
     path.write_text(path.read_text().replace("milestone: 1\n", f"milestone: {key}\n{extra}"))
@@ -480,7 +496,7 @@ def test_dry_run_runs_what_a_higher_ticket_waits_for_in_its_place_and_says_so(re
     git(repo, "commit", "-q", "-m", "cards")
     out = _dry_run(repo, capsys)
     assert "-> f63-01-desk-order: runnable, early for f15-06-card-actions, developer ticket" in out
-    assert "   f132-01-one: runnable, priority 5, developer ticket" in out
+    assert "   f132-01-one: runnable, place 2, developer ticket" in out
     assert out.index("f63-01-desk-order:") < out.index("f132-01-one:")
     assert "next: f63-01-desk-order" in out
 
@@ -559,7 +575,8 @@ def test_a_regate_ticket_that_waits_waits_as_today(repo, monkeypatch):
 
 def _fast_lane(repo: Path, key: str, place: int) -> None:
     """The owner put ``key``'s card, at ``place`` on the board, in the fast lane (ADR 35)."""
-    _milestone_doc(repo, key, f"> **State:** ready · **Priority:** {place} · **Fast lane:** yes")
+    _milestone_doc(repo, key, "> **State:** ready · **Fast lane:** yes")
+    _placed(repo, key, place)
 
 
 def _lane_session(repo: Path, monkeypatch, *, limited: bool = False):
@@ -664,7 +681,7 @@ def test_dry_run_lists_the_fast_lane_first(repo, capsys):
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "cards")
     out = _dry_run(repo, capsys)
-    assert "-> f9-01-lane: runnable, fast lane, priority 9, developer ticket" in out
+    assert "-> f9-01-lane: runnable, fast lane, place 2, developer ticket" in out
     assert out.index("f9-01-lane:") < out.index("f1-01-first:")
     assert "next: f9-01-lane" in out
 
@@ -782,7 +799,7 @@ def test_dry_run_lists_a_due_review_first(repo, capsys):
     git(repo, "commit", "-q", "-m", "f9 done")
     out = _dry_run(repo, capsys)
     assert "-> review F9: runnable, F9's tickets are all done" in out
-    assert "   f10-01-next: runnable, priority 100, developer ticket" in out
+    assert "   f10-01-next: runnable, place 1, developer ticket" in out
     assert "next: review F9" in out
 
 
@@ -810,7 +827,7 @@ def test_dry_run_prints_the_pickers_list_with_reasons_and_until_when(repo, capsy
         " m1-03: tests still failing"
     ) in out
     assert "-> checkpoint m1: runnable, after m1-01 and m1-02 merged" in out
-    assert "   m1-01-thing: runnable, priority 100, developer ticket" in out
+    assert "   m1-01-thing: runnable, place 1, developer ticket" in out
     assert out.index("escalation m1-03") < out.index("checkpoint m1") < out.index("m1-01-thing")
     assert "next: checkpoint m1" in out
 
@@ -834,7 +851,7 @@ def test_dry_run_shows_every_line_paused_by_the_owner(repo, capsys):
     cfg = _config(repo)
     save_state(State(owner_pause=loop.now().isoformat()), cfg.runs_dir / "state.json")
     out = _dry_run(repo, capsys)
-    assert "   m1-01-thing: paused by you, priority 100, developer ticket" in out
+    assert "   m1-01-thing: paused by you, place 1, developer ticket" in out
     assert "next: nothing" in out
 
 
@@ -853,7 +870,7 @@ def test_dry_run_shows_the_planner_next_while_paused(repo, capsys):
         conn.close()
     out = _dry_run(repo, capsys)
     assert "-> planner f7#1: runnable, your message on F7" in out
-    assert "   m1-01-thing: paused by you, priority 100, developer ticket" in out
+    assert "   m1-01-thing: paused by you, place 1, developer ticket" in out
     assert "next: planner f7#1" in out
 
 
@@ -5928,11 +5945,14 @@ def test_a_thread_with_replies_but_no_session_gives_the_lead_its_history(
 
 
 def _work_in_two_cards(repo: Path) -> None:
-    """M1 (building, priority 5) with three ready tickets, one waiting on another; M2 (ready,
-    priority 1) with a lead ticket; M3 an idea with none."""
-    _milestone_doc(repo, "m1-first", "> **State:** building · **Priority:** 5")
-    _milestone_doc(repo, "m2", "> **State:** ready · **Priority:** 1")
+    """M1 (building, second in the queue) with three ready tickets, one waiting on another; M2
+    (ready, first) with a lead ticket; M3 an idea with none, not on the list; M4 building,
+    last."""
+    _milestone_doc(repo, "m1-first", "> **State:** building")
+    _milestone_doc(repo, "m2", "> **State:** ready")
     _milestone_doc(repo, "m3", "> **State:** idea")
+    _milestone_doc(repo, "m4", "> **State:** building")
+    (repo / ".softfield" / "order.txt").write_text("m2\nm4\nm1\n")
     ready = repo / ".softfield" / "tasks" / "ready"
     write_task(ready, "m1-01-a")
     write_task(ready, "m1-02-b", "[m1-01-a]")
@@ -5945,20 +5965,23 @@ def _work_in_two_cards(repo: Path) -> None:
 
 def test_where_the_work_stands_is_the_runners_own_order_and_reading_it_changes_nothing(repo):
     """F21 D1: the ticket in flight, then the others as `run_order` sorts them (the card's
-    priority first), each with its milestone and who does it; every card; nothing written."""
+    place first), each with its milestone and who does it; every card in the queue's order,
+    without a number (F222 D7); nothing written."""
     _work_in_two_cards(repo)
     cfg = _config(repo)
     state = State(in_flight={"kind": "local", "ticket": "m1-01-a", "agent": "local-qwen"})
-    lines = loop.work_stands(cfg, state, [12.0, 20.0, 31.0]).splitlines()
-    flying = "In flight: m1-01-a (m1-first, developer, priority 5), now with local-qwen."
+    block = loop.work_stands(cfg, state, [12.0, 20.0, 31.0])
+    lines = block.splitlines()
+    flying = "In flight: m1-01-a (m1-first, developer), now with local-qwen."
     listed = [
-        "1. m2-01-c (m2, lead, priority 1)",
-        "2. m1-02-b (m1-first, developer, priority 5): waits for m1-01-a",
-        "3. m1-03-d (m1-first, developer, priority 5)",
+        "1. m2-01-c (m2, lead)",
+        "2. m1-02-b (m1-first, developer): waits for m1-01-a",
+        "3. m1-03-d (m1-first, developer)",
     ]
     assert [line for line in lines if re.match(r"\d+\. ", line)] == listed
     assert lines.index(flying) < lines.index(listed[0])
-    assert {"- building: M1 (5)", "- ready: M2 (1)", "- idea: M3 (100)"} <= set(lines)
+    assert {"- building: M4, M1", "- ready: M2", "- idea: M3"} <= set(lines)
+    assert "priority" not in block
     assert any("about 20 minutes" in line for line in lines)
     assert git(repo, "status", "--porcelain", "--ignored") == ""  # no state.json, no database
     assert state == State(in_flight={"kind": "local", "ticket": "m1-01-a", "agent": "local-qwen"})
@@ -5969,8 +5992,8 @@ def test_a_ticket_behind_its_direction_says_so_where_the_work_stands(repo):
     behind = {"m1-03-d": "waits for its direction"}
     block = loop.work_stands(_config(repo), State(), [], behind)
     assert "In flight: nothing." in block and "No ticket has merged yet" in block
-    assert "m1-03-d (m1-first, developer, priority 5): waits for its direction" in block
-    assert "2. m1-01-a (m1-first, developer, priority 5)\n" in block  # not in flight: listed
+    assert "m1-03-d (m1-first, developer): waits for its direction" in block
+    assert "2. m1-01-a (m1-first, developer)\n" in block  # not in flight: listed
 
 
 def _merged_ticket(
@@ -6042,7 +6065,7 @@ def test_a_planner_jobs_prompt_says_where_the_work_stands(repo, fake_model, monk
     assert len(prompts) == 2
     for prompt in prompts:
         assert "Where the work stands" in prompt and "In flight: nothing." in prompt
-        assert "Ready: no ticket." in prompt and "- planning: F7 (3)" in prompt
+        assert "Ready: no ticket." in prompt and "- planning: F7\n" in prompt
         assert "No ticket has merged yet" in prompt
     assert prompts[0].index("Where the work stands") < prompts[0].index("When will the board")
 
@@ -7813,9 +7836,10 @@ def test_a_fix_ticket_is_named_by_the_ticket_at_fault(repo, at_fault, kind, expe
     assert task.sections["Goal"].strip().endswith(": PART is never read")  # the finding, as before
 
 
-def test_a_fix_ticket_on_a_bug_is_a_bug_with_its_area_and_priority(repo):
+def test_a_fix_ticket_on_a_bug_is_a_bug_with_its_area_and_no_priority(repo):
     """A bug's fix is a bug too (`bug-<nn>-…`, `milestone: bugs`), whatever milestone's
-    checkpoint found it: bugs are never signed off."""
+    checkpoint found it: bugs are never signed off. An old number on the bug isn't copied:
+    the queue's list places the fix (ADR 45)."""
     source = write_task(repo / ".softfield" / "tasks" / "done", "bug-03-thing")
     source.write_text(
         source.read_text().replace(
@@ -7823,15 +7847,12 @@ def test_a_fix_ticket_on_a_bug_is_a_bug_with_its_area_and_priority(repo):
         )
     )
     write_task(repo / ".softfield" / "tasks" / "ready", "f4-12-mine")
+    (repo / ".softfield" / "order.txt").write_text("f4\n")
     path = loop.fix_ticket(repo, "f4", {"f4-C7-1": _finding_on("bug-03-thing")}, "copilot-auto")
     assert path is not None
     task = parse_task(path, 150)
-    assert (task.id, task.milestone, task.area, task.priority) == (
-        "bug-04-fix-thing",
-        "bugs",
-        "product",
-        7,
-    )
+    assert (task.id, task.milestone, task.area) == ("bug-04-fix-thing", "bugs", "product")
+    assert "priority:" not in path.read_text()
     from runner.tasks import preflight
 
     assert preflight(task, repo) == []
@@ -7846,7 +7867,7 @@ def test_a_fix_ticket_on_a_feature_ticket_drops_its_old_priority(repo):
     path = loop.fix_ticket(repo, "f4", {"f4-C7-1": _finding_on("f4-03-thing")}, "copilot-auto")
     assert path is not None
     task = parse_task(path, 150)
-    assert (task.milestone, task.priority) == ("f4", None)
+    assert task.milestone == "f4"
     assert "priority:" not in path.read_text()
     from runner.tasks import preflight
 

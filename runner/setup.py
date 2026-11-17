@@ -146,7 +146,6 @@ def publish_cards(folder: Path, name: str, db: Path) -> list[str]:
                 key,
                 title=milestone_doc(text).get("title"),
                 state=found.state,
-                priority=found.priority,
                 area=found.area,
             )
             published.append(key)

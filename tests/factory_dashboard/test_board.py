@@ -27,6 +27,7 @@ from factory_dashboard.board import (
 from factory_dashboard.line import live_line
 from factory_dashboard.queries import connect
 from runner import metrics
+from runner.tasks import milestone_order, short_key
 from tests.factory_dashboard.conftest import LOCAL, NOW, OPUS, PROJECT, mark_reserve
 from tests.factory_dashboard.test_overview import _reserve_client, _reserve_row
 from tests.factory_dashboard.test_planning import ORIGIN, STATIC
@@ -206,11 +207,11 @@ def test_a_ready_card_with_a_ticket_merged_is_planted_started_and_shows_what_run
     assert (growing.stage, growing.started) == ("planted", True)
     assert (growing.done, growing.total, growing.set_aside) == (1, 3, 1)
     assert growing.full_key == "f24-growing"
-    assert (growing.title, growing.area, growing.bug, growing.priority) == (
+    assert (growing.title, growing.area, growing.bug, growing.place) == (
         "Growing",
         "factory",
         False,
-        1,
+        1,  # first in Planted: the queue's list, no number on the card (ADR 45)
     )
     assert growing.at_work is not None
     assert (
@@ -256,8 +257,8 @@ def test_every_ticket_done_is_planted_until_the_sheet_is_stored_then_ripe_then_h
 ):
     unreviewed = card(read(board_db), "F25")
     assert (unreviewed.stage, unreviewed.started) == ("planted", True)
-    # a row the runner made before reading its doc: 100, and its series' area
-    assert (unreviewed.priority, unreviewed.area) == (100, "factory")
+    # a row the runner made before reading its doc: its series' area
+    assert unreviewed.area == "factory"
     assert card(read(board_db), "M4").area == "product"
     # every ticket done, no sheet stored: "Review next"
     assert unreviewed.review_step is not None
@@ -332,11 +333,8 @@ def test_a_set_aside_bug_is_a_seed_marked_as_a_bug_and_planted_once_ready(board_
     bug = card(read(board_db), "bug-01-duck-count")
     assert (bug.stage, bug.bug, bug.area, bug.kind) == ("seed", True, "factory", "bug")
     assert bug.note == "Set aside, won't run until you queue it ›"
-    assert (bug.full_key, bug.title, bug.priority) == (
-        "bug-01-duck-count",
-        "Goal of bug-01-duck-count.",
-        50,
-    )
+    assert (bug.full_key, bug.title) == ("bug-01-duck-count", "Goal of bug-01-duck-count.")
+    assert "priority" not in type(bug).__dataclass_fields__
 
     write(
         board_db,
@@ -362,7 +360,6 @@ def test_a_bug_grows_while_it_runs_or_is_stuck_and_is_harvested_once_done(board_
         "planted",
         False,
     )
-    assert card(found, "bug-02-stale").priority == 7  # its own `priority:`
     for key in ("bug-03-working", "bug-04-stuck"):
         assert (card(found, key).stage, card(found, key).started) == ("planted", True), key
     assert (card(found, "bug-05-fixed").stage, card(found, "bug-05-fixed").started) == (
@@ -694,11 +691,11 @@ def test_the_legend_names_both_colours_of_work(board_client):
     assert '<i class="swatch at-work-developer"></i>working now: a developer' in html
 
 
-def test_cards_within_a_stage_come_in_priority_order_then_by_key(board_db):
+def test_cards_within_a_stage_come_in_the_lists_order(board_db):
     found = read(board_db)
-    assert keys(found, "seed") == ["F20", "bug-01-duck-count"]  # 30, 50
-    assert keys(found, "sprouting") == ["F22", "F21"]  # 10, 20
-    # one line, started or not (F154 D1): 1, 5, 7, the bugs' 50 by key, then 100
+    assert keys(found, "seed") == ["F20", "bug-01-duck-count"]
+    assert keys(found, "sprouting") == ["F22", "F21"]
+    # one line, started or not (F154 D1); bug-02's old `priority: 7` orders nothing
     assert keys(found, "planted") == [
         "F24",
         "F23",
@@ -740,12 +737,30 @@ def test_cards_within_a_stage_follow_the_queue_s_list_not_the_priorities(board_d
     assert keys(read(board_db), "planted")[:2] == ["F24", "F23"]
 
 
+# Where ``write_board``'s list puts each card and bug, as the numbers it had before the list
+# (F222 D4): `_planted` slots a card in among them by such a number
+_OLD = {"f24": 1, "f23": 5, "bug-02-stale": 7, "f22": 10, "f21": 20, "f20": 30}
+
+
+def _old_number(key: str) -> int:
+    return _OLD.get(key, 50 if key.startswith("bug-") else 100)
+
+
 def _planted(*cards: tuple[str, int]) -> Callable[[sqlite3.Connection, int], None]:
-    """More planted cards, each with its priority."""
+    """More planted cards, each slotted into the queue's list where the old number put it
+    (ties: a bug first, then by card number), as the runner's move did."""
 
     def change(conn: sqlite3.Connection, p: int) -> None:
-        for key, priority in cards:
-            metrics.upsert_milestone(conn, p, key, title=key, state="ready", priority=priority)
+        numbers = {key: _old_number(key) for key in metrics.board_order(conn, p)}
+        for key, number in cards:
+            metrics.upsert_milestone(conn, p, key, title=key, state="ready")
+            numbers[short_key(key)] = number
+
+        def tie(key: str) -> tuple[int, bool, tuple[str, int], str]:
+            bug = key.startswith("bug-")
+            return numbers[key], not bug, ("", 0) if bug else milestone_order(key), key
+
+        metrics.set_board_order(conn, p, sorted(numbers, key=tie))
 
     return change
 
@@ -974,9 +989,8 @@ def _tickets(
         made: dict[str, int] = {}
         for card_key, ticket, kind, state, deps in rows:
             if card_key not in made:
-                made[card_key] = metrics.upsert_milestone(
-                    conn, p, card_key, title=card_key, state="ready", priority=1
-                )
+                _planted((card_key, 1))(conn, p)  # near the front of the queue
+                made[card_key] = metrics.upsert_milestone(conn, p, card_key)
             metrics.upsert_ticket(
                 conn,
                 p,
@@ -1412,7 +1426,7 @@ def test_the_top_bar_has_a_board_tab_right_after_planning(board_client):
 
 def test_the_board_replaces_the_milestones_tab_and_links_to_the_list(board_client):
     """The owner, 2026-10-06: the board is how milestones are found (f5-17). The list keeps
-    each card's priority and the trends, so it still answers and the board links to it."""
+    each card and the trends, so it still answers and the board links to it."""
     html = _page(board_client)
     tabs = re.findall(r'<nav class="tabs"[^>]*>(.*?)</nav>', html, re.S)[0]
     assert "/milestones" not in re.findall(r'href="([^"?]*)\?', tabs)
@@ -2155,7 +2169,7 @@ def test_a_planted_card_says_what_it_waits_for(board_db):
     def change(conn: sqlite3.Connection, p: int) -> None:
         # create f22's ticket that will be a dependency target
         f22 = metrics.upsert_milestone(
-            conn, p, "f22-research", title="Research", state="planning", priority=10, area="factory"
+            conn, p, "f22-research", title="Research", state="planning", area="factory"
         )
         metrics.upsert_ticket(
             conn, p, "f22-01-unfinished", milestone_id=f22, kind="developer", state="ready"
@@ -2186,7 +2200,7 @@ def test_two_ready_tickets_one_free_means_no_waits(board_db):
     def change(conn: sqlite3.Connection, p: int) -> None:
         # create f22's ticket
         f22 = metrics.upsert_milestone(
-            conn, p, "f22-research", title="Research", state="planning", priority=10, area="factory"
+            conn, p, "f22-research", title="Research", state="planning", area="factory"
         )
         metrics.upsert_ticket(
             conn, p, "f22-01-unfinished", milestone_id=f22, kind="developer", state="ready"
@@ -2213,13 +2227,13 @@ def test_ready_tickets_depend_on_two_other_cards(board_db):
     def change(conn: sqlite3.Connection, p: int) -> None:
         # create f22 and f63 milestones
         f22 = metrics.upsert_milestone(
-            conn, p, "f22-research", title="Research", state="planning", priority=10, area="factory"
+            conn, p, "f22-research", title="Research", state="planning", area="factory"
         )
         metrics.upsert_ticket(
             conn, p, "f22-01-unfinished", milestone_id=f22, kind="developer", state="ready"
         )
         f63 = metrics.upsert_milestone(
-            conn, p, "f63-later", title="Later", state="planning", priority=10, area="product"
+            conn, p, "f63-later", title="Later", state="planning", area="product"
         )
         metrics.upsert_ticket(
             conn, p, "f63-01-unfinished", milestone_id=f63, kind="developer", state="ready"
@@ -2302,14 +2316,14 @@ def test_waits_populated_only_for_planted_cards(board_db):
     def change(conn: sqlite3.Connection, p: int) -> None:
         # create f22 milestone with a ready ticket (to be a dependency target)
         f22 = metrics.upsert_milestone(
-            conn, p, "f22-research", title="Research", state="planning", priority=10, area="factory"
+            conn, p, "f22-research", title="Research", state="planning", area="factory"
         )
         metrics.upsert_ticket(
             conn, p, "f22-01-unfinished", milestone_id=f22, kind="developer", state="ready"
         )
         # create a growing milestone with a ready ticket that depends on f22
         growing = metrics.upsert_milestone(
-            conn, p, "f63-growing", title="Growing", state="ready", priority=10, area="factory"
+            conn, p, "f63-growing", title="Growing", state="ready", area="factory"
         )
         growing_ticket = metrics.upsert_ticket(
             conn, p, "f63-01-ticket", milestone_id=growing, kind="developer", state="ready"

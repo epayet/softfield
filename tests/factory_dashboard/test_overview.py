@@ -1482,11 +1482,13 @@ def test_next_in_line_shows_each_card_and_sends_reordering_to_the_board(queue_cl
 
 
 def test_next_in_line_says_whom_a_ticket_runs_early_for(client, db_path):
-    """F173 D7: f2-01-top (F2 at 1) waits for f1-06-second, which comes first in its place."""
+    """F173 D7: f2-01-top (F2 first on the list) waits for f1-06-second, which comes first in
+    its place."""
     conn = metrics.open_db(db_path)
     try:
         project = conn.execute("SELECT id FROM projects WHERE name = ?", (PROJECT,)).fetchone()[0]
-        card = metrics.upsert_milestone(conn, project, "f2", priority=1)
+        card = metrics.upsert_milestone(conn, project, "f2")
+        metrics.set_board_order(conn, project, ["f2", "f3", "f5"])
         metrics.upsert_ticket(
             conn,
             project,
@@ -1503,14 +1505,13 @@ def test_next_in_line_says_whom_a_ticket_runs_early_for(client, db_path):
     assert re.search(r"\bf2-01-top\b[^·]*· [^·]+ · waits for f1-06-second · F2(?= \d|$)", rows)
 
 
-def _prioritise(db_path: Path, ticket: str, own: int, card: int) -> None:
-    """``ticket``'s own ``priority:`` in its file, and its milestone card's priority."""
+def _prioritise(db_path: Path, ticket: str, own: int) -> None:
+    """``ticket``'s own old ``priority:`` in its file."""
     conn = metrics.open_db(db_path)
     try:
         project = conn.execute("SELECT id FROM projects WHERE name = ?", (PROJECT,)).fetchone()[0]
         body = f"---\nid: {ticket}\nmilestone: f1\npriority: {own}\n---\n\n### Goal\nFirst now.\n"
         metrics.upsert_ticket(conn, project, ticket, body=body)
-        metrics.upsert_milestone(conn, project, "f1", priority=card)
     finally:
         conn.close()
 
@@ -1518,7 +1519,7 @@ def _prioritise(db_path: Path, ticket: str, own: int, card: int) -> None:
 def test_next_in_line_follows_the_card_not_a_feature_tickets_own_priority(queue_client, db_path):
     """F173: a feature ticket runs in its card's place, whatever its own number says, as
     `pick_next` takes them."""
-    _prioritise(db_path, "f1-10-queued", own=5, card=50)
+    _prioritise(db_path, "f1-10-queued", own=0)
     html = queue_client.get("/").text
     rows = section(html, "queue").split("Next in line", 1)[1]
     shown = [t for _, t in re.findall(r"\b(\d) (f1-\d\d-[a-z-]+)", rows)]
@@ -1533,7 +1534,7 @@ def test_next_in_line_follows_the_queue_s_list_and_says_bug(queue_client, db_pat
     conn = metrics.open_db(db_path)
     try:
         project = conn.execute("SELECT id FROM projects WHERE name = ?", (PROJECT,)).fetchone()[0]
-        card = metrics.upsert_milestone(conn, project, "f2", priority=900)
+        card = metrics.upsert_milestone(conn, project, "f2")
         metrics.upsert_ticket(conn, project, "f2-01-later", milestone_id=card, state="ready")
         bugs = metrics.upsert_milestone(conn, project, "bugs")
         body = "---\npriority: 999\n---\n"
@@ -4588,7 +4589,7 @@ def test_a_review_of_a_fast_lane_card_shows_in_the_bay(board_db, tmp_path):
         project_id = metrics.find_project(conn, PROJECT)
         assert project_id is not None
         metrics.upsert_milestone(
-            conn, project_id, "f172", title="The review of a fast lane", state="ready", priority=10
+            conn, project_id, "f172", title="The review of a fast lane", state="ready"
         )
     finally:
         conn.close()

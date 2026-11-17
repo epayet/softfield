@@ -4,9 +4,9 @@ import pytest
 
 from runner.tasks import (
     AREA_MISSING,
-    DEFAULT_PRIORITY,
-    FEATURE_PRIORITY,
     FIX_OF_FIX,
+    NO_PRIORITY,
+    ORDER_FILE,
     STALE_BRANCH,
     STOPPED,
     TESTS_ONLY,
@@ -32,7 +32,7 @@ from runner.tasks import (
     pulls,
     short_key,
     task_ids,
-    task_priority,
+    task_place,
     ticket_prefix,
 )
 from tests.runner.conftest import git, write_task
@@ -451,21 +451,16 @@ def _bug(directory: Path, task_id: str = "bug-01-x", extra: str = "area: factory
 
 
 def test_a_bug_ticket_belongs_to_the_standing_bugs_key(repo):
-    """ADR 19 item 2: `bug-<nn>-<slug>`, `milestone: bugs`, with its area and priority 50."""
+    """ADR 19 item 2: `bug-<nn>-<slug>`, `milestone: bugs`, with its area."""
     task = parse_task(_bug(repo / ".softfield" / "tasks" / "ready"), 150)
-    assert (task.id, task.milestone, task.priority, task.area) == (
-        "bug-01-x",
-        "bugs",
-        50,
-        "factory",
-    )
+    assert (task.id, task.milestone, task.area) == ("bug-01-x", "bugs", "factory")
     assert preflight(task, repo) == []
 
 
 def test_bugs_is_a_key_of_its_own(tmp_path):
     assert milestone_key("bugs") == "bugs" and short_key("bugs") == "bugs"
     assert full_key(tmp_path, "bugs") == "bugs"
-    assert milestone_order("bugs") < milestone_order("f1")  # at equal priorities, a bug first
+    assert milestone_order("bugs") < milestone_order("f1")  # at equal places, a bug first
     assert ticket_prefix("bugs") == "bug" and ticket_prefix("f3-factory-line") == "f3"
 
 
@@ -506,24 +501,16 @@ def test_an_area_is_factory_or_product(tmp_path, value):
         parse_task(_bug(tmp_path, extra=f"area: {value}\n"), 150)
 
 
-def test_any_ticket_may_carry_a_priority_and_only_a_bug_has_a_default(tmp_path):
-    """ADR 19 item 3: lower first. A milestone ticket without one takes its card's (f5 D6)."""
-    path = write_task(tmp_path, "m1-01-thing")
-    task = parse_task(path, 150)
-    assert (task.priority, task.area) == (None, None)
-    path.write_text(path.read_text().replace("milestone: 1\n", "milestone: 1\npriority: 3\n"))
-    assert parse_task(path, 150).priority == 3
-    assert parse_task(_bug(tmp_path, extra="area: product\npriority: 0\n"), 150).priority == 0
-
-
-@pytest.mark.parametrize("value", ["-1", "high", "2.5", "true", "null", '"3"'])
-def test_a_priority_is_a_whole_number_from_0(tmp_path, value):
-    path = write_task(tmp_path, "m1-01-thing")
-    path.write_text(
-        path.read_text().replace("milestone: 1\n", f"milestone: 1\npriority: {value}\n")
-    )
-    with pytest.raises(TaskError, match="'priority' must be a whole number from 0"):
-        parse_task(path, 150)
+def test_a_ticket_carries_no_priority(tmp_path):
+    """ADR 45 item 5: the field is gone, so whatever a ticket says there reads as nothing and
+    orders nothing; pre-flight is what refuses it."""
+    assert "priority" not in Task.__dataclass_fields__
+    for value in ("3", "-1", "high"):
+        path = write_task(tmp_path, "m1-01-thing")
+        path.write_text(
+            path.read_text().replace("milestone: 1\n", f"milestone: 1\npriority: {value}\n")
+        )
+        assert task_place(parse_task(path, 150), {"m1": 4}) == 4
 
 
 def test_pick_next_orders_milestones_by_number(tmp_path):
@@ -543,31 +530,36 @@ def _in(directory: Path, task_id: str, milestone: str, extra: str = "", deps: st
     return parse_task(path, 150)
 
 
-def test_pick_next_goes_by_the_milestone_card_priority_first(tmp_path):
-    """f5 D6: a ticket in a priority-1 milestone goes before one in an earlier milestone at 5."""
+def test_pick_next_goes_by_the_cards_place_first(tmp_path):
+    """f5 D6: a ticket of the card placed first goes before one of an earlier milestone."""
     ready = [_in(tmp_path, "f1-01-early", "f1"), _in(tmp_path, "f2-01-late", "f2")]
     picked = pick_next(ready, done=set(), paused=set(), cards={"f1": 5, "f2": 1})
     assert picked is not None and picked.id == "f2-01-late"
-    assert [task_priority(t, {"f1": 5, "f2": 1}) for t in ready] == [5, 1]
+    assert [task_place(t, {"f1": 5, "f2": 1}) for t in ready] == [5, 1]
 
 
-def test_a_bug_at_priority_1_goes_before_milestone_tickets_at_2(tmp_path):
+def test_a_bug_placed_first_goes_before_milestone_tickets_and_its_number_counts_for_nothing(
+    tmp_path,
+):
     ready = [
         _in(tmp_path, "f1-01-a", "f1"),
         _in(tmp_path, "m1-01-b", "1"),
-        _in(tmp_path, "bug-01-x", "bugs", "area: factory\npriority: 1\n"),
+        _in(tmp_path, "bug-01-x", "bugs", "area: factory\npriority: 0\n"),
     ]
-    picked = pick_next(ready, done=set(), paused=set(), cards={"f1": 2, "m1": 2})
+    picked = pick_next(ready, done=set(), paused=set(), cards={"bug-01-x": 1, "f1": 2, "m1": 2})
     assert picked is not None and picked.id == "bug-01-x"
+    picked = pick_next(ready, done=set(), paused=set(), cards={"bug-01-x": 3, "f1": 2, "m1": 2})
+    assert picked is not None and picked.id == "f1-01-a"
 
 
-def test_a_feature_ticket_runs_in_its_cards_place_and_no_card_is_100(tmp_path):
-    """F173 D1: the card's place wins over a feature ticket's own number; a bug keeps its own."""
-    ticket = _in(tmp_path, "f1-01-a", "f1", "priority: 7\n")
-    assert task_priority(ticket, {"f1": 3}) == 3
-    assert task_priority(_in(tmp_path, "f1-02-b", "f1"), {}) == DEFAULT_PRIORITY == 100
-    assert task_priority(_in(tmp_path, "bug-01-x", "bugs", "area: factory\n"), {}) == 50
-    assert task_priority(_in(tmp_path, "bug-02-y", "bugs", "area: factory\npriority: 4\n"), {}) == 4
+def test_a_ticket_the_places_dont_name_goes_after_all_they_name(tmp_path):
+    """ADR 45 item 2: a card or bug with no place comes last; with no places, all are equal."""
+    ticket = _in(tmp_path, "f1-01-a", "f1", "priority: 0\n")
+    assert task_place(ticket, {"f1": 3}) == 3
+    assert task_place(_in(tmp_path, "f1-02-b", "f1"), {"f2": 0, "f3": 4}) == 5
+    assert task_place(_in(tmp_path, "bug-01-x", "bugs", "area: factory\n"), {}) == 0
+    bug = _in(tmp_path, "bug-02-y", "bugs", "area: factory\npriority: 4\n")
+    assert task_place(bug, {"bug-02-y": 1}) == 1
 
 
 def test_a_card_at_0_goes_before_one_at_1_whatever_its_tickets_say(tmp_path):
@@ -588,13 +580,23 @@ def test_inside_a_card_tickets_go_by_what_they_wait_for_then_id(tmp_path):
     assert picked is not None and picked.id == "f1-01-a"
 
 
-def test_preflight_refuses_a_feature_tickets_priority_and_passes_a_bugs(repo):
-    """F173 D2: the board orders the work."""
+def test_preflight_refuses_a_priority_on_any_ticket_once_the_project_has_its_list(repo):
+    """ADR 45 item 5: the board orders the work. A bug's is refused only once its project's
+    order is in its list: before that, the runner's move removes it (F222 D4, D8)."""
     ready = repo / ".softfield" / "tasks" / "ready"
-    assert preflight(_in(ready, "m1-01-a", "1", "priority: 3\n"), repo) == [FEATURE_PRIORITY]
-    assert "the board orders the work" in FEATURE_PRIORITY
+    assert preflight(_in(ready, "m1-01-a", "1", "priority: 3\n"), repo) == [NO_PRIORITY]
+    assert "the board orders the work" in NO_PRIORITY
     assert preflight(_in(ready, "m1-02-b", "1"), repo) == []
-    assert preflight(_in(ready, "bug-01-x", "bugs", "area: factory\npriority: 3\n"), repo) == []
+    bug = _in(ready, "bug-01-x", "bugs", "area: factory\npriority: 3\n")
+    assert preflight(bug, repo) == []  # not moved yet: no list
+    (repo / ORDER_FILE).write_text("m1\n")
+    other = _in(repo / ".softfield" / "tasks" / "later", "bug-03-z", "bugs", "area: factory\n")
+    other.path.write_text(other.path.read_text().replace("area:", "priority: 1\narea:"))
+    assert preflight(bug, repo) == []  # listed, but another bug's number left: not moved yet
+    other.path.unlink()
+    assert preflight(bug, repo) == [NO_PRIORITY]
+    assert preflight(_in(ready, "bug-02-y", "bugs", "area: factory\n"), repo) == []
+    assert preflight(_in(ready, "m1-03-c", "1", "priority: 0\n"), repo) == [NO_PRIORITY]
 
 
 def test_preflight_sends_a_fix_of_a_fix_to_the_lead(repo):
