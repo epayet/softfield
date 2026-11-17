@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F259 mock-up: the week's pace in the Planning room</title>
+<style>
+  /* The dashboard's own tokens (factory_dashboard/static/dashboard.css), dark mode */
+  :root {
+    --floor: #12161b; --bay: #181e25; --plate: #1f2730; --grid: #222b34; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+    --hazard: #f2b10a; --hazard-ink: #1a1405; --opus: #ff9640; --good: #5fd17a; --good-ink: #5fd17a; --fail: #ec5458;
+    --tick: var(--hazard);
+    --display: "Chakra Petch", "Bahnschrift", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+    --stripe: repeating-linear-gradient(-45deg, var(--hazard) 0 6px, transparent 6px 12px);
+    --ghost: repeating-linear-gradient(135deg, transparent 0 5px, rgba(255,255,255,.07) 5px 7px);
+  }
+  body { margin: 0; background: var(--floor); color: var(--fg); font: 15px/1.5 var(--body); padding: 20px; }
+  h1 { font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 4px; }
+  h3 { font: 600 13px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 0 0 8px; }
+  p.lede { color: var(--ink-2); max-width: 760px; margin: 0 0 8px; }
+  .switch { display: inline-flex; margin: 12px 0 16px; border: 1px solid var(--rule); }
+  .switch button { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 10px 18px;
+    background: var(--bay); color: var(--muted); border: 0; cursor: pointer; }
+  .switch button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+  .versions { display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start; }
+  .version { flex: 1 1 360px; max-width: 460px; }
+  @media (min-width: 900px) { .switch { display: none; } .versions > [hidden] { display: block !important; } }
+  .new { outline: 1px dashed var(--good); outline-offset: 3px; }   /* what this card adds */
+  .note { font: 12px var(--mono); color: var(--good); margin: 6px 0 0; }
+  .legend { color: var(--ink-2); font-size: 13px; margin: 14px 0 0; }
+  [hidden] { display: none !important; }
+
+  /* ---- copied from dashboard.css: the panel, the tile, the meter ---- */
+  .panel { background: var(--bay); border: 1px solid var(--rule); padding: 0 14px 12px; min-width: 0; position: relative; }
+  .panel::before, .panel::after { content: ""; position: absolute; width: 10px; height: 10px; border: 0 solid var(--tick); }
+  .panel::before { top: -1px; left: -1px; border-top-width: 2px; border-left-width: 2px; }
+  .panel::after { bottom: -1px; right: -1px; border-bottom-width: 2px; border-right-width: 2px; }
+  .panel > h2 { display: flex; align-items: center; gap: 10px; margin: 0 -14px 4px; padding: 7px 14px;
+    background: var(--plate); border-bottom: 1px solid var(--rule);
+    font: 600 14px var(--display); text-transform: uppercase; letter-spacing: .08em; }
+  .panel > h2::after { content: ""; order: 1; flex: 1; height: 8px; background: var(--stripe); opacity: .5; }
+  .panel > h2 .stamp { order: 2; font: 600 12px var(--mono); color: var(--muted); text-transform: none; letter-spacing: 0; }
+  .tile { display: flex; flex-direction: column; gap: 5px; }
+  .tile > p { margin: 0; }
+  .tile-small { font: 11.5px var(--mono); color: var(--muted); }
+  .lead-window-heading { color: var(--opus); }
+  .meter { height: 12px; background: var(--floor); border: 1px solid var(--rule); position: relative; margin-bottom: 6px; }
+  .meter > span { position: absolute; inset: 1px auto 1px 1px; max-width: 100%; }
+  .meter > .mark { top: -4px; bottom: -4px; width: 2px; background: var(--fg); outline: 1px solid var(--bay); z-index: 1; }
+  .meter > .ahead { background: var(--ghost), var(--plate); box-shadow: inset 0 0 0 1px var(--rule); }
+  .meter > .under-mark { background: var(--good); }
+  .meter > .pace { inset: -6px auto -6px 1px; width: 0; border-left: 2px dashed var(--hazard); background: none; z-index: 2; }
+  .meter > .pace::before { content: ""; position: absolute; top: -1px; left: -2px; width: 8px; height: 6px;
+    background: var(--hazard); clip-path: polygon(0 0, 100% 50%, 0 100%); }
+  .meter > .over-pace { background: repeating-linear-gradient(135deg, var(--hazard) 0 4px, var(--hazard-ink) 4px 8px); }
+  .stop-plate { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; margin-top: 2px;
+    padding: 5px 10px 6px 16px; background: var(--plate); border: 1px solid var(--rule); position: relative; font-size: 13px; }
+  .stop-plate::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 5px;
+    background: repeating-linear-gradient(135deg, var(--hazard) 0 4px, var(--hazard-ink) 4px 8px); }
+  .stop-plate b { font: 700 12px var(--display); text-transform: uppercase; letter-spacing: .1em; color: var(--hazard); }
+  .stop-plate small { color: var(--ink-2); flex-basis: 100%; }
+  .until { color: var(--hazard); font-family: var(--mono); }
+</style>
+</head>
+<body>
+<h1>F259: the week's pace in the Planning room</h1>
+<p class="lede">The Planning room's "The lead's window" tile, from the readings of Tue 17 Nov 18:09: 5-hour window 13%, week 29%, today's pace 22%, so lead tickets wait until about Wed 18 Nov 13:36. The Overview already shows all of this; Planning shows the bar only.</p>
+<div class="switch" role="group" aria-label="Which version">
+  <button type="button" data-show="today" aria-pressed="false">Today</button>
+  <button type="button" data-show="proposed" aria-pressed="true">Proposed</button>
+</div>
+
+<div class="versions">
+<!-- Today: copied from factory_dashboard/templates/planning.html, #lead-window -->
+<div class="version" data-version="today" hidden>
+  <h3>Today</h3>
+  <div id="lead-window" class="panel tile">
+    <h2 class="lead-window-heading">The lead's window <span class="stamp">read at 18:09</span></h2>
+    <div class="meter">
+      <span class="ahead" style="width:36%"></span>
+      <span class="under-mark" style="width:13%"></span>
+      <span class="mark" style="left:75%"></span>
+    </div>
+    <p class="tile-small">5-hour window 13% · resets at 21:20 · planning may go past the 75% line, the factory stops there</p>
+    <div class="meter">
+      <span class="ahead" style="width:100%"></span>
+      <span class="under-mark" style="width:29%"></span>
+      <span class="mark" style="left:70%"></span>
+    </div>
+    <p class="tile-small">week 29% · resets on Nov 23 16:00</p>
+  </div>
+  <p class="legend">The week reads 29%, well under the 70% mark, and nothing says the lead's tickets are held: you have to open the Overview to learn it.</p>
+</div>
+
+<!-- Proposed -->
+<div class="version" data-version="proposed">
+  <h3>Proposed</h3>
+  <div id="lead-window-p" class="panel tile">
+    <h2 class="lead-window-heading">The lead's window <span class="stamp">read at 18:09</span></h2>
+    <div class="meter">
+      <span class="ahead" style="width:36%"></span>
+      <span class="under-mark" style="width:13%"></span>
+      <span class="mark" style="left:75%"></span>
+    </div>
+    <p class="tile-small">5-hour window 13% · resets at 21:20 · planning may go past the 75% line, the factory stops there</p>
+    <div class="meter new">
+      <span class="ahead" style="width:100%"></span>
+      <span class="under-mark" style="width:29%"></span>
+      <span class="over-pace" style="left:22%;width:7%"></span>
+      <span class="pace" style="left:22%" title="today's pace: 22%"></span>
+      <span class="mark" style="left:70%"></span>
+    </div>
+    <p class="tile-small">week 29% · resets on Nov 23 16:00</p>
+    <div class="stop-plate new"><b>Over pace</b><span>lead tickets wait until about <span class="until">Wed 18 Nov 13:36</span></span><small>developers, planning, reviews and the fast lane go on · today's pace 22%</small></div>
+  </div>
+  <p class="note">▲ dashed green: what F259 adds</p>
+  <p class="legend">The week's bar gets the Overview's dashed yellow post (today's pace, 22%) and the striped stretch used beyond it, and the same "Over pace" plate under it, word for word. On pace, the plate is replaced by "on pace · today's 22%" on the week's small line; in the week's last hours, the "Last hours" plate shows as on the Overview; with the week's reserve lever on, neither shows, as on the Overview.</p>
+</div>
+</div>
+
+<script>
+  function wireSwitch() {
+    document.querySelectorAll(".switch button").forEach((button) => {
+      button.addEventListener("click", () => {
+        document.querySelectorAll(".switch button").forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
+        document.querySelectorAll("[data-version]").forEach((v) => { v.hidden = v.dataset.version !== button.dataset.show; });
+      });
+    });
+  }
+  wireSwitch();
+</script>
+</body>
+</html>
