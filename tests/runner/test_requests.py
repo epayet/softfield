@@ -839,8 +839,13 @@ def _stored_order(repo: Path) -> list[str]:
         conn.close()
 
 
-def test_a_first_plans_approval_puts_its_card_last_in_the_one_commit(repo):
+@pytest.mark.parametrize("was", ["planning", "idea"])
+def test_a_first_plans_approval_puts_its_card_last_in_the_one_commit(repo, was):
     _card(repo)
+    if was != "planning":  # F222 D2: a seed approved straight from idea enters the line too
+        card = repo / ".softfield" / "cards" / "f7-one-queue.md"
+        card.write_text(CARD.replace("planning", was))
+        git(repo, "add", ".softfield")
     _board(repo, {"f8": 100, "f9": 100}, bug=True)
     head = _listed(repo, "f9\nf8\n")  # f7 and the bug are not on it
     _plan(repo, {".softfield/tasks/later/f7-01-a.md": _ticket("f7-01-a")})

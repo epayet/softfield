@@ -918,6 +918,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** each checkpoint found the next case of one matching function. Each local fix added a loop for that case, so the function ended with three loops, two of them dead, and it still matched across ideas. After the second fix ticket on one function, the lead would do better to rewrite it from the decision's rule. That is now a Factory idea in the review.
 - **Decisions affected:** none.
 
+### F222 (2026-11-17): the board's list is the only order, and a plan you approve goes last ([review](../reviews/f222-when-milestones-plans-get-approved-do.md))
+
+- **Q1:** four lead tickets (`runner/` is protected), all passed on attempt 1: three on Opus and 01 on Sonnet. No checkpoint. Review round 1 found one should-fix (no test for a seed approved straight from idea) and one template nit, both fixed by the review, plus one nit reported. Score 8.
+- **Q3:** all Claude's. 04, which removed the field everywhere and wrote the one-off move, cost $12.71, most of the build. See the review's numbers.
+- **Q5:** see the review's numbers.
+- **Anything else:** retiring a field in two steps paid off: first the new source of truth also writes the old one, then the old one goes. Main was right after every ticket, and the runner's own move did the data change with no hand edits. The tickets waited about 4.5 days on the week's pace hold for lead tickets. Dropping a column made every before picture fail (500): the old code can't run on the new database.
+- **Decisions affected:** none (ADR 45 as accepted).
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.
