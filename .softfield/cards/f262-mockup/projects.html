@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F262 mock-up: archive a project</title>
+<style>
+  /* The dashboard's own tokens (factory_dashboard/static/dashboard.css), dark mode */
+  :root {
+    --floor: #12161b; --bay: #181e25; --plate: #1f2730; --grid: #222b34; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+    --hazard: #f2b10a; --hazard-ink: #1a1405; --opus: #ff9640; --sonnet: #ffc48a; --good: #5fd17a;
+    --warn: var(--hazard); --accent: var(--sonnet);
+    --display: "Chakra Petch", "Bahnschrift", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+    --stripe: repeating-linear-gradient(135deg, var(--hazard) 0 6px, var(--hazard-ink) 6px 12px);
+    --stripe-dim: repeating-linear-gradient(135deg, var(--rule) 0 6px, transparent 6px 12px);
+  }
+  body { margin: 0; background: var(--floor); color: var(--fg); font: 15px/1.5 var(--body); padding: 20px;
+    background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 32px 32px; }
+  h1 { font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 4px; }
+  h3 { font: 600 13px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 0 0 8px; }
+  p.lede { color: var(--ink-2); max-width: 760px; margin: 0 0 8px; }
+  a { color: var(--accent); text-decoration: none; }
+  .switch { display: inline-flex; margin: 12px 0 16px; border: 1px solid var(--rule); }
+  .switch button { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 10px 18px;
+    background: var(--bay); color: var(--muted); border: 0; cursor: pointer; }
+  .switch button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+  .new { outline: 1px dashed var(--good); outline-offset: 3px; }   /* what this card adds */
+  .note { display: block; font: 500 11.5px var(--mono); color: var(--good); margin-top: 4px; }
+  .legend { color: var(--ink-2); font-size: 13px; margin: 14px 0 0; max-width: 760px; }
+  [hidden] { display: none !important; }
+  .versions { display: grid; gap: 24px; }
+  @media (min-width: 900px) {   /* a wide screen: side by side, the switch goes */
+    .versions { grid-template-columns: 1fr 1fr; }
+    .versions > [data-version] { display: block !important; }
+    .switch { display: none; }
+  }
+  .frame { max-width: 520px; }
+
+  /* ---- the top bar's picker, as drawn ---- */
+  .bar { background: var(--bay); border: 1px solid var(--rule); border-bottom: 0; padding: 8px 12px;
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .bar::after { content: ""; display: block; width: 100%; height: 4px; background: var(--stripe); margin: 8px -12px -8px; flex: 0 0 calc(100% + 24px); }
+  .brand { font: 700 16px var(--display); letter-spacing: .04em; color: var(--fg); }
+  .brand b { color: var(--hazard); }
+  .filters { margin-left: auto; font: 500 12px var(--display); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  .picker { display: inline-block; vertical-align: top; margin-left: 6px; border: 1px solid var(--rule); background: var(--plate); min-width: 150px; }
+  .picker div { font: 500 13px var(--body); text-transform: none; letter-spacing: 0; color: var(--fg); padding: 3px 8px; }
+  .picker .sel { background: var(--rule); }
+  .picker .gone { color: var(--muted); text-decoration: line-through; }
+
+  /* ---- the panel and the Projects page as drawn (dashboard.css) ---- */
+  .panel { background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; min-width: 0; margin-top: 12px; }
+  .panel h2 { font: 600 14px var(--display); text-transform: uppercase; letter-spacing: .08em; margin: 0 0 8px; }
+  .panel h2 .src { font: 400 12px var(--body); text-transform: none; letter-spacing: 0; color: var(--muted); margin-left: 6px; }
+  .projects-page .rank { list-style: none; margin: 0; padding: 0; }
+  .projects-page .muted { color: var(--muted); }
+  .projects-page .proj { display: grid; grid-template-columns: 52px 1fr; gap: 4px 12px; padding: 12px 0;
+    border-bottom: 1px solid var(--grid); }
+  .projects-page .proj:last-child { border-bottom: 0; }
+  .projects-page .proj > .plate { display: grid; gap: 4px; min-width: 0; }
+  .projects-page .place { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .projects-page .place input { width: 44px; text-align: center; font: 700 18px var(--display); background: var(--plate);
+    color: var(--fg); border: 1px solid var(--rule); padding: 4px 0; }
+  .projects-page .place small { font: 500 11px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .projects-page .rankno { font: 700 13px var(--mono); color: var(--muted); margin-right: 6px; }
+  .projects-page .name { font: 700 17px var(--display); letter-spacing: .03em; }
+  .projects-page .what { color: var(--ink-2); font-size: 13.5px; }
+  .projects-page .facts { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13.5px; }
+  .projects-page .facts b { font-family: var(--display); }
+  .projects-page .links { display: flex; flex-wrap: wrap; gap: 6px 14px; font: 600 13px var(--display);
+    letter-spacing: .04em; text-transform: uppercase; align-items: center; }
+  .projects-page .send-order { font: 700 14px var(--display); letter-spacing: .06em; text-transform: uppercase;
+    background: var(--hazard); color: var(--hazard-ink); border: 0; padding: 10px 16px; margin-top: 10px; }
+  .projects-page .send-order:disabled { background: var(--plate); color: var(--muted); }
+  .app-row { font-size: 13px; color: var(--muted); }
+  .app-tag { font: 600 11px var(--display); letter-spacing: .08em; text-transform: uppercase; border: 1px solid var(--rule); padding: 0 5px; margin-right: 6px; color: var(--ink-2); }
+
+  /* ---- F124's Pause (lands first), drawn plain ---- */
+  .projects-page .head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .projects-page .head .name { flex: 1; min-width: 0; }
+  .hold { font: 700 12px var(--display); letter-spacing: .08em; text-transform: uppercase; padding: 7px 12px;
+    background: var(--plate); color: var(--fg); border: 1px solid var(--rule); }
+
+  /* ---- proposed: Archive at the plate's foot, the Archived bay below the list ---- */
+  .shelve { margin-left: auto; font: 600 12px var(--display); letter-spacing: .08em; text-transform: uppercase;
+    padding: 5px 10px; background: transparent; color: var(--muted); border: 1px solid var(--rule); cursor: pointer;
+    display: inline-flex; align-items: center; gap: 7px; }
+  .shelve::before { content: ""; width: 11px; height: 8px; border: 2px solid currentColor; border-top-width: 4px; }  /* a crate lid, drawn */
+  .shelve.asked { border: 1px dashed var(--opus); color: var(--opus); cursor: default; }
+  .way { color: var(--opus); font-size: 13px; }
+  .archived { margin-top: 14px; border: 1px solid var(--rule); background: var(--floor); }
+  .archived > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 10px;
+    font: 700 13px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-2);
+    padding: 8px 12px; background: var(--plate); border-bottom: 1px solid var(--rule); position: relative; }
+  .archived > summary::before { content: ""; width: 18px; height: 10px; background: var(--stripe-dim); border: 1px solid var(--rule); }
+  .archived > summary .count { font: 500 12px var(--mono); color: var(--muted); letter-spacing: 0; }
+  .archived > summary .src { margin-left: auto; font: 400 12px var(--body); text-transform: none; letter-spacing: 0; color: var(--muted); }
+  .archived .crate { display: grid; gap: 4px; padding: 10px 12px; border-bottom: 1px solid var(--grid); opacity: .92; }
+  .archived .crate:last-child { border-bottom: 0; }
+  .archived .crate .head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .archived .crate .name { font: 700 15px var(--display); letter-spacing: .03em; color: var(--ink-2); flex: 1; }
+  .archived .shelf-line { color: var(--muted); font-size: 13px; }
+  .unshelve { font: 700 12px var(--display); letter-spacing: .08em; text-transform: uppercase; padding: 7px 12px;
+    background: var(--hazard); color: var(--hazard-ink); border: 1px solid var(--hazard); cursor: pointer; }
+</style>
+</head>
+<body>
+<h1>F262: archive a project</h1>
+<p class="lede">The Projects page and the top bar's project picker on 2026-11-17, with the four projects in the owner's order and their real counts.
+Proposed shows coaster-ranker archived (an example: it has 0 ready and 12 done) and F124's Pause, which lands first, drawn plain.</p>
+<div class="switch" role="group" aria-label="Which version">
+  <button type="button" data-show="today" aria-pressed="false">Today</button>
+  <button type="button" data-show="proposed" aria-pressed="true">Proposed</button>
+</div>
+
+<div class="versions">
+<!-- Today: copied from factory_dashboard/templates/projects.html and base.html's picker -->
+<div data-version="today" hidden class="frame">
+  <h3>Today</h3>
+  <div class="bar"><span class="brand">Soft<b>Field</b></span>
+    <span class="filters">Project <span class="picker"><div>coaster-ranker</div><div>travel-companion</div><div class="sel">softfield</div><div>coucou</div></span></span>
+  </div>
+  <div class="projects-page">
+  <section class="panel">
+    <h2>Projects <span class="src">the runner works in this order</span></h2>
+    <ol class="rank">
+      <li class="proj">
+        <label class="place"><input type="number" value="1"><small>place</small></label>
+        <div class="plate">
+          <div><span class="rankno">#1</span><span class="name">coaster-ranker</span></div>
+          <div class="what">Rank the Universal Orlando coasters you've ridden by dragging them into order, and compare your list with your partner's.</div>
+          <div class="facts"><span><b>0</b> ready</span><span><b>12</b> done</span><span class="muted">nothing for you</span></div>
+          <div class="links"><a href="#">Planning</a><a href="#">Board</a><a href="#">Overview</a></div>
+          <div class="app-row"><span class="app-tag">App</span>No stack yet: the factory can't run it.</div>
+        </div>
+      </li>
+      <li class="proj">
+        <label class="place"><input type="number" value="2"><small>place</small></label>
+        <div class="plate">
+          <div><span class="rankno">#2</span><span class="name">travel-companion</span></div>
+          <div class="what">Stampu: trip ideas from a prompt, shown visually, remembering what you like and where you've been.</div>
+          <div class="facts"><span><b>8</b> ready</span><span><b>2</b> ideas</span><span><b>11</b> done</span><span class="muted">nothing for you</span></div>
+          <div class="links"><a href="#">Planning</a><a href="#">Board</a><a href="#">Overview</a></div>
+          <div class="app-row"><span class="app-tag">App</span>Stopped</div>
+        </div>
+      </li>
+      <li class="proj">
+        <label class="place"><input type="number" value="3"><small>place</small></label>
+        <div class="plate">
+          <div><span class="rankno">#3</span><span class="name">softfield</span></div>
+          <div class="what">The software factory itself: the runner, the dashboard and the workflow that build every project.</div>
+          <div class="facts"><span><b>135</b> ready</span><span><b>2</b> building</span><span><b>19</b> ideas</span><span><b>106</b> done</span><span><b>7</b> for you</span></div>
+          <div class="links"><a href="#">Planning</a><a href="#">Board</a><a href="#">Overview</a></div>
+        </div>
+      </li>
+      <li class="proj">
+        <label class="place"><input type="number" value="4"><small>place</small></label>
+        <div class="plate">
+          <div><span class="rankno">#4</span><span class="name">coucou</span></div>
+          <div class="what">A small, private way to send a photo or a note to an always-on screen in someone's home.</div>
+          <div class="facts"><span><b>0</b> ready</span><span><b>1</b> ideas</span><span><b>5</b> done</span><span><b>1</b> for you</span></div>
+          <div class="links"><a href="#">Planning</a><a href="#">Board</a><a href="#">Overview</a></div>
+          <div class="app-row"><span class="app-tag">App</span>No stack yet: the factory can't run it.</div>
+        </div>
+      </li>
+    </ol>
+    <button type="button" class="send-order" disabled>Send new order</button>
+  </section>
+  </div>
+  <p class="legend">Every project is in the picker and in the list. The only way to take one off is <span class="mono">softfield forget</span> in a terminal, and nothing brings it back from here.</p>
+</div>
+
+<!-- Proposed -->
+<div data-version="proposed" class="frame">
+  <h3>Proposed</h3>
+  <div class="bar"><span class="brand">Soft<b>Field</b></span>
+    <span class="filters">Project <span class="picker new"><div>travel-companion</div><div class="sel">softfield</div><div>coucou</div></span></span>
+  </div>
+  <span class="note">the picker lists the projects that aren't archived; coaster-ranker has gone</span>
+  <div class="projects-page">
+  <section class="panel">
+    <h2>Projects <span class="src">the runner works in this order</span></h2>
+    <ol class="rank">
+      <li class="proj">
+        <label class="place"><input type="number" value="1"><small>place</small></label>
+        <div class="plate">
+          <div class="head"><span class="name"><span class="rankno">#1</span>travel-companion</span><button type="button" class="hold">Pause</button></div>
+          <div class="what">Stampu: trip ideas from a prompt, shown visually, remembering what you like and where you've been.</div>
+          <div class="facts"><span><b>8</b> ready</span><span><b>2</b> ideas</span><span><b>11</b> done</span><span class="muted">nothing for you</span></div>
+          <div class="links"><a href="#">Planning</a><a href="#">Board</a><a href="#">Overview</a>
+            <button type="button" class="shelve new">Archive</button></div>
+          <div class="app-row"><span class="app-tag">App</span>Stopped</div>
+          <span class="note">Archive sits at the plate's foot, quieter than Pause: you use it rarely</span>
+        </div>
+      </li>
+      <li class="proj">
+        <label class="place"><input type="number" value="2"><small>place</small></label>
+        <div class="plate">
+          <div class="head"><span class="name"><span class="rankno">#2</span>softfield</span><button type="button" class="hold">Pause</button></div>
+          <div class="what">The software factory itself: the runner, the dashboard and the workflow that build every project.</div>
+          <div class="facts"><span><b>135</b> ready</span><span><b>2</b> building</span><span><b>19</b> ideas</span><span><b>106</b> done</span><span><b>7</b> for you</span></div>
+          <div class="links"><a href="#">Planning</a><a href="#">Board</a><a href="#">Overview</a>
+            <button type="button" class="shelve new">Archive</button></div>
+        </div>
+      </li>
+      <li class="proj">
+        <label class="place"><input type="number" value="3"><small>place</small></label>
+        <div class="plate">
+          <div class="head"><span class="name"><span class="rankno">#3</span>coucou</span><button type="button" class="hold">Pause</button></div>
+          <div class="what">A small, private way to send a photo or a note to an always-on screen in someone's home.</div>
+          <div class="facts"><span><b>0</b> ready</span><span><b>1</b> ideas</span><span><b>5</b> done</span><span><b>1</b> for you</span></div>
+          <div class="links"><a href="#">Planning</a><a href="#">Board</a><a href="#">Overview</a>
+            <button type="button" class="shelve asked new" disabled>Archiving…</button></div>
+          <div class="way new">On its way: the runner takes it at its next pick, after the job it is on.</div>
+          <div class="app-row"><span class="app-tag">App</span>No stack yet: the factory can't run it.</div>
+          <span class="note">pressed: dashed orange at once, no longer pressable (owner, 2026-10-07)</span>
+        </div>
+      </li>
+    </ol>
+    <button type="button" class="send-order" disabled>Send new order</button>
+
+    <details class="archived new" open>
+      <summary>Archived <span class="count">· 1</span><span class="src">off the picker · their tickets wait</span></summary>
+      <div class="crate">
+        <div class="head"><span class="name">coaster-ranker</span><button type="button" class="unshelve">Unarchive</button></div>
+        <div class="what muted">Rank the Universal Orlando coasters you've ridden by dragging them into order, and compare your list with your partner's.</div>
+        <div class="shelf-line">Archived by you on Tue 17 Nov. 0 ready · 12 done, kept as they are.</div>
+        <div class="links"><a href="#">Planning</a><a href="#">Board</a></div>
+      </div>
+    </details>
+    <span class="note">a folded bay under the list, closed when you load the page; it shows only when a project is archived. Unarchive puts the project back at the bottom of the list, running</span>
+  </section>
+  </div>
+  <p class="legend"><span class="new">Dashed green</span> marks what is new. An archived project leaves the picker and the order; its cards, threads and tickets stay, the runner takes none of its tickets, and its Planning and Board still open from here, so you can read or plan it before you unarchive it.</p>
+</div>
+</div>
+
+<script>
+  function showVersion(button) {
+    document.querySelectorAll(".switch button").forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
+    document.querySelectorAll("[data-version]").forEach((v) => { v.hidden = v.dataset.version !== button.dataset.show; });
+  }
+  document.querySelectorAll(".switch button").forEach((button) => {
+    button.addEventListener("click", () => showVersion(button));
+  });
+</script>
+</body>
+</html>
