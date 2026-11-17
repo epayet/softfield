@@ -41,3 +41,9 @@ attempts: 3
 tokens: 3426827
 logs: .softfield/var/runs/20261116-205926/f251-01-uptime-in-the-top-bar
 ```
+
+```yaml
+# --- runner ---
+result: done
+finished_by: lead
+```
