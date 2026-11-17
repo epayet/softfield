@@ -2,7 +2,7 @@
 id: f216-03-review-page-plates-and-folds
 milestone: f216-let-s-redesign-the-milestone-review
 difficulty: 5
-depends_on: [f216-01-review-sheet-new-shape, f216-02-findings-costs-and-markdown, f164-03-idea-plates-with-plant]
+depends_on: [f216-01-review-sheet-new-shape, f216-02-findings-costs-and-markdown, f216-04-to-html-lists-and-href, f164-03-idea-plates-with-plant]
 agent: lead
 files:
   - factory_dashboard/templates/milestone.html
