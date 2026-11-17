@@ -1,4 +1,4 @@
-# Milestone F258: Runner: when a third fix ticket would touch the same…
+# Milestone F258: The lead takes a third fix on one function (mostly covered since f68-08)
 
 > **State:** idea · **Area:** factory
 > Planted by the owner on 2026-11-17.
