@@ -1807,7 +1807,7 @@ def test_id_less_idea_matches_by_text_not_project_fallback(db_path, tmp_path):
         if last and last[0]:
             conn.execute(
                 "UPDATE owner_requests SET done = ?, result = ? WHERE id = ?",
-                ("2026-10-01T10:00:00+00:00", "planted .softfield/cards/f164-second.md", last[0]),
+                ("2026-10-01T10:00:00+00:00", "planted .softfield/cards/f170-second.md", last[0]),
             )
             conn.commit()
     finally:
@@ -1817,7 +1817,46 @@ def test_id_less_idea_matches_by_text_not_project_fallback(db_path, tmp_path):
     assert ideas[0].state == "planted"
     assert ideas[0].card == "f164"
     assert ideas[1].state == "planted"
-    assert ideas[1].card == "f164"
+    assert ideas[1].card == "f170"
+
+
+def test_idea_with_empty_text_matches_no_request(db_path, tmp_path):
+    """An idea whose text is empty once normalised (just a full stop) matches no request."""
+    from factory_dashboard.milestones import _same_text, review_ideas
+    from runner import metrics
+
+    assert not _same_text(" . ", "Anything at all")
+    assert _same_text("First idea.", "First   idea for the factory.")
+
+    factory_repo = tmp_path / "factory_repo"
+    (factory_repo / "runner").mkdir(parents=True)
+    (factory_repo / "factory_dashboard").mkdir(parents=True)
+    (factory_repo / "runner" / "loop.py").write_text("# loop", encoding="utf-8")
+    (factory_repo / "factory_dashboard" / "app.py").write_text("# app", encoding="utf-8")
+    conn = metrics.open_db(db_path)
+    try:
+        metrics.upsert_project(conn, "factory", repo=str(factory_repo))
+        review_pid = metrics.find_project(conn, PROJECT)
+        assert review_pid is not None
+        metrics.upsert_milestone(
+            conn,
+            review_pid,
+            "f164",
+            title="Milestone f164",
+            status="in progress",
+            signoff={"what_next": "- **Factory:**\n  > .\n"},
+        )
+        factory_pid = metrics.find_project(conn, "factory")
+        assert factory_pid is not None
+        metrics.add_request(
+            conn, factory_pid, "plant", "", json.dumps({"text": "Anything."}), NOW.isoformat()
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    ideas = review_ideas(metrics.open_db(db_path), PROJECT, "f164")
+    assert len(ideas) == 1
+    assert ideas[0].state == "plant"
 
 
 # --- the card's fast lane lever (F172 D6, D8) ---------------------------------------------

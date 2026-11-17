@@ -798,6 +798,19 @@ def _factory_project(conn: sqlite3.Connection, review_project: str) -> str:
     return review_project
 
 
+def _normalise_idea_text(text: str) -> str:
+    """Whitespace collapsed, one final full stop dropped."""
+    norm = re.sub(r"\s+", " ", text).strip()
+    return norm[:-1] if norm.endswith(".") else norm
+
+
+def _same_text(idea_text: str, request_text: str) -> bool:
+    """Whether a plant request's text is the idea's (a request may add to it); an idea with
+    no text once normalised matches no request."""
+    norm_idea = _normalise_idea_text(idea_text)
+    return bool(norm_idea) and _normalise_idea_text(request_text).startswith(norm_idea)
+
+
 def review_ideas(conn: sqlite3.Connection, project: str, key: str) -> list[Idea]:
     """The review's ideas from its stored sign-off sheet, each with its area, the project it
     plants in and whether it is planted, on its way or refused (D2, D3)."""
@@ -891,31 +904,15 @@ def review_ideas(conn: sqlite3.Connection, project: str, key: str) -> list[Idea]
         if req is None:
             for r, v in req_list:
                 target = v.get("project") or v.get("area") or ""
-                if target == idea.project:
-                    req_text = v.get("text", "")
-                    norm_idea = re.sub(r"\s+", " ", idea.text).strip()
-                    if norm_idea.endswith("."):
-                        norm_idea = norm_idea[:-1]
-                    norm_req = re.sub(r"\s+", " ", req_text).strip()
-                    if norm_req.endswith("."):
-                        norm_req = norm_req[:-1]
-                    if norm_req.startswith(norm_idea):
-                        req, req_value = r, v
-                        break
+                if target == idea.project and _same_text(idea.text, v.get("text", "")):
+                    req, req_value = r, v
+                    break
         # Then by project_id (with text similarity check)
         if req is None:
             for r, v in req_list:
-                if r["project_id"] == project_id:
-                    req_text = v.get("text", "")
-                    norm_idea = re.sub(r"\s+", " ", idea.text).strip()
-                    if norm_idea.endswith("."):
-                        norm_idea = norm_idea[:-1]
-                    norm_req = re.sub(r"\s+", " ", req_text).strip()
-                    if norm_req.endswith("."):
-                        norm_req = norm_req[:-1]
-                    if norm_req.startswith(norm_idea):
-                        req, req_value = r, v
-                        break
+                if r["project_id"] == project_id and _same_text(idea.text, v.get("text", "")):
+                    req, req_value = r, v
+                    break
         if req is None:
             continue
 
@@ -927,13 +924,7 @@ def review_ideas(conn: sqlite3.Connection, project: str, key: str) -> list[Idea]
             idea = _update_idea_state(idea, req)
         else:
             # Hand-made plant: text matches (whitespace collapsed, final full stop ignored)
-            norm_idea = re.sub(r"\s+", " ", idea.text).strip()
-            if norm_idea.endswith("."):
-                norm_idea = norm_idea[:-1]
-            norm_req = re.sub(r"\s+", " ", req_text).strip()
-            if norm_req.endswith("."):
-                norm_req = norm_req[:-1]
-            if norm_req.startswith(norm_idea):
+            if _same_text(idea.text, req_text):
                 idea = _update_idea_state(idea, req)
 
         # Rebuild the list since Idea is frozen
