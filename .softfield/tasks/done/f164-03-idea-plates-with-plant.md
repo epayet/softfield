@@ -36,3 +36,10 @@ Read `.softfield/cards/f164-i-like-reading-the-milestone-reviews.md` (D4, D5) an
 - a sheet with no quoted line shows no ideas heading
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
