@@ -1,6 +1,7 @@
 # Milestone F249: A sent-back plan shows on its way on the desk and its thread
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** done · **Priority:** 100 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-17. Base: git tag `f249-a-plan-is-being-sent-back-start`. Report: [`.softfield/reviews/f249-a-plan-is-being-sent-back.md`](../reviews/f249-a-plan-is-being-sent-back.md).
 > Planted by the owner on 2026-11-14.
 
 ## Notes

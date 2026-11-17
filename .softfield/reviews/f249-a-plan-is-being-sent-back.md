@@ -1,5 +1,7 @@
 # Review: F249, a sent-back plan shows on its way
 
+- **Status:** done, signed off by the owner on 2026-11-17.
+
 ## Sign-off sheet
 
 ### 1. What changed
