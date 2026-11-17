@@ -33,3 +33,12 @@ The picture to build: `.softfield/cards/f133-mockup/board.html` (Proposed). Read
 - the card page has no Area row, and a thread's title has its status beside it and never its area
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 3
+duration_s: 5391
+gate_failures: ['stopped', 'stopped']
+tokens: 4329881
+```
