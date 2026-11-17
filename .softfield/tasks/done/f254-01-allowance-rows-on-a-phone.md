@@ -37,3 +37,9 @@ attempts: 3
 tokens: 7087327
 logs: .softfield/var/runs/20261116-205926/f254-01-allowance-rows-on-a-phone
 ```
+
+```yaml
+# --- runner ---
+result: done
+finished_by: lead
+```
