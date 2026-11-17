@@ -902,6 +902,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** F249's lesson applied. The plan named the existing assertion that stated the old rule (`'target="_blank"' not in row`) and told the ticket to turn it around, and Qwen did exactly that. The ticket waited about 3 h in the queue behind larger cards for 12 minutes of work.
 - **Decisions affected:** none.
 
+### F254 (2026-11-17): the allowance takes less height on a phone ([review](../reviews/f254-on-mobile-each-allowance-box-take.md))
+
+- **Q1:** one developer ticket at difficulty 3 (phone CSS, one template wrapper). Qwen 0/3: two attempts stopped with no edit, and one rewrote the template, which broke the wide screen and missed the height. A direction ($0.62) waited about 1.5 h for Claude's window. Opus finished it in 19 minutes ($2.09). No checkpoint. Review round 1: two nits, reported only. Score 8.
+- **Q3:** Claude's work, after about 1 h 50 min of Qwen attempts that merged nothing. See the review's numbers.
+- **Q5:** see the review's numbers.
+- **Anything else:** F9 had already learned that a phone layout is the lead's, and the plan routed it to the developer anyway, as with F84, F172 and F170's two-page tickets: a routing rule in the lead's notes doesn't reach the planner. The escalation added developer note 13 (a phone regroup is CSS on the template's own order, with a worked example). If the next one is still misrouted, it needs a pre-flight check.
+- **Decisions affected:** none.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.
