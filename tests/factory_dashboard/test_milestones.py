@@ -1859,6 +1859,69 @@ def test_idea_with_empty_text_matches_no_request(db_path, tmp_path):
     assert ideas[0].state == "plant"
 
 
+def test_a_press_of_another_idea_never_counts_for_one_its_text_starts_with(db_path):
+    """Idea 2's press, "Add X to Y. From F28's review.", starts with idea 1's text "Add X":
+    it is idea 2's alone, and idea 1 keeps its buttons."""
+    from factory_dashboard.milestones import review_ideas
+
+    _make_milestone_with_what_next(
+        db_path, PROJECT, "f28", "- **Factory:**\n  > Add X.\n  > Add X to Y.\n"
+    )
+    _make_plant_request(
+        db_path, PROJECT, {"text": "Add X to Y. From F28's review.", "from": "f28/2"}
+    )
+    ideas = review_ideas(metrics.open_db(db_path), PROJECT, "f28")
+    assert [(i.id, i.state) for i in ideas] == [("f28/1", "plant"), ("f28/2", "on its way")]
+
+
+def test_a_quoted_line_takes_its_area_from_its_own_section_only(db_path):
+    """What next ends under Product; a quoted line in What clogged with no bullet above it in
+    its own section is a factory idea, not product (D2: "in its section")."""
+    from factory_dashboard.milestones import review_ideas
+
+    conn = metrics.open_db(db_path)
+    try:
+        pid = metrics.find_project(conn, PROJECT)
+        assert pid is not None
+        metrics.upsert_milestone(
+            conn,
+            pid,
+            "f28",
+            title="Milestone f28",
+            status="in progress",
+            signoff={
+                "what_next": "- **Product:**\n  > A product idea.\n",
+                "clogged": "> Log why the runner skipped each ready ticket.\n",
+            },
+        )
+    finally:
+        conn.close()
+    ideas = review_ideas(metrics.open_db(db_path), PROJECT, "f28")
+    assert [(i.id, i.area) for i in ideas] == [("f28/1", "product"), ("f28/2", "factory")]
+
+
+def test_a_sheet_with_ideas_outside_what_next_still_gives_them(db_path):
+    """D2: any section's quoted lines are ideas, even with no What next at all."""
+    from factory_dashboard.milestones import review_ideas
+
+    conn = metrics.open_db(db_path)
+    try:
+        pid = metrics.find_project(conn, PROJECT)
+        assert pid is not None
+        metrics.upsert_milestone(
+            conn,
+            pid,
+            "f28",
+            title="Milestone f28",
+            status="in progress",
+            signoff={"clogged": "- Twelve idle hours.\n  > Say why a ready ticket waits.\n"},
+        )
+    finally:
+        conn.close()
+    ideas = review_ideas(metrics.open_db(db_path), PROJECT, "f28")
+    assert [i.text for i in ideas] == ["Say why a ready ticket waits."]
+
+
 # --- the card's fast lane lever (F172 D6, D8) ---------------------------------------------
 
 

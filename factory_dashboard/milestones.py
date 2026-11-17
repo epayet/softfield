@@ -850,14 +850,9 @@ def review_ideas(conn: sqlite3.Connection, project: str, key: str) -> list[Idea]
         return []
 
     sheet = detail.signoff
-    what_next = sheet.get("what_next")
-    if not what_next:
-        return []
-
-    # Parse quoted lines from all sections in order
     ideas: list[Idea] = []
     n = 0
-    last_bullet: str = ""  # nearest bullet above the current line
+    factory: str | None = None  # looked up once, on the first factory idea
 
     for section_key in (
         "changed",
@@ -871,6 +866,7 @@ def review_ideas(conn: sqlite3.Connection, project: str, key: str) -> list[Idea]
         section_text = sheet.get(section_key, "")
         if not section_text:
             continue
+        last_bullet = ""  # the nearest bullet above, in this section only (D2)
         for line in section_text.split("\n"):
             stripped = line.strip()
             if stripped.startswith("- "):
@@ -880,9 +876,11 @@ def review_ideas(conn: sqlite3.Connection, project: str, key: str) -> list[Idea]
                 n += 1
                 text = stripped[1:].strip()
                 # Area: product when the nearest bullet above starts with **Product
-                area = "product" if "**Product" in last_bullet else "factory"
+                area = "product" if last_bullet.startswith("- **Product") else "factory"
                 # Project: product → the review's own; factory → the factory's own
-                target_project = project if area == "product" else _factory_project(conn, project)
+                if area == "factory" and factory is None:
+                    factory = _factory_project(conn, project)
+                target_project = project if area == "product" else str(factory)
                 ideas.append(
                     Idea(
                         id=f"{short_key(key)}/{n}",
@@ -895,74 +893,33 @@ def review_ideas(conn: sqlite3.Connection, project: str, key: str) -> list[Idea]
                     )
                 )
 
-    if not ideas:
-        return []
-
-    for idea in ideas:
-        # Determine state from owner_requests of the idea's own target project
-        idea_project = idea.project
-        project_id_row = conn.execute(
-            "SELECT id FROM projects WHERE name = ?", (idea_project,)
-        ).fetchone()
-        if project_id_row is None:
-            continue
-        project_id = project_id_row["id"]
-
-        plant_requests = conn.execute(
-            "SELECT * FROM owner_requests WHERE project_id = ? AND kind = 'plant' ORDER BY id DESC",
-            (project_id,),
-        ).fetchall()
-
-        # Build a list of (request, parsed_value) pairs
-        req_list: list[tuple[sqlite3.Row, dict[str, Any]]] = []
-        for req in plant_requests:
-            try:
+    plants: dict[str, list[tuple[sqlite3.Row, dict[str, Any]]]] = {}  # newest first, by project
+    for name in {idea.project for idea in ideas}:
+        plants[name] = []
+        for req in conn.execute(
+            "SELECT r.* FROM owner_requests r JOIN projects p ON p.id = r.project_id"
+            " WHERE p.name = ? AND r.kind = 'plant' ORDER BY r.id DESC",
+            (name,),
+        ):
+            with contextlib.suppress(json.JSONDecodeError):
                 value = json.loads(req["value"] or "{}")
-            except json.JSONDecodeError:
-                continue
-            if not isinstance(value, dict):
-                continue
-            req_list.append((req, value))
+                if isinstance(value, dict):
+                    plants[name].append((req, value))
 
-        req = None
-        req_value: dict[str, Any] = {}
-        # Try matching by request's ``from`` field first
-        for r, v in req_list:
-            if v.get("from") == idea.id:
-                req, req_value = r, v
-                break
-        # Then by target project name (with text similarity check)
-        if req is None:
-            for r, v in req_list:
-                target = v.get("project") or v.get("area") or ""
-                if target == idea.project and _same_text(idea.text, v.get("text", "")):
-                    req, req_value = r, v
-                    break
-        # Then by project_id (with text similarity check)
-        if req is None:
-            for r, v in req_list:
-                if r["project_id"] == project_id and _same_text(idea.text, v.get("text", "")):
-                    req, req_value = r, v
-                    break
-        if req is None:
-            continue
+    def matching(idea: Idea) -> sqlite3.Row | None:
+        """The latest request whose ``from`` is the idea's id, else the latest hand-made one
+        (no ``from``) whose text is the idea's: a press of another idea never counts (D3)."""
+        found = plants[idea.project]
+        return next((r for r, v in found if v.get("from") == idea.id), None) or next(
+            (
+                r
+                for r, v in found
+                if not v.get("from") and _same_text(idea.text, str(v.get("text") or ""))
+            ),
+            None,
+        )
 
-        from_id = req_value.get("from")
-        req_text = req_value.get("text", "")
-
-        # Exact match on ``from``
-        if from_id == idea.id:
-            idea = _update_idea_state(idea, req)
-        else:
-            # Hand-made plant: text matches (whitespace collapsed, final full stop ignored)
-            if _same_text(idea.text, req_text):
-                idea = _update_idea_state(idea, req)
-
-        # Rebuild the list since Idea is frozen
-        idx = next(i for i, ix in enumerate(ideas) if ix.id == idea.id)
-        ideas[idx] = idea
-
-    return ideas
+    return [_update_idea_state(i, req) if (req := matching(i)) else i for i in ideas]
 
 
 def _update_idea_state(idea: Idea, req: sqlite3.Row) -> Idea:

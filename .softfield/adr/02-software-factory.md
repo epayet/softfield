@@ -910,6 +910,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** F9 had already learned that a phone layout is the lead's, and the plan routed it to the developer anyway, as with F84, F172 and F170's two-page tickets: a routing rule in the lead's notes doesn't reach the planner. The escalation added developer note 13 (a phone regroup is CSS on the template's own order, with a worked example). If the next one is still misrouted, it needs a pre-flight check.
 - **Decisions affected:** none.
 
+### F164 (2026-11-17): plant a review's ideas straight from the review ([review](../reviews/f164-i-like-reading-the-milestone-reviews.md))
+
+- **Q1:** 8 tickets, all merged on attempt 1. Four were Qwen's: f164-02, then three fix tickets, one after each checkpoint (02b, 04, 05). Four were lead tickets for Sonnet (01, 06, 03, 07). Review round 1: two should-fix findings and three nits; the lead fixed four of them itself. Score 7.
+- **Q3:** Qwen did about 2 h of developer work. Sonnet took about 51 min ($1.29), 25 days later, behind higher cards on the board. See the review's numbers.
+- **Q5:** see the review's numbers.
+- **Anything else:** each checkpoint found the next case of one matching function. Each local fix added a loop for that case, so the function ended with three loops, two of them dead, and it still matched across ideas. After the second fix ticket on one function, the lead would do better to rewrite it from the decision's rule. That is now a Factory idea in the review.
+- **Decisions affected:** none.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.

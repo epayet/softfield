@@ -1199,6 +1199,26 @@ def test_a_refused_idea_says_why_and_has_its_buttons_back(planning, db_path, ser
     assert set(_idea_buttons(review)) == {"Plant", "Plant and ask the lead"}
 
 
+def test_pressing_plant_turns_the_plate_on_its_way_at_once_and_posts_it(
+    page, planning, db_path, serve
+):
+    """D4: the press makes the plate dashed "On its way" and takes its buttons away before the
+    answer comes, and the plant request is stored for the idea."""
+    _sheet(db_path, "f28")
+    _open(page, serve(), "/planning/f28")
+    plate = page.locator("#idea-f28-1")
+    plate.get_by_role("button", name="Plant", exact=True).click()
+    page.wait_for_selector("#idea-f28-1.on-its-way")
+    assert plate.locator(".way").is_visible()
+    assert plate.locator("button").count() == 0
+    conn = metrics.open_db(db_path)
+    try:
+        rows = conn.execute("SELECT kind, value FROM owner_requests").fetchall()
+    finally:
+        conn.close()
+    assert [(r["kind"], json.loads(r["value"])["from"]) for r in rows] == [("plant", "f28/1")]
+
+
 def test_a_sheet_with_no_quoted_line_shows_no_ideas_heading(planning, db_path, serve):
     _sheet(db_path, "f28", "- **Factory:** nothing.")
     assert "Ideas from this review" not in _thread(serve(), "f28")
