@@ -1,4 +1,4 @@
-# Milestone F269: tests/factory_dashboard/test_jobs.py's…
+# Milestone F269: The 200-jobs test writes its jobs in one transaction
 
 > **State:** idea · **Area:** factory
 > Planted by the owner on 2026-11-18.
