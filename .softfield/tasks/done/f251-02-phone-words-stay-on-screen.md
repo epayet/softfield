@@ -25,3 +25,12 @@ The owner, 2026-11-17: "The text overflows on the left on mobile I can't see the
 - the page still doesn't scroll sideways, and the wide screen's top bar is unchanged
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 2
+duration_s: 3600
+gate_failures: ['stopped']
+tokens: 2464069
+```
