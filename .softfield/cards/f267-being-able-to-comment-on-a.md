@@ -1,4 +1,4 @@
-# Milestone F267: Being able to comment on a thread even though the lead is…
+# Milestone F267: Add notes to a thread while the lead is still writing its reply
 
 > **State:** idea · **Area:** factory
 > Planted by the owner on 2026-11-18.
