@@ -625,6 +625,39 @@ def test_phone_top_bar_is_compact_and_tabs_scroll(page, client, tmp_path, scheme
     assert layout_problems(page) == []
 
 
+def test_phone_status_words_stay_on_screen(page, client):
+    """f251-02: on a phone the status words that a tap on the dot opens sit fully on screen.
+    The words box's left edge is at 0 or more and its right edge within the viewport.
+    A long status wraps inside the box rather than overflowing the screen."""
+    page.set_viewport_size(PHONE)
+    open_overview(page, client)
+    page.evaluate("() => document.fonts.ready")
+    # Give the status words long text (like the owner's "Paused by you since 19:28
+    # · coaster-ranker")
+    page.evaluate(
+        """() => {
+          const words = document.querySelector('.factory-status .words');
+          if (words) words.textContent = 'Paused by you since 19:28 · coaster-ranker · '
+              + 'the longest project name';
+        }"""
+    )
+    # Tap the dot to show the words
+    page.locator(".dot-btn").click()
+    page.wait_for_selector(".bar-top.show-words", timeout=REFRESH)
+    words_box = page.locator(".factory-status .words").bounding_box()
+    assert words_box
+    # left edge at 0 or more (not cut off at the left)
+    assert words_box["x"] >= 0, f"words left edge {words_box['x']:.1f} < 0"
+    # right edge within the viewport
+    assert words_box["x"] + words_box["width"] <= PHONE["width"] + 1, (
+        f"words right edge {words_box['x'] + words_box['width']:.1f} > {PHONE['width']}"
+    )
+    # the page doesn't scroll sideways
+    assert page.evaluate(
+        "() => document.documentElement.clientWidth === document.documentElement.scrollWidth"
+    ), "page scrolls sideways"
+
+
 def test_phone_theme_switch_plate_is_40px_tall(page, client):
     """f69-08: the phone-specific knob sizing requires a .phone ancestor, but the app
     does not add that class at mobile widths; the overrides must apply directly."""
