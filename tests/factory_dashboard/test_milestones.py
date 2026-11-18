@@ -20,10 +20,11 @@ from tests.layout import DISPLAY, PHONE, layout_problems
 
 
 def section(html_content: str, name: str) -> str:
-    """The text of the page's ``<section id="name">``, tags stripped and unescaped."""
-    match = re.search(rf'<section[^>]*\bid="{name}"[^>]*>(.*?)</section>', html_content, re.S)
+    """The text of the page's ``<section id="name">``, or its fold (``<details>``, F216 D8),
+    tags stripped and unescaped."""
+    match = re.search(rf'<(section|details)[^>]*\bid="{name}"[^>]*>(.*?)</\1>', html_content, re.S)
     assert match, f"no section {name}"
-    return html.unescape(" ".join(re.sub(r"<[^>]+>", " ", match.group(1)).split()))
+    return html.unescape(" ".join(re.sub(r"<[^>]+>", " ", match.group(2)).split()))
 
 
 def charts(html: str) -> dict[str, object]:
@@ -351,22 +352,23 @@ def test_milestone_detail_answers_200(milestone_detail_client):
 
 def test_milestone_detail_sections_in_d8_order(milestone_detail_client):
     html = milestone_detail_client.get("/milestones/f1").text
-    ids = re.findall(r'<section[^>]*\bid="([a-z-]+)"', html)
+    ids = re.findall(r'<(?:section|details)[^>]*\bid="([a-z-]+)"', html)
+    # F216 D8: Needs your answer under the head, the reading part, What next, then the folds
     expected = [
+        "decisions",
         "about",
-        "grew",
         "what-changed",
         "how-to-test",
-        "decisions",
         "what-next",
+        "behind",
         "later",
+        "findings",
         "lessons",
         "clogged",
         "results",
-        "savings",
+        "grew",
         "tickets",
         "runs",
-        "findings",
     ]
     # Check that all expected sections appear in order.
     last_pos = -1
@@ -378,7 +380,7 @@ def test_milestone_detail_sections_in_d8_order(milestone_detail_client):
 
 def test_milestone_detail_shows_savings_with_parts_and_net(milestone_detail_client):
     html = milestone_detail_client.get("/milestones/f1").text
-    savings = section(html, "savings")
+    savings = section(html, "results")  # What it cost holds them (F216 D10)
     # Should show doing_itself, supporting, and net
     assert "what Claude would have spent" in savings
     assert "what it spent supporting" in savings
@@ -413,7 +415,7 @@ def test_milestone_detail_shows_signoff_parts_by_text(milestone_detail_client):
 
 def test_milestone_detail_follows_the_sheets_order(milestone_detail_client):
     html = milestone_detail_client.get("/milestones/f1").text
-    ids = ["what-changed", "how-to-test", "decisions", "what-next", "later", "lessons", "clogged"]
+    ids = ["decisions", "what-changed", "how-to-test", "what-next", "later", "lessons", "clogged"]
     assert [html.index(f'id="{i}"') for i in ids] == sorted(html.index(f'id="{i}"') for i in ids)
 
 
@@ -543,10 +545,10 @@ def _card_head(page: str) -> str:
 def _grew(page: str) -> list[tuple[str, bool, bool, str]]:
     """How it grew: each stage's name, whether it's the current one, whether it's dimmed as
     a later one, and its words after the name."""
-    match = re.search(r'<section[^>]*\bid="grew"[^>]*>(.*?)</section>', page, re.S)
+    match = re.search(r'<(section|details)[^>]*\bid="grew"[^>]*>(.*?)</\1>', page, re.S)
     assert match, "no How it grew"
     found = []
-    for attrs, inner in re.findall(r"<li([^>]*)>(.*?)</li>", match.group(1), re.S):
+    for attrs, inner in re.findall(r"<li([^>]*)>(.*?)</li>", match.group(2), re.S):
         name, _, rest = _words(inner).partition(" ")
         classes = re.search(r'class="([^"]*)"', attrs)
         later = "not-yet" in (classes.group(1).split() if classes else [])
@@ -556,9 +558,9 @@ def _grew(page: str) -> list[tuple[str, bool, bool, str]]:
 
 def _ticket_rows(page: str) -> list[list[str]]:
     """The Tickets section's rows: each one's cells, as words."""
-    match = re.search(r'<section[^>]*\bid="tickets"[^>]*>(.*?)</section>', page, re.S)
+    match = re.search(r'<(section|details)[^>]*\bid="tickets"[^>]*>(.*?)</\1>', page, re.S)
     assert match, "no Tickets"
-    rows = re.findall(r"<tr>(.*?)</tr>", match.group(1), re.S)
+    rows = re.findall(r"<tr>(.*?)</tr>", match.group(2), re.S)
     cells = [[_words(c) for c in re.findall(r"<td[^>]*>(.*?)</td>", r, re.S)] for r in rows]
     return [c for c in cells if c]
 
@@ -1030,15 +1032,18 @@ def no_signoff_client(db_path):
 
 
 def test_a_card_with_outcome_shows_it_in_about_and_folds_the_note(card_doc_client):
-    """A card whose doc has Outcome shows it in #about, before #grew, and its note folded."""
+    """A card whose doc has Outcome shows it in #about, before #grew, and its note folded:
+    with its review's sheet stored, in Behind it's "Your note and how it grew" (F216 D8)."""
     html = card_doc_client.get("/milestones/f1").text
     about = section(html, "about")
     assert "What it will do" in about
     assert "The page shows this outcome" in about
     assert "And the folded note" in about
-    assert "Your note ›" in about
-    assert "This is the owner" in about
-    assert "It has two lines" in about
+    assert "This is the owner" not in about
+    grew = section(html, "grew")
+    assert grew.startswith("Your note and how it grew")
+    assert "This is the owner" in grew
+    assert "It has two lines" in grew
     assert "Done when" in about
     assert "The outcome shows" in about
     assert "The note is folded" in about
@@ -2700,3 +2705,274 @@ def test_to_html_nested_bullet_then_numbered():
 
     result = _to_html("- Top\n  - A\n1. n")
     assert result == "<ul><li>Top<ul><li>A</li></ul></li></ul><ol><li>n</li></ol>"
+
+
+# --- f216-03: the page once its review is written: plates, Sign off, then folds -------------
+
+_F187_SHEET = {
+    "changed": (
+        "- **Nothing should look different.** Every page shows the same clock times.\n"
+        "- **The factory now writes every new time in UTC.**"
+    ),
+    "how_to_test": (
+        "1. Open the Overview on your phone.\n2. Open the Timeline, Runs and Jobs pages."
+    ),
+    "done_check": (
+        "- **Not yet:** the stored times at 0 not in UTC.\n"
+        "- **Met:** with the zone set to Paris, `08:00+00:00` shows as 09:00."
+    ),
+    "decisions": "None. ADR 31 was already accepted.",
+    "along_the_way": (
+        "- **Also changed how a limit's reset time is read.** It returns UTC. *The review.*\n"
+        "- **The dashboard's tests now run in UTC.** *The lead, on f187-02.*"
+    ),
+    "what_next": "- **Factory:** make the suite fit a review's 10-minute limit.",
+    "later": "- A conversion that keeps failing writes a copy.\n- The old JSON state lapses.",
+    "lessons": (
+        "- **UK winter hides this whole class of bug.**\n"
+        "- **A clock's readers change too.**\n"
+        "- **A sweep by column name misses renamed values.**"
+    ),
+    "clogged": "- **The local model's three attempts: 34 minutes.** Fixed: a worked example.",
+}
+
+_F175_ASKS = (
+    "**ADR 39: bound the run logs.** The job logs take about 800 MB. I recommend compressing"
+    " logs older than 90 days."
+)
+
+_FOLDS = ["later", "findings", "lessons", "clogged", "results", "grew", "tickets", "runs"]
+
+
+def _ripe_card(db_path, key: str, sheet: dict[str, str], *, costs: bool = True) -> None:
+    """A ripe card ``key`` (its one ticket done, its sheet stored), with a review and the lead's
+    ticket's jobs in one run, and three findings: two fixed, one left (F187's shape)."""
+    conn = metrics.open_db(db_path)
+    try:
+        pid = metrics.upsert_project(conn, PROJECT)
+        m = metrics.upsert_milestone(
+            conn,
+            pid,
+            key,
+            title=f"Card {key}",
+            status="review",
+            review_score=7,
+            review_rounds=1,
+            outcome="Every time the factory stores is UTC.",
+            done_when="- the plan's own Done when line",
+            signoff=sheet,
+            started="2026-09-29T09:00:00+02:00",
+        )
+        ticket = metrics.upsert_ticket(
+            conn,
+            pid,
+            f"{key}-01-clocks",
+            milestone_id=m,
+            kind="lead",
+            state="done",
+            merged_by=OPUS,
+            commit="e" * 40,
+            lines_changed=40,
+        )
+        if costs:
+            run = metrics.upsert_run(conn, pid, "20260930-110000")
+            _job(conn, run, m, ticket, "lead-ticket", OPUS, 1, "passed", cost_usd=1.3)
+            review = _job(conn, run, m, None, "review", OPUS, 1, "passed", cost_usd=2.85)
+            for n, (severity, route, resolved) in enumerate(
+                (
+                    ("should-fix", "local", True),
+                    ("nit", "report", None),
+                    ("blocking", "local", True),
+                ),
+                start=1,
+            ):
+                metrics.add_finding(
+                    conn,
+                    m,
+                    f"F{n}",
+                    job_id=review,
+                    severity=severity,
+                    route=route,
+                    resolved=resolved,
+                    summary=f"Finding {n}",
+                )
+    finally:
+        conn.close()
+
+
+def test_to_html_single_stars_are_emphasis_as_d2_ends_a_choice():
+    from factory_dashboard.milestones import _to_html
+
+    assert _to_html("- **Kept it.** Why. *The review.*") == (
+        "<ul><li><strong>Kept it.</strong> Why. <em>The review.</em></li></ul>"
+    )
+    # a lone star, or stars inside a word or a sum, stay as they are
+    assert _to_html("2 * 3 * 4, a*b*c") == "<p>2 * 3 * 4, a*b*c</p>"
+
+
+def _part(page: str, name: str) -> str:
+    """The raw HTML of the page's ``<section>`` or ``<details>`` with ``id="name"``."""
+    match = re.search(rf'<(section|details)[^>]*\bid="{name}"[^>]*>(.*?)</\1>', page, re.S)
+    assert match, f"no part {name}"
+    return match.group(2)
+
+
+def _gist(page: str, name: str) -> str:
+    """A fold's summary line, as words."""
+    match = re.search(r"<summary>(.*?)</summary>", _part(page, name), re.S)
+    assert match, f"{name} has no summary"
+    return _words(match.group(1))
+
+
+def test_a_sheet_page_comes_in_d8_order_with_sign_off_before_what_next(db_path, serve):
+    _ripe_card(db_path, "f187-utc", {**_F187_SHEET, "decisions": _F175_ASKS})
+    page = serve().get("/milestones/f187-utc").text
+    order = [
+        'id="card-head"',
+        'id="decisions"',
+        'id="about"',
+        'id="what-changed"',
+        'id="how-to-test"',
+        'id="along-the-way"',
+        'id="review"',
+        'id="what-next"',
+        'id="behind"',
+        *(f'id="{f}"' for f in _FOLDS),
+    ]
+    places = [page.index(mark) for mark in order]
+    assert places == sorted(places), order
+    assert 'id="signoff-button"' in _part(page, "review")
+    assert "Needs your answer" in _words(_part(page, "decisions"))
+    assert "ADR 39: bound the run logs." in _words(_part(page, "decisions"))
+    # every part is the one plate, and nothing is styled in place
+    for part in ("decisions", "about", "what-changed", "how-to-test", "along-the-way", "what-next"):
+        # "about" keeps its own class beside the plate's, for its fold of the note
+        assert re.search(rf'<section class="card-plate[^"]*" id="{part}"', page), part
+    assert "style=" not in _part(page, "review")
+
+
+def test_the_eight_folds_are_closed_with_their_gists(db_path, serve):
+    _ripe_card(db_path, "f187-utc", _F187_SHEET)
+    page = serve().get("/milestones/f187-utc").text
+    behind = re.search(r'<section[^>]*id="behind"[^>]*>(.*?)</section>', page, re.S)
+    assert behind and "Behind it" in behind.group(1)
+    folds = re.findall(r'<details([^>]*)\bid="([a-z-]+)"', behind.group(1))
+    assert [name for _, name in folds] == _FOLDS
+    assert all("open" not in attrs for attrs, _ in folds)
+    assert _gist(page, "later") == "Left for later 2 points"
+    assert _gist(page, "findings") == "What the review caught 3: 2 fixed, 1 left as it is"
+    assert _gist(page, "lessons") == "Lessons 3"
+    assert _gist(page, "clogged") == "What clogged the line 1, with its fix"
+    assert _gist(page, "results") == "What it cost $4.15, of which the review $2.85"
+    assert _gist(page, "tickets") == "Tickets 1 of 1 done"
+    assert _gist(page, "runs") == "Runs 1"
+    assert _gist(page, "grew").startswith("Your note and how it grew Ripe")
+    words = _words(page)
+    for empty in ("Not written yet", "No runs.", "No savings data.", "No results yet."):
+        assert empty not in words
+
+
+def test_a_fold_with_nothing_in_it_is_not_drawn(db_path, serve):
+    sheet = {k: v for k, v in _F187_SHEET.items() if k not in ("later", "lessons", "clogged")}
+    _ripe_card(db_path, "f188-bare", sheet, costs=False)
+    page = serve().get("/milestones/f188-bare").text
+    for gone in ("later", "lessons", "clogged", "findings", "runs"):
+        assert f'id="{gone}"' not in page, gone
+    assert 'id="grew"' in page and 'id="tickets"' in page
+    assert "Not written yet" not in _words(page)
+
+
+def test_a_fold_whose_text_is_not_in_bullets_shows_its_name_alone(db_path, serve):
+    _ripe_card(db_path, "f189-prose", {**_F187_SHEET, "later": "Nothing much, all in one line."})
+    page = serve().get("/milestones/f189-prose").text
+    assert _gist(page, "later") == "Left for later"
+
+
+def test_done_when_as_of_now_replaces_the_plan_s_and_falls_back_to_it(db_path, serve):
+    _ripe_card(db_path, "f187-utc", _F187_SHEET)
+    _ripe_card(db_path, "f190-old", {k: v for k, v in _F187_SHEET.items() if k != "done_check"})
+    about = _words(_part(serve().get("/milestones/f187-utc").text, "about"))
+    assert "Done when, as of now" in about
+    assert "Not yet: the stored times at 0 not in UTC." in about
+    assert "the plan's own Done when line" not in about
+    old = _words(_part(serve().get("/milestones/f190-old").text, "about"))
+    assert "as of now" not in old
+    assert "the plan's own Done when line" in old
+
+
+def test_a_decisions_starting_none_shows_no_plate(db_path, serve):
+    """F187's "None. …" draws nothing, whatever its case; F175's question shows."""
+    _ripe_card(db_path, "f187-utc", _F187_SHEET)
+    _ripe_card(db_path, "f191-lower", {**_F187_SHEET, "decisions": "none waiting."})
+    client = serve()
+    for key in ("f187-utc", "f191-lower"):
+        page = client.get(f"/milestones/{key}").text
+        assert 'id="decisions"' not in page, key
+        assert "Needs your answer" not in page, key
+
+
+def test_what_the_review_caught_and_what_it_cost_draw_the_database_rows(db_path, serve):
+    _ripe_card(db_path, "f187-utc", _F187_SHEET)
+    page = serve().get("/milestones/f187-utc").text
+    caught = re.findall(r"<tr>(.*?)</tr>", _part(page, "findings"), re.S)
+    rows = [[_words(c) for c in re.findall(r"<td[^>]*>(.*?)</td>", r, re.S)] for r in caught]
+    assert rows == [
+        ["blocking", "Finding 3", "fixed"],
+        ["should-fix", "Finding 1", "fixed"],
+        ["nit", "Finding 2", "left"],
+    ]
+    cost = _words(_part(page, "results"))
+    assert "The review $2.85" in cost and "The lead's tickets $1.30" in cost
+    assert "Review score 7.0/10" in cost and "Review rounds 1" in cost
+    # no developer lines: no savings; no separate Findings, Results or Savings parts
+    assert 'id="savings"' not in page
+    assert "Findings by severity" not in page
+    assert page.count('id="results"') == 1 and page.count('id="findings"') == 1
+
+
+def test_savings_show_in_what_it_cost_only_with_developer_lines(milestone_detail_client):
+    """f1's developer merged 100 lines: its savings are in What it cost."""
+    page = milestone_detail_client.get("/milestones/f1").text
+    cost = _part(page, "results")
+    assert 'id="savings"' in cost
+    assert "$1.50" in _words(cost) and "-$2.70" in _words(cost)
+    assert "Developers, first time 1 of 2" in _words(cost)
+
+
+def test_a_card_with_no_sheet_draws_as_before(milestone_detail_client):
+    page = milestone_detail_client.get("/milestones/f10").text
+    ids = re.findall(r'<section[^>]*\bid="([a-z-]+)"', page)
+    assert ids == [
+        "about",
+        "grew",
+        "review-wait",
+        "results",
+        "savings",
+        "tickets",
+        "runs",
+        "findings",
+    ]
+    assert "<details" not in page.split('id="grew"')[1]
+
+
+def test_the_sheet_page_has_no_sideways_scroll_on_a_phone_and_folds_open_without_script(
+    page, db_path, serve
+):
+    _ripe_card(db_path, "f187-utc", {**_F187_SHEET, "decisions": _F175_ASKS})
+    page.set_viewport_size(PHONE)
+    client = serve()
+    # tapping a fold needs no script: plain <details>, nothing listening on them
+    behind = _part(client.get("/milestones/f187-utc").text, "behind")
+    assert "<script" not in behind and "hx-" not in behind
+    assert not re.search(r"\son[a-z]+=", behind)
+    open_page(page, client, "/milestones/f187-utc")
+    page.evaluate("() => document.fonts.ready")
+    page.evaluate("() => document.querySelector('nav.tabs').setAttribute('data-layout', 'overlay')")
+    problems = layout_problems(page)
+    assert problems == [], "\n".join(problems)
+    fold = page.locator("#findings")
+    assert fold.get_attribute("open") is None
+    fold.locator("summary").click()
+    assert fold.get_attribute("open") == ""
+    assert page.locator("#findings table").is_visible()
+    assert page.evaluate("() => document.documentElement.scrollWidth") <= PHONE["width"]

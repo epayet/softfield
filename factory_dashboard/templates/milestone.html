@@ -1,7 +1,10 @@
 {% extends "base.html" %}
 {% block title %}{{ milestone.key | upper }} · Milestone · {{ project }}{% endblock %}
 {# A milestone's page is its card's (f5-17, after .softfield/cards/f5-board-mockup/Card.dc.html):
-   the header and "How it grew" carry the board's stage, then what the page showed before. #}
+   the header and "How it grew" carry the board's stage, then what the page showed before.
+   Once its review's sheet is stored (F216 D8, .softfield/cards/f216-mockup/review-page.html):
+   Needs your answer, the reading part as plates, Sign off, What next, then "Behind it", a plate
+   of closed folds, each with the page's own gist (D9). A part with nothing in it isn't drawn. #}
 {% from "_partials/stage_icon.html" import icon %}
 {% block crumbs %}
 <a href="/board{{ q }}">Board</a>
@@ -9,6 +12,7 @@
 <span>{{ milestone.key | upper }}</span>
 {% endblock %}
 {% block content %}
+{% set sheet = milestone.signoff %}
 <div class="page card-page">
 
 <header id="card-head" class="card-head{% if card %} at-{{ card.stage }}{% endif %}">
@@ -40,29 +44,40 @@
   <a class="card-thread" href="/planning/{{ thread | urlencode }}{{ q }}">Its planning thread: talk it through, sign it off ›</a>
 </header>
 
-<section class="about" id="about">
+{# signoff_html's parts are escaped by _to_html; a "None…" decisions isn't among them (D4) #}
+{% if sheet and "decisions" in signoff_html %}
+<section class="card-plate asks" id="decisions">
+  <header><h2>Needs your answer</h2><span class="stripe" aria-hidden="true"></span></header>
+  <div class="body">{{ signoff_html["decisions"] | safe }}</div>
+</section>
+{% endif %}
+
+{# with a sheet, the note folds away under Behind it (D8), unless it's all there is to say #}
+{% set done_check = signoff_html.get("done_check") %}
+{% set show_note = about.note and not (sheet and (about.outcome_html or about.done_when_html or done_check)) %}
+<section class="card-plate about" id="about">
   <header><h2>What it's about</h2><span class="stripe" aria-hidden="true"></span></header>
   <div class="body">
     {# outcome_html and done_when_html are escaped by _to_html; the note is plain text #}
-    {% if about.outcome_html or about.done_when_html or about.note %}
+    {% if about.outcome_html or about.done_when_html or done_check or show_note %}
     {% if about.outcome_html %}
     <p class="label">What it will do</p>
     {{ about.outcome_html | safe }}
     {% endif %}
-    {% if about.done_when_html %}
+    {% if done_check %}
+    <p class="label">Done when, as of now</p>
+    {{ done_check | safe }}
+    {% elif about.done_when_html %}
     <p class="label">Done when</p>
     {{ about.done_when_html | safe }}
     {% endif %}
-    {% if about.note and about.outcome_html %}
+    {% if show_note and about.outcome_html %}
     <details><summary>Your note ›</summary>
       <p class="note">{{ about.note }}</p></details>
-    {% elif not about.outcome_html and not about.done_when_html and about.note %}
+    {% elif show_note %}
     <p class="label">Your note</p>
     <p class="note">{{ about.note }}</p>
     <p class="later">The lead writes what it will do when it plans the card.</p>
-    {% else %}
-    <p class="later">Nothing written about it yet.</p>
-    <p class="later"><a href="/planning/{{ thread | urlencode }}{{ q }}">Its planning thread: talk it through, sign it off ›</a></p>
     {% endif %}
     {% else %}
     <p class="later">Nothing written about it yet.</p>
@@ -71,6 +86,7 @@
   </div>
 </section>
 
+{% if not sheet %}
 <section id="grew" class="panel">
   <h2>How it grew</h2>
   <ol class="grew">
@@ -81,157 +97,9 @@
   {% if card %}<p class="sub">The outlined stage is where the card is now; the dimmed ones are still to come.</p>{% endif %}
 </section>
 
-{% if review and (review.ripe or review.signing_off) %}
-<section id="review" style="background: var(--bay); border: 1px solid var(--rule); border-left: 3px solid var(--hazard); padding: 12px 16px; display: flex; flex-direction: column; gap: 8px">
-  {% set signing = "border: 1px dashed var(--hazard); padding: 4px 8px; font-size: 12.5px; align-self: flex-start" %}
-  {% if review.signing_off %}
-  <span class="pill" id="signing-off" style="{{ signing }}">Signing off at the runner's next pick</span>
-  {% elif review.ripe %}
-  <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center">
-    <button type="button" id="signoff-button"
-      hx-post="/requests" hx-target="#signoff-status" hx-swap="innerHTML"
-      hx-vals='{"kind": "signoff", "project": {{ project | tojson }}, "subject": {{ review.key | tojson }}}'
-      hx-on::before-request="this.insertAdjacentHTML('beforebegin', document.getElementById('signing-off-shape').innerHTML); this.remove()"
-      style="font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--hazard-ink); background: var(--hazard); border: 0; padding: 0 16px; min-height: 44px">Sign off</button>
-    <template id="signing-off-shape"><span class="pill" id="signing-off" style="{{ signing }}">Signing off at the runner's next pick</span></template>
-    <span id="signoff-status" style="font-size: 12.5px; color: var(--muted)">{% if review.refused %}The runner said: {{ review.refused }}{% else %}Marks it done and tags it, at the runner's next pick.{% endif %}</span>
-  </div>
-  {% endif %}
-</section>
-{% endif %}
-
-{% if milestone.signoff %}
-<section id="what-changed">
-  <h2>What changed</h2>
-  {% if "changed" in signoff_html %}
-  {{ signoff_html["changed"] | safe }}
-  {% else %}
-  <p class="sub">Not written yet</p>
-  {% endif %}
-</section>
-
-{# F85 D7: only where "What changed" shows, and only with f85-01's list; the switches change
-   what is shown on the page itself #}
-{% if shots %}
-<section class="shots" id="shots">
-  <header><h2>Before and after</h2><span class="stripe" aria-hidden="true"></span><span class="src">{{ shots.plates | length }} page{{ "s" if shots.plates | length != 1 }} · taken {{ shots.taken }}</span></header>
-  <div class="body">
-    <div class="controls">
-      <div class="switch ba" role="group" aria-label="Before or after">
-        <button type="button" data-ba="before" aria-pressed="false">Before</button>
-        <button type="button" data-ba="after" aria-pressed="true">After</button>
-      </div>
-      <div class="switch" role="group" aria-label="Which screen">
-        <button type="button" data-w="phone" aria-pressed="true">Phone</button>
-        <button type="button" data-w="wide" aria-pressed="false">Wide</button>
-      </div>
-      {% if shots.mockup %}<a class="plan-mockup" href="{{ shots.mockup }}">The plan's mock-up ›</a>{% endif %}
-    </div>
-    {% for plate in shots.plates %}
-    <div class="page-plate">
-      <div class="addr">
-        {% if plate.href %}<a class="live" href="{{ plate.href }}" target="_blank" rel="noopener">{{ plate.address }} <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M4 2h6v6M10 2 3 9" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></a><span class="open">opens the page as it is now in a new tab</span>
-        {% else %}<span>{{ plate.address }}</span>{% endif %}
-      </div>
-      <div class="pair">
-        {% for when, label, source, pictures in (("before", "Before", "at the card's start", plate.before), ("after", "After", "main now", plate.after)) %}
-        <figure data-when="{{ when }}"{% if when == "before" %} hidden{% endif %}>
-          <figcaption>{{ label }} · {{ source }}</figcaption>
-          {% for p in pictures %}
-          <div class="shot-slot" data-width="{{ p.width }}"{% if p.width == "wide" %} hidden{% endif %}>
-            {% if p.src %}<a class="shot" href="{{ p.src }}" target="_blank" rel="noopener"><img src="{{ p.src }}" alt="{{ label }}, {{ p.width }}: {{ plate.address }}" loading="lazy"></a>
-            {# p.say is one of the page's own fixed sentences #}
-            {% else %}<div class="missing"{% if p.why %} title="{{ p.why }}"{% endif %}>{{ p.say | safe }}.{% if p.why %} <small>{{ p.why }}</small>{% endif %}</div>{% endif %}
-          </div>
-          {% endfor %}
-        </figure>
-        {% endfor %}
-      </div>
-    </div>
-    {% endfor %}
-    <p class="sub">Tap a picture to open it at full size. On a wide screen, Before and After sit side by side.</p>
-  </div>
-  <script>
-    (function shotsPanel() {
-      const panel = document.getElementById("shots");
-      const screen = window.matchMedia("(min-width: 1100px)");
-      let when = "after";
-      let width = screen.matches ? "wide" : "phone";
-      function draw() {
-        const sideBySide = screen.matches;
-        panel.classList.toggle("wide-screen", sideBySide);
-        panel.querySelectorAll("figure").forEach(function (f) { f.hidden = !sideBySide && f.dataset.when !== when; });
-        panel.querySelectorAll(".shot-slot").forEach(function (s) { s.hidden = s.dataset.width !== width; });
-        panel.querySelectorAll("[data-ba]").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.ba === when)); });
-        panel.querySelectorAll("[data-w]").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.w === width)); });
-      }
-      panel.querySelectorAll("[data-ba]").forEach(function (b) { b.addEventListener("click", function () { when = b.dataset.ba; draw(); }); });
-      panel.querySelectorAll("[data-w]").forEach(function (b) { b.addEventListener("click", function () { width = b.dataset.w; draw(); }); });
-      screen.addEventListener("change", function () { width = screen.matches ? "wide" : "phone"; draw(); });
-      draw();
-    })();
-  </script>
-</section>
-{% endif %}
-
-<section id="how-to-test">
-  <h2>How to test</h2>
-  {% if "how_to_test" in signoff_html %}
-  {{ signoff_html["how_to_test"] | safe }}
-  {% else %}
-  <p class="sub">Not written yet</p>
-  {% endif %}
-</section>
-
-<section id="decisions">
-  <h2>Decisions waiting for you</h2>
-  {% if "decisions" in signoff_html %}
-  {{ signoff_html["decisions"] | safe }}
-  {% else %}
-  <p class="sub">Not written yet</p>
-  {% endif %}
-</section>
-
-<section id="what-next">
-  <h2>What next</h2>
-  {% if "what_next" in signoff_html %}
-  {{ signoff_html["what_next"] | safe }}
-  {% else %}
-  <p class="sub">Not written yet</p>
-  {% endif %}
-</section>
-
-<section id="later">
-  <h2>Left for later</h2>
-  {% if "later" in signoff_html %}
-  {{ signoff_html["later"] | safe }}
-  {% else %}
-  <p class="sub">Not written yet</p>
-  {% endif %}
-</section>
-
-<section id="lessons">
-  <h2>How the work went</h2>
-  {% if "lessons" in signoff_html %}
-  {{ signoff_html["lessons"] | safe }}
-  {% else %}
-  <p class="sub">Not written yet</p>
-  {% endif %}
-</section>
-
-<section id="clogged">
-  <h2>What clogged the factory line</h2>
-  {% if "clogged" in signoff_html %}
-  {{ signoff_html["clogged"] | safe }}
-  {% else %}
-  <p class="sub">Not written yet</p>
-  {% endif %}
-</section>
-{% else %}
 <section class="panel" id="review-wait">
   <div class="review-wait"><h2>The review</h2><span class="sub">comes when the last ticket is done: what changed, how to test it, decisions for you, what next.</span></div>
 </section>
-{% endif %}
 
 <section id="results">
   <h2>Results</h2>
@@ -313,6 +181,199 @@
   <p class="sub">No findings.</p>
   {% endif %}
 </section>
+
+{% else %}
+
+{% if "changed" in signoff_html %}
+<section class="card-plate" id="what-changed">
+  <header><h2>What changed</h2><span class="stripe" aria-hidden="true"></span></header>
+  <div class="body">{{ signoff_html["changed"] | safe }}</div>
+</section>
+{% endif %}
+
+{# F85 D7: only where "What changed" shows, and only with f85-01's list; the switches change
+   what is shown on the page itself #}
+{% if shots %}
+<section class="shots" id="shots">
+  <header><h2>Before and after</h2><span class="stripe" aria-hidden="true"></span><span class="src">{{ shots.plates | length }} page{{ "s" if shots.plates | length != 1 }} · taken {{ shots.taken }}</span></header>
+  <div class="body">
+    <div class="controls">
+      <div class="switch ba" role="group" aria-label="Before or after">
+        <button type="button" data-ba="before" aria-pressed="false">Before</button>
+        <button type="button" data-ba="after" aria-pressed="true">After</button>
+      </div>
+      <div class="switch" role="group" aria-label="Which screen">
+        <button type="button" data-w="phone" aria-pressed="true">Phone</button>
+        <button type="button" data-w="wide" aria-pressed="false">Wide</button>
+      </div>
+      {% if shots.mockup %}<a class="plan-mockup" href="{{ shots.mockup }}">The plan's mock-up ›</a>{% endif %}
+    </div>
+    {% for plate in shots.plates %}
+    <div class="page-plate">
+      <div class="addr">
+        {% if plate.href %}<a class="live" href="{{ plate.href }}" target="_blank" rel="noopener">{{ plate.address }} <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M4 2h6v6M10 2 3 9" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></a><span class="open">opens the page as it is now in a new tab</span>
+        {% else %}<span>{{ plate.address }}</span>{% endif %}
+      </div>
+      <div class="pair">
+        {% for when, label, source, pictures in (("before", "Before", "at the card's start", plate.before), ("after", "After", "main now", plate.after)) %}
+        <figure data-when="{{ when }}"{% if when == "before" %} hidden{% endif %}>
+          <figcaption>{{ label }} · {{ source }}</figcaption>
+          {% for p in pictures %}
+          <div class="shot-slot" data-width="{{ p.width }}"{% if p.width == "wide" %} hidden{% endif %}>
+            {% if p.src %}<a class="shot" href="{{ p.src }}" target="_blank" rel="noopener"><img src="{{ p.src }}" alt="{{ label }}, {{ p.width }}: {{ plate.address }}" loading="lazy"></a>
+            {# p.say is one of the page's own fixed sentences #}
+            {% else %}<div class="missing"{% if p.why %} title="{{ p.why }}"{% endif %}>{{ p.say | safe }}.{% if p.why %} <small>{{ p.why }}</small>{% endif %}</div>{% endif %}
+          </div>
+          {% endfor %}
+        </figure>
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+    <p class="sub">Tap a picture to open it at full size. On a wide screen, Before and After sit side by side.</p>
+  </div>
+  <script>
+    (function shotsPanel() {
+      const panel = document.getElementById("shots");
+      const screen = window.matchMedia("(min-width: 1100px)");
+      let when = "after";
+      let width = screen.matches ? "wide" : "phone";
+      function draw() {
+        const sideBySide = screen.matches;
+        panel.classList.toggle("wide-screen", sideBySide);
+        panel.querySelectorAll("figure").forEach(function (f) { f.hidden = !sideBySide && f.dataset.when !== when; });
+        panel.querySelectorAll(".shot-slot").forEach(function (s) { s.hidden = s.dataset.width !== width; });
+        panel.querySelectorAll("[data-ba]").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.ba === when)); });
+        panel.querySelectorAll("[data-w]").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.w === width)); });
+      }
+      panel.querySelectorAll("[data-ba]").forEach(function (b) { b.addEventListener("click", function () { when = b.dataset.ba; draw(); }); });
+      panel.querySelectorAll("[data-w]").forEach(function (b) { b.addEventListener("click", function () { width = b.dataset.w; draw(); }); });
+      screen.addEventListener("change", function () { width = screen.matches ? "wide" : "phone"; draw(); });
+      draw();
+    })();
+  </script>
+</section>
+{% endif %}
+
+{% if "how_to_test" in signoff_html %}
+<section class="card-plate" id="how-to-test">
+  <header><h2>How to test</h2><span class="stripe" aria-hidden="true"></span></header>
+  <div class="body">{{ signoff_html["how_to_test"] | safe }}</div>
+</section>
+{% endif %}
+
+{% if "along_the_way" in signoff_html %}
+<section class="card-plate" id="along-the-way">
+  <header><h2>Decisions made along the way</h2><span class="stripe" aria-hidden="true"></span></header>
+  <div class="body">{{ signoff_html["along_the_way"] | safe }}</div>
+</section>
+{% endif %}
+
+{# Sign off after what it signs off (D8) #}
+{% if review and (review.ripe or review.signing_off) %}
+<section id="review" class="signoff">
+  {% if review.signing_off %}
+  <span class="pill signing" id="signing-off">Signing off at the runner's next pick</span>
+  {% elif review.ripe %}
+  <button type="button" id="signoff-button" class="press"
+    hx-post="/requests" hx-target="#signoff-status" hx-swap="innerHTML"
+    hx-vals='{"kind": "signoff", "project": {{ project | tojson }}, "subject": {{ review.key | tojson }}}'
+    hx-on::before-request="this.insertAdjacentHTML('beforebegin', document.getElementById('signing-off-shape').innerHTML); this.remove()">Sign off</button>
+  <template id="signing-off-shape"><span class="pill signing" id="signing-off">Signing off at the runner's next pick</span></template>
+  <span id="signoff-status" class="say">{% if review.refused %}The runner said: {{ review.refused }}{% else %}Marks it done and tags it, at the runner's next pick.{% endif %}</span>
+  {% endif %}
+</section>
+{% endif %}
+
+{# F164's idea plates are drawn in place, inside its text #}
+{% if "what_next" in signoff_html %}
+<section class="card-plate" id="what-next">
+  <header><h2>What next</h2><span class="stripe" aria-hidden="true"></span></header>
+  <div class="body">{{ signoff_html["what_next"] | safe }}</div>
+</section>
+{% endif %}
+
+{% set show_savings = milestone.savings and milestone.savings.lines > 0 %}
+{% set results = milestone.results %}
+<section class="card-plate folds" id="behind">
+  <header><h2>Behind it</h2><span class="stripe" aria-hidden="true"></span></header>
+  {% macro summary(name, gist) %}<summary><b>{{ name }}</b>{% if gist %}<span>{{ gist }}</span>{% endif %}</summary>{% endmacro %}
+  {% if "later" in signoff_html %}
+  <details id="later">{{ summary("Left for later", gists.later) }}
+    <div class="inside">{{ signoff_html["later"] | safe }}</div></details>
+  {% endif %}
+  {% if milestone.caught %}
+  <details id="findings">{{ summary("What the review caught", gists.caught) }}
+    <div class="inside scroll"><table class="caught"><tbody>
+      {% for c in milestone.caught %}
+      <tr><td class="sev">{{ c.severity }}</td><td>{{ c.summary or "–" }}</td><td class="outcome">{{ c.outcome }}</td></tr>
+      {% endfor %}
+    </tbody></table></div></details>
+  {% endif %}
+  {% if "lessons" in signoff_html %}
+  <details id="lessons">{{ summary("Lessons", gists.lessons) }}
+    <div class="inside">{{ signoff_html["lessons"] | safe }}</div></details>
+  {% endif %}
+  {% if "clogged" in signoff_html %}
+  <details id="clogged">{{ summary("What clogged the line", gists.clogged) }}
+    <div class="inside">{{ signoff_html["clogged"] | safe }}</div></details>
+  {% endif %}
+  {% if milestone.spend or milestone.review_score is not none or milestone.owner_score is not none or (results and results.developer_tickets) or show_savings %}
+  <details id="results">{{ summary("What it cost", gists.cost) }}
+    <div class="inside">
+      {% if milestone.spend %}
+      {# to scale, in the rules' ink: no agent or status colour (D10) #}
+      <div class="spend">
+        {% for s in milestone.spend %}
+        <span>{{ s.label }}</span><i style="width: {{ (s.share * 100) | round | int }}%"></i><b>{{ s.usd | usd }}</b>
+        {% endfor %}
+      </div>
+      {% endif %}
+      <dl class="kv">
+        {% if milestone.review_score is not none %}<dt>Review score</dt><dd>{{ "%.1f" | format(milestone.review_score) }}/10</dd>{% endif %}
+        {% if milestone.owner_score is not none %}<dt>Owner score</dt><dd>{{ "%.1f" | format(milestone.owner_score) }}/10</dd>{% endif %}
+        {% if results %}<dt>Review rounds</dt><dd>{{ results.review_rounds }}</dd>{% endif %}
+        {% if results and results.developer_tickets %}<dt>Developers, first time</dt><dd>{{ results.first_attempt }} of {{ results.developer_tickets }}</dd>{% endif %}
+      </dl>
+      {% if show_savings %}
+      <div class="stats money" id="savings">
+        <div class="stat"><b>{{ milestone.savings.doing_itself | usd }}</b><span>what Claude would have spent writing the {{ "{:,}".format(milestone.savings.lines) }} lines itself (≈{{ milestone.savings.doing_itself_tokens | tokens }} token-equivalents)</span></div>
+        <div class="stat"><b>{{ milestone.savings.supporting | usd }}</b><span>what it spent supporting them (≈{{ milestone.savings.supporting_tokens | tokens }})</span></div>
+        <div class="stat"><b>{{ milestone.savings.net | usd }}</b><span>net, on {{ milestone.savings.tickets }} delegated ticket{{ "s" if milestone.savings.tickets != 1 }}</span></div>
+      </div>
+      {% endif %}
+    </div></details>
+  {% endif %}
+  <details id="grew">{{ summary("Your note and how it grew", gists.grew) }}
+    <div class="inside">
+      {% if about.note and not show_note %}<p class="note">{{ about.note }}</p>{% endif %}
+      <ol class="grew">
+        {% for g in grew %}
+        <li class="at-{{ g.stage }}{% if g.current %} now{% elif g.later %} not-yet{% endif %}"{% if g.current %} aria-current="step"{% endif %}><b>{{ g.name }}</b><span>{{ g.when }}</span></li>
+        {% endfor %}
+      </ol>
+    </div></details>
+  {% if milestone.tickets %}
+  <details id="tickets">{{ summary("Tickets", gists.tickets) }}
+    <div class="inside scroll"><table class="card-tickets">
+      <thead><tr><th>Ticket</th><th>Goal</th><th>Who</th><th>State</th></tr></thead>
+      <tbody>
+        {% for t in milestone.tickets %}
+        <tr><td class="id"><a href="/tickets/{{ t.ticket }}{{ q }}">{{ t.ticket }}</a></td><td>{{ t.goal or "–" }}</td><td class="who">{{ t.who }}</td><td class="state{% if t.mark %} is-{{ t.mark }}{% endif %}">{{ t.state }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table></div></details>
+  {% endif %}
+  {% if milestone.runs %}
+  <details id="runs">{{ summary("Runs", gists.runs) }}
+    <div class="inside"><ul>
+      {% for r in milestone.runs %}
+      <li><a href="/runs/{{ r.run_dir }}{{ q }}">{{ r.run_dir }}</a></li>
+      {% endfor %}
+    </ul></div></details>
+  {% endif %}
+</section>
+{% endif %}
 
 </div>
 {% endblock %}

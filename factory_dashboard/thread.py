@@ -41,7 +41,7 @@ from factory_dashboard.merges import (
     _merged_on,
     _text_with_links,
 )
-from factory_dashboard.milestones import _to_html, idea_plate, review_ideas
+from factory_dashboard.milestones import _to_html, asks_nothing, idea_plate, review_ideas
 from factory_dashboard.overview import Change, open_changes, running_jobs
 from factory_dashboard.planning import (
     _closing,
@@ -144,6 +144,7 @@ _SHEET = (  # what the owner acts on (F50 D2); the rest stays on the milestone p
     ("changed", "What changed"),
     ("how_to_test", "How to test"),
     ("decisions", "Decisions waiting for you"),
+    ("along_the_way", "Decisions made along the way"),  # F216 D13
 )
 
 
@@ -183,7 +184,9 @@ def _review(
     sections = [
         (heading, _to_html(sheet[key]))
         for key, heading in _SHEET
-        if isinstance(sheet.get(key), str) and sheet[key].strip()
+        if isinstance(sheet.get(key), str)
+        and sheet[key].strip()
+        and not (key == "decisions" and asks_nothing(sheet[key]))  # F216 D4
     ]
     ripe = any(m["key"] == row["key"] for m in live_line(conn, project, now)["field"]["ripe"])
     last = conn.execute(

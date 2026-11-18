@@ -354,6 +354,85 @@ def idea_plate(idea: Idea) -> str:
     )
 
 
+def asks_nothing(decisions: str) -> bool:
+    """Whether a sheet's "Decisions waiting for you" starts "none", in any case (F216 D4): it
+    shows no plate, on the card's page or its thread."""
+    return re.match(r"none\b", decisions.strip(), re.I) is not None
+
+
+_ITEM = re.compile(r"(- |\d+\. )")
+
+
+def _items(text: str | None) -> int | None:
+    """How many top-level bullets or numbered steps ``text`` holds; None when it isn't in
+    bullets (D9: then a fold shows its name alone)."""
+    count = sum(1 for line in (text or "").splitlines() if _ITEM.match(line))
+    return count or None
+
+
+def _plural(n: int, one: str, many: str) -> str:
+    return f"{n} {one if n == 1 else many}"
+
+
+_CAUGHT_WORDS = (  # an outcome's words in the gist, in the gist's order
+    ("fixed", "fixed", "fixed"),
+    ("ticket", "for a ticket", "for tickets"),
+    ("for you", "for you", "for you"),
+    ("left", "left as it is", "left as they are"),
+)
+
+
+@dataclass(frozen=True)
+class Gists:
+    """The Behind it folds' one-line gists, counted or derived by the page (F216 D9); "" for
+    a fold that shows its name alone."""
+
+    later: str
+    caught: str
+    lessons: str
+    clogged: str
+    cost: str
+    grew: str
+    tickets: str
+    runs: str
+
+
+def gists(detail: "MilestoneDetail", grew: "list[Grown]") -> Gists:
+    sheet = detail.signoff or {}
+    later = _items(sheet.get("later"))
+    lessons = _items(sheet.get("lessons"))
+    clogged = _items(sheet.get("clogged"))
+    caught = ""
+    if detail.caught:
+        counts = [
+            (sum(1 for c in detail.caught if c.outcome == outcome), one, many)
+            for outcome, one, many in _CAUGHT_WORDS
+        ]
+        caught = f"{len(detail.caught)}: " + ", ".join(
+            f"{n} {one if n == 1 else many}" for n, one, many in counts if n
+        )
+    cost = ""
+    if detail.spend:
+        cost = f"${sum(s.usd for s in detail.spend):,.2f}"
+        review = next((s for s in detail.spend if s.label == _ROLE_LABELS["review"]), None)
+        if review is not None:
+            cost += f", of which the review ${review.usd:,.2f}"
+    now = next((g for g in grew if g.current), None)
+    done = sum(1 for t in detail.tickets if t.mark == "done")
+    return Gists(
+        later=_plural(later, "point", "points") if later else "",
+        caught=caught,
+        lessons=str(lessons) if lessons else "",
+        clogged=(f"{clogged}, with its fix" if clogged == 1 else f"{clogged}, each with its fix")
+        if clogged
+        else "",
+        cost=cost,
+        grew=" · ".join(x for x in (now.name, now.when) if x) if now else "",
+        tickets=f"{done} of {len(detail.tickets)} done" if detail.tickets else "",
+        runs=str(len(detail.runs)) if detail.runs else "",
+    )
+
+
 def _inline_markup(text: str) -> str:
     """Process ``[text](url)`` links, `` `code` ``, and `` **bold** `` in text.
 
@@ -385,6 +464,8 @@ def _inline_markup(text: str) -> str:
 
     text = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", _replace_link, text)
     text = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", text)
+    # *Who.*, as "Decisions made along the way" ends each choice (F216 D2)
+    text = re.sub(r"(?<![*\w])\*(?=\S)([^*]+?)(?<=\S)\*(?![*\w])", r"<em>\1</em>", text)
     # Restore code blocks.
     for i, block in enumerate(code_blocks):
         text = text.replace(f"__CODE_{i}__", f"<code>{block}</code>")
@@ -1055,6 +1136,15 @@ def milestone_detail(
         ):
             if k in detail.signoff:
                 signoff_html[k] = _to_html(detail.signoff[k], ideas)
+        # F216: not among review_ideas' sections, so their quoted lines stay lines and the
+        # ideas keep their numbers
+        for k in ("done_check", "along_the_way"):
+            if detail.signoff.get(k, "").strip():
+                signoff_html[k] = _to_html(detail.signoff[k])
+        # D4: "None…" waits for nothing, so no plate
+        if asks_nothing(detail.signoff.get("decisions", "")):
+            signoff_html.pop("decisions", None)
+        signoff_html = {k: v for k, v in signoff_html.items() if v}
     # the thread page's Sign off, by the same rule (F50 D1); they import this module
     from factory_dashboard.planning import _repo
     from factory_dashboard.thread import _review
@@ -1091,6 +1181,7 @@ def milestone_detail(
             "thread": short_key(key),
             "about": about,
             "signoff_html": signoff_html,
+            "gists": gists(detail, grew),
             "review": review,
             "shots": shots,
         },

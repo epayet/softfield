@@ -4006,9 +4006,8 @@ def test_a_card_with_a_list_shows_the_panel_under_what_changed_one_plate_per_add
         db_path, tmp_path, pages=["/board", "/memory/"], pictures=ALL_TAKEN, files=tuple(ALL_TAKEN)
     )
     html = client.get(f"/milestones/{CARD}").text
-    assert (
-        html.index('id="what-changed"') < html.index('id="shots"') < html.index('id="how-to-test"')
-    )
+    # its sheet has no How to test, so none is drawn (F216 D8): Behind it comes next
+    assert html.index('id="what-changed"') < html.index('id="shots"') < html.index('id="behind"')
     panel = _panel(html)
     assert panel.index("/board") < panel.index("/memory/")
     assert panel.count('class="page-plate"') == 2

@@ -1087,6 +1087,45 @@ def test_a_card_with_no_review_has_no_review_section(planning, serve):
     assert 'id="review"' not in _thread(serve(), "f6")
 
 
+def test_the_thread_s_review_shows_the_choices_made_along_the_way_and_no_none(
+    planning, db_path, serve
+):
+    """F216 D13: What changed, How to test, Decisions waiting for you, Decisions made along
+    the way; a ``decisions`` starting "None" (any case) is left out, as on the card's page."""
+
+    def write(conn):
+        for key, decisions in (("f8-none", "None. ADR 31 was settled."), ("f9-asks", "ADR 39?")):
+            metrics.upsert_milestone(
+                conn,
+                _project_id(conn),
+                key,
+                title=f"Card {key}",
+                status="done",
+                signoff={
+                    "changed": "- It changed.",
+                    "how_to_test": "1. Open it.",
+                    "decisions": decisions,
+                    "along_the_way": "- **Kept the old name.** Fewer links break. *The review.*",
+                    "later": "- Not on the thread.",
+                },
+            )
+
+    _write(db_path, write)
+    client = serve()
+    review = _text(_review_section(_thread(client, "f8")))
+    assert "Decisions waiting for you" not in review and "None." not in review
+    assert re.search(
+        r"What changed It changed\. How to test Open it\. Decisions made along the way"
+        r" Kept the old name\. Fewer links break\. The review\.",
+        review,
+    ), review
+    assert "Not on the thread" not in review
+    asks = _text(_review_section(_thread(client, "f9")))
+    assert asks.index("Decisions waiting for you ADR 39?") < asks.index(
+        "Decisions made along the way"
+    )
+
+
 def test_a_refused_sign_off_keeps_its_word_under_the_button(planning, db_path, serve):
     """F50 D3: the runner refused (a dirty main): after a reload the button is back, and the
     runner's word stays under it."""
