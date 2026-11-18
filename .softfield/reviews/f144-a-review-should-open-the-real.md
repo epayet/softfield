@@ -1,5 +1,7 @@
 # Review: F144, a review reads the real page and real data before the tests
 
+- **Status:** done, signed off by the owner on 2026-11-18.
+
 ## Sign-off sheet
 
 ### 1. What changed

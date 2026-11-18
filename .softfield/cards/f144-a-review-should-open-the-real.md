@@ -1,6 +1,7 @@
 # Milestone F144: A review reads the real page and real data before the tests
 
-> **State:** ready · **Area:** factory
+> **State:** done · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-18. Base: git tag `f144-a-review-should-open-the-real-start`. Report: [`.softfield/reviews/f144-a-review-should-open-the-real.md`](../reviews/f144-a-review-should-open-the-real.md).
 > Planted by the owner on 2026-10-16.
 
 ## Notes
