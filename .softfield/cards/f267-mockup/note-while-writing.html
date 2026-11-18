@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F267 mock-up: add a note while the lead writes</title>
+<style>
+  /* The dashboard's own tokens (factory_dashboard/static/dashboard.css), dark mode */
+  :root {
+    --floor: #12161b; --bay: #181e25; --plate: #1f2730; --grid: #222b34; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+    --hazard: #f2b10a; --hazard-ink: #1a1405; --opus: #ff9640; --opus-ink: #ff9640; --sonnet: #ffc48a; --good: #5fd17a;
+    --tick: var(--ink-2);
+    --stripe: repeating-linear-gradient(-45deg, var(--hazard) 0 6px, transparent 6px 12px);
+    --notch: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
+    --display: "Chakra Petch", "Bahnschrift", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+  body { margin: 0; background: var(--floor); color: var(--fg); font: 15px/1.5 var(--body); padding: 20px;
+    background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 32px 32px; }
+  h1 { font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 4px; }
+  h3 { font: 600 13px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 0 0 8px; }
+  p.lede { color: var(--ink-2); max-width: 760px; margin: 0 0 8px; }
+  .switch { display: inline-flex; margin: 12px 0 16px; border: 1px solid var(--rule); }
+  .switch button { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 10px 18px;
+    background: var(--bay); color: var(--muted); border: 0; cursor: pointer; }
+  .switch button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+  .versions { display: flex; gap: 24px; flex-wrap: wrap; align-items: flex-start; }
+  .version { width: 390px; max-width: 100%; }
+  @media (max-width: 860px) { .version[hidden-on-phone] { display: none; } }
+  @media (min-width: 861px) { .switch { display: none; } }
+  .new { outline: 1px dashed var(--good); outline-offset: 3px; position: relative; }
+  .mark { display: block; font: 12px var(--mono); color: var(--good); margin: 6px 0 0; }
+  .legend { color: var(--ink-2); font-size: 13px; margin: 14px 0 0; max-width: 820px; }
+
+  /* ---- the thread page as drawn (dashboard.css, .thread-page) ---- */
+  .main { display: flex; flex-direction: column; gap: 12px; }
+  .card-head h2 { margin: 0; font: 700 21px/1.2 var(--display); letter-spacing: .03em; text-transform: uppercase; }
+  .stamp { font: 12px var(--mono); color: var(--muted); }
+  .said { margin: 0; white-space: pre-line; }
+  details > summary.fold { cursor: pointer; color: var(--muted); font-size: 13px; }
+  .message { background: var(--plate); border: 1px solid var(--rule); padding: 12px 16px; display: flex; flex-direction: column; gap: 6px; }
+  .message[data-waiting] { border-style: dashed; border-color: var(--hazard); }
+  .message .stamp.owner { color: var(--hazard); }
+  .message p.aside, .aside { margin: 0; font-size: 13px; color: var(--muted); }
+  .message .on-its-way { margin: 0; font-size: 12.5px; color: var(--hazard); }
+  #waiting { margin: 0; background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; color: var(--muted); }
+  #waiting.writing { color: var(--opus-ink); }
+  #reply { background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+  #reply label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+  textarea { background: var(--plate); color: var(--fg); border: 1px solid var(--rule); font: 15px var(--body); padding: 8px; resize: vertical; }
+  .row-of { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 0; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; min-height: 44px; padding: 0 16px; border: 0; cursor: pointer; }
+  .btn.go { background: var(--hazard); color: var(--hazard-ink); clip-path: var(--notch); }
+  .btn.plain { background: transparent; color: var(--fg); border: 1px solid var(--rule); }
+  .gone { border: 1px dashed var(--rule); color: var(--muted); padding: 10px 14px; font: 12px var(--mono); }
+
+  /* ---- proposed: the box as a plate, bolder ---- */
+  #reply.plated { padding-top: 0; position: relative; }
+  #reply.plated::before, #reply.plated::after { content: ""; position: absolute; width: 8px; height: 8px; border: 0 solid var(--tick); bottom: -1px; }
+  #reply.plated::before { left: -1px; border-width: 0 0 2px 2px; }
+  #reply.plated::after { right: -1px; border-width: 0 2px 2px 0; }
+  .plate { display: flex; align-items: center; gap: 10px; margin: 0 -14px; padding: 7px 14px; border-bottom: 1px solid var(--rule); }
+  .plate i { width: 22px; height: 12px; background: var(--stripe); }
+  .plate b { font: 700 13px var(--display); letter-spacing: .12em; text-transform: uppercase; }
+  .plate span { font: 11px var(--mono); color: var(--muted); margin-left: auto; }
+</style>
+</head>
+<body>
+<h1>F267: add a note while the lead writes</h1>
+<p class="lede">The thread page of F267 at 07:35 on 2026-11-18, while the lead wrote its first reply (job 2369). Proposed shows it a minute later, after the owner added one note.</p>
+<div class="switch" role="group" aria-label="Which version">
+  <button type="button" data-show="today" aria-pressed="false">Today</button>
+  <button type="button" data-show="proposed" aria-pressed="true">Proposed</button>
+</div>
+
+<div class="versions">
+<!-- Today: copied from factory_dashboard/templates/thread.html, as /planning/f267 read -->
+<div class="version" data-version="today" hidden-on-phone>
+  <h3>Today</h3>
+  <div class="main">
+    <header class="card-head"><h2>Being able to comment on a thread even though the lead is…</h2></header>
+    <details><summary class="fold">Your note</summary></details>
+    <p id="waiting" class="writing">Next for the lead · the lead is writing this reply · 44 s in, about 81 s left</p>
+    <article class="message">
+      <span class="stamp owner">You · 2026-11-18 07:34</span>
+      <p class="said">Being able to comment on a thread even though the lead is replying right now would be helpful even if it looks at it after it finishes what it's doing…</p>
+    </article>
+    <div class="gone">(no box: the page draws none while the lead owes a reply)</div>
+    <p class="row-of"><button class="btn plain" type="button">Archive</button> <span class="aside">It leaves your desk; Planning lists it under Archived.</span></p>
+  </div>
+</div>
+
+<!-- Proposed -->
+<div class="version" data-version="proposed">
+  <h3>Proposed</h3>
+  <div class="main">
+    <header class="card-head"><h2>Being able to comment on a thread even though the lead is…</h2></header>
+    <details><summary class="fold">Your note</summary></details>
+    <p id="waiting" class="writing">Next for the lead · the lead is writing this reply · 1 min in, about 30 s left</p>
+    <div class="new">
+      <article class="message" data-waiting>
+        <span class="stamp owner">You · 2026-11-18 07:35</span>
+        <p class="said">Also: the general thread should work the same way.</p>
+        <p class="aside">Sent · the lead reads it after this reply</p>
+        <p class="row-of"><button class="btn go" type="button">Edit</button> <button class="btn plain" type="button">Cancel it</button></p>
+      </article>
+      <span class="mark">the note waits, dashed; it says when the lead reads it</span>
+    </div>
+    <article class="message">
+      <span class="stamp owner">You · 2026-11-18 07:34</span>
+      <p class="said">Being able to comment on a thread even though the lead is replying right now would be helpful even if it looks at it after it finishes what it's doing…</p>
+    </article>
+    <div class="new">
+      <form id="reply" class="plated" onsubmit="return false">
+        <div class="plate"><i></i><b>Add a note</b><span>after this reply</span></div>
+        <label>Add a note · the lead reads it after this reply
+          <textarea rows="2"></textarea>
+        </label>
+        <div class="row-of">
+          <button type="button" class="btn go">Add note</button>
+          <span class="aside">Every note sent before the lead starts again goes in one reply.</span>
+        </div>
+      </form>
+      <span class="mark">the box stays while the lead writes</span>
+    </div>
+    <p class="row-of"><button class="btn plain" type="button">Archive</button> <span class="aside">It leaves your desk; Planning lists it under Archived.</span></p>
+  </div>
+</div>
+</div>
+
+<p class="legend"><span class="new" style="padding:0 4px">Dashed green</span> marks what changes. The plate on the box (stripe, label, corner ticks) is the bolder version; the calmer one is today's plain box with the new words. With nothing waiting, the box reads as today ("Anything else?", Send) and the points get their comment boxes back.</p>
+
+<script>
+  function wireSwitch() {
+    document.querySelectorAll(".switch button").forEach((button) => {
+      button.addEventListener("click", () => {
+        document.querySelectorAll(".switch button").forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
+        document.querySelectorAll("[data-version]").forEach((v) => {
+          if (v.dataset.version === button.dataset.show) v.removeAttribute("hidden-on-phone");
+          else v.setAttribute("hidden-on-phone", "");
+        });
+      });
+    });
+  }
+  wireSwitch();
+</script>
+</body>
+</html>
