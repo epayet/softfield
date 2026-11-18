@@ -950,6 +950,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** the fake clock took the slowest browser test from 36 s to under 4 s, but `check-all` only from 271 s to 246 s: on 16 workers the suite is now set by its 3,600 tests, not by its waits. A test written to prove "nothing happened" can pass for a reason it never names: the thread test's 5 s wait sat inside the page's 10 s scroll hold, so it never tested the typing hold its name promises. A mutation of the exact rule a test names is the check that finds this.
 - **Decisions affected:** none.
 
+### F144 (2026-11-18): a review reads the real page before the tests ([review](../reviews/f144-a-review-should-open-the-real.md))
+
+- **Q1:** one lead ticket (prompt text in the protected `runner/`), passed on attempt 1 in 9.6 minutes. No checkpoint. Review round 1 found nothing. Score 9.
+- **Q3:** all Claude's, about 101k token-equivalents for the build. See the review's numbers.
+- **Q5:** see the review's numbers.
+- **Anything else:** the card waited three weeks after its plan, first for ADR 37 to be accepted and then for its place in the board order. This review got the new brief itself; it had nothing to look at, since the diff changed no page, and its report says so in the lines ADR 37 item 3 asks for. Whether the rule catches anything shows only on the next page milestones.
+- **Decisions affected:** ADR 37 as accepted (amends ADR 28 item 5 for reviews).
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.
