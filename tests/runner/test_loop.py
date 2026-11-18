@@ -8337,6 +8337,68 @@ def test_the_queued_pass_runs_one_job_then_gives_the_lane_its_turn(repo, monkeyp
     loop.close_session(s)
 
 
+def _ticket_queues(repo: Path, monkeypatch, ran: list[str], kind: str, subject: str | None):
+    """`_lane_session`, its tickets merged by `_merge_any`; while the first one runs, a row of
+    ``kind`` is queued (``subject`` None: about that ticket). Queued jobs are recorded in
+    ``ran`` and stop the queue. F9's second ticket waits for the first, so the review isn't due
+    and nothing in a fast lane goes ahead of the queued row."""
+    _on_card(repo, "f9-01-first", 9)
+    _on_card(repo, "f9-02-second", 9, deps="[f9-01-first]")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "cards")
+    s = loop.open_session(_config(repo))
+    merge = _merge_any(repo, ran)
+
+    def run_task(s, task):
+        record = merge(s, task)
+        loop.enqueue(s, kind, subject or task.id, "queued while the ticket ran")
+        return record
+
+    def run_queued(s, row, escalate):
+        ran.append(f"{row.kind} {row.subject}")
+        raise _Ran
+
+    monkeypatch.setattr(loop, "run_task", run_task)
+    monkeypatch.setattr(loop, "run_queued", run_queued)
+    return s
+
+
+def test_a_ticket_turn_hands_back_before_a_planner_reply_queued_meanwhile(repo, monkeypatch):
+    """2026-11-18: travel-companion's turn ran developer ticket bug-03, then its planner
+    replies M7, M8 and M9 one after another, while F122 waited in Softfield's fast lane. The
+    ticket pass ends after its ticket; the reply goes back to the round."""
+    ran: list[str] = []
+    s = _ticket_queues(repo, monkeypatch, ran, dispatch.PLANNER, "general")
+    assert loop.work_queue(s, reviews=True, wait=False, once=True) is False
+    assert ran == ["f9-01-first"]
+    assert [row.kind for row in loop.open_rows(s)] == [dispatch.PLANNER]  # still waiting
+    loop.close_session(s)
+
+
+def test_a_ticket_turn_still_runs_its_own_tickets_direction(repo, monkeypatch):
+    ran: list[str] = []
+    s = _ticket_queues(repo, monkeypatch, ran, dispatch.DIRECTION, None)
+    with pytest.raises(_Ran):
+        loop.work_queue(s, reviews=True, wait=False, once=True)
+    assert ran == ["f9-01-first", "direction f9-01-first"]
+    loop.close_session(s)
+
+
+def test_a_review_due_after_a_ticket_turn_waits_for_the_round(repo, monkeypatch):
+    """2026-11-18: F216's review ran inside Softfield's ticket turn, ahead of travel-companion's
+    planner replies higher in the order. The turn ends; the queued pass takes the review."""
+    _two_milestones(repo)
+    ran: list[str] = []
+    monkeypatch.setattr(loop, "run_task", _merge_any(repo, ran))
+    s = loop.open_session(_config(repo))
+    assert loop.work_queue(s, reviews=True, wait=False, once=True) is False
+    assert ran == ["f9-02-last"]
+    assert s.report.review is None
+    assert loop.work_queue(s, reviews=True, wait=False, take_tickets=False) is False
+    assert s.report.review == "f9"
+    loop.close_session(s)
+
+
 def test_every_projects_queued_jobs_go_before_any_ticket():
     """ADR 30 item 6: the owner's planning reply in the second project doesn't wait behind the
     first project's ticket."""

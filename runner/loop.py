@@ -5658,7 +5658,7 @@ def work_queue(
     Ctrl-C, or the day's report (`_idle_holds`). A Ctrl-C between two polls is `run_session`'s.
     """
     code = code_at_start(s.repo)
-    ran = False  # a ticket ran, for ``once``
+    ran: Task | None = None  # the ticket that ran, for ``once``
     idle: str | None = None  # the idle line the run shows while it holds (F101)
     while True:
         if _new_code(s, code):  # a commit made outside the run (a terminal session's)
@@ -5702,8 +5702,8 @@ def work_queue(
         job = dispatch.pick(
             rows, tickets, dispatch.Windows(), now(), paused=paused_by_owner, first=lane
         )
-        if once and ran and (job is None or job.kind == dispatch.TICKET):
-            return False
+        if once and ran is not None and not _about(job, ran):
+            return False  # the round goes on: the lane, then the queue in project order
         if job is None:
             if paused_by_owner:
                 if wait and _hold_for_the_owner(s):
@@ -5752,7 +5752,20 @@ def work_queue(
         s.picks += 1
         if _new_code(s, code):
             return True
-        ran = True
+        ran = task
+
+
+def _about(job: dispatch.Pick | None, task: Task) -> bool:
+    """Whether ``job`` is the work its ticket queued, which a ``once`` turn still runs: its
+    direction or escalation, or its card's checkpoint. Anything else (a planner reply, a
+    review, another ticket's job) goes back to `project_round`, which asks the fast lane and
+    then each project in order (2026-11-18: travel-companion's turn ran three planner replies
+    after its ticket while F122 waited in Softfield's lane)."""
+    if job is None:
+        return False
+    if job.kind in (DIRECTION, ESCALATION):
+        return job.subject == task.id
+    return job.kind == CHECKPOINT and job.subject == task.milestone
 
 
 def _runnable_rows(
