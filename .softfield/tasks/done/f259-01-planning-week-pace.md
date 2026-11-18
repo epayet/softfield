@@ -31,3 +31,12 @@ The Planning room's week bar, in "The lead's window" tile, shows Claude's week p
 - With the week's reserve lever on, there is neither post nor plate.
 - The 5-hour window's bar on `/planning` never gets a post.
 - The Overview's pace tests pass unchanged.
+
+```yaml
+# --- runner ---
+result: done
+attempts: 2
+duration_s: 2897
+gate_failures: ['stopped']
+tokens: 3432232
+```
