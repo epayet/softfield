@@ -4460,6 +4460,34 @@ def test_a_paused_runner_that_restarts_stays_paused(repo, fake_model, fake_clock
     assert len(slept) == 2 and _state(repo).owner_pause is None
 
 
+def test_every_project_holds_for_a_pause_another_projects_request_took(repo):
+    """2026-11-18: the pause sat in travel-companion's state, and Softfield's queued direction
+    and its last attempt ran under it. Each project takes the factory's pause at its pick,
+    and lets it go once it is resumed, whichever project the resume came from."""
+    s = loop.open_session(_config(repo))
+    assert s.db is not None and s.state.owner_pause is None
+    since = THURSDAY.isoformat()
+    metrics.add_usage_event(s.db, loop.RUNNER_AGENT, since, metrics.OWNER_PAUSE)  # elsewhere
+    loop.apply_owner_requests(s)
+    assert s.state.owner_pause == since
+    later = (THURSDAY + timedelta(minutes=20)).isoformat()
+    metrics.add_usage_event(s.db, loop.RUNNER_AGENT, since, metrics.OWNER_PAUSE, resets_at=later)
+    loop.apply_owner_requests(s)
+    assert s.state.owner_pause is None
+    loop.close_session(s)
+
+
+def test_a_projects_own_pause_with_no_event_is_kept(repo):
+    """A pause in state.json alone (written before its event was, or by an older runner) holds
+    until a resume: no open event is not a resume."""
+    since = THURSDAY.isoformat()
+    save_state(State(owner_pause=since), _config(repo).runs_dir / "state.json")
+    s = loop.open_session(_config(repo))
+    loop.apply_owner_requests(s)
+    assert s.state.owner_pause == since
+    loop.close_session(s)
+
+
 def test_a_paused_runner_with_nothing_to_do_holds_rather_than_ends(
     repo, fake_model, fake_clock, monkeypatch
 ):

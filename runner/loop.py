@@ -5578,6 +5578,27 @@ def _queue_due_review(s: Session) -> None:
     enqueue(s, REVIEW, key, review_reason(key))
 
 
+def sync_pause(s: Session) -> bool:
+    """The owner's pause is the factory's (ADR 22 item 5): this project holds for an open
+    pause event whichever project's request took it, and lets go once that event is resumed.
+    A pause in state.json with no event holds until a resume. True when the state changed.
+    2026-11-18: the top bar's Pause landed in travel-companion's state, and Softfield's
+    direction ran under it."""
+    db = getattr(s, "db", None)
+    if db is None:  # no metrics database (or a test's stand-in session)
+        return False
+    was = s.state.owner_pause
+    try:
+        since = metrics.open_pause(db)
+        if since is not None:
+            s.state.owner_pause = since
+        elif was is not None and metrics.pause_ended(db, was):
+            s.state.owner_pause = None
+    except Exception as exc:
+        _metrics_failed(s, exc)
+    return s.state.owner_pause != was
+
+
 def apply_owner_requests(s: Session) -> None:
     """The owner's requests from the dashboard (f5 D2), at each pick: the run is git's one
     writer, so it applies them itself, as their console commands would, and turns off the
@@ -5602,7 +5623,7 @@ def apply_owner_requests(s: Session) -> None:
     for line in lines:
         s.log(f"[{RUNNER_AGENT}] the owner's request: {line}")
     s.report.notes += [line for line in lines if line.startswith(notify.NOT_SENT)]
-    if lines:
+    if sync_pause(s) or lines:
         save_state(s.state, s.state_path)
         sync_tickets(s)  # a queued ticket shows in the queue at once
     if switch_on(s.state, WEEK, at) and not was_on[WEEK]:
@@ -5926,6 +5947,9 @@ def run_projects(
                     refused.discard(cfg.repo)
                     sessions[cfg.repo] = s
                 live.append(s)
+            for s in live:  # the round's hold is the factory's pause, as it stands now
+                if sync_pause(s):
+                    save_state(s.state, s.state_path)
             restart, ran = project_round(live, turn)
             if restart:
                 return True

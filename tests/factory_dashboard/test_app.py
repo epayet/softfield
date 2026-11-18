@@ -2335,10 +2335,10 @@ PAUSE, RESUME = {"Pause after this job": "pause"}, {"Resume": "resume"}
         ),
         # the job goes on: its dot stays until it ends
         (_pause_asked, "Pausing after f1-04-live · coucou", "developer", RESUME),
-        (_pause_held_client, "Paused by you since 11:40 · coucou", "idle", RESUME),
+        (_pause_held_client, "Paused by you since 11:40", "idle", RESUME),
         (
             _pause_held_planner,
-            "Paused by you since 11:40 · the lead is answering you · coucou",
+            "Paused by you since 11:40 · the lead is answering you",
             "lead",  # only the planner runs while paused
             RESUME,
         ),
@@ -2521,7 +2521,7 @@ def test_the_top_bar_refreshes_on_any_page_without_notifications(page, serve, db
     lead_replies(db_path, "f7")
     poll(page)
     words = page.locator("#factory-status [role=status]")
-    assert words.text_content() == "Paused by you since 11:40 · coucou"
+    assert words.text_content() == "Paused by you since 11:40"
     assert tab.text_content() == "Planning · 2"
     assert tab.get_attribute("aria-current") == "page"  # still the page shown
     assert page.get_by_role("button", name="Resume", exact=True).text_content() == "▶"
@@ -2685,7 +2685,7 @@ def test_resume_survives_a_stale_live_poll(page, serve, db_path):
     page.clock.install()
     page.goto(ORIGIN + "/tickets")
     words = page.locator("#factory-status [role=status]")
-    assert words.text_content() == "Paused by you since 11:40 · coucou"
+    assert words.text_content() == "Paused by you since 11:40"
     _count_bar_polls(page)
     page.get_by_role("button", name="Resume", exact=True).click()
     page.wait_for_function(
@@ -2965,8 +2965,12 @@ def test_factory_wide_status_pause_before_running(db_path):
             attempt=1,
             started=(NOW - timedelta(minutes=12)).isoformat(),
         )
+        metrics.upsert_project(conn, "travel-companion")
+        metrics.set_project_order(conn, ["travel-companion", "coucou"])
         status = factory_wide_status(conn, PROJECT, NOW)
-        assert status.words.startswith("Paused by you since 11:40")
+        # the pause is the whole factory's: no project named (2026-11-18, the bar said
+        # "Paused by you · coaster-ranker", the first project in the order)
+        assert status.words == "Paused by you since 11:40"
         assert status.button == "resume"
     finally:
         conn.close()

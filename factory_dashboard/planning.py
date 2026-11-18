@@ -50,6 +50,7 @@ from factory_dashboard.overview import (
     open_changes,
     running_jobs,
 )
+from factory_dashboard.queries import local
 from runner import metrics
 from runner.planner import (
     APPLIED,
@@ -866,7 +867,9 @@ def factory_now(conn: sqlite3.Connection, project: str, now: datetime) -> dict[s
             "count": len(line),
             "all": max(ends) if line and len(ends) == len(line) else None,
         }
+    paused = metrics.open_pause(conn)  # the whole factory's, as the top bar says (2026-11-18)
     return {
+        "paused": None if paused is None else f"{local(paused):%H:%M}",
         "running": working[0] if working else None,
         "writing": writing,
         "next_reply": _next_reply(

@@ -135,10 +135,13 @@ def _switch(
 def _pause(conn: sqlite3.Connection, state: State, now: datetime, kind: str) -> str:
     """The owner pauses the factory, or resumes it (ADR 22 item 5): the pick takes nothing
     while ``state`` holds the pause. The hold is a ``pause`` usage event from when it took to
-    the resume, open meanwhile: what clogged the line counts it as stopped for the owner."""
-    since = state.owner_pause
+    the resume, open meanwhile: what clogged the line counts it as stopped for the owner.
+    The pause is the factory's: an open event, from any project's request, is the one there is
+    (2026-11-18: the top bar sends it with the project on screen)."""
+    since = metrics.open_pause(conn) or state.owner_pause
     if kind == PAUSE:
         if since is not None:
+            state.owner_pause = since
             return f"already paused, since {datetime.fromisoformat(since).astimezone():%H:%M}"
         state.owner_pause = now.isoformat()
         metrics.add_usage_event(conn, loop.RUNNER_AGENT, state.owner_pause, PAUSE)

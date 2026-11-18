@@ -2246,6 +2246,23 @@ def test_a_pause_request_holds_the_runner_until_a_resume_request(repo):
     assert _pauses(repo) == [(NOW.isoformat(), end.isoformat())]
 
 
+def test_the_pause_is_the_factorys_whichever_project_takes_the_request(repo):
+    """2026-11-16 and 2026-11-18: the top bar sends Pause and Resume with the project on screen.
+    The pause sat in travel-companion's state while Softfield's direction ran, and three resumes
+    sent from coaster-ranker answered "not paused". The open pause event is the factory's."""
+    here, elsewhere = State(), State()  # two projects' states, one metrics database
+    _ask(repo, "pause")
+    _apply(repo, here)
+    _ask(repo, "pause")
+    later = NOW + timedelta(minutes=5)
+    assert _apply(repo, elsewhere, later) == ["pause: already paused, since 12:00"]
+    assert elsewhere.owner_pause == NOW.isoformat()
+    _ask(repo, "resume")
+    end = NOW + timedelta(minutes=20)
+    assert _apply(repo, State(), end) == ["resume: resumed"]  # a third project's
+    assert _pauses(repo) == [(NOW.isoformat(), end.isoformat())]
+
+
 def test_a_pause_outlives_the_state_files_reload(repo):
     """A restart reads state.json again: the pause is in it, so the runner stays paused."""
     path = repo / ".softfield" / "var" / "runs" / "state.json"

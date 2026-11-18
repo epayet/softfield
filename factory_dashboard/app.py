@@ -311,7 +311,8 @@ def factory_wide_status(conn: sqlite3.Connection, project: str, now: datetime) -
         return 5 if status.words == "Stopped" else 4
 
     name, status = min(found, key=lambda pair: rank(pair[1]))
-    if len(names) == 1 or status.words == "Stopped":
+    # the pause holds every project, and any project's Resume lifts it (2026-11-18): no name
+    if len(names) == 1 or status.words == "Stopped" or status.words.startswith("Paused by you"):
         return replace(status, project=name)
     words = status.words
     if words.startswith("Running: "):

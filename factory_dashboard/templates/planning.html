@@ -7,6 +7,9 @@
 <section id="tiles" class="tiles" aria-label="Can I plan now">
   <div id="factory-now" class="panel tile">
     <h2>The factory now</h2>
+    {% if factory.paused %}
+    <p class="tile-paused">Paused by you since {{ factory.paused }}: {% if factory.running %}this job finishes, then {% endif %}only your planning runs.</p>
+    {% endif %}
     {% if factory.running %}
     <p>Running <b>{{ factory.running.ticket or factory.running.role }}</b> on {{ factory.running.agent }}, attempt {{ factory.running.attempt }}, {{ factory.running.elapsed | ago }}.</p>
     {% elif not factory.writing %}

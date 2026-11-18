@@ -941,6 +941,29 @@ def add_usage_event(
     return _upsert(conn, "usage_events", conflict, key, _given(value=value, resets_at=resets_at))
 
 
+OWNER_PAUSE = "pause"  # the runner's usage event while the owner pauses the factory
+
+
+def open_pause(conn: sqlite3.Connection) -> str | None:
+    """When the owner's pause of the whole factory took, while it holds: the latest ``pause``
+    event with no ``resets_at``. Every project's runner holds for it, whichever project the
+    dashboard sent the request from (2026-11-18)."""
+    row = conn.execute(
+        "SELECT at FROM usage_events WHERE kind = ? AND resets_at IS NULL ORDER BY at DESC LIMIT 1",
+        (OWNER_PAUSE,),
+    ).fetchone()
+    return None if row is None else str(row["at"])
+
+
+def pause_ended(conn: sqlite3.Connection, since: str) -> bool:
+    """Whether the pause that took at ``since`` was resumed: its event has a ``resets_at``."""
+    row = conn.execute(
+        "SELECT 1 FROM usage_events WHERE kind = ? AND at = ? AND resets_at IS NOT NULL",
+        (OWNER_PAUSE, since),
+    ).fetchone()
+    return row is not None
+
+
 def latest_readings(conn: sqlite3.Connection, agent_prefix: str) -> dict[str, sqlite3.Row]:
     """Each window's latest reading by any agent named ``agent_prefix…``: Claude's windows are
     the account's, whichever model's job read them (f1-44)."""

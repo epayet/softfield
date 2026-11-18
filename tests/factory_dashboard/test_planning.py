@@ -191,6 +191,24 @@ def test_the_factory_tile_names_the_running_ticket(planning, serve):
     assert "planning goes first" in tile
 
 
+def test_the_factory_tile_says_the_pause_while_its_job_finishes(planning, db_path, serve):
+    """2026-11-18: the top bar said "Paused by you" while this tile said only "Running …":
+    the job running under a pause finishes, then nothing but planning runs."""
+    client = serve()
+    since = _at(timedelta(minutes=20))
+    _write(db_path, lambda conn: metrics.add_usage_event(conn, "runner", since, "pause"))
+    tile = _tile(_page(client), "factory-now")
+    assert "Paused by you since 11:40: this job finishes, then only your planning runs." in tile
+    assert f"Running f1-04-live on {LOCAL}" in tile
+    _write(
+        db_path,
+        lambda conn: metrics.add_usage_event(
+            conn, "runner", since, "pause", resets_at=_at(timedelta(minutes=5))
+        ),
+    )
+    assert "Paused by you" not in _tile(_page(client), "factory-now")
+
+
 def test_a_pending_message_says_when_the_reply_comes(planning, db_path, serve):
     """An open planner row: answered after the running job, which ran past its typical
     10 min; after a planner job whose row isn't this thread's, and nothing says "writing" (F84:
