@@ -130,6 +130,7 @@ def create_app(db: Path, project: str, host: str = HOST) -> FastAPI:
         tickets,
         timeline,
     )
+    from factory_dashboard.milestones import inline_html
 
     app = FastAPI(title="softfield", docs_url=None, redoc_url=None, openapi_url=None)
     app.state.db, app.state.project = db, project
@@ -138,6 +139,7 @@ def create_app(db: Path, project: str, host: str = HOST) -> FastAPI:
     hosts = list(dict.fromkeys([HOST, "localhost", host]))
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=hosts)
     app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
+    templates.env.filters.update(md=inline_html)
     app.include_router(overview.router)
     app.include_router(milestones.router)
     app.include_router(line.router)

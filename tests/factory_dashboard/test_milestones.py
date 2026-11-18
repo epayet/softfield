@@ -2856,6 +2856,64 @@ def test_to_html_single_stars_are_emphasis_as_d2_ends_a_choice():
     assert _to_html("2 * 3 * 4, a*b*c") == "<p>2 * 3 * 4, a*b*c</p>"
 
 
+def test_inline_html_code_becomes_code_tag():
+    from factory_dashboard.milestones import inline_html
+
+    result = inline_html("`git show x`")
+    assert "<code>git show x</code>" in str(result)
+
+
+def test_inline_html_bold_becomes_strong():
+    from factory_dashboard.milestones import inline_html
+
+    result = inline_html("**x**")
+    assert "<strong>x</strong>" in str(result)
+
+
+def test_inline_html_http_link_becomes_anchor():
+    from factory_dashboard.milestones import inline_html
+
+    result = inline_html("[a](https://x)")
+    assert '<a href="https://x">a</a>' in str(result)
+
+
+def test_inline_html_non_http_link_becomes_text():
+    from factory_dashboard.milestones import inline_html
+
+    result1 = inline_html("[a](javascript:x)")
+    assert "a" in str(result1)
+    assert "href=" not in str(result1)
+
+    result2 = inline_html("[a](../x.md)")
+    assert "a" in str(result2)
+    assert "href=" not in str(result2)
+
+
+def test_inline_html_script_is_escaped():
+    from factory_dashboard.milestones import inline_html
+
+    result = inline_html("<script>")
+    assert "&lt;script&gt;" in str(result)
+    assert "<script>" not in str(result)
+
+
+def test_inline_html_code_inside_backticks_is_escaped():
+    from factory_dashboard.milestones import inline_html
+
+    result = inline_html("`<b>`")
+    assert "<code>&lt;b&gt;</code>" in str(result)
+
+
+def test_inline_html_stars_inside_backticks_stay_as_typed():
+    from factory_dashboard.milestones import inline_html
+
+    result = inline_html("`**not from the code**`")
+    assert "<code>" in str(result)
+    code_match = re.search(r"<code>(.*?)</code>", str(result), re.S)
+    assert code_match
+    assert "**" in code_match.group(1)
+
+
 def _part(page: str, name: str) -> str:
     """The raw HTML of the page's ``<section>`` or ``<details>`` with ``id="name"``."""
     match = re.search(rf'<(section|details)[^>]*\bid="{name}"[^>]*>(.*?)</\1>', page, re.S)

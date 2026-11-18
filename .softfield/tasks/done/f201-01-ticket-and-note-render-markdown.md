@@ -32,3 +32,12 @@ The picture to build is `.softfield/cards/f201-mockup/ticket-and-note.html`: onl
 - a card page and its thread show a note's backticks as `<code>`, with its line breaks kept
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 3
+duration_s: 9281
+gate_failures: ['task-tests', 'stopped']
+tokens: 7638553
+```

@@ -28,11 +28,11 @@
     {% if has_thread %}
     <details id="note">
       <summary class="fold">Your note</summary>
-      <p class="said">{{ note }}</p>
+      <p class="said">{{ note | md }}</p>
     </details>
     {% else %}
     <section id="note" class="panel">
-      <p class="said">{{ note }}</p>
+      <p class="said">{{ note | md }}</p>
     </section>
     {% endif %}
     {% endif %}
