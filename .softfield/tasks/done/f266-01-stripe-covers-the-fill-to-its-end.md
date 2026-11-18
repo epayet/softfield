@@ -24,3 +24,12 @@ Read D1 in `.softfield/cards/f266-there-s-a-tiny-green-dot.md`, then the `allowa
 - the two existing over-pace tests expect the new `left:calc(…)` style
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 2
+duration_s: 3529
+gate_failures: ['stopped']
+tokens: 1805587
+```
