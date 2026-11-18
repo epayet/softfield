@@ -31,3 +31,10 @@ Read "What we know" and Decisions D1 and D2 in `.softfield/cards/f208-there-s-be
 - the comment above `NO_EDIT_AFTER` says why the step finishes and why 35: F208, today's two stops were cut 14 and 15 minutes into one thought
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
