@@ -1,5 +1,7 @@
 # F264 review: the factory should never stay idle
 
+- **Status:** done, signed off by the owner on 2026-11-18.
+
 ## Sign-off sheet
 
 ### 1. What changed

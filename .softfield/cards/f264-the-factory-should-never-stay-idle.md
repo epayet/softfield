@@ -1,6 +1,7 @@
 # Milestone F264: The factory should never stay idle. The pacing and reserve…
 
-> **State:** ready · **Area:** factory · **Fast lane:** yes
+> **State:** done · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-18. Base: git tag `f264-the-factory-should-never-stay-idle-start`. Report: [`.softfield/reviews/f264-the-factory-should-never-stay-idle.md`](../reviews/f264-the-factory-should-never-stay-idle.md).
 > Planted by the owner on 2026-11-18.
 
 ## Notes
