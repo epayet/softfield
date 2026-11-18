@@ -34,3 +34,12 @@ Read D4 in `.softfield/cards/f264-the-factory-should-never-stay-idle.md`, then i
 - at 390 px, `test_name_reading_and_meter_share_the_lever_s_band_on_a_phone` passes unchanged
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 3
+duration_s: 9377
+gate_failures: ['stopped', 'task-tests']
+tokens: 7779585
+```
