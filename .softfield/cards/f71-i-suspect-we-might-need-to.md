@@ -1,6 +1,7 @@
 # Milestone F71: I suspect we might need to increase the timeouts as the…
 
-> **State:** ready · **Area:** factory
+> **State:** done · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-18. Base: git tag `f71-i-suspect-we-might-need-to-start`. Report: [`.softfield/reviews/f71-i-suspect-we-might-need-to.md`](../reviews/f71-i-suspect-we-might-need-to.md).
 > Planted by the owner on 2026-10-09.
 
 ## Notes

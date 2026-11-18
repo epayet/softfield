@@ -1,5 +1,7 @@
 # Review: F71, the slow tests (round 1, 2026-11-18)
 
+- **Status:** done, signed off by the owner on 2026-11-18.
+
 ## Sign-off sheet
 
 ### 1. What changed
