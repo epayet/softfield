@@ -1,5 +1,7 @@
 # Review: F208, a local attempt finishes its step before the no-edit stop
 
+- **Status:** done, signed off by the owner on 2026-11-18.
+
 ## Sign-off sheet
 
 ### 1. What changed

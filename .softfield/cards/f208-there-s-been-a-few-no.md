@@ -1,6 +1,7 @@
 # Milestone F208: Let a local attempt finish its step before the no-edit stop
 
-> **State:** ready · **Area:** factory
+> **State:** done · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-18. Base: git tag `f208-there-s-been-a-few-no-start`. Report: [`.softfield/reviews/f208-there-s-been-a-few-no.md`](../reviews/f208-there-s-been-a-few-no.md).
 > Planted by the owner on 2026-11-03.
 
 ## Notes
