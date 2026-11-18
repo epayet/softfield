@@ -27,3 +27,10 @@ Read `.softfield/cards/f71-i-suspect-we-might-need-to.md` ("What we saw on 2026-
 - `tests-fail-on-main` still puts the branch back when it stops early
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
