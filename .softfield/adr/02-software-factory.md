@@ -934,6 +934,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** the gate passed a ticket whose `tests:` file the branch never changed, so "the listed tests pass" was met by the old tests alone, and the one untested Done-when line was the one left undone. This is the F61, F77, F206 and F230 pattern in its plainest form, and the cheapest one to check: the review proposes a gate that fails a ticket whose branch touches none of its `tests:` files.
 - **Decisions affected:** none.
 
+### F264 (2026-11-18): the pace orders the line, it never stops it ([review](../reviews/f264-the-factory-should-never-stay-idle.md))
+
+- **Q1:** two lead tickets on Sonnet (01, 03), both passed on attempt 1 in 19 and 33 minutes; one developer ticket at difficulty 2 (02, the Overview's words) that Qwen merged on attempt 3 after a stop with no edit and a timeout, under an Opus direction ($0.58); about 2 h 37 min of Qwen. No checkpoint. Review round 1: four should-fix findings and three nits; the review fixed the four itself, all of them places that still said the old rule. Score 7.
+- **Q3:** the pick and the parks were Claude's; the words Qwen's. See the review's numbers.
+- **Q5:** see the review's numbers.
+- **Anything else:** the idle the card was about lasted about 6 hours (02:04 to 08:11), and ended once the owner planted it. A rule change of this kind lives in more places than its tickets list: the pick, the dry run, the idle line, the Overview's plate, row, legend and tooltips, the desk items and `docs/workflow.md`. The plan named the first four and the review found the others. A plan that changes a rule should start by searching for the rule's own words (here "use reserve", "your 25%", "start only under it").
+- **Decisions affected:** ADR 50 as accepted; ADR 44 items 1, 6 and 8 and ADR 16 items 1 and 3 amended by it.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.

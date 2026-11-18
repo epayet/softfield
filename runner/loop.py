@@ -4250,13 +4250,14 @@ def _finish_branch(
 
 
 # The owner's two switches (ADR 22 item 4, f8 D4), one per window (ADR 16 item 3), in
-# state.json: off (the default) keeps a lead ticket to the window's line or cap (ADR 44), on lets
-# it use the whole window. The console asks nothing.
+# state.json: off (the default), past the window's line or mark lead tickets go after the
+# developers'; on, they keep the board's order to the window's real limit (ADR 50 item 6). The
+# console asks nothing.
 WEEK = "week"
 FIVE_HOUR = "five_hour"
 SWITCHES = {
-    WEEK: "Let the factory use the week's reserve",
-    FIVE_HOUR: "Let the factory use your 25% of the 5-hour window",
+    WEEK: "Keep the board's order past the week's pace and mark",
+    FIVE_HOUR: "Keep the board's order past the 5-hour mark",
 }
 USE_RESERVE_HOURS = 24  # on lasts this long, then turns itself off (owner, 2026-10-04)
 SWITCH_POLL_S = 60.0  # how often a wait for the owner's 25% checks for the switch (f5 D2)

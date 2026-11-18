@@ -836,7 +836,7 @@ class ClaudePace:
     """The week's pace, and the words a held lead ticket's row carries."""
 
     week: WeekPace | None
-    row: str | None  # "waits for Claude's week pace until about Sun 04:00", None: not held
+    row: str | None  # "goes when nothing else can", "waits for Claude until about Mon 16:00"
 
 
 def _day_time(at: datetime) -> str:
@@ -893,31 +893,25 @@ def claude_pace(conn: sqlite3.Connection, project: str, now: datetime) -> Claude
                 _day_time(goes) if goes else None,
                 limit=at_limit,
             )
-    holding = [
-        w
-        for w in loop._passing_over(dispatch_windows(windows, reserves), now)
-        if allowance.lead_hold(loop.CLAUDE, [w], cost, now, reserves=reserves)
-    ]
+    # The pick's own two questions (ADR 50 items 2, 3 and 7): the real limit holds, the pace
+    # line and the marks only order.
     row = None
-    if holding:
-        at_real_limit = any(
-            allowance.resting(w, now)
-            or (w.capacity is not None and w.used >= w.capacity - allowance.EPS)
-            for w in holding
-        )
-        if at_real_limit:
-            all_ends = [allowance.lead_goes_at(w, cost, now) for w in holding]
-            known = [e for e in all_ends if e is not None]
-            until = f" until about {max(known).astimezone():%a %H:%M}" if known else ""
-            by_week = any(w.name == "seven_day" and not allowance.resting(w, now) for w in holding)
-            row = f"waits for {'Claude' + chr(39) + 's week pace' if by_week else 'Claude'}{until}"
-        else:
-            row = "goes when nothing else can"
+    if loop._held_at_the_limit(dispatch_windows(windows, reserves), now) is not None:
+        full = [
+            w
+            for w in windows
+            if allowance.lead_hold(loop.CLAUDE, [w], loop.FULL, now, reserves=loop.AT_THE_LIMIT)
+        ]
+        known = [e for w in full if (e := allowance.lead_goes_at(w, loop.FULL, now)) is not None]
+        until = f" until about {max(known).astimezone():%a %H:%M}" if known else ""
+        row = f"waits for Claude{until}"
+    elif allowance.lead_hold(loop.CLAUDE, windows, cost, now, reserves=reserves) is not None:
+        row = "goes when nothing else can"
     return ClaudePace(pace, row)
 
 
 def dispatch_windows(windows: list[allowance.Window], reserves: Collection[str]) -> Any:
-    """The runner's `Windows` for what `loop._passing_over` reads."""
+    """The runner's `Windows` for what `loop._held_at_the_limit` reads."""
     from runner import dispatch
 
     return dispatch.Windows(windows, None, reserves)

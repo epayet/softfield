@@ -1099,12 +1099,12 @@ def test_each_claude_meter_has_its_switch_showing_the_stored_state(db_path, tmp_
     client = allowance_client_with(db_path, tmp_path, {"week": "2026-10-02T09:30:00+00:00"})
     html = client.get("/").text
     label, checked, status, posts = switch_row(html, "claude-seven_day")
-    assert label == "Let the factory use the week's reserve"
+    assert label == "Keep the board's order past the week's pace and mark"
     assert checked == "true"
     assert status == "on until Sat 09:30"
     assert posts == {"kind": "reserve", "project": PROJECT, "subject": "week", "value": "off"}
     label, checked, status, posts = switch_row(html, "claude-five_hour")
-    assert label == "Let the factory use your 25% of the 5-hour window"
+    assert label == "Keep the board's order past the 5-hour mark"
     assert checked == "false"
     assert status is None
     assert posts == {"kind": "reserve", "project": PROJECT, "subject": "five_hour", "value": "on"}
@@ -1113,7 +1113,7 @@ def test_each_claude_meter_has_its_switch_showing_the_stored_state(db_path, tmp_
 def test_a_switch_on_for_more_than_24_hours_shows_off(db_path, tmp_path):
     client = allowance_client_with(db_path, tmp_path, {"five_hour": "2026-10-01T11:00:00+00:00"})
     label, checked, status, posts = switch_row(client.get("/").text, "claude-five_hour")
-    assert label == "Let the factory use your 25% of the 5-hour window"
+    assert label == "Keep the board's order past the 5-hour mark"
     assert checked == "false"
     assert status is None
     assert posts and posts["value"] == "on"
@@ -1123,7 +1123,7 @@ def test_without_a_config_both_switches_are_off(allowance_client):
     html = allowance_client.get("/").text
     for row, subject in (("claude-five_hour", "five_hour"), ("claude-seven_day", "week")):
         label, checked, status, posts = switch_row(html, row)
-        assert label.startswith("Let the factory")
+        assert label.startswith("Keep the board's order past the")
         assert checked == "false"
         assert status is None
         assert posts == {"kind": "reserve", "project": PROJECT, "subject": subject, "value": "on"}
@@ -1153,7 +1153,7 @@ def test_a_switch_asked_for_shows_on_its_way_with_no_button(db_path, tmp_path):
     html = client.get("/").text
     # The asked switch button has on-its-way class, "asked: on" in its title, and is disabled.
     label, _checked, status, posts = switch_row(html, "claude-seven_day")
-    assert label == "Let the factory use the week's reserve"
+    assert label == "Keep the board's order past the week's pace and mark"
     assert status == "asked: on"
     assert posts == {"kind": "reserve", "project": PROJECT, "subject": "week", "value": "on"}
     row = re.search(
@@ -1185,9 +1185,10 @@ def test_a_mark_has_a_title_equal_to_its_label(allowance_client):
     ]
 
 
-def pace_client(db_path: Path, used: float, resets_in: timedelta):
+def pace_client(db_path: Path, used: float, resets_in: timedelta, five_hour: float | None = None):
     """``allowance_client`` with Claude's week read at ``used``, resetting in ``resets_in``, and
-    a lead ticket and a developer's ready (f9-29)."""
+    a lead ticket and a developer's ready (f9-29); the 5-hour window at ``five_hour``, if given,
+    resetting in 5 hours."""
     from fastapi.testclient import TestClient
 
     from factory_dashboard.app import create_app, get_now
@@ -1205,6 +1206,16 @@ def pace_client(db_path: Path, used: float, resets_in: timedelta):
             value=used,
             resets_at=(NOW + resets_in).isoformat(),
         )
+        if five_hour is not None:
+            metrics.add_usage_event(
+                conn,
+                OPUS,
+                NOW.isoformat(),
+                "reading",
+                window="five_hour",
+                value=five_hour,
+                resets_at=(NOW + timedelta(hours=5)).isoformat(),
+            )
         project = metrics.upsert_project(conn, PROJECT)
         f1 = metrics.upsert_milestone(conn, project, "f1")
         metrics.upsert_ticket(
@@ -1280,16 +1291,28 @@ def test_over_pace_at_80_percent_shows_new_plate_not_a_wait(db_path):
 
 
 def test_over_pace_at_100_percent_shows_lead_tickets_wait(db_path):
-    """A week at 100% shows "lead tickets wait until" its reset."""
+    """A week at 100% shows "lead tickets wait until" its reset, and so does the lead row."""
     resets_in = timedelta(days=4, hours=16)
     html = pace_client(db_path, 1.0, resets_in).get("/").text
     meter = _meter(html)
     plate_match = re.search(r"stop-plate.*", meter, re.S)
     assert plate_match, "no stop-plate"
     plate = " ".join(re.sub(r"<[^>]+>", " ", plate_match[0]).split())
-    assert "lead tickets wait until" in plate
+    reset = (NOW + resets_in).astimezone()
+    assert f"lead tickets wait until about {reset:%a} {reset.day} {reset:%b %H:%M}" in plate
     assert "developers first" not in plate
-    assert "until" in plate  # the plate names the reset time
+    lead = next(r for r in _queue_rows(html) if "f1-07-lead" in r)
+    assert f"waits for Claude until about {reset:%a %H:%M}" in lead
+
+
+def test_over_the_weeks_pace_with_the_5_hour_window_full_the_lead_row_waits(db_path):
+    """ADR 50 item 3: the 5-hour window at 100% is a real limit, though the week is only over
+    its pace: the row says the wait and its reset, as the pick holds it."""
+    html = pace_client(db_path, 0.65, timedelta(days=4, hours=16), five_hour=1.0).get("/").text
+    lead = next(r for r in _queue_rows(html) if "f1-07-lead" in r)
+    reset = (NOW + timedelta(hours=5)).astimezone()
+    assert f"waits for Claude until about {reset:%a %H:%M}" in lead
+    assert "goes when nothing else can" not in lead
 
 
 def test_on_pace_the_week_shows_the_post_and_on_pace_but_no_plate(db_path):
@@ -3201,6 +3224,10 @@ def test_allowance_legend_names_bar_mark(allowance_client):
         "planning and reviews; only 100% makes them wait"
     )
     assert mark_line in legend_text
+    # ADR 50 item 2: the post and the stripes order lead tickets, they don't stop them
+    assert "today's pace; under it, lead tickets keep the board's order" in legend_text
+    assert "lead tickets go after developers until the post catches up" in legend_text
+    assert "start only under it" not in legend_text and "wait until the post" not in legend_text
 
 
 def test_allowance_legend_has_use_reserve_line(allowance_client):
