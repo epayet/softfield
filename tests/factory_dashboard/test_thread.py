@@ -17,8 +17,10 @@ from factory_dashboard.planning import reading_order
 from runner import metrics
 from tests.factory_dashboard.conftest import (
     NOW,
+    POLL,
     PROJECT,
     _at,
+    poll,
 )
 from tests.factory_dashboard.test_planning import (
     _REVIEW_ADR,
@@ -60,7 +62,12 @@ from tests.factory_dashboard.test_proposal import (
 from tests.layout import DISPLAY, PHONE, layout_problems
 from tests.runner.conftest import git
 
-LIVE = 9000  # one 5 s poll, and room to draw it
+# The thread reads its page again with a plain fetch (thread.html): count them, called or not
+_COUNT_READS = """() => {
+    window.reads = 0;
+    const read = window.fetch;
+    window.fetch = (...args) => { window.reads += 1; return read(...args); };
+}"""
 
 
 def test_a_fixture_reply_with_7_points_shows_each_point(planning, db_path, serve):
@@ -397,11 +404,13 @@ def test_a_first_proposal_brings_the_strip_into_the_header_through_the_poll(
     """F248 D2: a thread with no proposal is open; the lead's reply listing a plan and a
     mock-up arrives through the 5 s poll, and the strip and its note show in the card's
     header, under the title, without a reload."""
+    page.clock.install()
     _open(page, serve(), "/planning/f85")
     page.evaluate("() => { window.loadedOnce = true; }")
     assert page.locator("#card-steps").count() == 0
     _write(db_path, lambda conn: _review(conn, planning, "f85", _PLAN_2, _STRIP_MOCKUP))
-    page.locator("header#card #card-steps").wait_for(timeout=LIVE)
+    page.clock.run_for(POLL)  # the thread's own 5 s read (a fetch, not htmx)
+    page.locator("header#card #card-steps").wait_for()
     assert page.locator("#card-steps a").count() == 3
     assert page.locator("#conversation #card-steps").count() == 0
     order = page.evaluate(
@@ -1588,9 +1597,11 @@ def test_the_leads_answer_appears_on_an_open_thread(page, planning, db_path, ser
     """With F6's thread open, the lead's new answer shows in the conversation within a poll,
     and its points come back as a deck (deck.js binds the drawn-again conversation)."""
     _write(db_path, lambda conn: _seven_points(conn, planning))
+    page.clock.install()
     _open(page, serve(), "/planning/f6")
     _lead_says(db_path, planning, "f6", "A second answer.")
-    page.locator("#conversation >> text=A second answer.").wait_for(timeout=LIVE)
+    page.clock.run_for(POLL)
+    page.locator("#conversation >> text=A second answer.").wait_for()
     assert page.locator("#conversation").count() == 1
     assert page.locator(".deck").count() == page.locator(".deck[data-up]").count() > 0
 
@@ -1599,15 +1610,21 @@ def test_an_open_thread_waits_while_the_owner_types(page, planning, db_path, ser
     """Text in the reply box holds the conversation as it is (the text stays); emptied and
     left, the lead's answer arrives."""
     _write(db_path, lambda conn: _seven_points(conn, planning))
+    page.clock.install()
     _open(page, serve(), "/planning/f6")
     page.fill('#reply textarea[name="text"]', "Half a thought")
     _lead_says(db_path, planning, "f6", "A second answer.")
-    page.wait_for_timeout(LIVE)
+    page.evaluate(_COUNT_READS)
+    poll(page)  # the top bar's poll runs; the thread's own read holds: it never starts
+    assert page.evaluate("() => window.reads") == 0
     assert page.locator("#conversation >> text=A second answer.").count() == 0
     assert page.input_value('#reply textarea[name="text"]') == "Half a thought"
     page.fill('#reply textarea[name="text"]', "")
     page.evaluate("() => document.activeElement.blur()")
-    page.locator("#conversation >> text=A second answer.").wait_for(timeout=LIVE)
+    # the fill scrolled the box into view, which holds the reads 10 s (liveIdle): the next
+    # read after that brings the answer
+    page.clock.run_for(2 * POLL)
+    page.locator("#conversation >> text=A second answer.").wait_for()
 
 
 def test_a_comment_folded_away_still_holds_the_refresh(page, planning, db_path, serve):

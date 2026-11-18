@@ -18,6 +18,7 @@ from tests.factory_dashboard.conftest import (
     OTHER,
     PROJECT,
     SONNET,
+    poll,
     write_allowance,
 )
 from tests.layout import layout_problems
@@ -1741,9 +1742,10 @@ def test_needs_you_comes_back_when_a_need_appears_after_the_page_loaded(
     """In f3-14 the empty Needs you swapped its wrapper away, so a later need never showed."""
     client = serve_between(activity="check-all on main")
     sign_off_all(db_path)
+    page.clock.install()
     open_overview(page, client)
     assert page.locator("#needs-you").count() == 0
-    page.wait_for_timeout(6_000)  # one refresh with nothing to show
+    poll(page)  # one refresh with nothing to show
     conn = metrics.open_db(db_path)
     try:
         project = metrics.upsert_project(conn, PROJECT)
@@ -1757,7 +1759,7 @@ def test_needs_you_comes_back_when_a_need_appears_after_the_page_loaded(
         )
     finally:
         conn.close()
-    page.wait_for_selector("#needs-you", timeout=REFRESH)
+    poll(page)
     assert "A question that came later." in page.locator("#needs-you").inner_text()
 
 
@@ -1792,11 +1794,13 @@ def test_now_keeps_refreshing_after_the_first_refresh(page, serve_between, db_pa
         finally:
             conn.close()
 
+    page.clock.install()
     open_overview(page, client)
     now = page.locator("#now")
     for title in ("The first title.", "The second title."):
         running(title)
-        now.get_by_text(title).wait_for(timeout=REFRESH)
+        poll(page)
+        assert title in now.text_content()
     assert "The first title." not in now.inner_text()
 
 
@@ -1828,10 +1832,12 @@ def test_overview_poll_refreshes_every_part(page, serve_between, db_path):
             r.fulfill(status=404, body="")
 
     page.route(f"{ORIGIN}/**", route)
+    page.clock.install()
     page.goto(ORIGIN + "/")
 
-    # Wait for initial render.
-    page.wait_for_selector("#live-facts", state="attached", timeout=REFRESH)
+    # The first poll's render.
+    poll(page)
+    assert page.locator("#live-facts").count() == 1
 
     # Record top bar status before any change.
     status_before = page.locator("#factory-status [role=status]").inner_text()
@@ -1868,7 +1874,8 @@ def test_overview_poll_refreshes_every_part(page, serve_between, db_path):
         )
     finally:
         conn.close()
-    page.locator("#now").get_by_text("Polling job.").wait_for(timeout=REFRESH)
+    poll(page)
+    assert "Polling job." in page.locator("#now").text_content()
 
     # 2. Queue: add a ready ticket and wait for the count.
     conn = metrics.open_db(db_path)
@@ -1886,7 +1893,8 @@ def test_overview_poll_refreshes_every_part(page, serve_between, db_path):
         )
     finally:
         conn.close()
-    page.locator("#queue").get_by_text("1 ticket waiting").wait_for(timeout=REFRESH)
+    poll(page)
+    assert "1 ticket waiting" in page.locator("#queue").text_content()
 
     # 3. Allowance: add a reading and wait for 80%.
     conn = metrics.open_db(db_path)
@@ -1902,7 +1910,8 @@ def test_overview_poll_refreshes_every_part(page, serve_between, db_path):
         )
     finally:
         conn.close()
-    page.locator("#allowance").get_by_text("80%").wait_for(timeout=REFRESH)
+    poll(page)
+    assert "80%" in page.locator("#allowance").text_content()
 
     # 4. Needs you: add an owner item and wait for its text.
     conn = metrics.open_db(db_path)
@@ -1918,7 +1927,8 @@ def test_overview_poll_refreshes_every_part(page, serve_between, db_path):
         )
     finally:
         conn.close()
-    page.locator("#needs-you").get_by_text("Something to do.").wait_for(timeout=REFRESH)
+    poll(page)
+    assert "Something to do." in page.locator("#needs-you").text_content()
 
     # 5. Top bar: status changed.
     status_after = page.locator("#factory-status [role=status]").inner_text()
@@ -2641,6 +2651,15 @@ def test_title_text_inside_title_only(client, db_path):
         assert f"The {ticket} title." not in how_match.group(1)
 
 
+def _choose_the_last_hour(page) -> None:
+    """The span's 'the last hour', and #away drawn again from its fetch (factory.js)."""
+    page.evaluate("() => { window._away = document.getElementById('away'); }")
+    page.select_option("#replay-span", label="the last hour")
+    page.wait_for_function(
+        "() => document.getElementById('away') && document.getElementById('away') !== window._away"
+    )
+
+
 def test_choosing_a_span_updates_away_in_place(page, serve, client, db_path):
     """f9-14: choosing 'the last hour' changes #away's 'since' time, keeps a value set on
     window before the change, and puts since in the address bar."""
@@ -2657,9 +2676,8 @@ def test_choosing_a_span_updates_away_in_place(page, serve, client, db_path):
     original_since = original_since_match.group(1)
     # Set a value on window before the change.
     page.evaluate("window._kept = 'preserved'")
-    # Choose 'the last hour' without navigation.
-    page.select_option("#replay-span", label="the last hour")
-    page.wait_for_timeout(1000)
+    # Choose 'the last hour' without navigation, and wait for #away drawn again.
+    _choose_the_last_hour(page)
     # The address bar has since=.
     qs = parse_qs(urlsplit(page.url).query)
     assert "since" in qs
@@ -2694,8 +2712,7 @@ def test_replay_asks_new_since_after_span_change(page, serve, client, db_path):
     # Capture the original since from the page.
     original_page = page.evaluate("document.querySelector('.page[data-since]').dataset.since")
     # Choose 'the last hour'.
-    page.select_option("#replay-span", label="the last hour")
-    page.wait_for_timeout(1000)
+    _choose_the_last_hour(page)
     # The page's data-replay has the new since.
     new_since = page.evaluate("document.querySelector('.page[data-since]').dataset.replay")
     assert "since=" in new_since

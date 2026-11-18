@@ -81,6 +81,58 @@ def london(_utc_zone: None) -> Iterator[None]:
     _set_zone("UTC")
 
 
+POLL = 5_100  # ms on the page's clock: the pages' 5 s polls (base.html), each once
+SETTLE = 100  # ms on the page's clock: htmx's settle after a swap
+
+# What htmx has sent and what it has answered, from the moment it is first asked
+_WATCH_POLLS = """() => {
+    if (window.polls) return window.polls.sent;
+    window.polls = { sent: 0, done: 0 };
+    document.addEventListener("htmx:beforeRequest", () => { window.polls.sent += 1; });
+    document.addEventListener("htmx:afterRequest", () => { window.polls.done += 1; });
+    return 0;
+}"""
+
+
+def poll(page) -> None:
+    """The pages' 5 s polls, once, on the page's clock (``page.clock.install()`` before the page
+    opens): every request they send answered and swapped in before this returns. A test that
+    something didn't happen asserts after it, never after a wait of its own (f71-03)."""
+    sent = page.evaluate(_WATCH_POLLS)
+    page.clock.run_for(POLL)
+    page.wait_for_function(
+        "n => window.polls.sent > n && window.polls.done >= window.polls.sent", arg=sent
+    )
+    page.clock.run_for(SETTLE)  # htmx settles a swap (htmx:load) on a 20 ms timer
+
+
+# Every request htmx sends and answers, in order: "beforeRequest post /requests"
+_WATCH_REQUESTS = """() => {
+    window.requests = [];
+    for (const kind of ["beforeRequest", "afterRequest"]) {
+        document.addEventListener(`htmx:${kind}`, (event) => {
+            const config = event.detail.requestConfig || {};
+            window.requests.push(`${kind} ${config.verb} ${config.path}`);
+        });
+    }
+}"""
+
+
+def watch_requests(page) -> None:
+    """From now on ``window.requests`` lists what htmx sends and answers, in order."""
+    page.evaluate(_WATCH_REQUESTS)
+
+
+def requests_until(page, entry: str, count: int = 1) -> list[str]:
+    """``window.requests`` once it holds ``entry`` ``count`` times. The page's own listeners on
+    an answer run before the watcher's, so whatever an answer started is in the list too."""
+    page.wait_for_function(
+        "([e, n]) => window.requests.filter((r) => r === e).length >= n", arg=[entry, count]
+    )
+    sent: list[str] = page.evaluate("() => window.requests")
+    return sent
+
+
 PROJECT, OTHER = "coucou", "other"
 NOW = datetime(2026, 10, 2, 12, 0, tzinfo=UTC)
 LOCAL = "local-qwen3.6-35b-a3b"

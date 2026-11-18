@@ -18,7 +18,15 @@ from factory_dashboard import app as app_module
 from factory_dashboard.app import HOST, PORT, Db, ago, create_app
 from factory_dashboard.queries import connect
 from runner import cli, metrics
-from tests.factory_dashboard.conftest import LOCAL, NOW, OPUS, OTHER, PROJECT, write_allowance
+from tests.factory_dashboard.conftest import (
+    LOCAL,
+    NOW,
+    OPUS,
+    OTHER,
+    PROJECT,
+    poll,
+    write_allowance,
+)
 from tests.factory_dashboard.test_overview import REFRESH, lead_replies, open_overview
 from tests.factory_dashboard.test_planning import _open as open_planning_page
 from tests.layout import DISPLAY, PHONE, layout_problems
@@ -1153,18 +1161,21 @@ def test_the_page_notifies_once_per_new_item_and_once_when_all_is_done(
     page, serve_between, db_path
 ):
     page.add_init_script(FAKE_NOTIFICATION)
+    page.clock.install()
     open_overview(page, serve_between(activity="check-all on main"))
     bar = page.locator("#notify-bar")
     bar.wait_for(state="visible", timeout=REFRESH)
-    page.wait_for_selector("#live-facts", state="attached", timeout=REFRESH)
-    page.wait_for_timeout(6_000)  # another poll: nothing asked, nothing shown before it's on
+    poll(page)
+    assert page.locator("#live-facts").count() == 1
+    poll(page)  # another poll: nothing asked, nothing shown before it's on
     assert page.evaluate("window.asked") == 0
     assert page.evaluate("window.shown") == []
     assert page.evaluate("localStorage.getItem('notify:seen')") is None  # nothing compared
     page.locator('[data-action="yes"]').click()
     bar.wait_for(state="hidden", timeout=REFRESH)
     assert page.evaluate("window.asked") == 1
-    page.wait_for_function("localStorage.getItem('notify:seen') !== null", timeout=REFRESH)
+    poll(page)
+    assert page.evaluate("localStorage.getItem('notify:seen')") is not None
     assert page.evaluate("window.shown") == []  # what was there before isn't news
 
     conn = metrics.open_db(db_path)
@@ -1182,9 +1193,10 @@ def test_the_page_notifies_once_per_new_item_and_once_when_all_is_done(
         metrics.upsert_ticket(conn, project, "f1-20-next", milestone_id=f1, state="ready")
     finally:
         conn.close()
-    page.wait_for_function("window.shown.length > 0", timeout=REFRESH)
-    page.wait_for_selector('#live-facts[data-all-done="false"]', state="attached", timeout=REFRESH)
-    page.wait_for_timeout(6_000)  # the next poll sees the same item: no second notification
+    poll(page)
+    assert page.evaluate("window.shown.length") == 1
+    assert page.locator('#live-facts[data-all-done="false"]').count() == 1
+    poll(page)  # the next poll sees the same item: no second notification
     shown = page.evaluate("window.shown")
     assert len(shown) == 1 and shown[0]["title"] == "A decision for you"
     assert "A question that came later." in shown[0]["body"]
@@ -1196,8 +1208,9 @@ def test_the_page_notifies_once_per_new_item_and_once_when_all_is_done(
         metrics.upsert_ticket(conn, project, "f1-20-next", milestone_id=f1, state="done")
     finally:
         conn.close()
-    page.wait_for_function("window.shown.length > 1", timeout=REFRESH)
-    page.wait_for_timeout(6_000)
+    poll(page)
+    assert page.evaluate("window.shown.length") == 2
+    poll(page)  # and no third
     shown = page.evaluate("window.shown")
     assert len(shown) == 2 and "done" in shown[1]["title"].lower()
 
@@ -1226,6 +1239,13 @@ Object.defineProperty(navigator, "serviceWorker", {
   writable: true
 });
 """
+
+
+def _first_look(page, facts: str = "#live-facts") -> None:
+    """The page's first poll, on its clock (``page.clock.install()`` before it opens): the
+    Overview's ``#live-needs-you``, or another page's ``#live-poll``, gets ``facts``."""
+    poll(page)
+    assert page.locator(facts).count() == 1
 
 
 def _seen_first_look(page) -> None:
@@ -1270,8 +1290,9 @@ def test_notifications_go_through_service_worker_on_android(page, serve_between,
     client = serve_between(activity="check-all on main")
     page.add_init_script(FAKE_NOTIFICATION_GRANTED)
     page.add_init_script(FAKE_SERVICE_WORKER)
+    page.clock.install()
     open_overview(page, client)
-    page.wait_for_selector("#live-facts", state="attached", timeout=REFRESH)
+    _first_look(page)
     _seen_first_look(page)
 
     conn = metrics.open_db(db_path)
@@ -1307,8 +1328,9 @@ def test_fallback_to_direct_notification_when_showNotification_rejects(
     client = serve_between(activity="check-all on main")
     page.add_init_script(FAKE_NOTIFICATION_GRANTED)
     page.add_init_script(FAKE_SERVICE_WORKER_REJECTS)
+    page.clock.install()
     open_overview(page, client)
-    page.wait_for_selector("#live-facts", state="attached", timeout=REFRESH)
+    _first_look(page)
     _seen_first_look(page)
 
     conn = metrics.open_db(db_path)
@@ -1336,8 +1358,9 @@ def test_bundled_notifications_include_the_project_context(page, serve_between, 
     client = serve_between(activity="check-all on main")
     page.add_init_script(FAKE_NOTIFICATION_GRANTED)
     page.add_init_script(FAKE_SERVICE_WORKER)
+    page.clock.install()
     open_overview(page, client)
-    page.wait_for_selector("#live-facts", state="attached", timeout=REFRESH)
+    _first_look(page)
     _seen_first_look(page)
 
     conn = metrics.open_db(db_path)
@@ -1377,8 +1400,9 @@ def test_three_items_become_one_bundle_with_titles_in_body(page, serve_between, 
     client = serve_between(activity="check-all on main")
     page.add_init_script(FAKE_NOTIFICATION_GRANTED)
     page.add_init_script(FAKE_SERVICE_WORKER)
+    page.clock.install()
     open_overview(page, client)
-    page.wait_for_selector("#live-facts", state="attached", timeout=REFRESH)
+    _first_look(page)
     _seen_first_look(page)
 
     conn = metrics.open_db(db_path)
@@ -1418,8 +1442,9 @@ def test_bundled_notification_silent_on_next_look(page, serve_between, db_path):
     client = serve_between(activity="check-all on main")
     page.add_init_script(FAKE_NOTIFICATION_GRANTED)
     page.add_init_script(FAKE_SERVICE_WORKER)
+    page.clock.install()
     open_overview(page, client)
-    page.wait_for_selector("#live-facts", state="attached", timeout=REFRESH)
+    _first_look(page)
     _seen_first_look(page)
 
     conn = metrics.open_db(db_path)
@@ -1445,7 +1470,7 @@ def test_bundled_notification_silent_on_next_look(page, serve_between, db_path):
     assert initial_count == 1
 
     # Wait for the next poll cycle: same items, no new notification
-    page.wait_for_timeout(6_000)
+    poll(page)
     final_count = page.evaluate("window.sw_notifications.length")
     assert final_count == initial_count
 
@@ -1464,8 +1489,9 @@ def test_a_sign_off_in_the_same_look_as_all_done_is_not_lost(page, serve_between
         conn.close()
     page.add_init_script(FAKE_NOTIFICATION_GRANTED)
     page.add_init_script(FAKE_SERVICE_WORKER)
+    page.clock.install()
     open_overview(page, client)
-    page.wait_for_selector('#live-facts[data-all-done="false"]', state="attached", timeout=REFRESH)
+    _first_look(page, '#live-facts[data-all-done="false"]')
     _seen_first_look(page)
 
     conn = metrics.open_db(db_path)
@@ -1495,8 +1521,9 @@ def test_bundled_link_encodes_special_characters_in_project(page, serve_between,
     client = serve_between(activity="check-all on main")
     page.add_init_script(FAKE_NOTIFICATION_GRANTED)
     page.add_init_script(FAKE_SERVICE_WORKER)
+    page.clock.install()
     open_overview(page, client)
-    page.wait_for_selector("#live-facts", state="attached", timeout=REFRESH)
+    _first_look(page)
     _seen_first_look(page)
 
     conn = metrics.open_db(db_path)
@@ -1533,8 +1560,9 @@ def test_compare_uses_per_project_done(page, serve_between, db_path):
     client = serve_between(activity="check-all on main")
     page.add_init_script(FAKE_NOTIFICATION_GRANTED)
     page.add_init_script(FAKE_SERVICE_WORKER)
+    page.clock.install()
     open_overview(page, client)
-    page.wait_for_selector("#live-facts", state="attached", timeout=REFRESH)
+    _first_look(page)
     # Wait for the first look to store in notify:seen
     page.wait_for_function("localStorage.getItem('notify:seen') !== null", timeout=REFRESH)
 
@@ -1565,7 +1593,7 @@ def test_compare_uses_per_project_done(page, serve_between, db_path):
         " el.dispatchEvent(new Event('htmx:afterSwap', { bubbles: true })); }",
         other_live,
     )
-    page.wait_for_timeout(6_000)  # wait for compare to run
+    poll(page)  # and the next poll's compare
     assert page.evaluate("window.sw_notifications.length") == 1
 
     # Now switch back to coucou: load /live?project=coucou with the page's data-project
@@ -1575,7 +1603,7 @@ def test_compare_uses_per_project_done(page, serve_between, db_path):
         " el.dispatchEvent(new Event('htmx:afterSwap', { bubbles: true })); }",
         coucou_live,
     )
-    page.wait_for_timeout(6_000)  # wait for compare to run
+    poll(page)  # and the next poll's compare
     # No new notification: coucou's item was already seen
     assert page.evaluate("window.sw_notifications.length") == 1
 
@@ -1593,14 +1621,15 @@ def test_all_done_still_notifies_after_a_look_at_another_project(page, serve_bet
         conn.close()
     page.add_init_script(FAKE_NOTIFICATION_GRANTED)
     page.add_init_script(FAKE_SERVICE_WORKER)
+    page.clock.install()
     open_overview(page, client)
-    page.wait_for_selector('#live-facts[data-all-done="false"]', state="attached", timeout=REFRESH)
+    _first_look(page, '#live-facts[data-all-done="false"]')
     _seen_first_look(page)
 
     other_live = client.get("/live?project=other").text
     assert 'data-all-done="true"' in other_live
     _next_look(page, client, other_live)
-    page.wait_for_timeout(6_000)
+    poll(page)
     assert page.evaluate("window.sw_notifications.length") == 0
 
     conn = metrics.open_db(db_path)
@@ -1612,7 +1641,7 @@ def test_all_done_still_notifies_after_a_look_at_another_project(page, serve_bet
         conn.close()
     _next_look(page, client)
     page.wait_for_function("window.sw_notifications.length > 0", timeout=REFRESH)
-    page.wait_for_timeout(6_000)
+    poll(page)
     assert [n["title"] for n in page.evaluate("window.sw_notifications")] == ["All work done"]
 
 
@@ -1622,8 +1651,9 @@ def test_compare_ignores_old_plain_boolean_done(page, serve_between, db_path):
     client = serve_between(activity="check-all on main")
     page.add_init_script(FAKE_NOTIFICATION_GRANTED)
     page.add_init_script(FAKE_SERVICE_WORKER)
+    page.clock.install()
     open_overview(page, client)
-    page.wait_for_selector("#live-facts", state="attached", timeout=REFRESH)
+    _first_look(page)
     page.wait_for_function("localStorage.getItem('notify:seen') !== null", timeout=REFRESH)
 
     # Overwrite notify:seen with the old shape (plain boolean done)
@@ -1649,7 +1679,7 @@ def test_compare_ignores_old_plain_boolean_done(page, serve_between, db_path):
         " el.dispatchEvent(new Event('htmx:afterSwap', { bubbles: true })); }",
         all_done_html,
     )
-    page.wait_for_timeout(6_000)
+    poll(page)
     # No notification and no error (the old shape is handled gracefully)
     assert page.evaluate("window.sw_notifications.length") == 0
 
@@ -1659,8 +1689,9 @@ def test_new_item_on_other_project_notifies(page, serve_between, db_path):
     client = serve_between(activity="check-all on main")
     page.add_init_script(FAKE_NOTIFICATION_GRANTED)
     page.add_init_script(FAKE_SERVICE_WORKER)
+    page.clock.install()
     open_overview(page, client)
-    page.wait_for_selector("#live-facts", state="attached", timeout=REFRESH)
+    _first_look(page)
     # Wait for the first look to store in notify:seen
     page.wait_for_function("localStorage.getItem('notify:seen') !== null", timeout=REFRESH)
 
@@ -1692,8 +1723,9 @@ def test_fallback_notification_has_onclick_handler(page, serve_between, db_path)
     client = serve_between(activity="check-all on main")
     page.add_init_script(FAKE_NOTIFICATION_GRANTED)
     page.add_init_script(FAKE_SERVICE_WORKER_REJECTS)
+    page.clock.install()
     open_overview(page, client)
-    page.wait_for_selector("#live-facts", state="attached", timeout=REFRESH)
+    _first_look(page)
     _seen_first_look(page)
 
     conn = metrics.open_db(db_path)
@@ -1844,6 +1876,7 @@ def test_notification_bar_shows_steps_on_insecure_origin(page, client):
     """On the LAN address, with Chrome's own Notification (no stand-in: there it answers
     "denied", not "default"), the bar gives the steps with the page's address, and Got it
     hides them for good without answering the question (f12 review, F1 to F3)."""
+    page.clock.install()
     _open_at(page, client, LAN)
     assert page.evaluate("[window.isSecureContext, Notification.permission]") == [False, "denied"]
     bar = page.locator("#notify-bar")
@@ -1864,7 +1897,7 @@ def test_notification_bar_shows_steps_on_insecure_origin(page, client):
     assert page.evaluate("localStorage.getItem('notify:steps')") == "1"
     assert page.evaluate("localStorage.getItem('notify:asked')") is None
     page.reload()
-    page.wait_for_selector("#live-facts", state="attached", timeout=REFRESH)
+    _first_look(page)
     assert bar.is_hidden()
 
 
@@ -1987,9 +2020,10 @@ def test_service_worker_listener_rejects_external_links(page, client):
             r.fulfill(body=client.get(url).text, content_type="text/html; charset=utf-8")
 
     page.route(f"{ORIGIN}/**", route)
+    page.clock.install()
     page.goto(ORIGIN + "/")
-    page.wait_for_selector("#live-facts", state="attached", timeout=REFRESH)
-    page.wait_for_timeout(REFRESH)
+    _first_look(page)
+    poll(page)
 
     # External link: should be rejected (no navigation)
     before = page.evaluate("window.location.href")
@@ -2024,8 +2058,9 @@ def test_notification_bar_never_shows_when_permission_granted(page, client):
             r.fulfill(body=client.get(url).text, content_type="text/html; charset=utf-8")
 
     page.route(f"{ORIGIN}/**", route)
+    page.clock.install()
     page.goto(ORIGIN + "/")
-    page.wait_for_selector("#live-facts", state="attached", timeout=REFRESH)
+    _first_look(page)
     bar = page.locator("#notify-bar")
     bar.wait_for(state="hidden", timeout=REFRESH)
 
@@ -2044,8 +2079,9 @@ def test_notification_bar_never_shows_when_permission_denied(page, client):
             r.fulfill(body=client.get(url).text, content_type="text/html; charset=utf-8")
 
     page.route(f"{ORIGIN}/**", route)
+    page.clock.install()
     page.goto(ORIGIN + "/")
-    page.wait_for_selector("#live-facts", state="attached", timeout=REFRESH)
+    _first_look(page)
     bar = page.locator("#notify-bar")
     bar.wait_for(state="hidden", timeout=REFRESH)
 
@@ -2067,8 +2103,9 @@ def test_direct_notification_click_navigates_to_link(page, client, db_path):
             r.fulfill(body=client.get(url).text, content_type="text/html; charset=utf-8")
 
     page.route(f"{ORIGIN}/**", route)
+    page.clock.install()
     page.goto(ORIGIN + "/")
-    page.wait_for_selector("#live-facts", state="attached", timeout=REFRESH)
+    _first_look(page)
     _seen_first_look(page)
 
     # Seed a new item so compare() produces a notification.
@@ -2476,17 +2513,16 @@ def test_the_top_bar_refreshes_on_any_page_without_notifications(page, serve, db
             r.fulfill(body=client.get(url).text, content_type="text/html; charset=utf-8")
 
     page.route(f"{ORIGIN}/**", route)
+    page.clock.install()
     page.goto(ORIGIN + "/planning")
     tab = page.locator("#planning-tab")
     assert tab.text_content() == "Planning · 1"
     _pause_held(db_path)
     lead_replies(db_path, "f7")
-    page.wait_for_function(
-        "document.querySelector('#factory-status [role=status]').textContent"
-        " === 'Paused by you since 11:40 · coucou'",
-        timeout=REFRESH,
-    )
-    page.wait_for_function("document.querySelector('#planning-tab').textContent === 'Planning · 2'")
+    poll(page)
+    words = page.locator("#factory-status [role=status]")
+    assert words.text_content() == "Paused by you since 11:40 · coucou"
+    assert tab.text_content() == "Planning · 2"
     assert tab.get_attribute("aria-current") == "page"  # still the page shown
     assert page.get_by_role("button", name="Resume", exact=True).text_content() == "▶"
 
@@ -2586,6 +2622,7 @@ def test_pause_survives_a_stale_live_poll(page, serve, db_path):
             r.fulfill(body=client.get(url).text, content_type="text/html; charset=utf-8")
 
     page.route(f"{ORIGIN}/**", route)
+    page.clock.install()
     page.goto(ORIGIN + "/tickets")
     words = page.locator("#factory-status [role=status]")
     assert words.text_content() == "Running: coucou · f1-04-live"
@@ -2604,16 +2641,14 @@ def test_pause_survives_a_stale_live_poll(page, serve, db_path):
     assert [parse_qs(body)["kind"] for body in posted] == [["pause"]]
 
     # the stale poll came back and was kept out: still the asked words, no sign
-    page.wait_for_function("window.barPolls >= 1", timeout=REFRESH)
+    poll(page)
+    assert page.evaluate("window.barPolls") >= 1
     assert words.text_content() == "Pausing after f1-04-live · coucou"
     assert page.locator("#factory-status .sign").count() == 0
 
-    # Wait for the fresh /live poll to arrive with Pausing and Resume.
-    page.wait_for_function(
-        "document.querySelector('#factory-status [role=status]').textContent"
-        " === 'Pausing after this job'",
-        timeout=REFRESH,
-    )
+    # the fresh /live poll arrives with Pausing and Resume
+    poll(page)
+    assert words.text_content() == "Pausing after this job"
     assert page.get_by_role("button", name="Resume", exact=True).text_content() == "▶"
 
 
@@ -2647,6 +2682,7 @@ def test_resume_survives_a_stale_live_poll(page, serve, db_path):
             r.fulfill(body=client.get(url).text, content_type="text/html; charset=utf-8")
 
     page.route(f"{ORIGIN}/**", route)
+    page.clock.install()
     page.goto(ORIGIN + "/tickets")
     words = page.locator("#factory-status [role=status]")
     assert words.text_content() == "Paused by you since 11:40 · coucou"
@@ -2665,17 +2701,15 @@ def test_resume_survives_a_stale_live_poll(page, serve, db_path):
     assert [parse_qs(body)["kind"] for body in posted] == [["resume"]]
 
     # the stale poll came back and was kept out: still Resuming…, on its way, no sign
-    page.wait_for_function("window.barPolls >= 1", timeout=REFRESH)
+    poll(page)
+    assert page.evaluate("window.barPolls") >= 1
     assert words.text_content() == "Resuming…"
     assert page.locator("#factory-status .sign").count() == 0
     assert page.locator("#factory-status.asked").count() == 1
 
-    # Wait for the fresh /live poll to arrive with Running and Pause.
-    page.wait_for_function(
-        "document.querySelector('#factory-status [role=status]').textContent"
-        " === 'Running: f1-04-live'",
-        timeout=REFRESH,
-    )
+    # the fresh /live poll arrives with Running and Pause
+    poll(page)
+    assert words.text_content() == "Running: f1-04-live"
     pause = page.get_by_role("button", name="Pause after this job", exact=True)
     assert pause.text_content() == "⏸"
 
@@ -2703,21 +2737,20 @@ def test_refused_post_shows_error_and_restores_button(page, serve, db_path):
             r.fulfill(body=client.get(url).text, content_type="text/html; charset=utf-8")
 
     page.route(f"{ORIGIN}/**", route)
+    page.clock.install()
     page.goto(ORIGIN + "/tickets")
     words = page.locator("#factory-status [role=status]")
     assert words.text_content() == "Running: coucou · f1-04-live"
     page.get_by_role("button", name="Pause after this job", exact=True).click()
-    # Wait for the error words first, with no dashed edge, then for the Pause sign to come back.
+    # The error words first, with no dashed edge, then the next poll brings the Pause sign back.
     page.wait_for_function(
         "document.querySelector('#factory-status [role=status]').textContent"
         ' === "Didn\'t reach the factory: try again"'
         " && !document.getElementById('factory-status').classList.contains('asked')",
         timeout=REFRESH,
     )
-    page.wait_for_function(
-        "document.querySelector('#factory-status .sign') !== null",
-        timeout=REFRESH,
-    )
+    poll(page)
+    assert page.locator("#factory-status .sign").count() > 0
     pause = page.get_by_role("button", name="Pause after this job", exact=True)
     assert pause.text_content() == "⏸"
 
@@ -3048,6 +3081,7 @@ def test_on_a_phone_the_dot_and_sign_join_the_brands_row_and_a_tap_shows_the_wor
     """f17: at 390 px the brand, the dot, the sign and the project share one row (their middles
     agree: they differ in height), the dot and the sign are 44 px thumb targets, and the words
     show only once the dot is tapped, and stay through the next poll."""
+    page.clock.install()
     _open_tickets(page, serve(), PHONE)
     parts = {
         "brand": page.locator(".brand"),
@@ -3070,9 +3104,8 @@ def test_on_a_phone_the_dot_and_sign_join_the_brands_row_and_a_tap_shows_the_wor
     assert layout_problems(page) == []  # on screen, over nothing it shouldn't cover
     # the next poll swaps the bar in again: the words stay
     page.evaluate("() => { window.shown = document.querySelector('#factory-status .words'); }")
-    page.wait_for_function(
-        "document.querySelector('#factory-status .words') !== window.shown", timeout=REFRESH
-    )
+    poll(page)
+    assert page.evaluate("document.querySelector('#factory-status .words') !== window.shown")
     assert words.is_visible()
     parts["dot"].click()
     assert not words.is_visible()

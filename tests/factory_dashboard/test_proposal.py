@@ -18,6 +18,7 @@ from tests.factory_dashboard.conftest import (
     NOW,
     PROJECT,
     _at,
+    poll,
 )
 from tests.factory_dashboard.test_planning import (
     _REVIEW_ADR,
@@ -1178,12 +1179,14 @@ def test_approve_plan_wakes_up_once_accept_adr_is_pressed(page, planning, db_pat
     on its way, the fold is still open, and the poll stops."""
     _waiting_plan(checkout, db_path, planning)
     page.set_viewport_size({"width": 1024, "height": 800})
+    page.clock.install()
     _open(page, serve(), "/planning/f6/proposals/plan")
     assert page.locator("#approve-plan").is_disabled()
     page.click("#approve-first > summary")
     assert page.locator("#approve-first-button").is_visible()
     _accept_adr(db_path, planning)
-    page.wait_for_selector("#approve-plan:not([disabled])", timeout=15000)
+    poll(page)
+    assert page.locator("#approve-plan").is_enabled()
     assert page.locator("#approve-plan").is_visible()
     assert page.locator("#approve-first-button").is_enabled()
     assert page.locator("#approve-first-button").is_visible()  # the fold stayed open

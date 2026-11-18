@@ -22,6 +22,7 @@ from tests.factory_dashboard.conftest import (
     PLANNING_PLAN,
     PROJECT,
     _at,
+    poll,
 )
 from tests.layout import DISPLAY, PHONE, layout_problems
 
@@ -1236,8 +1237,6 @@ def test_a_note_half_typed_survives_coming_poll(page, planning, db_path, serve):
 
 # --- the desk and an open thread refresh by themselves (F19 review) ---------------------------
 
-LIVE = 9000  # one 5 s poll, and room to draw it
-
 
 def _lead_says(db_path: Path, project_id: int, card: str, text: str) -> None:
     def write(conn: sqlite3.Connection) -> None:
@@ -1250,10 +1249,12 @@ def _lead_says(db_path: Path, project_id: int, card: str, text: str) -> None:
 def test_the_desk_poll_moves_an_answered_seed_to_the_answers(page, planning, db_path, serve):
     """F9 is a seed when the desk opens; the lead answers on its thread: within a poll F9 sits
     under "Your answers wanted" and no longer under the seeds, without a reload."""
+    page.clock.install()
     _open(page, serve())
     assert page.locator('#desk-seeds a[href^="/planning/f9"]').count() == 1
     _lead_says(db_path, planning, "f9", "Here is what I think.")
-    page.locator('#desk-answers a[href^="/planning/f9"]').wait_for(timeout=LIVE)
+    poll(page)
+    assert page.locator('#desk-answers a[href^="/planning/f9"]').count() == 1
     assert page.locator('#desk-seeds a[href^="/planning/f9"]').count() == 0
 
 

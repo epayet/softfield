@@ -15,12 +15,15 @@ from tests.factory_dashboard.conftest import (
     NOW,
     PROJECT,
     _at,
+    requests_until,
+    watch_requests,
 )
 from tests.factory_dashboard.test_planning import (
     ASKED,
     DUCKS,
     MESSAGE,
     NOTE,
+    ORIGIN,
     PICK,
     TAKEN,
     _asked_changes,
@@ -135,12 +138,15 @@ def test_a_failed_post_leaves_textarea_and_coming_as_they_were(page, planning, d
     page.route("**/requests", refuse)
     page.on("request", lambda request: fetched.append(request.url))
     page.fill('#plant textarea[name="text"]', "The new note")
+    watch_requests(page)
 
     with page.expect_response("**/requests") as response_info:
         page.click("#plant-only")
     response = response_info.value
     assert response.status == 400
-    page.wait_for_timeout(300)  # a re-fetch, if one wrongly followed, would have landed
+    # a re-fetch, if one wrongly followed, starts as the post's answer is handled
+    sent = requests_until(page, "afterRequest post /requests")
+    assert sent == ["beforeRequest post /requests", "afterRequest post /requests"]
 
     assert not [url for url in fetched if "/planning" in url]
     assert page.input_value('#plant textarea[name="text"]') == "The new note"
@@ -155,13 +161,17 @@ def test_a_stored_plant_empties_the_box_even_when_the_new_form_never_comes(
     _open(page, serve())
     page.route("**/planning", lambda route: route.abort())
     page.fill('#plant textarea[name="text"]', "Stored once")
+    watch_requests(page)
     page.click("#plant-only")
     page.wait_for_selector("#plant-status >> text=Asked")
-    page.wait_for_timeout(300)  # the re-fetch has failed by now
+    requests_until(page, "afterRequest post /requests")
+    # the two re-fetches (the form, Coming) have failed by now
+    refetched = f"afterRequest get {ORIGIN}/planning"
+    assert requests_until(page, refetched, 2).count(refetched) == 2
     assert page.input_value('#plant textarea[name="text"]') == ""
     assert page.locator("#desk-coming").count() == 0
     page.click("#plant-only")  # the empty box is required: nothing is sent
-    page.wait_for_timeout(300)
+    assert page.evaluate("() => window.requests").count("beforeRequest post /requests") == 1
     assert _values(db_path, "plant") == [{"text": "Stored once", "ask": False}]
 
 
