@@ -32,15 +32,9 @@
     </h2>
     {{ ab.allowance_bar(window) }}
     <p class="tile-small">5-hour window {{ window.percent if window and window.percent else "–" }}{{ " · " ~ (window.reset_label or window.status) if window and (window.reset_label or window.status) }} · planning may go past the 75% line, the factory stops there</p>
-    {% if pace %}
     {{ ab.allowance_bar(week, pace=pace) }}
-    {% else %}
-    {{ ab.allowance_bar(week) }}
-    {% endif %}
     <p class="tile-small">week {{ week.percent if week and week.percent else "–" }}{{ " · " ~ (week.reset_label or week.status) if week and (week.reset_label or week.status) }}{% if pace and pace.state == "on" %} · on pace · today's {{ pace.pace }}{% endif %}</p>
-    {% if pace and pace.state == "over" %}
     {{ ab.pace_plate(pace) }}
-    {% endif %}
   </div>
 </section>
 

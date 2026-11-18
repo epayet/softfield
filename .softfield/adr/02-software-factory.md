@@ -926,6 +926,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** retiring a field in two steps paid off: first the new source of truth also writes the old one, then the old one goes. Main was right after every ticket, and the runner's own move did the data change with no hand edits. The tickets waited about 4.5 days on the week's pace hold for lead tickets. Dropping a column made every before picture fail (500): the old code can't run on the new database.
 - **Decisions affected:** none (ADR 45 as accepted).
 
+### F259 (2026-11-18): the week's pace on the Planning room too ([review](../reviews/f259-the-pace-indicator-is-only-on.md))
+
+- **Q1:** one developer ticket at difficulty 3 (a macro moved, one context key, a template line). Qwen merged it on attempt 2; attempt 1 stopped with no edit after 20 minutes; 49 minutes in all, 3.4M tokens in. No checkpoint. Review round 1: two should-fix (the "Last hours" plate never shown on `/planning`; the ticket's test file never touched) and one nit, all fixed by the review. Score 5.
+- **Q3:** all Qwen's in the build. See the review's numbers.
+- **Q5:** see the review's numbers.
+- **Anything else:** the gate passed a ticket whose `tests:` file the branch never changed, so "the listed tests pass" was met by the old tests alone, and the one untested Done-when line was the one left undone. This is the F61, F77, F206 and F230 pattern in its plainest form, and the cheapest one to check: the review proposes a gate that fails a ticket whose branch touches none of its `tests:` files.
+- **Decisions affected:** none.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.

@@ -3195,3 +3195,68 @@ def test_a_picked_up_send_back_keeps_its_proposal_dashed_until_the_lead_replies(
         ("/planning/f30/proposals/mockup", "part"),
         ("/planning/f30/proposals/plan", "part on-its-way"),
     ]
+
+
+# --- the week's pace in the lead's window (F259) -----------------------------------------------
+
+
+def _lead_window(html: str) -> tuple[str, str, str]:
+    """The lead's window tile: the 5-hour bar, the week's bar, and the tile's text."""
+    found = re.search(r'<div id="lead-window"[^>]*>(.*?)</section>', html, re.S)
+    assert found
+    meters = re.findall(r'<div class="meter">(.*?)</div>', found[1], re.S)
+    assert len(meters) == 2
+    return meters[0], meters[1], _text(found[1])
+
+
+def test_over_pace_the_planning_week_bar_has_the_post_the_stripes_and_the_plate(db_path):
+    from runner.allowance import lead_goes_at
+    from tests.factory_dashboard.test_overview import pace_client, week_window
+
+    resets_in = timedelta(days=4, hours=16)
+    five, week, text = _lead_window(_page(pace_client(db_path, 0.65, resets_in)))
+    assert 'class="pace" style="left:33%"' in week
+    assert 'class="over-pace" style="left:33%;width:32%"' in week
+    assert 'class="pace"' not in five
+    goes = lead_goes_at(week_window(0.65, resets_in), 0.0, NOW)
+    assert goes is not None
+    until = goes.astimezone()
+    assert (
+        f"Over pace lead tickets wait until about {until:%a} {until.day} {until:%b %H:%M}" in text
+    )
+    assert "developers, planning, reviews and the fast lane go on · today's pace 33%" in text
+    assert "on pace" not in text
+
+
+def test_on_pace_the_planning_week_line_says_so_and_there_is_no_plate(db_path):
+    from tests.factory_dashboard.test_overview import pace_client
+
+    _, week, text = _lead_window(_page(pace_client(db_path, 0.30, timedelta(days=4, hours=16))))
+    assert 'class="pace" style="left:33%"' in week and "over-pace" not in week
+    assert "· on pace · today's 33%" in text
+    assert "Over pace" not in text and "Last hours" not in text
+
+
+def test_in_the_last_hours_planning_shows_the_last_hours_plate_and_no_post(db_path):
+    from tests.factory_dashboard.test_overview import pace_client
+
+    _, week, text = _lead_window(_page(pace_client(db_path, 0.72, timedelta(hours=10))))
+    assert 'class="pace"' not in week and "over-pace" not in week
+    assert "Last hours lead tickets may use the whole reserve, until" in text
+    assert "what's left at the reset is lost" in text
+
+
+def test_in_the_last_hours_a_full_week_on_planning_says_everything_waits(db_path):
+    from tests.factory_dashboard.test_overview import pace_client
+
+    _, _, text = _lead_window(_page(pace_client(db_path, 1.0, timedelta(hours=10))))
+    assert "Last hours everything waits for the reset" in text
+
+
+def test_with_the_weeks_lever_on_planning_draws_neither_post_nor_plate(db_path, tmp_path):
+    from tests.factory_dashboard.test_overview import allowance_client_with
+
+    client = allowance_client_with(db_path, tmp_path, {"week": "2026-10-02T09:30:00+00:00"})
+    _, week, text = _lead_window(_page(client))
+    assert 'class="pace"' not in week
+    assert "Over pace" not in text and "Last hours" not in text and "on pace" not in text
