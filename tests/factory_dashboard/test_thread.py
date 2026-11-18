@@ -1615,14 +1615,16 @@ def test_an_open_thread_waits_while_the_owner_types(page, planning, db_path, ser
     page.fill('#reply textarea[name="text"]', "Half a thought")
     _lead_says(db_path, planning, "f6", "A second answer.")
     page.evaluate(_COUNT_READS)
+    # the fill scrolled the box into view, which holds the reads 10 s by itself (liveIdle):
+    # past that hold, only the typed text keeps the thread's own read from starting
+    page.clock.run_for(2 * POLL)
     poll(page)  # the top bar's poll runs; the thread's own read holds: it never starts
     assert page.evaluate("() => window.reads") == 0
     assert page.locator("#conversation >> text=A second answer.").count() == 0
     assert page.input_value('#reply textarea[name="text"]') == "Half a thought"
     page.fill('#reply textarea[name="text"]', "")
     page.evaluate("() => document.activeElement.blur()")
-    # the fill scrolled the box into view, which holds the reads 10 s (liveIdle): the next
-    # read after that brings the answer
+    # the fill scrolled again: the next read after its hold brings the answer
     page.clock.run_for(2 * POLL)
     page.locator("#conversation >> text=A second answer.").wait_for()
 

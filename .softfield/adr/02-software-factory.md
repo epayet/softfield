@@ -942,6 +942,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** the idle the card was about lasted about 6 hours (02:04 to 08:11), and ended once the owner planted it. A rule change of this kind lives in more places than its tickets list: the pick, the dry run, the idle line, the Overview's plate, row, legend and tooltips, the desk items and `docs/workflow.md`. The plan named the first four and the review found the others. A plan that changes a rule should start by searching for the rule's own words (here "use reserve", "your 25%", "start only under it").
 - **Decisions affected:** ADR 50 as accepted; ADR 44 items 1, 6 and 8 and ADR 16 items 1 and 3 amended by it.
 
+### F71 (2026-11-18): the test gates on workers, and the browser tests on a fake clock ([review](../reviews/f71-i-suspect-we-might-need-to.md))
+
+- **Q1:** two lead tickets, both passed on attempt 1: 04 (the gates) on Sonnet in 10 minutes, 03 (the browser tests) on Opus in 39 minutes after a 13-minute start lost to the 5-hour limit. No checkpoint. Review round 1: one should-fix in a test (fixed by the review), two points left for later, two reported. Score 8.
+- **Q3:** all Claude's. See the review's numbers.
+- **Q5:** see the review's numbers.
+- **Anything else:** the fake clock took the slowest browser test from 36 s to under 4 s, but `check-all` only from 271 s to 246 s: on 16 workers the suite is now set by its 3,600 tests, not by its waits. A test written to prove "nothing happened" can pass for a reason it never names: the thread test's 5 s wait sat inside the page's 10 s scroll hold, so it never tested the typing hold its name promises. A mutation of the exact rule a test names is the check that finds this.
+- **Decisions affected:** none.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.
