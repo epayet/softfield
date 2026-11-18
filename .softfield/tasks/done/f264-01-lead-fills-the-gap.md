@@ -32,3 +32,10 @@ Read "What happened", "Settled with the owner" and D1–D3 in `.softfield/cards/
 - the idle line names lead tickets as waiting for Claude only at 100% or a rest, with the reset; over the line, a lead row in the dry run says "goes when nothing else can (Claude's week over its pace)"
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
