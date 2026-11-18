@@ -462,7 +462,8 @@ def _inline_markup(text: str) -> str:
             return f'<a href="{safe_url}">{link_text}</a>'
         return link_text
 
-    text = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", _replace_link, text)
+    # a url may hold one level of brackets, as a Wikipedia address does
+    text = re.sub(r"\[([^\]]+)\]\(((?:[^()]|\([^()]*\))+)\)", _replace_link, text)
     text = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", text)
     # *Who.*, as "Decisions made along the way" ends each choice (F216 D2)
     text = re.sub(r"(?<![*\w])\*(?=\S)([^*]+?)(?<=\S)\*(?![*\w])", r"<em>\1</em>", text)
@@ -481,161 +482,47 @@ def _to_html(text: str | None, ideas: Iterator[Idea] | None = None) -> str:
     if text is None:
         return ""
     escaped = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-    lines = escaped.split("\n")
-    html_parts: list[str] = []
-    in_ol: bool = False
-    in_ul: bool = False
-    nesting: int = 0  # current nested <ul> depth inside an <li>
-    current_indent: int = 0  # indent level of the current list context
-    open_li_depths: list[int] = []  # stack of nesting depths where open <li>s were opened
-    for line in lines:
+    out: list[str] = []
+    # the lists open now, outermost first: their tag and indent; each has an <li> open, and
+    # a deeper list sits inside its parent's open <li>
+    open_lists: list[tuple[str, int]] = []
+
+    def close(deeper_than: int = -1) -> None:
+        while open_lists and open_lists[-1][1] > deeper_than:
+            out.append(f"</li></{open_lists.pop()[0]}>")
+
+    for line in escaped.split("\n"):
         stripped = line.strip()
-        # Idea plates
         if ideas is not None and stripped.startswith("&gt;") and len(stripped) > len("&gt;"):
             idea = next(ideas, None)
             if idea is not None:
-                while open_li_depths:
-                    html_parts.append("</li>")
-                    open_li_depths.pop()
-                while nesting > 0:
-                    html_parts.append("</ul>")
-                    nesting -= 1
-                if in_ul:
-                    html_parts.append("</ul>")
-                    in_ul = False
-                if in_ol:
-                    html_parts.append("</ol>")
-                    in_ol = False
-                html_parts.append(idea_plate(idea))
+                close()
+                out.append(idea_plate(idea))
                 continue
-        # Numbered list item
-        ol_match = re.match(r"^(\s*)(\d+)\.\s+(.*)", line)
-        if ol_match:
-            while open_li_depths and open_li_depths[-1] == nesting:
-                html_parts.append("</li>")
-                open_li_depths.pop()
-            while nesting > 0:
-                html_parts.append("</ul>")
-                nesting -= 1
-            while open_li_depths:
-                html_parts.append("</li>")
-                open_li_depths.pop()
-            current_indent = 0
-            if in_ul:
-                html_parts.append("</ul>")
-                in_ul = False
-            if not in_ol:
-                html_parts.append("<ol>")
-                in_ol = True
-            text_part = _inline_markup(ol_match.group(3))
-            html_parts.append(f"<li>{text_part}</li>")
-            continue
-        # Bullet list item (with optional indent for nesting)
-        ul_match = re.match(r"^(\s*)(- )(.*)", line)
-        if ul_match:
-            indent_len = len(ul_match.group(1))
-            text_part = ul_match.group(3)
-            if indent_len > 0:
-                # Nested item: compare indent to current context indent.
-                if indent_len > current_indent:
-                    nesting += 1
-                    html_parts.append("<ul>")
-                    current_indent = indent_len
-                    text_part = _inline_markup(text_part)
-                    html_parts.append(f"<li>{text_part}")
-                    open_li_depths.append(nesting)
-                elif indent_len < current_indent:
-                    # Un-nesting: close <li>s opened at deeper depth, close <ul>s.
-                    while open_li_depths and open_li_depths[-1] > nesting:
-                        html_parts.append("</li>")
-                        open_li_depths.pop()
-                    while nesting > 0 and current_indent > indent_len:
-                        html_parts.append("</ul>")
-                        nesting -= 1
-                    current_indent = 0
-                    text_part = _inline_markup(text_part)
-                    html_parts.append(f"<li>{text_part}")
-                    open_li_depths.append(nesting)
-                else:
-                    # Same indent: close the previous open <li>, open a new one.
-                    while open_li_depths and open_li_depths[-1] == nesting:
-                        html_parts.append("</li>")
-                        open_li_depths.pop()
-                    text_part = _inline_markup(text_part)
-                    html_parts.append(f"<li>{text_part}")
-                    open_li_depths.append(nesting)
+        item = _LIST_LINE.match(line)
+        if item:
+            indent, tag = len(item["indent"]), "ol" if item["number"] else "ul"
+            close(indent)
+            if open_lists and open_lists[-1] == (tag, indent):
+                out.append("</li>")  # the next item of the same list
             else:
-                # Top-level item: close <li>s, then nested <ul>s, then parent <li>s.
-                while open_li_depths and open_li_depths[-1] > 0:
-                    html_parts.append("</li>")
-                    open_li_depths.pop()
-                while nesting > 0:
-                    html_parts.append("</ul>")
-                    nesting -= 1
-                while open_li_depths:
-                    html_parts.append("</li>")
-                    open_li_depths.pop()
-                current_indent = 0
-                if in_ol:
-                    html_parts.append("</ol>")
-                    in_ol = False
-                if not in_ul:
-                    html_parts.append("<ul>")
-                    in_ul = True
-                text_part = _inline_markup(text_part)
-                html_parts.append(f"<li>{text_part}")
-                open_li_depths.append(0)
-            continue
-        # Blank line closes open lists.
-        if not stripped:
-            while open_li_depths and open_li_depths[-1] > 0:
-                html_parts.append("</li>")
-                open_li_depths.pop()
-            while nesting > 0:
-                html_parts.append("</ul>")
-                nesting -= 1
-            while open_li_depths:
-                html_parts.append("</li>")
-                open_li_depths.pop()
-            if in_ul:
-                html_parts.append("</ul>")
-                in_ul = False
-            if in_ol:
-                html_parts.append("</ol>")
-                in_ol = False
-            continue
-        # Regular line
-        while open_li_depths and open_li_depths[-1] > 0:
-            html_parts.append("</li>")
-            open_li_depths.pop()
-        while nesting > 0:
-            html_parts.append("</ul>")
-            nesting -= 1
-        while open_li_depths:
-            html_parts.append("</li>")
-            open_li_depths.pop()
-        if in_ul:
-            html_parts.append("</ul>")
-            in_ul = False
-        if in_ol:
-            html_parts.append("</ol>")
-            in_ol = False
-        if stripped:
-            html_parts.append(f"<p>{_inline_markup(stripped)}</p>")
-    while open_li_depths and open_li_depths[-1] > 0:
-        html_parts.append("</li>")
-        open_li_depths.pop()
-    while nesting > 0:
-        html_parts.append("</ul>")
-        nesting -= 1
-    while open_li_depths:
-        html_parts.append("</li>")
-        open_li_depths.pop()
-    if in_ul:
-        html_parts.append("</ul>")
-    if in_ol:
-        html_parts.append("</ol>")
-    return "".join(html_parts)
+                if open_lists and open_lists[-1][1] == indent:  # a bullet after a step
+                    close(indent - 1)
+                out.append(f"<{tag}>")
+                open_lists.append((tag, indent))
+            out.append(f"<li>{_inline_markup(item['text'])}")
+        elif stripped and open_lists and line[:1].isspace():
+            out.append(f" {_inline_markup(stripped)}")  # an item's text, wrapped
+        else:
+            close()
+            if stripped:
+                out.append(f"<p>{_inline_markup(stripped)}</p>")
+    close()
+    return "".join(out)
+
+
+# a bullet or a numbered step, at any indent (D12)
+_LIST_LINE = re.compile(r"^(?P<indent>[ \t]*)(?:- |(?P<number>\d+)\.[ \t]+)(?P<text>.*)$")
 
 
 @dataclass(frozen=True)

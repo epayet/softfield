@@ -2707,6 +2707,52 @@ def test_to_html_nested_bullet_then_numbered():
     assert result == "<ul><li>Top<ul><li>A</li></ul></li></ul><ol><li>n</li></ol>"
 
 
+def test_to_html_a_bullet_under_a_step_sits_inside_the_step():
+    """F216 review: a bullet indented under a numbered step nests in the step's ``<li>``,
+    and the steps stay one ``<ol>``, so the next one isn't numbered 1 again."""
+    from factory_dashboard.milestones import _to_html
+
+    result = _to_html("1. Open it\n   - a detail\n2. Then this")
+    assert result == "<ol><li>Open it<ul><li>a detail</li></ul></li><li>Then this</li></ol>"
+
+
+def test_to_html_a_wrapped_step_stays_one_step():
+    """F216 review: m12's How to test, as stored, wraps a step on indented lines; they are
+    the step's text, and the steps after it stay in the same list."""
+    from factory_dashboard.milestones import _to_html
+
+    text = (
+        "1. On your phone, open Me.\n"
+        "2. Tap **COASTER RANKER**: the train runs under the letters\n"
+        "   (each one jumps), loops and leaves.\n"
+        "3. Tap the title again."
+    )
+    assert _to_html(text) == (
+        "<ol><li>On your phone, open Me.</li><li>Tap <strong>COASTER RANKER</strong>: the"
+        " train runs under the letters (each one jumps), loops and leaves.</li>"
+        "<li>Tap the title again.</li></ol>"
+    )
+
+
+def test_to_html_uneven_indents_still_nest_inside_an_li():
+    """F216 review: a dedent to an indent no list has opens a list in the open item, never
+    a stray ``</li>``."""
+    from factory_dashboard.milestones import _to_html
+
+    assert _to_html("- a\n    - deep\n  - mid\n- c") == (
+        "<ul><li>a<ul><li>deep</li></ul><ul><li>mid</li></ul></li><li>c</li></ul>"
+    )
+
+
+def test_to_html_a_link_keeps_brackets_in_its_url():
+    """F216 review: ``(…)`` inside a url stays in the href."""
+    from factory_dashboard.milestones import _to_html
+
+    assert _to_html("[x](https://e.com/a_(b)) here") == (
+        '<p><a href="https://e.com/a_(b)">x</a> here</p>'
+    )
+
+
 # --- f216-03: the page once its review is written: plates, Sign off, then folds -------------
 
 _F187_SHEET = {
