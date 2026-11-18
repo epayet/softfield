@@ -1,6 +1,6 @@
 # Milestone F122: Start a new project from the Projects page
 
-> **State:** ready · **Area:** factory
+> **State:** ready · **Area:** factory · **Fast lane:** yes
 > Planted by the owner on 2026-10-14.
 
 ## Notes
