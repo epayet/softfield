@@ -27,3 +27,10 @@ Read "Settled with the owner" and D5 in `.softfield/cards/f264-the-factory-shoul
 - a run that starts with a `FIVE_HOUR_KIND` entry in `state.parked` drops it and resolves its open owner item
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
