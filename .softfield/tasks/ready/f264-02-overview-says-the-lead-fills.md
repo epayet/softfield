@@ -8,6 +8,7 @@ files:
   - factory_dashboard/overview.py
   - factory_dashboard/templates/_partials/allowance_bar.html
   - factory_dashboard/templates/_partials/allowance.html
+  - factory_dashboard/static/dashboard.css
 tests:
   - tests/factory_dashboard/test_overview.py
 ---
@@ -21,11 +22,15 @@ Read D4 in `.softfield/cards/f264-the-factory-should-never-stay-idle.md`, then i
 - Over the line, the plate reads "Over pace", then "developers first; the lead takes over when nothing else can run", then the small line "planning, reviews and the fast lane go on · today's pace N%". A held lead row says "goes when nothing else can".
 - At 100% or a rest, the plate and rows say "lead tickets wait until" the reset or the rest's end, as `allowance.lead_goes_at` gives it.
 - Both marks' words read "lead tickets go last from here". The switch label reads "keep board order" instead of "use reserve". In the legend, the mark's line reads "the mark: past it, lead tickets go after developers, planning and reviews; only 100% makes them wait", and the switch's line reads "keep board order: lead tickets keep the board's order past the mark; on lasts 24 hours, then turns itself off".
+- A test's week whose reset is less than about 17 hours away is in its last 10% (`allowance.in_sweep`) and shows the "Last hours" plate instead: use `timedelta(days=4, hours=16)` as the existing pace tests do.
+- `test_allowance_legend_names_bar_mark` asks for the old legend's words ("factory", "owner" or "stop"); this ticket changes that line, so that test changes to the new one.
+- At 390 px the lever sits in an `auto` grid column (the phone rules for `#allowance .allow > [id^="allow-"]` in `factory_dashboard/static/dashboard.css`). The longer "keep board order" widens it, so the `.reading` beside it wraps and rises above the lever, and `test_name_reading_and_meter_share_the_lever_s_band_on_a_phone` fails. Let the lever's label wrap onto two lines within its 44 px, in that phone block only, and leave that test as it is.
 - The "Last hours" plate doesn't change. No element is added, moved or removed.
 
 ### Done when
-- a week at 34% used with a pace line of 26% shows the new plate words and the row "goes when nothing else can"
-- a week at 80% used shows the same words, not a wait; a week at 100% shows "lead tickets wait until" its reset
+- a week at 34% used with a pace line of 26% shows the new plate words, the small line included, and the row "goes when nothing else can"
+- a week at 80% used shows the same words, not a wait; a week at 100% (reset 4 days away) shows "lead tickets wait until" its reset
 - both Claude rows' marks say "lead tickets go last from here", the switches say "keep board order", and the legend has the two new lines
+- at 390 px, `test_name_reading_and_meter_share_the_lever_s_band_on_a_phone` passes unchanged
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
