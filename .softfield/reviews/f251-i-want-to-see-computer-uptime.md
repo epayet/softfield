@@ -1,5 +1,7 @@
 # Review: F251, how long the computer has been on
 
+- **Status:** done, signed off by the owner on 2026-11-18.
+
 ## Sign-off sheet
 
 ### 1. What changed

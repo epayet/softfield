@@ -1,6 +1,7 @@
 # Milestone F251: Show how long the computer has been on in the top bar
 
-> **State:** ready · **Area:** factory
+> **State:** done · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-18. Base: git tag `f251-i-want-to-see-computer-uptime-start`. Report: [`.softfield/reviews/f251-i-want-to-see-computer-uptime.md`](../reviews/f251-i-want-to-see-computer-uptime.md).
 > Planted by the owner on 2026-11-14.
 
 ## Notes
