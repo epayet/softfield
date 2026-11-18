@@ -1,4 +1,4 @@
-# Milestone F268: Having the ability to upload files in conversations would…
+# Milestone F268: Add pictures to a plant or a thread message
 
 > **State:** idea · **Area:** factory
 > Planted by the owner on 2026-11-18.
