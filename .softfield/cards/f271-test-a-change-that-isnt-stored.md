@@ -1,4 +1,4 @@
-# Milestone F271: test_a_change_that_isnt_stored_leaves_the_row_open…
+# Milestone F271: Two refused-edit tests check the request list instead of waiting 300 ms
 
 > **State:** idea · **Area:** factory
 > Planted by the owner on 2026-11-18.
