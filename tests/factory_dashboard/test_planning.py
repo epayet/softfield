@@ -3215,7 +3215,7 @@ def test_over_pace_the_planning_week_bar_has_the_post_the_stripes_and_the_plate(
     resets_in = timedelta(days=4, hours=16)
     five, week, text = _lead_window(_page(pace_client(db_path, 0.65, resets_in)))
     assert 'class="pace" style="left:33%"' in week
-    assert 'class="over-pace" style="left:33%;width:32%"' in week
+    assert 'class="over-pace" style="left:calc(33% + 1px);width:32%"' in week
     assert 'class="pace"' not in five
     assert "developers first; the lead takes over when nothing else can run" in text
     assert "planning, reviews and the fast lane go on · today's pace 33%" in text

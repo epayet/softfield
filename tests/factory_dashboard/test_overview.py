@@ -1255,7 +1255,7 @@ def test_over_pace_the_week_shows_the_post_the_stripes_and_the_plate(db_path):
     html = pace_client(db_path, 0.65, resets_in).get("/").text
     meter = _meter(html)
     assert 'class="pace" style="left:33%"' in meter
-    assert 'class="over-pace" style="left:33%;width:32%"' in meter
+    assert 'class="over-pace" style="left:calc(33% + 1px);width:32%"' in meter
     plate = " ".join(re.sub(r"<[^>]+>", " ", meter).split())
     assert "developers first; the lead takes over when nothing else can run" in plate
     assert "lead tickets wait until" not in plate
@@ -1336,6 +1336,18 @@ def test_in_the_last_hours_a_full_week_says_everything_waits_for_the_reset(db_pa
     meter = _meter(pace_client(db_path, 1.0, timedelta(hours=10)).get("/").text)
     text = " ".join(re.sub(r"<[^>]+>", " ", meter).split())
     assert "Last hours everything waits for the reset" in text
+
+
+def test_pace_rounding_discrepancy_stripe_width_equals_fill_minus_post(db_path):
+    """f266: when rounding used-post alone gives one percent less than rounded fill minus rounded
+    post, the stripe width equals the fill's percent minus the post's (the live case on 2026-11-18
+    pattern: 0.357 used, line 0.264, fill 36%, post 26%, stripe 10%)."""
+    resets_in = timedelta(days=4, hours=16)
+    html = pace_client(db_path, 0.355, resets_in).get("/").text
+    meter = _meter(html)
+    assert 'class="pace" style="left:33%"' in meter
+    assert 'class="under-mark" style="width:36%"' in meter
+    assert 'class="over-pace" style="left:calc(33% + 1px);width:3%"' in meter
 
 
 def test_the_weeks_lever_on_draws_neither_post_nor_plate(db_path, tmp_path):
