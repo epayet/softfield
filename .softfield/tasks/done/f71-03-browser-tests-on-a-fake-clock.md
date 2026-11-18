@@ -43,3 +43,10 @@ Read `.softfield/cards/f71-i-suspect-we-might-need-to.md` ("Findings (2026-10-21
 - the listed `tests:` pass on 16 workers (`-n 16`) three runs in a row
 - your final note gives the suite's time and the slowest ten tests, before and after
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
