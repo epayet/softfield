@@ -28,3 +28,12 @@ A thread's message box stays on the page while the lead owes a reply, so the own
 - While a reply is owed, the points still have no comment boxes.
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: stopped)
+attempts: 3
+tokens: 3002905
+logs: .softfield/var/runs/20261118-135500/f267-02-note-box-while-writing
+```
