@@ -1,6 +1,6 @@
 # Review: F216, a shorter, consistent review page, with the decisions made along the way
 
-- **Status:** reviewed, waiting for your sign-off.
+- **Status:** done, signed off by the owner on 2026-11-18.
 
 ## Sign-off sheet
 

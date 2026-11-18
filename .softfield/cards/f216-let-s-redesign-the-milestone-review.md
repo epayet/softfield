@@ -1,6 +1,7 @@
 # Milestone F216: A shorter, consistent review page, with the decisions made along the way
 
-> **State:** ready · **Area:** factory
+> **State:** done · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-18. Base: git tag `f216-let-s-redesign-the-milestone-review-start`. Report: [`.softfield/reviews/f216-let-s-redesign-the-milestone-review.md`](../reviews/f216-let-s-redesign-the-milestone-review.md).
 > Planted by the owner on 2026-11-04.
 
 ## Notes
