@@ -398,15 +398,31 @@ Write {out} as:
   "stop": null | "adr-needed" | "security-unresolved" | "unforeseen-cross-milestone"}}
 Keep ids stable across rounds; mark findings fixed since the last round "resolved": true.
 Give checkpoint_verdicts and score every round, as they stand: the last round's are kept.
-Also create or update .softfield/reviews/{milestone}.md. It starts with the owner's sign-off
-sheet ("Sign-off sheet" above), ending with "6. What next": your product and factory
-suggestions. Write each suggestion that needs a card as one quoted `> ` line under its
-Product or Factory bullet: one self-contained sentence in the owner's plant-note voice, so
-the dashboard can offer to plant it. What this review already did itself is not quoted.
-Then what was built, findings and resolutions (the findings section names the pages it opened
-and the record it compared, one line each, so a review that skipped them shows), what was set
-aside and workflow observations. The numbers come from `softfield report {milestone}`, between the
-`<!-- runner report -->` markers: leave that block as it is and don't recount them.
+Also create or update .softfield/reviews/{milestone}.md: the title, the status, the owner's
+sign-off sheet and the runner's numbers, with nothing below the sheet (findings live in the
+findings above, a workflow lesson goes under 8). The sheet's headings, in this order:
+### 1. What changed (at most 4 points of 2 lines)
+### 2. How to test it yourself (at most 5 steps)
+### 3. Done when, as of now: one bullet per line or group of the card's Done when, starting
+**Met:**, **Not yet:** or **Your check:**
+### 4. Decisions waiting for you: only a draft ADR or a question for the owner, with your
+recommendation
+### 5. Decisions made along the way: at most 5 bullets, each a choice the plan didn't make or
+changed (an addition, a departure from a card's D or a ticket, or something left out on
+purpose), as `- **What was chosen.** Why. The other option, if there was a real one. *Who.*`
+(the review, or the lead or developer on a named ticket). Not a plan's decision built as
+written, an ADR, or a plain bug fix that changes no behaviour. Its source is the card's
+Decisions, Done when and mock-up compared with the diff and the review's own fixes.
+### 6. What next: your product and factory suggestions. Write each suggestion that needs a
+card as one quoted `> ` line under its Product or Factory bullet: one self-contained sentence
+in the owner's plant-note voice, so the dashboard can offer to plant it. What this review
+already did itself is not quoted.
+### 7. Left for later
+### 8. How the work went: at most 3 lessons, one or two lines each, no line per session
+### 9. What clogged the factory line: only hours with a fix, at most 3 lines
+A section with nothing to say is left out, heading and all, except 1 and 2. The numbers come
+from `softfield report {milestone}`, between the `<!-- runner report -->` markers: leave that
+block as it is and don't recount them.
 Read-only git (diff, log, show) is fine; don't commit: the runner does.
 """
 

@@ -300,6 +300,48 @@ def test_the_review_asks_for_each_card_suggestion_as_one_quoted_line():
     assert "already did itself is not quoted" in text
 
 
+def test_the_review_asks_for_the_nine_headings_and_nothing_below_the_sheet():
+    """F216 D1, D2, D6: the sheet's shape, the decisions along the way, no extra report."""
+    text = " ".join(prompts.REVIEW.split())
+    headings = [
+        "### 1. What changed",
+        "### 2. How to test it yourself",
+        "### 3. Done when, as of now",
+        "### 4. Decisions waiting for you",
+        "### 5. Decisions made along the way",
+        "### 6. What next",
+        "### 7. Left for later",
+        "### 8. How the work went",
+        "### 9. What clogged the factory line",
+    ]
+    places = [text.index(heading) for heading in headings]
+    assert places == sorted(places)
+    assert "left out, heading and all, except 1 and 2" in text
+    assert "what was built" not in text and "what was set aside" not in text
+    assert "workflow observations" not in text and "findings and resolutions" not in text
+    assert "nothing below the sheet" in text.lower()
+    assert "<!-- runner report -->" in text
+    along = text[text.index("Decisions made along the way:") :]
+    assert "at most 5 bullets" in along and "*Who.*" in along
+    assert "Done when and mock-up" in along and "the review's own fixes" in along
+    assert "Not a plan's decision built as written" in along
+    fields = dict(
+        milestone="f1", round=1, max_rounds=3, scope="", tests="tests", recurring="none",
+        checkpoints="none", out="x.json", pictures="none",
+    )  # fmt: skip
+    assert "### 5. Decisions made along the way" in prompts.REVIEW.format(**fields)
+
+
+def test_lead_md_and_workflow_say_the_new_sheet():
+    lead = (ROOT / "runner/instructions/lead.md").read_text(encoding="utf-8")
+    sheet = lead[lead.index("## Sign-off sheet") : lead.index("## Reporting")]
+    assert "Done when, as of now" in sheet and "Decisions made along the way" in sheet
+    assert "**Met:**" in sheet and "nothing below the sheet" in sheet.lower()
+    flow = (ROOT / "docs/workflow.md").read_text(encoding="utf-8")
+    report = flow[flow.index("**Report:**") :].split("\n")[0]
+    assert "decisions made along the way" in report and "nothing below the sheet" in report
+
+
 def test_the_review_reads_the_real_page_before_the_tests():
     """ADR 37 items 1–3: the page look comes first, then the fixture check and report line."""
     text = " ".join(prompts.REVIEW.split())
@@ -308,7 +350,6 @@ def test_the_review_reads_the_real_page_before_the_tests():
     assert "factory_dashboard/" in before and "raw HTML" in before
     assert "one fixture" in before and ".softfield/cards/" in before
     assert "softfield look sql" in before and "should-fix" in before
-    assert "names the pages it opened" in text and "record it compared" in text
     assert "lead.md" not in text and "owner.md" not in text
     fields = dict(
         milestone="f1", round=1, max_rounds=3, scope="", tests="tests", recurring="none",

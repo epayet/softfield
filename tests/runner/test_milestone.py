@@ -298,6 +298,24 @@ def test_the_sign_off_sheet_has_what_clogged_the_factory_line():
     assert signoff_sections(clogged)["clogged"] == "- 11 h waiting for Claude."
 
 
+def test_the_new_sheet_has_done_check_and_decisions_along_the_way():
+    """F216 D7: two new keys; a sheet without them parses as before."""
+    sheet = (
+        "### 1. What changed\n- A.\n\n"
+        "### 3. Done when, as of now\n- **Met:** one.\n\n"
+        "### 5. Decisions made along the way\n- **Chose X.** Why. *The review.*\n\n"
+        "### 6. What next\nNothing.\n"
+    )
+    assert signoff_sections(sheet) == {
+        "changed": "- A.",
+        "done_check": "- **Met:** one.",
+        "along_the_way": "- **Chose X.** Why. *The review.*",
+        "what_next": "Nothing.",
+    }
+    old = signoff_sections(REVIEW_DOC)
+    assert "done_check" not in old and "along_the_way" not in old
+
+
 def test_a_milestone_run_records_its_doc(repo, monkeypatch):
     _milestone_repo(repo)
     monkeypatch.setattr(milestone, "review_milestone", lambda *a: "clean")

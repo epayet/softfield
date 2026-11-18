@@ -202,6 +202,8 @@ SIGNOFF_SECTIONS = {
     "What next": "what_next",
     "Left for later": "later",
     "Decisions waiting for you": "decisions",
+    "Done when, as of now": "done_check",
+    "Decisions made along the way": "along_the_way",
     "How the work went": "lessons",
     "What clogged the factory line": "clogged",
 }

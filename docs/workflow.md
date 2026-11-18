@@ -104,7 +104,7 @@ All coordination goes through files in the repo. Run logs go to `.softfield/var/
 | This round's findings ≥ the previous round's | stop |
 | ADR needed / unresolved security finding / cross-milestone surprise | stop immediately |
 
-**Report:** `.softfield/reviews/mN.md` starts with the owner's **sign-off sheet** (what changed, how to test it yourself, left for later, decisions waiting, how the work went; see `runner/instructions/lead.md`), then covers what was built, the findings and their resolutions, what was set aside, the metrics (tasks, attempts per task, escalation rate, review rounds, headless runs), the stop reason and workflow observations. **Only the owner marks a milestone done.**
+**Report:** `.softfield/reviews/mN.md` holds the title, the status, the owner's **sign-off sheet** (what changed, how to test it yourself, done when as of now, decisions waiting, decisions made along the way, what next, left for later, how the work went, what clogged the line; see `runner/instructions/lead.md`) and the runner's numbers (tasks, attempts per task, escalation rate, review rounds, headless runs), with nothing below the sheet: findings live in the database, and a workflow lesson goes under "How the work went". **Only the owner marks a milestone done.**
 
 ## Headless Claude invocation
 
