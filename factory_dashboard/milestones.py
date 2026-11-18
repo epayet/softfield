@@ -24,6 +24,7 @@ from urllib.parse import quote, urlencode
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
+from markupsafe import Markup
 
 from factory_dashboard import queries
 from factory_dashboard.app import Db, Now, Project, render, templates
@@ -433,55 +434,63 @@ def gists(detail: "MilestoneDetail", grew: "list[Grown]") -> Gists:
     )
 
 
-def _inline_markup(text: str) -> str:
-    """Process ``[text](url)`` links, `` `code` ``, and `` **bold** `` in text.
+def inline_html(text: str) -> Markup:
+    """Escape *text* and render inline markdown: `` `code` ``, `` **bold** `` and
+    `` [text](url) ``.
 
     Code blocks are protected: bold and links are not applied inside them.
     Quotes in http/https URLs are percent-encoded to prevent attribute breaking.
+    Non-http/https links become plain text.
     """
+    escaped = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
     # Extract code blocks first so bold and links don't apply inside them.
     code_blocks: list[str] = []
 
     def _replace_code(m: re.Match[str]) -> str:
         code_blocks.append(m.group(1))
-        return f"__CODE_{len(code_blocks) - 1}__"
+        return f"\x00CODE_{len(code_blocks) - 1}\x00"
 
-    text = re.sub(r"`([^`]+)`", _replace_code, text)
-    if not text.strip():
+    escaped = re.sub(r"`([^`]+)`", _replace_code, escaped)
+
+    if not escaped.strip():
         for i, block in enumerate(code_blocks):
-            text = text.replace(f"__CODE_{i}__", f"<code>{block}</code>")
-        return text
+            escaped = escaped.replace(f"\x00CODE_{i}\x00", f"<code>{block}</code>")
+        return Markup(escaped)  # noqa: S704
 
     # Links: http/https only become <a>; others become plain text
     def _replace_link(m: re.Match[str]) -> str:
         link_text = m.group(1)
         url = m.group(2)
         if url.startswith(("http://", "https://")):
-            # Escape quotes in the URL to prevent attribute breaking.
             safe_url = url.replace('"', "%22")
             return f'<a href="{safe_url}">{link_text}</a>'
         return link_text
 
     # a url may hold one level of brackets, as a Wikipedia address does
-    text = re.sub(r"\[([^\]]+)\]\(((?:[^()]|\([^()]*\))+)\)", _replace_link, text)
-    text = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", text)
+    escaped = re.sub(r"\[([^\]]+)\]\(((?:[^()]|\([^()]*\))+)\)", _replace_link, escaped)
+    escaped = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", escaped)
     # *Who.*, as "Decisions made along the way" ends each choice (F216 D2)
-    text = re.sub(r"(?<![*\w])\*(?=\S)([^*]+?)(?<=\S)\*(?![*\w])", r"<em>\1</em>", text)
+    escaped = re.sub(r"(?<![*\w])\*(?=\S)([^*]+?)(?<=\S)\*(?![*\w])", r"<em>\1</em>", escaped)
     # Restore code blocks.
     for i, block in enumerate(code_blocks):
-        text = text.replace(f"__CODE_{i}__", f"<code>{block}</code>")
-    return text
+        escaped = escaped.replace(f"\x00CODE_{i}\x00", f"<code>{block}</code>")
+    return Markup(escaped)  # noqa: S704
+
+
+def _inline_markup(text: str) -> str:
+    """Process inline markdown in *text* (called by ``_to_html`` per line)."""
+    return str(inline_html(text))
 
 
 def _to_html(text: str | None, ideas: Iterator[Idea] | None = None) -> str:
     """Turn ``1. x`` numbered lines into ``<ol>``, an indented ``- x`` under a bullet into a
     nested ``<ul>``, `` **x** `` into ``<strong>x</strong>``, `` `x` `` into ``<code>x</code>``,
-    and ``[text](url)`` into links (http/https only). Escapes first. With ``ideas``, each
+    and ``[text](url)`` into links (http/https only). With ``ideas``, each
     quoted line (``> …``) is drawn in place as the next idea's plate (F164 D5); with none
     left it stays a plain line."""
     if text is None:
         return ""
-    escaped = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
     out: list[str] = []
     # the lists open now, outermost first: their tag and indent; each has an <li> open, and
     # a deeper list sits inside its parent's open <li>
@@ -491,9 +500,9 @@ def _to_html(text: str | None, ideas: Iterator[Idea] | None = None) -> str:
         while open_lists and open_lists[-1][1] > deeper_than:
             out.append(f"</li></{open_lists.pop()[0]}>")
 
-    for line in escaped.split("\n"):
+    for line in text.split("\n"):
         stripped = line.strip()
-        if ideas is not None and stripped.startswith("&gt;") and len(stripped) > len("&gt;"):
+        if ideas is not None and stripped.startswith(">") and len(stripped) > 1:
             idea = next(ideas, None)
             if idea is not None:
                 close()
@@ -510,13 +519,13 @@ def _to_html(text: str | None, ideas: Iterator[Idea] | None = None) -> str:
                     close(indent - 1)
                 out.append(f"<{tag}>")
                 open_lists.append((tag, indent))
-            out.append(f"<li>{_inline_markup(item['text'])}")
+            out.append(f"<li>{inline_html(item['text'])}")
         elif stripped and open_lists and line[:1].isspace():
-            out.append(f" {_inline_markup(stripped)}")  # an item's text, wrapped
+            out.append(f" {inline_html(stripped)}")  # an item's text, wrapped
         else:
             close()
             if stripped:
-                out.append(f"<p>{_inline_markup(stripped)}</p>")
+                out.append(f"<p>{inline_html(stripped)}</p>")
     close()
     return "".join(out)
 

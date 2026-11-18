@@ -73,10 +73,10 @@
     {% endif %}
     {% if show_note and about.outcome_html %}
     <details><summary>Your note ›</summary>
-      <p class="note">{{ about.note }}</p></details>
+      <p class="note">{{ about.note | md }}</p></details>
     {% elif show_note %}
     <p class="label">Your note</p>
-    <p class="note">{{ about.note }}</p>
+    <p class="note">{{ about.note | md }}</p>
     <p class="later">The lead writes what it will do when it plans the card.</p>
     {% endif %}
     {% else %}
@@ -346,7 +346,7 @@
   {% endif %}
   <details id="grew">{{ summary("Your note and how it grew", gists.grew) }}
     <div class="inside">
-      {% if about.note and not show_note %}<p class="note">{{ about.note }}</p>{% endif %}
+      {% if about.note and not show_note %}<p class="note">{{ about.note | md }}</p>{% endif %}
       <ol class="grew">
         {% for g in grew %}
         <li class="at-{{ g.stage }}{% if g.current %} now{% elif g.later %} not-yet{% endif %}"{% if g.current %} aria-current="step"{% endif %}><b>{{ g.name }}</b><span>{{ g.when }}</span></li>
@@ -359,7 +359,7 @@
       <thead><tr><th>Ticket</th><th>Goal</th><th>Who</th><th>State</th></tr></thead>
       <tbody>
         {% for t in milestone.tickets %}
-        <tr><td class="id"><a href="/tickets/{{ t.ticket }}{{ q }}">{{ t.ticket }}</a></td><td>{{ t.goal or "–" }}</td><td class="who">{{ t.who }}</td><td class="state{% if t.mark %} is-{{ t.mark }}{% endif %}">{{ t.state }}</td></tr>
+      <tr><td class="id"><a href="/tickets/{{ t.ticket }}{{ q }}">{{ t.ticket }}</a></td><td>{{ (t.goal or "–") | md }}</td><td class="who">{{ t.who }}</td><td class="state{% if t.mark %} is-{{ t.mark }}{% endif %}">{{ t.state }}</td></tr>
         {% endfor %}
       </tbody>
     </table></div></details>

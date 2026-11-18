@@ -749,7 +749,7 @@ def test_a_ticket_with_parsed_body_folds_context(db_path, later_client):
     goal_section = section_raw(html, "goal")
     assert "<details>" in goal_section
     assert "<summary>" in goal_section
-    assert "The lead&#39;s notes for the agent." in goal_section
+    assert "The lead's notes for the agent." in goal_section
 
 
 def test_later_ticket_page_on_its_way_message(db_path, later_client):
@@ -1104,3 +1104,37 @@ def test_ticket_page_first_crumb_of_a_card_with_no_title(db_path, serve):
 
     html = serve().get("/tickets/f99-01-a").text
     assert re.search(r'<a href="/milestones/f99-untitled\?[^"]*">F99</a>', html)
+
+
+def test_ticket_page_goal_with_inline_code_shows_code_tag(db_path, later_client):
+    """A ticket page whose Goal holds `` `inline_html` `` shows <code>inline_html</code>."""
+    from runner import metrics
+
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        f1 = metrics.upsert_milestone(conn, project, "f1")
+        metrics.upsert_ticket(
+            conn,
+            project,
+            "f1-97-code",
+            milestone_id=f1,
+            kind="developer",
+            state="later",
+            difficulty=2,
+            title="Inline code ticket.",
+            body=(
+                "---\nid: f1-97-code\n---\n\n"
+                "### Goal\nUse `run_order` and **bold** for the brief.\n\n"
+                "### Done when\n- `inline_html` shows `<code>inline_html</code>`\n"
+                "- **bold** renders as strong\n"
+            ),
+        )
+    finally:
+        conn.close()
+
+    html = later_client.get("/tickets/f1-97-code").text
+    goal_section = section_raw(html, "goal")
+    assert "<code>run_order</code>" in goal_section
+    assert "<strong>bold</strong>" in goal_section
+    assert "<code>inline_html</code>" in goal_section
