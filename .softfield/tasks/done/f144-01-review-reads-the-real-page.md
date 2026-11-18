@@ -26,3 +26,10 @@ Read `.softfield/adr/37-a-review-reads-the-real-page-first.md` (items 1–4), th
 - the "Review" section of `runner/instructions/lead.md` names `softfield look page` and ADR 37
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
