@@ -1,5 +1,7 @@
 # Review: F266, the over-pace stripe covers the week meter's green fill to its end
 
+- **Status:** done, signed off by the owner on 2026-11-18.
+
 ## Sign-off sheet
 
 ### 1. What changed

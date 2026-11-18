@@ -1,6 +1,7 @@
 # Milestone F266: The over-pace stripe covers the week meter's green fill to its very end
 
-> **State:** ready · **Area:** factory
+> **State:** done · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-18. Base: git tag `f266-there-s-a-tiny-green-dot-start`. Report: [`.softfield/reviews/f266-there-s-a-tiny-green-dot.md`](../reviews/f266-there-s-a-tiny-green-dot.md).
 > Planted by the owner on 2026-11-18.
 
 ## Notes
