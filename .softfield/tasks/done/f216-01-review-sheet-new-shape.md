@@ -31,3 +31,10 @@ Read `.softfield/cards/f216-let-s-redesign-the-milestone-review.md` (D1, D2, D3,
 - `runner/instructions/lead.md` and `docs/workflow.md` say the same as `REVIEW`
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
