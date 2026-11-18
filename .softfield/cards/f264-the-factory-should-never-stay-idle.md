@@ -1,4 +1,4 @@
-# Milestone F264: The factory should never stay idle. The pacing and reserve…
+# Milestone F264: The line never idles: over the pace, the lead works when developers can't
 
 > **State:** idea · **Area:** factory
 > Planted by the owner on 2026-11-18.
