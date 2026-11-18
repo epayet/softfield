@@ -589,17 +589,18 @@ def test_a_refused_message_shows_and_try_again_opens_its_thread_with_it(planning
 def test_try_again_fills_the_box_only_with_a_refused_message_of_ours(
     planning, db_path, serve, project_of, result
 ):
-    """A message that worked, one on its way (the box waits for the lead's reply), or another
-    project's: the box stays empty. The reply's box: a waiting message has its own (F14)."""
+    """A message that worked, one on its way (the box then takes notes, F267), or another
+    project's: the box stays empty."""
     found: list[int] = [planning]
     if project_of == "elsewhere":
         _write(db_path, lambda conn: found.append(metrics.upsert_project(conn, "elsewhere")))
     asked = _finished(db_path, found[-1], "plan_message", "f6", '{"text": "Hi."}', result)
     thread = serve().get(f"/planning/f6?again={asked}").text
     reply = re.search(r'<form id="reply".*?</form>', thread, re.S)
-    box = reply and re.search(r'<textarea name="text"[^>]*>(.*?)</textarea>', reply[0], re.S)
-    assert (reply is None) == (result is None)
-    assert box is None if result is None else box and box[1] == ""
+    assert reply
+    assert ("plated" in reply[0].split(">", 1)[0]) == (result is None)
+    box = re.search(r'<textarea name="text"[^>]*>(.*?)</textarea>', reply[0], re.S)
+    assert box and box[1] == ""
 
 
 def test_a_refused_send_back_tries_again_on_its_thread(planning, db_path, serve):
@@ -813,7 +814,7 @@ def test_a_message_retried_from_its_reply_box_names_what_it_retries(page, planni
     _open(page, client, f"/planning/f6?again={asked}")
     assert page.input_value('#reply textarea[name="text"]') == "Make it calm."
     page.click('#reply button[type="submit"]')
-    page.wait_for_selector("#reply", state="hidden")
+    page.wait_for_selector("#reply.plated")  # F267: sent, the box takes notes
     assert _values(db_path, "plan_message")[1:] == [
         {"text": "Make it calm.", "comments": {}, "again": str(asked)}
     ]

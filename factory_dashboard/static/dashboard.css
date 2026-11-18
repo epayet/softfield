@@ -640,6 +640,15 @@ tr.few .gauge { opacity: .35; }
 .thread-page .merged-on-card { display: flex; flex-direction: column; gap: 6px; }
 .thread-page .merged-on-card > p { margin: 0; font-size: 14px; color: var(--ink-2); }
 .thread-page #reply { background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+/* F267 D1: while the lead owes a reply, the box is a plate: stripe, name, corner ticks */
+.thread-page #reply.plated { padding-top: 0; position: relative; }
+.thread-page #reply.plated::before, .thread-page #reply.plated::after { content: ""; position: absolute; width: 8px; height: 8px; border: 0 solid var(--tick); bottom: -1px; }
+.thread-page #reply.plated::before { left: -1px; border-width: 0 0 2px 2px; }
+.thread-page #reply.plated::after { right: -1px; border-width: 0 2px 2px 0; }
+.thread-page #reply .plate { display: flex; align-items: center; gap: 10px; margin: 0 -14px; padding: 7px 14px; border-bottom: 1px solid var(--rule); }
+.thread-page #reply .plate i { width: 22px; height: 12px; background: var(--stripe); }
+.thread-page #reply .plate b { font: 700 13px var(--display); letter-spacing: .12em; text-transform: uppercase; }
+.thread-page #reply .plate span { font: 11px var(--mono); color: var(--muted); margin-left: auto; }
 .thread-page #progress { font: 12px var(--mono); color: var(--muted); }
 .thread-page #archive { margin-top: 6px; }
 /* F210 D3: a card's steps, the same strip on its thread and its proposals' pages; the top

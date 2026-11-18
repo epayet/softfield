@@ -78,7 +78,7 @@
       <p class="on-its-way">{{ "cancelling at the runner's next pick" if msg.change.cancel else "changed · the runner picks it up at its next pick" }}</p>
       {% with asked = {"id": msg.change.id, "done": none} %}{% include "_partials/request.html" %}{% endwith %}
       {% elif msg.waiting %}
-      <p class="aside">Sent · the runner picks it up at its next pick</p>
+      <p class="aside">Sent · {% if writing_now %}the lead reads it after this reply{% else %}the runner picks it up at its next pick{% endif %}</p>
       {% endif %}
       {% for c in msg.points %}
       <p class="comment-on"><b>On {{ c.n }}:</b> {{ c.comment }}</p>
@@ -180,19 +180,32 @@
     </div>
     {% endif %}
 
-    {% if not next_reply and merged_on|length != 1 %}
-    <form id="reply" hx-post="/requests" hx-target="#reply-status" hx-swap="innerHTML"
-      hx-vals='js:{kind: "plan_message", project: {{ project | tojson }}, subject: {{ thread | tojson }}, value: JSON.stringify({text: this.elements.text.value, comments: Object.fromEntries(Array.from(document.querySelectorAll("textarea.comment"), t => [t.dataset.point, t.value]).filter(c => c[1].trim())), again: this.elements.again.value || undefined})}'
-      class="dock">
+    {# F267 D1: the box is always there (a card merged away still has none); while the lead
+       owes a reply, it is a plate for notes the lead reads after that reply #}
+    {% if merged_on|length != 1 %}
+    <form id="reply" class="dock{% if next_reply %} plated{% endif %}" hx-post="/requests" hx-target="#reply-status" hx-swap="innerHTML"
+      hx-vals='js:{kind: "plan_message", project: {{ project | tojson }}, subject: {{ thread | tojson }}, value: JSON.stringify({text: this.elements.text.value, comments: Object.fromEntries(Array.from(document.querySelectorAll("textarea.comment"), t => [t.dataset.point, t.value]).filter(c => c[1].trim())), again: this.elements.again.value || undefined})}'>
+      {% if next_reply %}
+      <div class="plate"><i></i><b>Add a note</b><span>after this reply</span></div>
+      {% endif %}
       {# F48 D2: the refused message Try again brought here; the send names it, once #}
       <input type="hidden" name="again" value="{{ again_id }}">
-      {% if points %}<span id="progress" data-points="{{ points }}">{{ points }} points · 0 comments</span>{% endif %}
+      {% if points and not next_reply %}<span id="progress" data-points="{{ points }}">{{ points }} points · 0 comments</span>{% endif %}
+      {% if next_reply %}
+      <label>Add a note · the lead reads it after this reply
+      {% else %}
       <label>{{ "Anything else? A question, a new thought" if has_thread else "What should the lead look at? It reads the card too." }}
+      {% endif %}
         <textarea name="text" rows="2">{{ again }}</textarea>
       </label>
       <div class="row-of">
+        {% if next_reply %}
+        <button type="submit" class="btn go">Add note</button>
+        <span id="reply-status" class="aside">Every note sent before the lead starts again goes in one reply.</span>
+        {% else %}
         <button type="submit" class="btn go">{{ "Send" if has_thread else "Send to the lead" }}</button>
         <span id="reply-status" class="aside">Every point is agreed unless you comment on it.</span>
+        {% endif %}
       </div>
     </form>
     <script>

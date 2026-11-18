@@ -35,6 +35,7 @@ from tests.factory_dashboard.test_planning import (
     _group,
     _groups,
     _lead_says,
+    _line,
     _open,
     _page,
     _points,
@@ -499,7 +500,7 @@ def test_a_sent_comment_goes_and_a_failed_send_keeps_it(page, planning, db_path,
     assert _not_sent(page) == [("/planning/f6", "1 comment not sent")]
     page.unroute(f"{ORIGIN}/requests")
     page.click('#reply button[type="submit"]')
-    page.wait_for_selector("#reply", state="hidden")
+    page.wait_for_selector("#reply.plated")  # F267: sent, the box takes notes
     assert page.evaluate("() => sessionStorage.getItem('softfield-comments')") == "{}"
     assert _not_sent(page) == []
     page.reload()
@@ -519,7 +520,7 @@ def test_send_with_comments_posts_one_request(page, planning, db_path, serve):
     page.wait_for_selector("#progress >> text=7 points · 2 comments")
     page.click('#reply button[type="submit"]')
     page.wait_for_selector("#conversation >> text=And the phone?")
-    page.wait_for_selector("#reply", state="hidden")
+    page.wait_for_selector("#reply.plated >> text=Add note")  # F267: the box takes notes
     # waiting message: #waiting present, the sent message at the top (F30), showing "Sent"
     assert page.locator("#waiting").is_visible()
     msg = page.locator("#conversation .message").first
@@ -555,7 +556,7 @@ def test_send_with_comments_posts_one_request(page, planning, db_path, serve):
 def test_an_open_plan_message_request_shows_sent_with_dashed_border(planning, db_path, serve):
     """An open plan_message request: the owner's message element has the text, \"On N: <comment>\"
     and \"Sent\", a dashed hazard border in its style, `#waiting` is present and `#reply` is
-    absent."""
+    the note box (F267)."""
     _write(db_path, lambda conn: _seven_points(conn, planning))
     _write(
         db_path,
@@ -590,9 +591,9 @@ def test_an_open_plan_message_request_shows_sent_with_dashed_border(planning, db
     assert "Sent" in _text(msg_html)
     # dashed hazard border (on the article via data-waiting attribute)
     assert "data-waiting" in msg_style
-    # #waiting present, #reply absent
+    # #waiting present, #reply the note box
     assert '<p id="waiting"' in html
-    assert 'id="reply"' not in html
+    _note_box(html)
 
 
 def test_a_waiting_messages_comments_show_in_point_order(planning, db_path, serve):
@@ -655,7 +656,7 @@ def test_a_done_plan_message_with_lead_reply_shows_once(planning, db_path, serve
 
 def test_an_open_send_back_shows_as_the_owner_waiting_message(planning, db_path, serve):
     """An open ``send_back``: the owner's message element has the text, "On N: <comment>",
-    "Sent", a dashed hazard border, ``#waiting`` present and ``#reply`` absent."""
+    "Sent", a dashed hazard border, ``#waiting`` present and ``#reply`` the note box."""
     _write(db_path, lambda conn: _seven_points(conn, planning))
     _write(
         db_path,
@@ -687,12 +688,12 @@ def test_an_open_send_back_shows_as_the_owner_waiting_message(planning, db_path,
     assert "Sent" in _text(msg_html)
     assert "data-waiting" in msg_style
     assert '<p id="waiting"' in html
-    assert 'id="reply"' not in html
+    _note_box(html)
 
 
 def test_a_pending_reply_hides_send_and_shows_the_wait(planning, db_path, serve):
-    """An open planner row about this thread: the wait instead of Send and the Comment…
-    boxes; one about another thread changes nothing here."""
+    """An open planner row about this thread: the wait, and the note box (F267) instead of Send
+    and the Comment… boxes; one about another thread changes nothing here."""
     _write(db_path, lambda conn: _seven_points(conn, planning))
     _write(
         db_path,
@@ -701,7 +702,7 @@ def test_a_pending_reply_hides_send_and_shows_the_wait(planning, db_path, serve)
         ),
     )
     client = serve()
-    assert '<form id="reply"' in _thread(client, "f6")
+    assert '<form id="reply" class="dock"' in _thread(client, "f6")
     _write(
         db_path,
         lambda conn: metrics.queue_job(
@@ -711,7 +712,7 @@ def test_a_pending_reply_hides_send_and_shows_the_wait(planning, db_path, serve)
     html = _thread(client, "f6")
     # F84: behind general's, older, while a ticket job runs
     assert "Next for the lead · 2nd in line" in _text(html)
-    assert '<form id="reply"' not in html
+    _note_box(html)
     assert "Send" not in _text(html)
     assert "Comment…" not in html
 
@@ -756,7 +757,7 @@ def test_the_latest_exchange_comes_first_and_the_older_messages_fold_newest_firs
 
 def test_waiting_messages_show_above_the_leads_latest_newest_first(planning, db_path, serve):
     """F30 D1: what waits for the lead comes first: the wait, then the owner's messages, newest
-    first and dashed, then the lead's latest message; no Send."""
+    first and dashed, then the lead's latest message; no Send, the note box (F267)."""
     _write(db_path, lambda conn: _seven_points(conn, planning))
     for minutes, words in ((6, "And the phone?"), (5, "And the tablet?")):
         value = json.dumps({"text": words, "comments": {}})
@@ -777,7 +778,7 @@ def test_waiting_messages_show_above_the_leads_latest_newest_first(planning, db_
     )
     tablet, phone, _ = _said(html)
     assert "data-waiting" in tablet and "data-waiting" in phone
-    assert 'id="reply"' not in html
+    _note_box(html)
 
 
 def test_a_messages_stamp_is_local(paris, planning, db_path, serve):
@@ -967,7 +968,7 @@ def test_an_archive_on_its_way_shows_at_once_and_its_button_goes(planning, db_pa
 
 
 def test_the_archive_row_still_shows_when_a_reply_waits(planning, db_path, serve):
-    """While a reply waits (``id="waiting"`` instead of the form), the Archive row
+    """While a reply waits (``id="waiting"`` and the note box, F267), the Archive row
     still shows after it."""
     _write(db_path, lambda conn: _seven_points(conn, planning))
     _write(
@@ -983,7 +984,7 @@ def test_the_archive_row_still_shows_when_a_reply_waits(planning, db_path, serve
     )
     html = _thread(serve(), "general")
     assert '<p id="waiting"' in html
-    assert 'id="reply"' not in html
+    _note_box(html)
     assert 'id="archive-button"' in html
     assert html.index('id="waiting"') < html.index('id="archive"')
 
@@ -1464,7 +1465,8 @@ def test_an_edit_on_its_way_shows_the_new_message_and_no_buttons(planning, db_pa
     assert f'hx-get="/requests/{change}"' in changed
     assert "<button" not in changed and "<form" not in changed
     assert f'id="edit-{other}"' in untouched and "on-its-way" not in untouched
-    assert '<p id="waiting"' in html and 'id="reply"' not in html
+    assert '<p id="waiting"' in html
+    _note_box(html)
 
 
 def test_an_edit_the_runner_will_refuse_keeps_the_messages_words(planning, db_path, serve):
@@ -1488,10 +1490,11 @@ def test_a_cancel_on_its_way_strikes_the_message_and_the_send_form_comes_back(
     assert _text(cancelled).endswith(f"Make it calm. {CANCELLING} {ASKED}")
     assert f'hx-get="/requests/{cancel}"' in cancelled
     assert "<button" not in cancelled and "<form" not in cancelled
-    assert 'id="reply"' in html and '<p id="waiting"' not in html
+    assert '<form id="reply" class="dock"' in html and '<p id="waiting"' not in html
     _finished(db_path, planning, "plan_message", "f6", MESSAGE, None)
     html = _thread(client, "f6")
-    assert '<p id="waiting"' in html and 'id="reply"' not in html
+    assert '<p id="waiting"' in html
+    _note_box(html)
 
 
 def _dashed_links(html: str) -> list[str]:
@@ -1541,7 +1544,7 @@ def test_edit_then_save_posts_a_change_and_the_message_shows_it_at_once(
     assert _lines(message)[1:] == ["Make it bright.", CHANGED, ASKED, 'On 2: Say "how".']
     assert page.locator(f"#editor-{said}, #save-{said}, #cancel-{said}").count() == 0
     assert page.locator("#conversation").count() == 1
-    assert page.locator("#waiting").is_visible() and page.locator("#reply").count() == 0
+    assert page.locator("#waiting").is_visible() and page.locator("#reply.plated").is_visible()
     words = {"text": "Make it bright.", "comments": {"2": 'Say "how".'}}
     assert _asked_changes(db_path) == [(str(said), words)]
     assert _values(db_path, "plan_message") == [json.loads(COMMENTED)]  # never edited
@@ -1552,7 +1555,7 @@ def test_cancel_it_strikes_the_message_at_once_and_the_send_form_comes_back(
 ):
     said = _finished(db_path, planning, "plan_message", "f6", MESSAGE, None)
     _open(page, serve(), "/planning/f6")
-    assert page.locator("#reply").count() == 0
+    assert page.locator("#reply.plated").is_visible()
     page.click(f"#cancel-{said}")
     page.wait_for_selector("#conversation .on-its-way")
     message = page.locator("#conversation .message").first
@@ -1562,6 +1565,7 @@ def test_cancel_it_strikes_the_message_at_once_and_the_send_form_comes_back(
     assert "line-through" in struck.evaluate("e => getComputedStyle(e).textDecorationLine")
     assert page.locator(f"#edit-{said}, #cancel-{said}").count() == 0
     assert page.locator("#reply").is_visible() and page.locator("#waiting").count() == 0
+    assert page.locator("#reply.plated").count() == 0  # F267: nothing waits, Send is back
     assert _asked_changes(db_path) == [(str(said), {"cancel": True})]
 
 
@@ -1951,3 +1955,94 @@ def test_a_card_title_shows_its_status_and_not_its_area(planning, db_path, serve
     stamp_text = stamp_match[1]
     assert "factory" not in stamp_text.lower()
     assert "product" not in stamp_text.lower()
+
+
+# --- F267: the note box while the lead writes (D1) -------------------------------------------
+
+_NOTE_LABEL = "Add a note · the lead reads it after this reply"
+_NOTE_ASIDE = "Every note sent before the lead starts again goes in one reply."
+
+
+def _form(html: str) -> str:
+    """The thread's message box, from its opening tag to ``</form>``."""
+    return '<form id="reply"' + html.split('<form id="reply"', 1)[1].split("</form>", 1)[0]
+
+
+def _words(form: str) -> str:
+    """A form's words, after its opening tag (whose ``hx-vals`` script holds a ``>``)."""
+    return _text(form.split("}'>", 1)[1])
+
+
+def _note_box(html: str) -> str:
+    """The box while the lead owes a reply (F267 D1): the plate, its label, Add note and the
+    aside, and no Send nor point count; returns the form."""
+    form = _form(html)
+    assert form.startswith('<form id="reply" class="dock plated"')
+    plate = re.search(r'<div class="plate">(.*?)</div>', form, re.S)
+    assert plate and plate[1] == "<i></i><b>Add a note</b><span>after this reply</span>"
+    assert _words(form) == f"Add a note after this reply {_NOTE_LABEL} Add note {_NOTE_ASIDE}"
+    return form
+
+
+def _sent_line(html: str, words: str) -> str:
+    """The "Sent · …" line of the waiting message saying ``words``."""
+    [said] = [m for m in _said(html) if words in m and "data-waiting" in m]
+    [line] = re.findall(r'<p class="aside">(Sent · [^<]*)</p>', said)
+    return str(line)
+
+
+def test_while_the_lead_writes_the_threads_reply_the_box_takes_notes(planning, db_path, serve):
+    """F84's reply being written: its page has the note box under its plate, and its waiting
+    message says the lead reads it after this reply, with Edit and Cancel it."""
+    client = _line(serve, db_path, planning)
+    html = _thread(client, "f84")
+    assert '<p id="waiting" class="writing"' in html
+    _note_box(html)
+    assert _sent_line(html, "When?") == "Sent · the lead reads it after this reply"
+    [said] = [m for m in _said(html) if "When?" in m]
+    assert "Edit" in _text(said) and "Cancel it" in _text(said)
+    assert "Comment…" not in html
+
+
+def test_a_thread_in_line_has_the_note_box_and_its_message_waits_for_the_runner(
+    planning, db_path, serve
+):
+    """F85 waits behind F84's reply: a reply is owed, so the note box shows, but the lead isn't
+    writing F85's, so its message still waits for the runner's next pick."""
+    client = _line(serve, db_path, planning)
+    html = _thread(client, "f85")
+    assert '<p id="waiting"' in html and '<p id="waiting" class="writing"' not in html
+    _note_box(html)
+    assert _sent_line(html, "When?") == "Sent · the runner picks it up at its next pick"
+
+
+def test_with_nothing_waiting_the_box_reads_as_today(planning, db_path, serve):
+    """No reply owed on f6: Send, today's words, the points' count and their Comment… boxes."""
+    _write(db_path, lambda conn: _seven_points(conn, planning))
+    html = _thread(serve(), "f6")
+    form = _form(html)
+    assert form.startswith('<form id="reply" class="dock"') and "plated" not in form
+    assert 'class="plate"' not in form
+    assert _words(form) == (
+        "7 points · 0 comments Anything else? A question, a new thought Send "
+        "Every point is agreed unless you comment on it."
+    )
+    assert html.count("Comment…") == 7
+
+
+def test_on_a_phone_the_note_box_is_drawn_as_a_plate(page, planning, db_path, serve):
+    """At 390 px, while F84's reply is written: the plate's stripe is drawn, the box has the
+    two corner ticks, and Add note is a 44 px tap."""
+    page.set_viewport_size(PHONE)
+    _open(page, _line(serve, db_path, planning), "/planning/f84")
+    stripe = page.locator("#reply .plate i")
+    assert stripe.evaluate("e => getComputedStyle(e).backgroundImage").startswith(
+        "repeating-linear-gradient"
+    )
+    ticks = page.locator("#reply").evaluate(
+        "e => ['::before', '::after'].map(p => getComputedStyle(e, p).borderBottomWidth)"
+    )
+    assert ticks == ["2px", "2px"]
+    button = page.locator('#reply button[type="submit"]')
+    assert button.inner_text().strip().lower() == "add note"
+    assert button.evaluate("e => e.offsetHeight") >= 44
