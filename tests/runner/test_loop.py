@@ -4301,17 +4301,12 @@ def test_over_the_line_a_planner_job_a_review_and_a_checkpoint_may_start(repo, f
     _week_read(repo, 0.65, LINE_33)
     s = loop.open_session(_config(repo))
     assert loop.claude_hold(s, THURSDAY) is None
-    assert loop.claude_hold(s, THURSDAY, owners=True) is None
     loop.close_session(s)
 
 
-def test_a_five_hour_park_over_its_reset_doesnt_start_a_ticket_over_the_line(
-    repo, fake_clock, capsys
-):
-    """ADR 44 items 1 and 7: that park began no work, so the line holds it, and "it goes on after
-    its reset" leaves the desk."""
+def test_a_five_hour_park_is_dropped_at_the_start_of_a_run(repo, fake_clock):
+    """ADR 50 item 3: an older run's park at the 5-hour mark goes, with its desk item."""
     _week_read(repo, 0.65, LINE_33)
-    _on_card(repo, "f1-01-lead", 1, agent="lead")
     path = _config(repo).runs_dir / "state.json"
     state = load_state(path)
     state.parked["f1-01-lead"] = {
@@ -4334,8 +4329,7 @@ def test_a_five_hour_park_over_its_reset_doesnt_start_a_ticket_over_the_line(
         created=THURSDAY.isoformat(),
     )
     conn.close()
-    # the park ends and the line holds it, so it waits its turn as a gap filler (ADR 50 item 2)
-    assert _both_choose(repo, capsys) == ("f1-01-lead", "f1-01-lead")
+    _run(repo, once=True)
     assert _state(repo).parked == {}
     assert all(i["resolved"] for i in _rows(repo, "owner_items"))
 
@@ -5431,12 +5425,11 @@ def _with_sonnet(repo: Path, **roles: tuple[str, ...]) -> SessionReport:
     return report
 
 
-def test_at_80_percent_developer_work_goes_on_and_the_lead_ticket_parks_till_the_reset(
+def test_at_80_percent_developer_work_goes_first_and_the_lead_ticket_follows_at_once(
     repo, fake_model, fake_lead, fake_clock, at_the_keyboard, monkeypatch, capsys
 ):
-    """F1, 2 Oct 05:26: Sonnet took three developer tickets at 22% of the 5-hour window, the
-    window reached 100% and lead ticket f1-53 parked (ADR 16 items 1–3). With the switch off,
-    the lead ticket parks and goes on by itself after the reset."""
+    """ADR 50 items 3 and 4: with the switch off, past the 5-hour mark the developer ticket
+    goes first and the lead ticket fills the gap, with no park and no desk item."""
     _claude_at(repo, 0.80)
     _lead_task(repo, "m1-01-lead")
     _add_task(repo, "m1-02-thing")
@@ -5457,17 +5450,12 @@ def test_at_80_percent_developer_work_goes_on_and_the_lead_ticket_parks_till_the
         "local-m, the floor: claude-sonnet: lead work is ready, it goes first",
     )
     assert "[y/N]" not in capsys.readouterr().out
-    assert [j.kind for j in jobs] == ["lead-ticket"] and ran_at[0] > FIVE_RESETS
+    assert [j.kind for j in jobs] == ["lead-ticket"] and ran_at[0] == THURSDAY
     assert [(t.id, t.result) for t in report.tasks] == [
         ("m1-02-thing", "done"),
         ("m1-01-lead", "done"),
     ]
-    # Its Needs-you item, open while it waited, names the switch, and is cleared once it ran.
-    [item] = _rows(repo, "owner_items")
-    assert (item["kind"], item["subject"]) == ("five-hour", "m1-01-lead")
-    assert "80%" in str(item["text"]) and item["resolved"] is not None
-    assert "Let the factory use your 25% of the 5-hour window" in str(item["text"])
-    assert item["command"] == "softfield reserve five-hour on"
+    assert _rows(repo, "owner_items") == []
     assert _state(repo).parked == {}
 
 
@@ -5504,7 +5492,7 @@ def test_with_the_5_hour_switch_on_lead_tickets_go_past_75_percent(
 def test_a_reserve_request_lets_a_lead_ticket_past_75_percent_or_parks_it(
     repo, fake_model, fake_lead, fake_clock, at_the_keyboard, monkeypatch, value, goes
 ):
-    """f8-04's Done when: `reserve five_hour on` lets it run at once; `off` parks it."""
+    """f8-04, ADR 50 item 3: on or off, the lead ticket runs at once at the 5-hour mark."""
     _claude_at(repo, 0.80)
     _switch_on(repo, "five_hour")
     _lead_task(repo, "m1-01-lead")
@@ -5520,65 +5508,29 @@ def test_a_reserve_request_lets_a_lead_ticket_past_75_percent_or_parks_it(
     _ask_from_the_dashboard(repo, "reserve", "five_hour", value)
     report = _run(repo)
     assert [t.result for t in report.tasks] == ["done"]
-    assert (ran_at[0] == THURSDAY) is goes and (ran_at[0] > FIVE_RESETS) is not goes
+    assert ran_at[0] == THURSDAY
     [request] = _rows(repo, "owner_requests")
     assert request["done"] is not None
 
 
-def test_turning_the_5_hour_switch_on_during_the_wait_lets_the_parked_work_go(
-    repo, fake_model, fake_lead, fake_clock, at_the_keyboard, monkeypatch
-):
-    """f5 D2: the owner turns the switch on from the phone while the run sleeps for the
-    window; the wait takes it within a poll, and the escalation that was parked goes before
-    the lead ticket (F2, 2 Oct 12:01; f4-01)."""
+def test_at_80_percent_claude_holds_no_support_job_but_at_100_or_resting_it_does(repo, fake_clock):
+    """ADR 50 items 3 and 4: a review, a direction, an escalation and a checkpoint all start
+    through `claude_hold`; the 5-hour mark doesn't hold them, the real limit does."""
     _claude_at(repo, 0.80)
-    write_task(repo / ".softfield" / "tasks" / "escalated", "m1-09-stuck")
-    logs = repo / ".softfield" / "var" / "runs" / "earlier" / "m1-09-stuck"
-    logs.mkdir(parents=True)
-    _lead_task(repo, "m1-01-lead")  # commits the escalated ticket too
-    state_path = repo / ".softfield" / "var" / "runs" / "state.json"
-    state = load_state(state_path)
-    state.parked["escalation:m1-09-stuck"] = {
-        "kind": "escalation",
-        "branch": "",
-        "session_id": "",
-        "resets_at": FIVE_RESETS.isoformat(),
-        loop.FIVE_HOUR_HELD: True,
-        "milestone": "1",
-        "logs": ".softfield/var/runs/earlier/m1-09-stuck",
-        "reason": "gates failed",
-    }
-    save_state(state, state_path)
-    script, jobs = fake_lead
-    script.extend([lambda job, repo_: None, _lead_implements])
-    _passes(monkeypatch)
-    slept: list[float] = []
-    clock_sleep = time.sleep  # fake_clock's
-
-    def phone(seconds: float) -> None:
-        if not slept:  # the run sleeps for the window: the owner turns the switch on
-            _ask_from_the_dashboard(repo, "reserve", "five_hour", "on")
-        slept.append(seconds)
-        clock_sleep(seconds)
-
-    monkeypatch.setattr("time.sleep", phone)
-    report = loop.run_session(_config(repo), once=False, dry_run=False, escalate=True)
-    assert report is not None
-    assert [j.kind for j in jobs] == ["escalation", "lead-ticket"]
-    assert slept == [loop.SWITCH_POLL_S]  # taken at the first poll, long before the reset
-    assert fake_clock[0] < FIVE_RESETS
-    assert [(t.id, t.result, t.attempts) for t in report.tasks] == [("m1-01-lead", "done", 1)]
-    after = _state(repo)
-    assert after.parked == {} and after.escalations == {"m1-09-stuck": 1}
-    assert all(item["resolved"] is not None for item in _rows(repo, "owner_items"))
-    [request] = _rows(repo, "owner_requests")
-    assert request["done"] is not None
+    s = loop.open_session(_config(repo))
+    assert loop.claude_hold(s, THURSDAY) is None
+    loop.close_session(s)
+    _claude_at(repo, 1.0, age=timedelta(minutes=1))
+    s = loop.open_session(_config(repo))
+    hold = loop.claude_hold(s, THURSDAY)
+    assert hold is not None and not hold.five_hour and hold.until >= FIVE_RESETS
+    loop.close_session(s)
 
 
-def test_the_week_switch_doesnt_lift_the_5_hour_reserve(
+def test_the_week_switch_leaves_the_5_hour_mark_no_park_either(
     repo, fake_model, fake_lead, fake_clock, at_the_keyboard, monkeypatch
 ):
-    """ADR 16 item 3 and the owner (2026-10-04): one switch per window."""
+    """ADR 50 item 3: at the 5-hour mark a lead ticket goes at once, switch or not."""
     _claude_at(repo, 0.80, week=0.79)
     _switch_on(repo, "week")
     _lead_task(repo, "m1-01-lead")
@@ -5592,10 +5544,8 @@ def test_the_week_switch_doesnt_lift_the_5_hour_reserve(
     script.append(lead)
     _passes(monkeypatch)
     report = _run(repo)
-    assert [t.result for t in report.tasks] == ["done"] and ran_at[0] > FIVE_RESETS
-    assert {(i["kind"], i["subject"]) for i in _rows(repo, "owner_items")} == {
-        ("five-hour", "m1-01-lead")
-    }
+    assert [t.result for t in report.tasks] == ["done"] and ran_at[0] == THURSDAY
+    assert _rows(repo, "owner_items") == [] and _state(repo).parked == {}
 
 
 # --- A card may use Claude's reserve (ADR 34, F172) -------------------------------------------
@@ -5730,7 +5680,8 @@ def test_an_escalated_ticket_of_a_marked_card_keeps_the_lane(repo):
 def test_past_the_owners_25_percent_a_marked_cards_lead_ticket_runs(
     repo, fake_model, fake_lead, fake_clock, at_the_keyboard, monkeypatch
 ):
-    """ADR 34 item 5: both reserves; the unmarked one waits for the reset as today."""
+    """ADR 34 item 5, ADR 50 item 3: the marked one first; the unmarked one follows at once,
+    with no park at the 5-hour mark."""
     _claude_at(repo, 0.80)
     _marked(repo, "m2")
     _card_ticket(repo, "m1-01-lead")
@@ -5743,10 +5694,8 @@ def test_past_the_owners_25_percent_a_marked_cards_lead_ticket_runs(
     assert [t.result for t in report.tasks] == ["done", "done"]
     [(first, first_at), (second, second_at)] = ran
     assert (first, first_at) == ("m2-01-lead", THURSDAY)
-    assert second == "m1-01-lead" and second_at > FIVE_RESETS
-    assert {(i["kind"], i["subject"]) for i in _rows(repo, "owner_items")} == {
-        ("five-hour", "m1-01-lead")
-    }
+    assert second == "m1-01-lead" and second_at == THURSDAY
+    assert _rows(repo, "owner_items") == []
 
 
 def test_a_marked_cards_lead_ticket_waits_while_claude_is_limited(
@@ -6143,11 +6092,10 @@ def test_the_owners_messages_go_before_a_lead_ticket_and_continue_one_session(
     assert "F7" in str(item["text"])
 
 
-def test_at_80_percent_a_planner_job_still_runs_and_a_lead_ticket_parks(
+def test_at_80_percent_a_planner_job_and_a_lead_ticket_both_run_at_once(
     repo, fake_model, fake_clock, at_the_keyboard, monkeypatch
 ):
-    """ADR 20 item 2: planning may use the owner's 25% of the 5-hour window; the factory
-    still stops at 75%."""
+    """ADR 20 item 2, ADR 50 item 3: the 5-hour mark holds neither."""
     _claude_at(repo, 0.80)
     _lead_task(repo, "m1-01-lead")
     _passes(monkeypatch)
@@ -6158,7 +6106,7 @@ def test_at_80_percent_a_planner_job_still_runs_and_a_lead_ticket_parks(
     [(planner_kind, _, planned_at), (lead_kind, _, led_at)] = events
     assert (planner_kind, lead_kind) == ("planner", "lead-ticket")
     assert planned_at == THURSDAY  # at once, at 80%
-    assert led_at > FIVE_RESETS  # the lead ticket parked until the reset
+    assert led_at == THURSDAY  # no park at the mark
     assert [(t.id, t.result) for t in report.tasks] == [("m1-01-lead", "done")]
     [thread] = _rows(repo, "planner_threads")
     assert thread["card"] == "general"
@@ -6774,20 +6722,14 @@ def test_a_cards_out_of_the_lane_review_keeps_the_old_rule(repo):
     loop.close_session(s)
 
 
-def test_a_lane_cards_review_parks_with_both_reserves_and_another_cards_with_one(repo, monkeypatch):
-    """F242 D3: `claude_hold` is asked with ``owners`` for the lane card only."""
-    asked: list[bool] = []
-
-    def hold(s, at, *, owners=False):
-        asked.append(owners)
-
-    monkeypatch.setattr(loop, "claude_hold", hold)
+def test_at_the_5_hour_mark_no_cards_review_parks(repo, fake_clock):
+    """ADR 50 item 3 (it replaces F242 D3's two reserves for the lane card only)."""
+    _claude_at(repo, 0.80)
     _f9_review_due(repo, fast_lane=True)
     s = loop.open_session(_config(repo), None)
     assert loop.park_review(s, "f9") is False
     assert loop.park_review(s, "f10") is False
     loop.close_session(s)
-    assert asked == [True, False]
 
 
 def test_dry_run_lists_a_lane_cards_review_first_in_the_lane(repo, capsys):
@@ -6894,11 +6836,11 @@ def test_an_old_state_files_parked_support_jobs_become_rows_once(repo, fake_cloc
     assert after.queued["checkpoint:m1"]["out"] == ".softfield/var/runs/x/checkpoint-1.md"
 
 
-def test_with_claude_at_80_percent_copilot_does_the_checkpoint_and_its_findings_are_acted_on(
+def test_with_claude_at_its_limit_copilot_does_the_checkpoint_and_its_findings_are_acted_on(
     repo, fake_model, fake_lead, fake_clock, monkeypatch
 ):
     """ADR 16 item 9: Copilot does the checkpoint for real; its findings become fix tickets."""
-    _claude_at(repo, 0.80)
+    _claude_at(repo, 1.0)
     _two_merges(repo, fake_model)
     fix = {
         **SHADOW_FINDING,
@@ -6951,7 +6893,7 @@ def test_with_claude_at_80_percent_copilot_does_the_checkpoint_and_its_findings_
     checkpoint, claudes = [j for j in _rows(repo, "jobs") if j["role"] == "checkpoint"]
     assert (checkpoint["agent"], checkpoint["outcome"]) == ("copilot-auto", "passed")
     assert str(checkpoint["routing_reason"]).startswith(
-        "copilot-auto stands in for Claude (claude: 5-hour window 80% used, over its cap of 75%)"
+        "copilot-auto stands in for Claude (claude: 5-hour window 100% used, over its cap of 100%"
     )
     assert (claudes["agent"], claudes["outcome"]) == ("claude-sonnet", "passed")
     found = {f["key"]: f for f in _rows(repo, "findings")}
@@ -7005,7 +6947,7 @@ def test_two_stand_in_checkpoints_then_claude_free_make_one_claude_recheck_of_al
 ):
     """f8-08 (the owner, 2026-10-06): while Claude is out, a stand-in reviews each batch of
     merges and one queued checkpoint gathers them; once Claude is free, it checks them all."""
-    _claude_at(repo, 0.80)
+    _claude_at(repo, 1.0)
     specs = _fake_copilot(monkeypatch, JobResult(ok=True, text='{"findings": []}', duration_s=1))
     roles = {**ROLES, "checkpoint-stand-in": (COPILOT.id,)}
     agents = {**_config(repo).agents, COPILOT.id: COPILOT}
@@ -7065,7 +7007,7 @@ def test_each_batch_of_merges_gets_its_stand_in_while_the_checkpoint_waits_for_c
     """F151 (2026-10-17): after a stand-in parked the checkpoint for Claude's re-check, five
     more merges waited until the owner restarted the runner. The next batch's merge starts the
     parked row again, so a stand-in reviews it at the next pick."""
-    _claude_at(repo, 0.80)
+    _claude_at(repo, 1.0)
     _four_merges(repo, fake_model)
     specs = _fake_copilot(monkeypatch, JobResult(ok=True, text='{"findings": []}', duration_s=1))
     roles = {**ROLES, "checkpoint-stand-in": (COPILOT.id,)}
@@ -7095,7 +7037,7 @@ def test_a_stand_in_that_fails_on_the_next_batch_parks_the_checkpoint_again_for_
 ):
     """F151: the parked row starts again for the new batch, but its stand-in fails: the row
     parks again until Claude's reset, with both batches kept for Claude."""
-    _claude_at(repo, 0.80)
+    _claude_at(repo, 1.0)
     _four_merges(repo, fake_model)
     _fake_copilot(monkeypatch, JobResult(ok=True, text='{"findings": []}', duration_s=1))
     roles = {**ROLES, "checkpoint-stand-in": (COPILOT.id,)}
@@ -7119,7 +7061,7 @@ def test_without_a_stand_in_the_next_batch_leaves_the_checkpoint_parked_for_clau
     repo, fake_model, fake_lead, fake_clock
 ):
     """F151: with no stand-in to run, the row parks again and the developer tickets go on."""
-    _claude_at(repo, 0.80)
+    _claude_at(repo, 1.0)
     _four_merges(repo, fake_model)
     s = loop.open_session(_config(repo))
     for _ in range(4):
@@ -7146,13 +7088,14 @@ def _review_row(repo: Path) -> dict[str, object]:
     return row
 
 
-def test_a_review_at_80_percent_parks_and_a_developer_ticket_runs_meanwhile(
+def test_a_review_at_100_percent_parks_and_a_developer_ticket_runs_meanwhile(
     repo, fake_clock, at_the_keyboard, monkeypatch, capsys
 ):
     """F53 D1: on 2026-10-08 the runner slept 3 h 30 in `wait_for_room` with about 40
-    developer tickets ready. The review parks its row, as a checkpoint does (ADR 16 item 4)."""
+    developer tickets ready. The review parks its row, as a checkpoint does (ADR 16 item 4),
+    at the window's real limit (ADR 50 item 3)."""
     _a_due_review_and_two_tickets(repo)
-    _claude_at(repo, 0.80)
+    _claude_at(repo, 1.0)
     ran: list[str] = []
     monkeypatch.setattr(loop, "run_task", _merge_any(repo, ran))
     monkeypatch.setattr(loop, "wait_for_room", lambda *a: pytest.fail("the runner slept"))
@@ -7165,7 +7108,7 @@ def test_a_review_at_80_percent_parks_and_a_developer_ticket_runs_meanwhile(
     out = capsys.readouterr().out
     assert "[y/N]" not in out
     assert "⏸ [runner] the review of f9 waits for Claude · resumes 14:00 (in 2 h" in out
-    assert "Parked the review of f9: claude: 5-hour window 80% used" in s.report.notes[0]
+    assert "Parked the review of f9: claude: 5-hour window 100% used" in s.report.notes[0]
     assert _state(repo).review_stop == {}  # parked is no stop: the milestone stays due
     # After the reset the review goes before the next ticket
     fake_clock[0] = FIVE_RESETS + timedelta(minutes=1)
@@ -7179,7 +7122,7 @@ def test_with_no_ticket_left_the_queue_sleeps_to_the_parked_reviews_reset(
 ):
     """The run doesn't end while a review waits for Claude: it is next after the reset."""
     _a_due_review_and_two_tickets(repo)
-    _claude_at(repo, 0.80)
+    _claude_at(repo, 1.0)
     ran: list[tuple[str, bool]] = []
     merge = _merge_any(repo, [])
 
@@ -7201,42 +7144,11 @@ def test_the_5_hour_switch_lets_the_review_go_at_once(repo, fake_clock, at_the_k
     assert fake_clock[0] == THURSDAY
 
 
-def test_the_5_hour_switch_turned_on_during_a_named_milestones_wait_ends_it(
-    repo, fake_clock, at_the_keyboard, monkeypatch
-):
-    """`runner milestone` still waits in `wait_for_room` (F53 D1 parks `runner run`'s only)."""
+def test_at_80_percent_a_named_milestones_review_doesnt_wait(repo, fake_clock, at_the_keyboard):
+    """ADR 50 item 3: `runner milestone`'s `wait_for_room` returns at once, switch off."""
     _claude_at(repo, 0.80)
-    s = loop.open_session(_config(repo))
-    slept: list[float] = []
-    clock_sleep = time.sleep  # fake_clock's
-
-    def phone(seconds: float) -> None:
-        if not slept:  # the review waits: the owner turns the switch on
-            _ask_from_the_dashboard(repo, "reserve", "five_hour", "on")
-        slept.append(seconds)
-        clock_sleep(seconds)
-
-    monkeypatch.setattr("time.sleep", phone)
-    loop.wait_for_room(s, "the review")
-    assert slept == [loop.SWITCH_POLL_S] and fake_clock[0] < FIVE_RESETS
-    assert loop.switch_on(_state(repo), "five_hour", loop.now())
-
-
-def test_the_5_hour_switch_turned_on_while_the_review_is_parked_makes_it_the_next_pick(
-    repo, fake_clock, at_the_keyboard, monkeypatch
-):
-    _a_due_review_and_two_tickets(repo)
-    _claude_at(repo, 0.80)
-    ran: list[str] = []
-    monkeypatch.setattr(loop, "run_task", _merge_any(repo, ran))
-    s = loop.open_session(_config(repo))
-    loop.work_queue(s, reviews=True, once=True)
-    assert ran == ["f10-01-next"] and s.report.review is None
-    _ask_from_the_dashboard(repo, "reserve", "five_hour", "on")  # the owner, from their phone
-    assert loop.work_queue(s, reviews=True, once=True) is False
-    assert ran == ["f10-01-next"] and s.report.review == "f9"
+    loop.wait_for_room(loop.open_session(_config(repo)), "the review")
     assert fake_clock[0] == THURSDAY
-    assert loop.switch_on(_state(repo), "five_hour", loop.now())
 
 
 # --- ADR 38: no checkpoint on merges the milestone's review reads ---------------------------
@@ -7404,13 +7316,12 @@ def test_a_queued_checkpoint_whose_merges_the_review_reads_runs_no_job(repo, fak
     loop.close_session(s)
 
 
-def test_a_review_parked_for_the_owners_share_keeps_no_lead_work_from_claude(repo, fake_clock):
-    """A review parked for the owner's 25% is no limit: the switch may yet free it. One parked
-    for a real limit is, as a parked checkpoint is."""
-    _claude_at(repo, 0.80)
+def test_a_review_parked_for_a_real_limit_keeps_lead_work_from_claude(repo, fake_clock):
+    """A review parked at the window's real limit is a limit, as a parked checkpoint is."""
+    _claude_at(repo, 1.0)
     s = loop.open_session(_config(repo))
     assert loop.park_review(s, "f9") is True
-    assert loop._limits_ahead(s, loop.now(), five_hour=False) == []
+    assert loop._limits_ahead(s, loop.now(), five_hour=False) == [FIVE_RESETS]
     assert loop._limits_ahead(s, loop.now()) == [FIVE_RESETS]
     loop.park_row(s, "review", "f9", FIVE_RESETS)
     assert loop._limits_ahead(s, loop.now(), five_hour=False) == [FIVE_RESETS]
@@ -7575,7 +7486,7 @@ def test_a_failed_probe_falls_back_to_the_stored_reading(
     assert f"no fresh reading of Claude's windows ({why})" in out
     assert "the stored one from 11:30" in out
     assert [t.result for t in report.tasks] == ["done"]
-    assert [item["kind"] for item in _rows(repo, "owner_items")] == ["five-hour"]
+    assert _rows(repo, "owner_items") == []
     [probe_job] = [j for j in _rows(repo, "jobs") if j["role"] == "probe"]
     assert probe_job["outcome"] == "failed"
 

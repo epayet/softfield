@@ -278,7 +278,12 @@ def open_session(cfg: Config, command: str | None = "run") -> Session:
     recovered = _recover(git, state, state_path) if cut_off is not None else ""
     # A ticket no longer parks at the week's reserve (ADR 44 item 6): an older run's entry goes,
     # and `_start_run` its desk item.
-    asked = [k for k, entry in state.parked.items() if entry.get("kind") == RESERVE_KIND]
+    # Nor at the 5-hour mark (ADR 50 items 3 and 4): the same.
+    asked = [
+        k
+        for k, entry in state.parked.items()
+        if entry.get("kind") in (RESERVE_KIND, FIVE_HOUR_KIND)
+    ]
     for key in asked:
         del state.parked[key]
     # A ticket parked for a limit is tried again at once: the owner may have reset the
@@ -563,10 +568,12 @@ def _start_run(s: Session, command: str, cut_off_job: int | None = None) -> None
 
 
 def _resolve_reserve_parks(conn: sqlite3.Connection, project_id: int, at: str) -> None:
-    """The desk items of tickets an older run parked at the week's reserve (ADR 44 item 6); a
-    lapsed switch's own item stays."""
+    """The desk items of tickets an older run parked at the week's reserve (ADR 44 item 6) or at
+    the 5-hour mark (ADR 50 item 3); a lapsed switch's own item stays."""
     for row in metrics.open_owner_items(conn, project_id):
-        if row["kind"] == RESERVE_KIND and row["subject"] not in SWITCHES:
+        if row["kind"] == FIVE_HOUR_KIND or (
+            row["kind"] == RESERVE_KIND and row["subject"] not in SWITCHES
+        ):
             metrics.resolve_owner_item(conn, row["id"], at)
 
 
@@ -2404,9 +2411,6 @@ def run_task(s: Session, task: Task, directing: Mapping[str, Any] | None = None)
     if router.lead_only(task.agent, task.files, protected):
         if task.agent != "lead":
             s.report.notes.append(f"{task.id} touches protected paths: the lead does it.")
-        if at_five_hour(s, task):
-            rec.result = "parked"
-            return rec
         run_lead_task(s, task, rec)
         return rec
 
@@ -4584,32 +4588,29 @@ class Hold:
     login: bool = False  # only an expired login holds it: `check_login` frees it
 
 
-def claude_hold(s: Session, at: datetime, *, owners: bool = False) -> Hold | None:
+def claude_hold(s: Session, at: datetime) -> Hold | None:
     """Whether a support job (a direction, a checkpoint, an escalation, a review) must wait
-    for Claude (ADR 16 item 4): a job parked for a limit, a refusal still resting a window, or
-    the owner's share of the 5-hour window with its switch off. The week's reserve is theirs
-    to use (ADR 15 item 4). The ``owners`` own work (a planner job) may use both reserves
-    (ADR 20 item 2)."""
+    for Claude (ADR 16 item 4): a job parked for a limit, or a window at its real limit or
+    resting after a refusal. Neither the week's reserve nor the 5-hour mark holds it (ADR 50
+    items 3 and 4)."""
     if ahead := _limits_ahead(s, at, five_hour=False):
         login = not _parked_ahead(s, at, five_hour=False, login=False)
         reason = LOGIN_REASON if login else "Claude is limited"
         return Hold(max(min(ahead), at + timedelta(minutes=1)), reason, False, login)
     windows = rested_claude_windows(s, at)
-    five_on = owners or switch_on(s.state, FIVE_HOUR, at)
-    kept = {"seven_day", *(("five_hour",) if five_on else ())}
-    fit = allowance.answer(CLAUDE, windows, LEAD_COST, at, use_reserve=kept)
+    kept = {"seven_day", "five_hour"}
+    fit = allowance.answer(CLAUDE, windows, FULL, at, use_reserve=kept)
     if fit.ok:
         return None
     ends = [
         w.cooldown_until or w.resets_at
         for w in windows
-        if not allowance.answer(CLAUDE, [w], LEAD_COST, at, use_reserve=kept).ok
+        if not allowance.answer(CLAUDE, [w], FULL, at, use_reserve=kept).ok
     ]
     until = min(
         (e for e in ends if e is not None), default=at + timedelta(seconds=s.cfg.backoff_min)
     )
-    five_hour = not five_on and allowance.reserve_only(CLAUDE, windows, LEAD_COST, at, "five_hour")
-    return Hold(max(until, at + timedelta(minutes=1)), fit.reason, five_hour)
+    return Hold(max(until, at + timedelta(minutes=1)), fit.reason, False)
 
 
 def _park_support(s: Session, role: str, name: str, hold: Hold, /, **resume: str) -> None:
@@ -4628,8 +4629,7 @@ def park_review(s: Session, milestone: str) -> bool:
     now, its row parks until the hold ends, as a checkpoint's does, and the queue goes on with
     the developers' tickets. Returns whether it parked. A parked review is no stop: its rounds
     stay in ``State.review_counts``, for it to go on from the round it was at."""
-    in_lane = milestone in lane_reviews(s.repo, s.state)  # may use both reserves (F242 D3)
-    if (hold := claude_hold(s, now(), owners=in_lane)) is None:
+    if (hold := claude_hold(s, now())) is None:
         return False
     _park_support(s, REVIEW, milestone, hold)
     return True
@@ -4898,7 +4898,7 @@ def run_planner(s: Session, row: dispatch.Queued) -> None:
     except planner.PlannerError as exc:
         s.report.notes.append(f"The planner's {row.subject} can't run: {exc}.")
         return
-    if (hold := claude_hold(s, now(), owners=True)) is not None:
+    if (hold := claude_hold(s, now())) is not None:
         _park_support(s, PLANNER, row.subject, hold)
         return
     at = now().isoformat()
@@ -5096,18 +5096,6 @@ def _week_switched_on(s: Session) -> None:
         _record(s, metrics.set_run_reserve, s.run_id)
 
 
-def _at_five_hour(s: Session, at: datetime) -> tuple[str, datetime] | None:
-    """``("80%", reset)`` when Claude is refused only by the owner's share of its 5-hour
-    window (ADR 16 item 1); else None."""
-    windows = rested_claude_windows(s, at)
-    if not allowance.reserve_only(CLAUDE, windows, LEAD_COST, at, "five_hour"):
-        return None
-    five = next((w for w in windows if w.name == "five_hour"), None)
-    if five is None or five.resets_at is None:
-        return None
-    return f"{five.used:.0%}", five.resets_at
-
-
 def _five_hour_switched(s: Session) -> bool:
     """While the run waits for the owner's 25%: whether the 5-hour switch is on now, taking
     the dashboard's switches alone (f5 D2); the other requests wait for the pick."""
@@ -5144,49 +5132,6 @@ def _five_hour_switched_on(s: Session) -> None:
     for row in open_rows(s):
         if s.state.queued.get(row_key(row), {}).get(FIVE_HOUR_HELD):
             _unpark_row(s, row)
-
-
-def at_five_hour(s: Session, task: Task) -> bool:
-    """Before a lead ticket: whether it waits for the owner's share of Claude's 5-hour window
-    (ADR 16 items 1 and 3). With the 5-hour switch off (ADR 22 item 4), the ticket parks
-    until the window resets and then goes on by itself; meanwhile it is a Needs-you item
-    naming the switch, and the switch turned on lets it go at once. It parks only when
-    nothing else can run (`_next_task`). A marked card's tickets go on (ADR 34 item 5)."""
-    at = now()
-    found = None if switch_on(s.state, FIVE_HOUR, at) else _at_five_hour(s, at)
-    if found is None or _uses_reserve(s, task):
-        return False
-    used, resets = found
-    text = (
-        f"{task.id} waits for Claude's 5-hour window ({used} used, kept for you):"
-        f" it goes on after {resets.astimezone():%H:%M},"
-        f" or at once if you turn on “{SWITCHES[FIVE_HOUR]}”"
-    )
-    if s.project_id is not None:
-        _record(
-            s,
-            metrics.upsert_owner_item,
-            s.project_id,
-            FIVE_HOUR_KIND,
-            task.id,
-            text=text,
-            command=switch_command(FIVE_HOUR),
-            created=at.isoformat(),
-        )
-    s.state.parked[task.id] = {
-        "kind": FIVE_HOUR_KIND,
-        "branch": "",
-        "session_id": "",
-        "resets_at": resets.isoformat(),
-        "text": text,
-        FIVE_HOUR_HELD: True,
-    }
-    save_state(s.state, s.state_path)
-    s.report.notes.append(text)
-    reason = f"Claude's 5-hour window is at {used}, kept for you"
-    where = f"goes on after {resets.astimezone():%H:%M}"
-    s.log(console.stopped(task.id, "parked", reason, where, waiting_behind(s, task.id)))
-    return True
 
 
 def _passing_over(windows: dispatch.Windows, at: datetime) -> list[allowance.Window]:
@@ -5253,8 +5198,7 @@ def choose_ticket(
         return task
     held = {t.id for t in ready if t.id in parked and parked[t.id]["kind"] != RESERVE_KIND}
     due = [t for t in ready if t.id in held and _due(parked[t.id], at)]
-    began = [t for t in due if parked[t.id]["kind"] != FIVE_HOUR_KIND]
-    unbegun = [t for t in due if parked[t.id]["kind"] == FIVE_HOUR_KIND]  # it never started
+    began = due
     limited = windows.limited_until is not None and windows.limited_until > at
     free = [t for t in ready if t.id not in held and not (limited and lead(t))]
     held_in_lane = allowance.lead_hold(
@@ -5262,13 +5206,13 @@ def choose_ticket(
     )
     in_lane = [
         t
-        for t in began + unbegun + free
+        for t in began + free
         if t.id in lane and (t in began or not lead(t) or held_in_lane is None)
     ]
     if (task := first(in_lane)) is not None:
         return task
     passed_over = _passed_over(windows, at) is not None
-    if (task := first(began if passed_over else began + unbegun)) is not None:
+    if (task := first(began)) is not None:
         return task
     fixes = [
         t
@@ -5303,35 +5247,11 @@ def choose_ticket(
     return first(developers) or task
 
 
-def _end_unbegun_parks(
-    s: Session, ready: list[Task], windows: dispatch.Windows, lane: Collection[str], at: datetime
-) -> None:
-    """A ticket parked at the 5-hour window began no work, so once its reset has passed the line
-    holds it like any other (ADR 44 items 1 and 7): its park ends, and "it goes on after its
-    reset" leaves the desk."""
-    if _passed_over(windows, at) is None:
-        return
-    over = [
-        t.id
-        for t in ready
-        if t.id not in lane
-        and t.id in s.state.parked
-        and s.state.parked[t.id]["kind"] == FIVE_HOUR_KIND
-        and _due(s.state.parked[t.id], at)
-    ]
-    for task_id in over:
-        del s.state.parked[task_id]
-        _resolve_item(s, FIVE_HOUR_KIND, task_id)
-    if over:
-        save_state(s.state, s.state_path)
-
-
 def _next_task(s: Session, ready: list[Task], done: set[str], paused: set[str]) -> Task | None:
     """`choose_ticket` from the session."""
     at = now()
     windows = _windows_now(s, at)
     lane = reserve_cards(s.repo, ready)
-    _end_unbegun_parks(s, ready, windows, lane, at)
     return choose_ticket(
         ready,
         done,

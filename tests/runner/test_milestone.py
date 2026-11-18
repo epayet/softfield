@@ -953,7 +953,7 @@ def test_a_named_milestones_review_still_waits_for_claude(repo, monkeypatch, clo
     """`runner milestone` has no queue to go back to: its review sleeps to the reset, before
     its e2e run."""
     _milestone_repo(repo)
-    _claude_at(repo, 0.80)
+    _claude_at(repo, 1.0)
     events: list[tuple[str, bool]] = []
 
     def run_e2e(*a):
@@ -1198,7 +1198,7 @@ def test_a_review_parked_between_rounds_resumes_at_its_round_on_its_own_fixes(
         events.append(f"{key} round {round_no}")
         if len(prompts) == 1:  # F9's round 1 files a fix ticket and uses up Claude's room
             milestone_ticket(repo_, "ready", "f9-02-fix", "f9")
-            _claude_at(repo_, 0.80)
+            _claude_at(repo_, 1.0)
             _review_writes(job, repo_, [LEAK])
         else:
             _review_writes(job, repo_, [{**LEAK, "resolved": True}] if key == "f9" else [])
