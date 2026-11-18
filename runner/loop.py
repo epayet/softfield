@@ -5202,6 +5202,16 @@ def _passed_over(windows: dispatch.Windows, at: datetime) -> str | None:
     return allowance.lead_hold(CLAUDE, passing, LEAD_COST, at, reserves=windows.reserves)
 
 
+AT_THE_LIMIT = dispatch.LANE_RESERVES  # whole capacities: only a real limit holds
+FULL = dispatch.FULL
+
+
+def _held_at_the_limit(windows: dispatch.Windows, at: datetime) -> str | None:
+    """Why Claude's real limit keeps a lead ticket from a gap, or None (ADR 50 item 3, F264 D1):
+    a window at 100%, or resting after a refusal. The pace line and the marks only order."""
+    return allowance.lead_hold(CLAUDE, windows.claude, FULL, at, reserves=AT_THE_LIMIT)
+
+
 def choose_ticket(
     ready: list[Task],
     done: set[str],
@@ -5226,10 +5236,9 @@ def choose_ticket(
     (ADR 44 item 7). Then the fix tickets of a card between two review rounds (``reviewing``,
     `under_review`, F191 D7), held as any ticket is. While Claude is limited, only work that
     needs no Claude: developer tickets,
-    which local takes. Over the week's pace line a lead ticket is passed over, with no park and
-    no desk item, and asks again at the next pick (`allowance.lead_hold`, ADR 44 item 6). At the
-    owner's share of the 5-hour window, developer tickets go before lead ones, so a lead ticket
-    parks only when nothing else can run (ADR 16 item 3). Each by place (f5 D6), a ticket
+    which local takes. Over the week's pace line or past a mark, developer tickets go before
+    lead ones, and the first lead ticket fills the gap when nothing else can start (ADR 50 item
+    2); only Claude's real limit stops it (`_held_at_the_limit`). Each by place (f5 D6), a ticket
     waited for in its first waiter's place, read from the whole ready list (F173 D6)."""
     pulled = pulls(ready, cards)
 
@@ -5270,15 +5279,22 @@ def choose_ticket(
     ]
     if (fix := first(fixes)) is not None and (
         not lead(fix)
-        or allowance.lead_hold(CLAUDE, windows.claude, LEAD_COST, at, reserves=windows.reserves)
-        is None
+        or (
+            allowance.lead_hold(CLAUDE, windows.claude, LEAD_COST, at, reserves=windows.reserves)
+            is None
+            and _held_at_the_limit(windows, at) is None
+        )
     ):
         return fix
     developers = [t for t in free if not lead(t)]
     task = first(developers if passed_over else free)
+    if task is None and passed_over:
+        task = first(free)  # nothing else can start: the first lead ticket fills the gap (ADR 50)
     if task is None or not lead(task):
         return task
-    # Nothing else passes it over, so only the owner's share of the 5-hour window can hold it
+    if _held_at_the_limit(windows, at) is not None:
+        return first(developers)  # only Claude's real limit stops lead work
+    # Past the 5-hour mark developer tickets go first, and a lead one fills the gap
     if (
         allowance.lead_hold(CLAUDE, windows.claude, LEAD_COST, at, reserves=windows.reserves)
         is None
@@ -5409,10 +5425,10 @@ def _tickets_wait(count: int, what: str, kind: str = "ticket") -> str:
 def _lead_tickets_passed_over(
     s: Session, ready: list[Task], paused: set[str], held: Mapping[str, str], at: datetime
 ) -> str | None:
-    """The lead tickets only Claude's windows hold (ADR 44 item 6) and about until when: the week
-    in words, or a window's rest. None when there are none."""
+    """The lead tickets only Claude's real limit holds (ADR 50 item 3, F264 D3) and until when: a
+    full window's reset, or a window's rest. None when there are none."""
     windows = _windows_now(s, at)
-    if _passed_over(windows, at) is None:
+    if _held_at_the_limit(windows, at) is None:
         return None
     skipped = {*paused, *held, *waits_for_main(s, ready), *reserve_cards(s.repo, ready)}
     done = task_ids(s.tasks_dir("done"))
@@ -5428,14 +5444,21 @@ def _lead_tickets_passed_over(
         return None
     holding = [
         w
-        for w in _passing_over(windows, at)
-        if allowance.lead_hold(CLAUDE, [w], LEAD_COST, at, reserves=windows.reserves)
+        for w in windows.claude
+        if allowance.lead_hold(CLAUDE, [w], FULL, at, reserves=AT_THE_LIMIT)
     ]
-    ends = [allowance.lead_goes_at(w, LEAD_COST, at) for w in holding]
-    until = max(end for end in ends if end is not None).astimezone()
+    ends = [(allowance.lead_goes_at(w, FULL, at), w) for w in holding]
+    known = [(e, w) for e, w in ends if e is not None]
+    if not known:
+        return _tickets_wait(count, "for Claude", "lead ticket")
+    end, last = max(known, key=lambda pair: pair[0])
+    until = end.astimezone()
     if any(allowance.resting(w, at) for w in holding):
         return _tickets_wait(count, f"for Claude until {until:%a %H:%M}", "lead ticket")
-    return _tickets_wait(count, f"for Claude's week · until about {until:%a %H:%M}", "lead ticket")
+    label = allowance.LABELS.get(last.name, last.name)
+    return _tickets_wait(
+        count, f"for Claude's {label} · until about {until:%a %H:%M}", "lead ticket"
+    )
 
 
 def _idle_line(s: Session, ready: list[Task], paused: set[str], held: Mapping[str, str]) -> str:

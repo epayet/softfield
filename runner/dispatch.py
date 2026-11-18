@@ -45,6 +45,8 @@ TICKET = "ticket"
 
 CLAUDE = "claude"
 COST = 0.0  # a job's share of Claude's windows isn't learned yet (`loop.LEAD_COST`)
+FULL = 0.001  # a window at its capacity holds a lead ticket, though it has no expected cost
+LABELS = allowance.LABELS
 SUPPORT_RESERVE = "seven_day"  # the week's reserve is the support roles' (ADR 15 item 4)
 LANE_RESERVES = frozenset({"seven_day", "five_hour"})  # the fast lane's (ADR 35 item 4)
 GOES_WITH = (ESCALATION, DIRECTION)  # a ticket's own work: it joins the lane with it
@@ -197,9 +199,23 @@ def _ticket_line(t: Ticket, windows: Windows, now: datetime, *, lane: bool = Fal
         return Line(job, f"waits until {_when(t.not_before, now)}")
     if not t.lead or t.not_before is not None:  # past its reset: its work goes on (ADR 44 item 7)
         return Line(job, None)
-    reserves = LANE_RESERVES if lane else windows.reserves
-    held = allowance.lead_hold(CLAUDE, windows.claude, COST, now, reserves=reserves)
-    return Line(job, _limited(windows, now) or held)
+    limited = _limited(windows, now)
+    if lane:
+        held = allowance.lead_hold(CLAUDE, windows.claude, COST, now, reserves=LANE_RESERVES)
+        return Line(job, limited or held)
+    at_the_limit = allowance.lead_hold(CLAUDE, windows.claude, FULL, now, reserves=LANE_RESERVES)
+    if limited or at_the_limit:
+        return Line(job, limited or at_the_limit)  # only Claude's real limit stops it (ADR 50)
+    pace = [
+        LABELS.get(w.name, w.name)
+        for w in windows.claude
+        if allowance.lead_hold(CLAUDE, [w], COST, now, reserves=windows.reserves)
+    ]
+    if pace:  # over its pace line or a mark: developers first, and it fills a gap
+        return Line(
+            job, f"goes when nothing else can (Claude's {' and '.join(pace)} over its pace)"
+        )
+    return Line(job, None)
 
 
 def _limited(windows: Windows, now: datetime) -> str | None:

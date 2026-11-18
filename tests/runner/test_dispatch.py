@@ -72,15 +72,30 @@ def test_developers_run_meanwhile_while_claude_is_limited():
     )
 
 
-def test_at_the_weeks_reserve_a_lead_ticket_waits_and_support_jobs_may_use_it():
-    """ADR 15 items 4 and 5: the reserve is the support roles'; a lead ticket waits for the
-    owner, and developer tickets go first."""
+def test_at_the_weeks_reserve_a_lead_ticket_goes_when_nothing_else_can_and_support_jobs_go():
+    """ADR 15 items 4 and 5, ADR 50 item 2: the reserve is the support roles'; a lead ticket
+    goes after the developer tickets, as a gap filler."""
     windows = Windows(claude=(_week(0.75),))
     lines = plan([_row("checkpoint", "f8")], [_lead("f8-02"), _dev("f8-07")], windows, NOW)
     waits = {line.pick.subject: line.waits for line in lines}
     assert waits["f8"] is None
-    assert waits["f8-02"] is not None and "week 75% used" in waits["f8-02"]
+    assert waits["f8-02"] == "goes when nothing else can (Claude's week over its pace)"
     assert waits["f8-07"] is None
+
+
+def test_a_full_week_or_5_hour_window_holds_a_lead_ticket_with_its_reason():
+    """ADR 50 item 3: only Claude's real limit says "waits"."""
+    week = plan([], [_lead("f8-02")], Windows(claude=(_week(1.0),)), NOW)
+    assert week[0].waits is not None and "week 100% used" in week[0].waits
+    resting = replace(_week(0.1), cooldown_until=NOW + timedelta(hours=3))
+    assert plan([], [_lead("f8-02")], Windows(claude=(resting,)), NOW)[0].waits is not None
+    five = allowance.Window("five_hour", "rolling", 5 * allowance.HOUR, NOW, 1.0, 0.8, reserve=0.25)
+    assert plan([], [_lead("f8-02")], Windows(claude=(five,)), NOW)[0].waits == (
+        "goes when nothing else can (Claude's 5-hour window over its pace)"
+    )
+    full = replace(five, used=1.0)
+    waits = plan([], [_lead("f8-02")], Windows(claude=(full,)), NOW)[0].waits
+    assert waits is not None and "5-hour window 100% used" in waits
 
 
 def _week_at_33(used: float) -> allowance.Window:
@@ -89,11 +104,14 @@ def _week_at_33(used: float) -> allowance.Window:
     return replace(_week(used), resets_at=resets)
 
 
-def test_over_its_pace_line_a_lead_ticket_waits_and_names_the_line():
-    """ADR 44 item 1: 65% is short of the reserve, and the line holds it all the same."""
+def test_over_its_pace_line_a_lead_ticket_goes_when_nothing_else_can_and_says_so():
+    """ADR 50 item 2: 65% is short of the reserve; the line only orders."""
     lines = plan([], [_lead("f8-02"), _dev("f8-07")], Windows(claude=(_week_at_33(0.65),)), NOW)
     waits = {line.pick.subject: line.waits for line in lines}
-    assert waits == {"f8-02": "claude: week 65% used, over its pace line of 33%", "f8-07": None}
+    assert waits == {
+        "f8-02": "goes when nothing else can (Claude's week over its pace)",
+        "f8-07": None,
+    }
 
 
 def test_in_the_weeks_last_10_percent_a_lead_ticket_may_use_the_whole_reserve():

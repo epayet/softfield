@@ -4036,63 +4036,62 @@ def test_with_the_week_switch_on_a_lead_ticket_at_the_reserve_runs(
     assert _rows(repo, "owner_items") == []
 
 
-def test_with_the_week_switch_off_a_lead_ticket_at_the_reserve_is_passed_over(
+def test_with_the_week_switch_off_a_lead_ticket_at_the_reserve_goes_after_the_developers(
     repo, fake_model, fake_lead, fake_clock, at_the_keyboard, monkeypatch, capsys
 ):
-    """ADR 44 item 6: no park and no desk item; work without the lead goes on."""
+    """ADR 50 item 2: no park and no desk item; the developer's ticket goes first, and the lead
+    ticket fills the gap after it."""
     _readings_at(repo, 0.79)
     _lead_task(repo, "m1-01-lead")
     _add_task(repo, "m1-02-thing")
-    _, jobs = fake_lead
+    script, _ = fake_lead
+    script.append(lambda job, repo_: _lead_writes(repo_, "lead"))
+    _passes(monkeypatch)
     fake_model.append(_implement)
     report = _run(repo)
-    assert jobs == []  # the reserve wasn't touched
-    assert [(t.id, t.result) for t in report.tasks] == [("m1-02-thing", "done")]
-    assert (repo / ".softfield" / "tasks" / "ready" / "m1-01-lead.md").is_file()
+    assert [(t.id, t.result) for t in report.tasks] == [
+        ("m1-02-thing", "done"),
+        ("m1-01-lead", "done"),
+    ]
     assert _state(repo).parked == {}
     assert _rows(repo, "owner_items") == []
     assert "[y/N]" not in capsys.readouterr().out
     assert fake_clock[0] == THURSDAY  # it didn't sleep till Monday for the owner
 
 
-def test_a_switch_turned_on_after_the_tickets_were_passed_over_runs_them_at_the_next_command(
+def test_past_the_mark_lead_tickets_with_nothing_else_to_run_all_go_with_no_switch(
     repo, fake_model, fake_lead, fake_clock, at_the_keyboard, monkeypatch
 ):
-    """ADR 44 item 3: the lever works as today."""
+    """ADR 50 item 2: with no developer ticket free, past the week's mark, the lead tickets fill
+    the gap in the board's order, the switch off, and no desk item asks."""
     _readings_at(repo, 0.79)
     _lead_task(repo, "m1-01-lead")
     _lead_task(repo, "m1-02-lead")
-    script, jobs = fake_lead
-    reserves: list[object] = []
-
-    def lead(job: ClaudeJob, repo_: Path) -> None:
-        reserves.extend(run["reserve"] for run in _rows(repo, "runs"))
-        _lead_implements(job, repo_)
-
-    script.extend([lead, lambda job, repo_: _lead_writes(repo_, "second")])
+    script, _ = fake_lead
+    script.extend([_lead_implements, lambda job, repo_: _lead_writes(repo_, "second")])
     _passes(monkeypatch)
-    _run(repo)
-    assert jobs == [] and _state(repo).parked == {}
-    _earlier_run(repo)
-    _ask_from_the_dashboard(repo, "reserve", "week", "on")
     report = _run(repo)
-    assert [t.result for t in report.tasks] == ["done", "done"]
+    assert [(t.id, t.result) for t in report.tasks] == [
+        ("m1-01-lead", "done"),
+        ("m1-02-lead", "done"),
+    ]
     assert _state(repo).parked == {}
     assert _rows(repo, "owner_items") == []
-    assert reserves == [0, 1]  # the first run ended; the next is on the reserve
-    assert [run["reserve"] for run in _rows(repo, "runs")] == [0, 0]  # and ended in turn
+    assert [run["reserve"] for run in _rows(repo, "runs")] == [0]
 
 
 def test_a_switch_turned_on_24_hours_ago_reads_off_and_asks_again(
-    repo, fake_model, fake_lead, fake_clock, at_the_keyboard
+    repo, fake_model, fake_lead, fake_clock, at_the_keyboard, monkeypatch
 ):
-    """The owner, 2026-10-04: on lasts 24 hours; then it is off and a Needs-you item asks."""
+    """The owner, 2026-10-04: on lasts 24 hours; then it is off and a Needs-you item asks. The
+    lead ticket goes as a gap filler all the same (ADR 50)."""
     _readings_at(repo, 0.79)
     _switch_on(repo, "week", at=THURSDAY - timedelta(hours=24))
     _lead_task(repo, "m1-01-lead")
-    _, jobs = fake_lead
-    report = _run(repo)
-    assert jobs == [] and report.tasks == []
+    script, _ = fake_lead
+    script.append(_lead_implements)
+    _passes(monkeypatch)
+    _run(repo)
     assert _state(repo).switches == {}
     items = {(i["kind"], i["subject"]): i for i in _rows(repo, "owner_items")}
     assert set(items) == {("reserve", "week")}
@@ -4115,15 +4114,17 @@ def test_a_lead_ticket_under_the_weeks_pace_line_runs_with_the_switch_off(
     assert _rows(repo, "owner_items") == []
 
 
-def test_a_lead_ticket_over_the_line_and_short_of_the_reserve_waits(
-    repo, fake_lead, fake_clock, monkeypatch
+def test_a_lead_ticket_over_the_line_and_short_of_the_reserve_goes_when_nothing_else_can(
+    repo, fake_model, fake_lead, fake_clock, monkeypatch
 ):
-    """ADR 44: 0.5 on a Thursday is past the week's pace line, and this is what f1-46 let run."""
+    """ADR 50 item 2: 0.5 on a Thursday is past the week's pace line; the line orders only."""
     _readings_at(repo, 0.5)
     _lead_task(repo, "m1-01-lead")
-    _, jobs = fake_lead
+    script, _ = fake_lead
+    script.append(_lead_implements)
+    _passes(monkeypatch)
     report = _run(repo)
-    assert jobs == [] and report.tasks == []
+    assert [t.result for t in report.tasks] == ["done"]
     assert _state(repo).parked == {} and _rows(repo, "owner_items") == []
 
 
@@ -4191,7 +4192,20 @@ def _parked_past_its_reset(repo: Path) -> None:
     ("used", "resets", "five_hour", "lever", "lane", "parked", "tickets", "expected"),
     [
         pytest.param(0.65, LINE_33, 0.07, False, False, False, "both", "f2-01-thing", id="over"),
-        pytest.param(0.65, LINE_33, 0.07, False, False, False, "lead", None, id="over-only-lead"),
+        pytest.param(
+            0.65, LINE_33, 0.07, False, False, False, "lead", "f1-01-lead", id="over-only-lead"
+        ),
+        pytest.param(0.80, LINE_33, 0.07, False, False, False, "both", "f2-01-thing", id="mark"),
+        pytest.param(
+            0.80, LINE_33, 0.07, False, False, False, "lead", "f1-01-lead", id="mark-only-lead"
+        ),
+        pytest.param(1.0, LINE_33, 0.07, False, False, False, "lead", None, id="week-full"),
+        pytest.param(1.0, LINE_33, 0.07, False, False, False, "both", "f2-01-thing", id="full-dev"),
+        pytest.param(
+            0.10, LINE_33, 0.80, False, False, False, "lead", "f1-01-lead", id="five-only-lead"
+        ),
+        pytest.param(0.10, LINE_33, 1.0, False, False, False, "lead", None, id="five-full"),
+        pytest.param(0.10, LINE_33, 1.0, False, False, False, "both", "f2-01-thing", id="five-dev"),
         pytest.param(0.20, LINE_33, 0.07, False, False, False, "both", "f1-01-lead", id="under"),
         pytest.param(0.65, LINE_33, 0.07, True, False, False, "both", "f1-01-lead", id="lever"),
         pytest.param(0.65, LINE_33, 0.07, False, True, False, "both", "f1-01-lead", id="lane"),
@@ -4217,7 +4231,7 @@ def test_the_runner_and_the_dry_run_choose_the_same_next_ticket(
     if parked:
         _parked_past_its_reset(repo)
     assert _both_choose(repo, capsys) == (expected, expected)
-    if tickets == "lead":  # passed over: no park and no desk item
+    if tickets == "lead" and expected is None:  # held at the limit: no park and no desk item
         assert _state(repo).parked == {} and _rows(repo, "owner_items") == []
 
 
@@ -4229,6 +4243,18 @@ def test_the_dry_run_reads_a_refusal_as_the_runner_does(repo, fake_clock, capsys
     conn.close()
     _lead_and_developer(repo)
     assert _both_choose(repo, capsys) == ("f2-01-thing", "f2-01-thing")
+
+
+def test_with_the_week_resting_after_a_refusal_no_lead_ticket_fills_the_gap(
+    repo, fake_clock, capsys
+):
+    """ADR 50 item 3: only Claude's real limit stops lead work, a rest included."""
+    _week_read(repo, 0.65, LINE_33)
+    conn = metrics.open_db(_config(repo).metrics_db)
+    metrics.add_usage_event(conn, "claude-sonnet", THURSDAY.isoformat(), "refusal")
+    conn.close()
+    _on_card(repo, "f1-01-lead", 1, agent="lead")
+    assert _both_choose(repo, capsys) == (None, None)
 
 
 def test_the_dry_runs_lead_line_says_the_limit_a_parked_job_keeps_it_behind(
@@ -4308,7 +4334,8 @@ def test_a_five_hour_park_over_its_reset_doesnt_start_a_ticket_over_the_line(
         created=THURSDAY.isoformat(),
     )
     conn.close()
-    assert _both_choose(repo, capsys) == (None, None)
+    # the park ends and the line holds it, so it waits its turn as a gap filler (ADR 50 item 2)
+    assert _both_choose(repo, capsys) == ("f1-01-lead", "f1-01-lead")
     assert _state(repo).parked == {}
     assert all(i["resolved"] for i in _rows(repo, "owner_items"))
 
@@ -5613,7 +5640,7 @@ def test_past_the_week_mark_a_marked_cards_lead_ticket_runs_before_the_developer
     repo, fake_model, fake_lead, fake_clock, at_the_keyboard, monkeypatch
 ):
     """ADR 34 item 3, ADR 35 item 2: the fast lane's lead ticket first, then developer tickets;
-    the unmarked one is passed over, though it comes first by milestone (ADR 44 item 6)."""
+    the unmarked one, though it comes first by milestone, fills the gap last (ADR 50 item 2)."""
     _readings_at(repo, 0.79)
     _marked(repo, "m2")
     _card_ticket(repo, "m1-01-lead")
@@ -5621,13 +5648,14 @@ def test_past_the_week_mark_a_marked_cards_lead_ticket_runs_before_the_developer
     _card_ticket(repo, "m2-01-lead")
     script, _ = fake_lead
     ran: list[tuple[str, datetime]] = []
-    _leads_in_order(script, ran, 1)
+    _leads_in_order(script, ran, 2)
     fake_model.append(_implement)
     _passes(monkeypatch)
     report = _run(repo)
     assert [(t.id, t.result) for t in report.tasks] == [
         ("m2-01-lead", "done"),
         ("m1-02-thing", "done"),
+        ("m1-01-lead", "done"),
     ]
     assert _state(repo).parked == {}
     assert _rows(repo, "owner_items") == []
@@ -5638,7 +5666,7 @@ def test_the_tickets_a_marked_card_waits_for_pass_the_reserve_too(
     repo, fake_model, fake_lead, fake_clock, at_the_keyboard, monkeypatch
 ):
     """ADR 34 item 3: marking m3 must not leave it behind m1's lead tickets, directly or
-    through another; m4's, which nothing marked waits for, is passed over."""
+    through another; m4's, which nothing marked waits for, fills the gap after them (ADR 50)."""
     _readings_at(repo, 0.79)
     _marked(repo, "m3")
     _kept_open(repo, "m1")
@@ -5648,16 +5676,16 @@ def test_the_tickets_a_marked_card_waits_for_pass_the_reserve_too(
     _card_ticket(repo, "m4-01-lead")
     script, _ = fake_lead
     ran: list[tuple[str, datetime]] = []
-    _leads_in_order(script, ran, 3)
+    _leads_in_order(script, ran, 4)
     _passes(monkeypatch)
     report = _run(repo)
     assert [(t.id, t.result) for t in report.tasks] == [
         ("m1-01-lead", "done"),
         ("m1-02-lead", "done"),
         ("m3-01-lead", "done"),
+        ("m4-01-lead", "done"),
     ]
     assert _state(repo).parked == {}
-    assert (repo / ".softfield" / "tasks" / "ready" / "m4-01-lead.md").is_file()
 
 
 def test_reserve_cards_follows_the_ready_tickets_only(repo):
@@ -8010,13 +8038,16 @@ def _says(repo: Path) -> object:
     return activity
 
 
+RESET = "Mon 16:00"  # the week's reset in the idle line, MONDAY in the tests' time zone
+
+
 def test_every_lead_ticket_held_by_the_week_holds_the_run_which_says_what_waits_once(
     repo, fake_lead, fake_clock, at_the_keyboard, monkeypatch, capsys
 ):
     """2026-10-10: 22 lead tickets waited for the week's reserve, the run ended after 2.9
-    minutes, and for two days nothing the owner asked from the dashboard was applied. Over the
-    whole line (79%), they go when the week's last 10% opens."""
-    _readings_at(repo, 0.79)
+    minutes, and for two days nothing the owner asked from the dashboard was applied. With the
+    week full (ADR 50), they go at its reset."""
+    _readings_at(repo, 1.0)
     _lead_task(repo, "m1-01-lead")
     _lead_task(repo, "m1-02-lead")
     _, jobs = fake_lead
@@ -8028,42 +8059,18 @@ def test_every_lead_ticket_held_by_the_week_holds_the_run_which_says_what_waits_
 
     _idles(monkeypatch, lambda: seen.append(_says(repo)), a_day_passes, a_day_passes)
     report = _run(repo)
-    line = "Idle: 2 lead tickets wait for Claude's week · until about Sun 23:12"
+    line = f"Idle: 2 lead tickets wait for Claude's week · until about {RESET}"
     assert seen == [line, line, line]  # three polls: the queue didn't return
     assert jobs == [] and report.tasks == [] and not report.idle  # and it spent no Claude
     assert capsys.readouterr().out.count(line) == 1
     assert not (repo / ".softfield" / "sessions").exists()
 
 
-def test_the_reserve_switch_turned_on_while_the_run_is_idle_runs_the_tickets(
-    repo, fake_lead, fake_clock, at_the_keyboard, monkeypatch
-):
-    _readings_at(repo, 0.79)
-    _lead_task(repo, "m1-01-lead")
-    _lead_task(repo, "m1-02-lead")
-    script, jobs = fake_lead
-    script.extend([_lead_implements, lambda job, repo_: _lead_writes(repo_, "second")])
-    _passes(monkeypatch)
-    ran_before: list[int] = []
-
-    def phone() -> None:
-        ran_before.append(len(jobs))
-        _ask_from_the_dashboard(repo, "reserve", "week", "on")
-
-    _idles(monkeypatch, phone)
-    report = _run(repo)
-    assert ran_before == [0]
-    assert [(t.id, t.result) for t in report.tasks] == [
-        ("m1-01-lead", "done"),
-        ("m1-02-lead", "done"),
-    ]
-    assert _state(repo).parked == {}
-
-
-def test_the_run_picks_a_lead_ticket_up_by_itself_once_the_line_passes_the_reading(
+def test_the_run_takes_a_lead_ticket_over_the_pace_line_at_once_and_never_idles(
     repo, fake_lead, fake_clock, monkeypatch
 ):
-    """ADR 44 item 6: at 50%, Thursday's line lets it go on Friday at 16:00."""
+    """ADR 50 item 2: at 50%, past Thursday's line, nothing else can start, so it goes now
+    (ADR 44 item 6 let it go on Friday at 16:00)."""
     _readings_at(repo, 0.5)
     _lead_task(repo, "m1-01-lead")
     script, _ = fake_lead
@@ -8075,31 +8082,16 @@ def test_the_run_picks_a_lead_ticket_up_by_itself_once_the_line_passes_the_readi
 
     script.append(lead)
     _passes(monkeypatch)
-    seen: list[object] = []
-    friday = datetime(2026, 10, 2, 16, 0, tzinfo=UTC)
-
-    def before_it() -> None:
-        seen.append(_says(repo))
-        assert ran_at == []
-        fake_clock[0] = friday - timedelta(minutes=1)
-
-    def the_line_passes() -> None:
-        seen.append(_says(repo))
-        assert ran_at == []
-        fake_clock[0] = friday + timedelta(minutes=1)
-
-    _idles(monkeypatch, before_it, the_line_passes)
+    monkeypatch.setattr(loop, "_idle_wait", lambda: pytest.fail("it held"))
     report = _run(repo)
-    line = "Idle: 1 lead ticket waits for Claude's week · until about Fri 16:00"
-    assert seen == [line, line]
     assert [(t.id, t.result) for t in report.tasks] == [("m1-01-lead", "done")]
-    assert ran_at == [friday + timedelta(minutes=1)]
+    assert ran_at == [THURSDAY]
 
 
 def test_the_weeks_reset_while_the_run_is_idle_runs_the_ticket_by_itself(
     repo, fake_lead, fake_clock, monkeypatch
 ):
-    _readings_at(repo, 0.79)
+    _readings_at(repo, 1.0)
     _lead_task(repo, "m1-01-lead")
     script, _ = fake_lead
     script.append(_lead_implements)
@@ -8134,7 +8126,7 @@ def test_with_nothing_ready_the_run_holds_and_picks_a_ticket_that_appears(
 def test_the_idle_line_is_logged_again_when_what_it_waits_for_changes(
     repo, fake_lead, fake_clock, monkeypatch, capsys
 ):
-    _readings_at(repo, 0.79)
+    _readings_at(repo, 1.0)
     _lead_task(repo, "m1-01-lead")
     seen: list[object] = []
 
@@ -8165,7 +8157,7 @@ def test_the_idle_line_is_logged_again_when_what_it_waits_for_changes(
 
     _idles(monkeypatch, look, a_sign_off_is_asked, look, look)
     _run(repo)
-    first = "Idle: 1 lead ticket waits for Claude's week · until about Sun 23:12"
+    first = f"Idle: 1 lead ticket waits for Claude's week · until about {RESET}"
     second = f"{first} · waiting for you: 1 sign-off, 2 blocked tickets"
     assert seen == [first, first, second, second]
     out = capsys.readouterr().out
@@ -8186,7 +8178,7 @@ def test_tickets_behind_a_blocked_one_are_named_in_the_idle_line(repo, fake_cloc
 def test_once_and_a_milestones_queue_end_with_nothing_to_run_as_before(
     repo, fake_lead, fake_clock, monkeypatch
 ):
-    _readings_at(repo, 0.79)
+    _readings_at(repo, 1.0)
     _lead_task(repo, "m1-01-lead")
     monkeypatch.setattr(loop, "_idle_wait", lambda: pytest.fail("it held"))
     s = loop.open_session(_config(repo))
@@ -8197,7 +8189,7 @@ def test_once_and_a_milestones_queue_end_with_nothing_to_run_as_before(
 
 def _one_merges_and_one_waits_for_the_reserve(repo: Path, fake_model) -> None:
     """A developer ticket to merge, and a lead ticket that keeps M1's review from being due."""
-    _readings_at(repo, 0.79)
+    _readings_at(repo, 1.0)
     _lead_task(repo, "m1-02-lead")
     _add_task(repo, "m1-01-thing")
     fake_model.append(_implement)
