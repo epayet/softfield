@@ -46,6 +46,7 @@ from factory_dashboard.merges import (
 )
 from factory_dashboard.overview import (
     agent_allowances,
+    claude_pace,
     open_changes,
     running_jobs,
 )
@@ -886,6 +887,7 @@ def planning(request: Request, conn: Db, project: Project, now: Now) -> HTMLResp
         None,
     )
     c = coming(conn, project, now)
+    pace = claude_pace(conn, project, now)
     return render(
         request,
         conn,
@@ -896,6 +898,7 @@ def planning(request: Request, conn: Db, project: Project, now: Now) -> HTMLResp
             "factory": factory_now(conn, project, now),
             "window": window,
             "week": week,
+            "pace": pace.week,
             "coming": c,
             "groups": desk(conn, project, now),
             "archived": archived(conn, project, now),

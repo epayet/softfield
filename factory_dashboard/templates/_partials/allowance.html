@@ -48,11 +48,7 @@
         <small class="rate{{ ' out' if a.rate_out }}">{{ a.rate }}</small>
         {% endif %}
       </div>
-      {% if wp and wp.state == "over" %}
-      <div class="stop-plate"><b>Over pace</b><span>lead tickets wait until about <span class="until">{{ wp.until or "the reset" }}</span></span><small>developers, planning, reviews and the fast lane go on · today's pace {{ wp.pace }}</small></div>
-      {% elif wp and wp.state == "last" %}
-      <div class="stop-plate"><b>Last hours</b>{% if wp.full %}<span>everything waits for the reset<span class="until"> {{ wp.until }}</span></span>{% else %}<span>lead tickets may use the whole reserve, until <span class="until">{{ wp.until }}</span></span><small>what's left at the reset is lost</small>{% endif %}</div>
-      {% endif %}
+      {{ ab.pace_plate(wp) }}
     </div>
     {# once, under Claude's last meter: the cards in the fast lane (F172 D6, D8), and on their way (F192 D4) #}
     {% if reserve_cards and a.label == "Claude" and (loop.nextitem is none or loop.nextitem.label != "Claude") %}
