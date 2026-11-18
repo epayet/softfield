@@ -432,9 +432,73 @@ def test_a_stream_with_no_edit_for_20_minutes_is_stopped(tmp_path, monkeypatch):
     _thinking(monkeypatch, VARIED)
     run = _attempt(tmp_path, clock)
     assert run.stopped == STOP_NO_EDIT == "stopped: no edit after 20 min"
-    assert ticked[-1] == 20 and 19.5 in ticked and run.exit_code is None
+    assert ticked[-1] == 20.5 and 20 in ticked and run.exit_code is None  # the next step ended it
     assert not run.timed_out  # stopped, not out of time
     assert f"--- {STOP_NO_EDIT} ---" in (tmp_path / "logs" / "opencode-1.jsonl").read_text()
+
+
+def _quiet_after(minute: float, *, steps_at: float = 0.0, edit_at: float = 0.0):
+    """Frames every half minute to 60: a read and a step each until `minute`, then nothing
+    except a step at `steps_at` and an edit at `edit_at` (0 = never)."""
+    frames = []
+    for m in range(1, 121):
+        at = m / 2
+        if at <= minute or at == steps_at:
+            new = [_tool("read"), _step(100, 1)]
+        else:
+            new = [_tool("edit")] if at == edit_at else []
+        frames.append((at, new))
+    return frames
+
+
+def test_an_attempt_that_finishes_no_step_after_20_minutes_is_stopped_at_35(tmp_path, monkeypatch):
+    clock, ticked = _ticking(monkeypatch, _quiet_after(19.5))
+    _thinking(monkeypatch, VARIED)
+    run = _attempt(tmp_path, clock)
+    assert run.stopped == STOP_NO_EDIT and ticked[-1] == 35 and 34 in ticked
+    assert f"--- {STOP_NO_EDIT} ---" in (tmp_path / "logs" / "opencode-1.jsonl").read_text()
+
+
+def test_an_attempt_that_finishes_a_step_at_minute_24_is_stopped_then(tmp_path, monkeypatch):
+    clock, ticked = _ticking(monkeypatch, _quiet_after(19.5, steps_at=24))
+    _thinking(monkeypatch, VARIED)
+    run = _attempt(tmp_path, clock)
+    assert run.stopped == STOP_NO_EDIT and ticked[-1] == 24
+
+
+def test_an_attempt_whose_step_in_hand_edits_at_minute_30_runs_on(tmp_path, monkeypatch):
+    clock, ticked = _ticking(monkeypatch, _quiet_after(19.5, edit_at=30))
+    _thinking(monkeypatch, VARIED)
+    run = _attempt(tmp_path, clock)
+    assert (run.stopped, run.exit_code, ticked[-1]) == ("", 0, 60)
+
+
+def test_a_stopped_attempt_leaves_its_thinking_beside_its_log(tmp_path, monkeypatch):
+    clock, _ = _ticking(monkeypatch, _quiet_after(19.5, steps_at=24))
+    _thinking(monkeypatch, VARIED)
+    run = local_model.run_opencode(
+        tmp_path, "m", "t", "p", 45 * 60, tmp_path / "logs" / "opencode-2-3.jsonl", clock=clock
+    )
+    assert run.stopped == STOP_NO_EDIT
+    assert (tmp_path / "logs" / "thinking-2-3.md").read_text() == VARIED + "\n"
+
+
+def test_a_repeating_attempt_with_no_reasoning_found_writes_no_file_and_still_stops(
+    tmp_path, monkeypatch
+):
+    clock, _ = _ticking(monkeypatch, [(0.5, [_step(100, 1)])])
+    _thinking(monkeypatch, "")
+    run = _attempt(tmp_path, clock)
+    assert run.stopped == "" and not list((tmp_path / "logs").glob("thinking-*"))
+    clock, _ = _ticking(monkeypatch, [(m / 2, [_step(100, 1)]) for m in range(1, 9)])
+    _thinking(monkeypatch, LOOPING)
+    assert _attempt(tmp_path, clock).stopped == STOP_REPEATING
+    assert (tmp_path / "logs" / "thinking-1.md").read_text() == LOOPING + "\n"
+    (tmp_path / "logs" / "thinking-1.md").unlink()
+    clock, _ = _ticking(monkeypatch, _quiet_after(19.5))
+    _thinking(monkeypatch, "")
+    assert _attempt(tmp_path, clock).stopped == STOP_NO_EDIT
+    assert not list((tmp_path / "logs").glob("thinking-*"))
 
 
 def test_a_stream_whose_reasoning_repeats_one_phrase_is_stopped_within_one_tick(

@@ -188,11 +188,15 @@ def session_reasoning(db: Path, session_id: str) -> str:
 # f2-05: in f1, 6 of 24 failed local attempts made no edit in 25-30 minutes, some thinking
 # one phrase over and over; at each tick an attempt stuck like this is stopped. F93: 20 minutes,
 # not 10: from 10 to 13 October, 16 of 29 attempts were stopped at 10 minutes while the first
-# edits of the others came as late as 9.2.
+# edits of the others came as late as 9.2. F208: a stop at minute 20 cut two attempts 14 and
+# 15 minutes into one thought, and a step's thought is saved only when it ends. So at minute 20
+# the step in hand finishes (the first step that finishes after it ends the wait), and the wait
+# is at most until minute 35.
 NO_EDIT_AFTER = 20 * 60.0
+NO_EDIT_LIMIT = 35 * 60.0
 REPEAT_WINDOW = 4000  # the characters of reasoning, last first, that must all repeat
 MAX_PHRASE = 200  # how long the repeated phrase may be
-STOP_NO_EDIT = f"stopped: no edit after {NO_EDIT_AFTER / 60:.0f} min"
+STOP_NO_EDIT = f"stopped: no edit after {NO_EDIT_AFTER / 60:.0f} min"  # stays true (stop_reason)
 STOP_REPEATING = "stopped: repeating itself"
 STOP_REASONS = (STOP_NO_EDIT, STOP_REPEATING)
 
@@ -206,10 +210,17 @@ def repeating(reasoning: str) -> bool:
     return any(tail[n:] == tail[:-n] for n in range(1, MAX_PHRASE + 1))
 
 
-def stuck(lines: list[str], reasoning: str, elapsed: float) -> str:
-    """Why an attempt so far should be stopped (one of ``STOP_REASONS``), or ''."""
+def stuck(
+    lines: list[str], reasoning: str, elapsed: float, steps_at_limit: int | None = None
+) -> str:
+    """Why an attempt so far should be stopped (one of ``STOP_REASONS``), or ''.
+
+    ``steps_at_limit`` is the finished steps when ``NO_EDIT_AFTER`` first passed (None before):
+    with no edit, the attempt stops once a further step has finished, or at ``NO_EDIT_LIMIT``."""
     if elapsed >= NO_EDIT_AFTER and not stream_facts(lines).edits:
-        return STOP_NO_EDIT
+        finished = steps_at_limit is not None and parse_events(lines).steps > steps_at_limit
+        if finished or elapsed >= NO_EDIT_LIMIT:
+            return STOP_NO_EDIT
     return STOP_REPEATING if repeating(reasoning) else ""
 
 
@@ -264,18 +275,24 @@ def run_opencode(
     started = time.monotonic()
     begun = clock()
     stopped = ""
+    steps_at_limit: int | None = None
+    last_reasoning = ""
     log_path.parent.mkdir(parents=True, exist_ok=True)
 
     def read() -> list[str]:
         return log_path.read_text(encoding="utf-8", errors="replace").splitlines()
 
     def tick() -> bool:
-        nonlocal stopped
+        nonlocal stopped, steps_at_limit, last_reasoning
         lines = read()
+        totals = parse_events(lines)
         if on_progress is not None:
-            on_progress(parse_events(lines))
-        reasoning = session_reasoning(OPENCODE_DB, stream_facts(lines).session_id)
-        stopped = stuck(lines, reasoning, clock() - begun)
+            on_progress(totals)
+        elapsed = clock() - begun
+        if steps_at_limit is None and elapsed >= NO_EDIT_AFTER:
+            steps_at_limit = totals.steps
+        last_reasoning = session_reasoning(OPENCODE_DB, stream_facts(lines).session_id)
+        stopped = stuck(lines, last_reasoning, elapsed, steps_at_limit)
         return bool(stopped)
 
     env = {**os.environ, **SHELL_TIMEOUT_ENV, CONFIG_ENV: opencode_config(repo)}
@@ -283,6 +300,9 @@ def run_opencode(
     lines = read()
     if stopped:
         marker = f"\n--- {stopped} ---\n"
+        if last_reasoning:  # opencode-N[-M].jsonl keeps thinking-N[-M].md beside it
+            name = log_path.stem.replace("opencode", "thinking", 1) + ".md"
+            (log_path.parent / name).write_text(last_reasoning + "\n", encoding="utf-8")
     elif exit_code is None:
         marker = "\n--- timed out ---\n"
     else:
