@@ -1,4 +1,4 @@
-# Milestone F270: tests/runner/test_shots.py waits on the real…
+# Milestone F270: test_shots.py stops waiting on real seconds
 
 > **State:** idea · **Area:** factory
 > Planted by the owner on 2026-11-18.
