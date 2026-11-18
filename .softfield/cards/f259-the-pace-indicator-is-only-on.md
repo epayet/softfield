@@ -1,6 +1,7 @@
 # Milestone F259: The Planning room's week bar shows Claude's pace, as the Overview does
 
-> **State:** ready · **Area:** factory
+> **State:** done · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-18. Base: git tag `f259-the-pace-indicator-is-only-on-start`. Report: [`.softfield/reviews/f259-the-pace-indicator-is-only-on.md`](../reviews/f259-the-pace-indicator-is-only-on.md).
 > Planted by the owner on 2026-11-17.
 
 ## Notes

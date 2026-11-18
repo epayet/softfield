@@ -1,5 +1,7 @@
 # F259 review: the pace indicator, on the Planning room too
 
+- **Status:** done, signed off by the owner on 2026-11-18.
+
 ## Sign-off sheet
 
 ### 1. What changed
