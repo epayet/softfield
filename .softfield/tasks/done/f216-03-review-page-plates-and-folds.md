@@ -36,3 +36,10 @@ Read `.softfield/cards/f216-let-s-redesign-the-milestone-review.md` (D3, D4, D8,
 - no horizontal scroll at 390 px on F187's page, and tapping a fold works without a script
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
