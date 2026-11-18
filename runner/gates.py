@@ -8,7 +8,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePosixPath
 
 from runner import i18n
-from runner.config import Checks, project_checks, suite_args
+from runner.config import Checks, project_checks, suite_args, worker_args
 from runner.gitops import Git
 from runner.procs import run_bounded
 from runner.tasks import Task
@@ -336,7 +336,8 @@ def gate_mypy(ctx: GateContext) -> GateResult:
 
 
 def gate_task_tests(ctx: GateContext) -> GateResult:
-    return _command("task-tests", ctx, "uv", "run", "pytest", "-q", *ctx.task.tests)
+    workers = worker_args(project_checks(ctx.repo))
+    return _command("task-tests", ctx, "uv", "run", "pytest", "-q", *workers, *ctx.task.tests)
 
 
 def gate_all_tests(ctx: GateContext) -> GateResult:
@@ -372,7 +373,10 @@ def gate_tests_fail_on_main(ctx: GateContext) -> GateResult:
                 ctx.git.run("checkout", ctx.base, "--", path)
             else:
                 (ctx.repo / path).unlink(missing_ok=True)
-        code, output = _exec(ctx, "uv", "run", "pytest", "-q", "-p", "no:cacheprovider", *tests)
+        workers = worker_args(project_checks(ctx.repo))
+        # -x: one failure already gives the verdict
+        args = ("-q", "-x", "-p", "no:cacheprovider", *workers, *tests)
+        code, output = _exec(ctx, "uv", "run", "pytest", *args)
     finally:
         ctx.git.run("reset", "-q", "--hard", "HEAD")
     if code in (1, 2):  # tests failed, or couldn't import what the task adds

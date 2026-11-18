@@ -1,6 +1,8 @@
 from dataclasses import replace
 from pathlib import Path
 
+import pytest
+
 from runner import gates
 from runner.config import Checks
 from runner.gates import (
@@ -9,6 +11,7 @@ from runner.gates import (
     added_skips,
     dependency_changes,
     gate_all_tests,
+    gate_task_tests,
     gate_tests_fail_on_main,
     is_test_file,
     layout_problems,
@@ -147,6 +150,49 @@ def test_all_tests_runs_on_the_projects_workers(repo: Path, monkeypatch):
     task = write_task(repo / ".softfield" / "tasks" / "ready", "m1-01-current")
     assert gate_all_tests(GateContext(repo, Git(repo), parse_task(task, 150), "main", (), 60)).ok
     assert calls[0][3:6] == ("-q", "-n", "4")
+
+
+@pytest.mark.parametrize("workers", [4, 0])
+def test_task_tests_runs_on_the_projects_workers(repo: Path, monkeypatch, workers: int):
+    """F71 D9: task-tests uses `-n N` with workers, and no `-n` with 0."""
+    toml = repo / ".softfield" / "project.toml"
+    toml.write_text(toml.read_text().replace("[checks]\n", f"[checks]\ntest_workers = {workers}\n"))
+    calls: list[tuple[str, ...]] = []
+
+    def fake_command(name: str, ctx: GateContext, *args: str) -> GateResult:
+        calls.append(args)
+        return GateResult(name, True, "")
+
+    monkeypatch.setattr(gates, "_command", fake_command)
+    task = write_task(repo / ".softfield" / "tasks" / "ready", "m1-01-current")
+    assert gate_task_tests(GateContext(repo, Git(repo), parse_task(task, 150), "main", (), 60)).ok
+    assert ("-n" in calls[0]) == (workers > 0)
+    if workers:
+        assert calls[0][calls[0].index("-n") + 1] == "4"
+
+
+@pytest.mark.parametrize("workers", [4, 0])
+def test_tests_fail_on_main_stops_at_first_failure_on_workers(repo: Path, monkeypatch, workers):
+    toml = repo / ".softfield" / "project.toml"
+    toml.write_text(toml.read_text().replace("[checks]\n", f"[checks]\ntest_workers = {workers}\n"))
+    # On main, as the gate puts back main's version of every file outside tests/.
+    git(repo, "commit", "-q", "-am", "workers")
+    ctx = _branch_with(
+        repo,
+        {
+            "coucou/thing.py": "def thing() -> int:\n    return 42\n",
+            "tests/unit/test_thing.py": "def test_thing():\n    assert thing() == 42\n",
+        },
+    )
+    seen: dict[str, str] = {}
+    _fake_pytest(monkeypatch, 1, seen)
+    assert gate_tests_fail_on_main(ctx).ok
+    args = seen["args"].split()
+    assert "-x" in args
+    assert ("-n" in args) == (workers > 0)
+    if workers:
+        assert args[args.index("-n") + 1] == "4"
+    assert git(repo, "status", "--porcelain") == ""
 
 
 def test_added_skips_finds_ways_to_silence_a_test():

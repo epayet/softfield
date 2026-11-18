@@ -319,10 +319,14 @@ def project_run(repo: Path) -> Run | None:
     return Run(service=service, path=str(table.get("path", "/")))
 
 
+def worker_args(checks: Checks) -> list[str]:
+    """pytest's arguments for the project's workers: none when it keeps one process."""
+    return ["-n", str(checks.test_workers)] if checks.test_workers > 0 else []
+
+
 def suite_args(checks: Checks) -> list[str]:
     """pytest's arguments for the whole suite: its folders, on its workers."""
-    workers = ["-n", str(checks.test_workers)] if checks.test_workers > 0 else []
-    return [*workers, *checks.test_dirs]
+    return [*worker_args(checks), *checks.test_dirs]
 
 
 def read_protected(repo: Path) -> list[str]:
