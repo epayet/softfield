@@ -343,6 +343,14 @@ docs/workflow.md (Milestone review loop).
 
 Round {round} of at most {max_rounds}. {scope}
 
+If the diff changed a factory page (templates, static files or views under factory_dashboard/),
+read each changed page on the live database before the tests: `softfield look page <address>`
+for its text, and its raw HTML too where escaping or an attribute matters. Then take one
+fixture from each new test file and compare it with a real record of the same kind (a card's
+doc in .softfield/cards/, a thread or row through `softfield look sql`). A fixture tidier than
+the real thing is a should-fix finding on the test. If the live database lacks the case the
+milestone added, say so and rely on the tests: don't invent data.
+
 Read the tests as closely as the code: missing edge cases, and every existing test a
 developer edited (the session reports in .softfield/sessions/ list them). Check the French.
 
@@ -395,8 +403,9 @@ sheet ("Sign-off sheet" above), ending with "6. What next": your product and fac
 suggestions. Write each suggestion that needs a card as one quoted `> ` line under its
 Product or Factory bullet: one self-contained sentence in the owner's plant-note voice, so
 the dashboard can offer to plant it. What this review already did itself is not quoted.
-Then what was built, findings and resolutions, what was set aside and workflow
-observations. The numbers come from `softfield report {milestone}`, between the
+Then what was built, findings and resolutions (the findings section names the pages it opened
+and the record it compared, one line each, so a review that skipped them shows), what was set
+aside and workflow observations. The numbers come from `softfield report {milestone}`, between the
 `<!-- runner report -->` markers: leave that block as it is and don't recount them.
 Read-only git (diff, log, show) is fine; don't commit: the runner does.
 """

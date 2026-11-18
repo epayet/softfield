@@ -300,6 +300,29 @@ def test_the_review_asks_for_each_card_suggestion_as_one_quoted_line():
     assert "already did itself is not quoted" in text
 
 
+def test_the_review_reads_the_real_page_before_the_tests():
+    """ADR 37 items 1–3: the page look comes first, then the fixture check and report line."""
+    text = " ".join(prompts.REVIEW.split())
+    assert text.index("softfield look page") < text.index("Read the tests as closely")
+    before = text[: text.index("Read the tests as closely")]
+    assert "factory_dashboard/" in before and "raw HTML" in before
+    assert "one fixture" in before and ".softfield/cards/" in before
+    assert "softfield look sql" in before and "should-fix" in before
+    assert "names the pages it opened" in text and "record it compared" in text
+    assert "lead.md" not in text and "owner.md" not in text
+    fields = dict(
+        milestone="f1", round=1, max_rounds=3, scope="", tests="tests", recurring="none",
+        checkpoints="none", out="x.json", pictures="none",
+    )  # fmt: skip
+    assert "softfield look page" in prompts.REVIEW.format(**fields)
+
+
+def test_lead_md_review_reads_a_changed_page_with_look_page():
+    lead = (ROOT / "runner/instructions/lead.md").read_text(encoding="utf-8")
+    review = lead[lead.index("## Review") :]
+    assert "softfield look page" in review and "ADR 37" in review
+
+
 def test_the_later_route_is_a_quoted_line_and_never_for_security():
     """ADR 43 items 1 and 5: no bug ticket, and a security finding never takes `later`."""
     text = " ".join(prompts.REVIEW.split())
