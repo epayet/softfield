@@ -37,3 +37,9 @@ attempts: 3
 tokens: 3002905
 logs: .softfield/var/runs/20261118-135500/f267-02-note-box-while-writing
 ```
+
+```yaml
+# --- runner ---
+result: done
+finished_by: lead
+```
