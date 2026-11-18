@@ -313,10 +313,11 @@ tbody tr:hover { background: var(--accent-wash); }
   #allowance .allow > [id^="allow-"] > * { grid-column: 1 / -1; }
   #allowance .allow > [id^="allow-"] > .line:first-child { display: contents; }
   #allowance .allow > [id^="allow-"] .reading {
-    grid-column: 1; grid-row: 1; display: flex; flex-wrap: wrap; justify-content: space-between;
-    gap: 0 6px; align-items: baseline; font-size: 12px; }
+    grid-column: 1; grid-row: 1; display: flex; justify-content: space-between;
+    gap: 0 6px; font-size: 12px; white-space: nowrap;
+    margin: 0; padding: 0; align-self: flex-start; }
   #allowance .allow > [id^="allow-"] > .meter { grid-column: 1; grid-row: 2; height: 8px; margin: 3px 0 0; }
-  #allowance .allow > [id^="allow-"] .lever { grid-column: 2; grid-row: 1 / 3; }
+  #allowance .allow > [id^="allow-"] .lever { grid-column: 2; grid-row: 1 / 3; white-space: normal; line-height: 1.15; }
   #allowance .allow > [id^="allow-"] > .line:not(:first-child) {
     display: block; margin: 3px 0 0; line-height: 1.4; }
   #allowance .allow > [id^="allow-"] > .line small + small::before { content: " · "; color: var(--rule); }

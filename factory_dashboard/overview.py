@@ -751,8 +751,8 @@ def agent_allowances(conn: sqlite3.Connection, now: datetime) -> list[WindowAllo
         queries.LEAD_PREFIX,
         "Claude",
         [
-            ("five_hour", "5-hour window", FIVE_HOUR_MARK, "kept for you from here"),
-            ("seven_day", "week", WEEK_MARK, "reserve kept for planning and reviews from here"),
+            ("five_hour", "5-hour window", FIVE_HOUR_MARK, "lead tickets go last from here"),
+            ("seven_day", "week", WEEK_MARK, "lead tickets go last from here"),
         ],
         now,
     )
@@ -828,6 +828,7 @@ class WeekPace:
     pace: str  # "33%"
     until: str | None  # "Sun 8 Nov 04:00": when lead tickets go on again, or the reset
     full: bool = False  # in the last hours with the week all used
+    limit: bool = False  # at Claude's real limit (100% or a rest)
 
 
 @dataclass(frozen=True)
@@ -870,6 +871,7 @@ def claude_pace(conn: sqlite3.Connection, project: str, now: datetime) -> Claude
         line = allowance.pace_line(week, now)
         capacity = week.capacity or 1.0
         used = week.used / capacity
+        at_limit = week.used >= week.capacity - allowance.EPS if week.capacity else False
         if allowance.in_sweep(week, now):
             ends = week.resets_at
             pace = WeekPace(
@@ -889,6 +891,7 @@ def claude_pace(conn: sqlite3.Connection, project: str, now: datetime) -> Claude
                 used,
                 f"{line / capacity:.0%}",
                 _day_time(goes) if goes else None,
+                limit=at_limit,
             )
     holding = [
         w
@@ -897,11 +900,19 @@ def claude_pace(conn: sqlite3.Connection, project: str, now: datetime) -> Claude
     ]
     row = None
     if holding:
-        all_ends = [allowance.lead_goes_at(w, cost, now) for w in holding]
-        known = [e for e in all_ends if e is not None]
-        until = f" until about {max(known).astimezone():%a %H:%M}" if known else ""
-        by_week = any(w.name == "seven_day" and not allowance.resting(w, now) for w in holding)
-        row = f"waits for {'Claude' + chr(39) + 's week pace' if by_week else 'Claude'}{until}"
+        at_real_limit = any(
+            allowance.resting(w, now)
+            or (w.capacity is not None and w.used >= w.capacity - allowance.EPS)
+            for w in holding
+        )
+        if at_real_limit:
+            all_ends = [allowance.lead_goes_at(w, cost, now) for w in holding]
+            known = [e for e in all_ends if e is not None]
+            until = f" until about {max(known).astimezone():%a %H:%M}" if known else ""
+            by_week = any(w.name == "seven_day" and not allowance.resting(w, now) for w in holding)
+            row = f"waits for {'Claude' + chr(39) + 's week pace' if by_week else 'Claude'}{until}"
+        else:
+            row = "goes when nothing else can"
     return ClaudePace(pace, row)
 
 

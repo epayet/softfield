@@ -3210,21 +3210,15 @@ def _lead_window(html: str) -> tuple[str, str, str]:
 
 
 def test_over_pace_the_planning_week_bar_has_the_post_the_stripes_and_the_plate(db_path):
-    from runner.allowance import lead_goes_at
-    from tests.factory_dashboard.test_overview import pace_client, week_window
+    from tests.factory_dashboard.test_overview import pace_client
 
     resets_in = timedelta(days=4, hours=16)
     five, week, text = _lead_window(_page(pace_client(db_path, 0.65, resets_in)))
     assert 'class="pace" style="left:33%"' in week
     assert 'class="over-pace" style="left:33%;width:32%"' in week
     assert 'class="pace"' not in five
-    goes = lead_goes_at(week_window(0.65, resets_in), 0.0, NOW)
-    assert goes is not None
-    until = goes.astimezone()
-    assert (
-        f"Over pace lead tickets wait until about {until:%a} {until.day} {until:%b %H:%M}" in text
-    )
-    assert "developers, planning, reviews and the fast lane go on · today's pace 33%" in text
+    assert "developers first; the lead takes over when nothing else can run" in text
+    assert "planning, reviews and the fast lane go on · today's pace 33%" in text
     assert "on pace" not in text
 
 

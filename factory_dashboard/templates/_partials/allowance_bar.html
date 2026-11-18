@@ -21,7 +21,11 @@
 
 {# The pace plate: "Over pace" or "Last hours" (f259 D1). #}
 {% macro pace_plate(wp) %}
-{% if wp and wp.state == "over" %}
+{% if wp and wp.state == "over" and wp.limit %}
+<div class="stop-plate"><b>Over pace</b><span>lead tickets wait until about <span class="until">{{ wp.until or "the reset" }}</span></span><small>developers, planning, reviews and the fast lane go on · today's pace {{ wp.pace }}</small></div>
+{% elif wp and wp.state == "over" %}
+<div class="stop-plate"><b>Over pace</b><span>developers first; the lead takes over when nothing else can run</span><small>planning, reviews and the fast lane go on · today's pace {{ wp.pace }}</small></div>
+{% elif wp and wp.state == "on" and wp.limit %}
 <div class="stop-plate"><b>Over pace</b><span>lead tickets wait until about <span class="until">{{ wp.until or "the reset" }}</span></span><small>developers, planning, reviews and the fast lane go on · today's pace {{ wp.pace }}</small></div>
 {% elif wp and wp.state == "last" %}
 <div class="stop-plate"><b>Last hours</b>{% if wp.full %}<span>everything waits for the reset<span class="until"> {{ wp.until }}</span></span>{% else %}<span>lead tickets may use the whole reserve, until <span class="until">{{ wp.until }}</span></span><small>what's left at the reset is lost</small>{% endif %}</div>

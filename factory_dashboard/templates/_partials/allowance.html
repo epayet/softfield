@@ -22,7 +22,7 @@
           title="{{ 'asked: ' ~ sw.asked if sw.asked else sw.label }}"
           hx-post="/requests" hx-swap="none"
           hx-vals='{"kind": "reserve", "project": {{ project | tojson }}, "subject": {{ sw.name | tojson }}, "value": {{ ("off" if sw.until else "on") | tojson }}}'
-          hx-on::before-request="this.classList.add('on-its-way'); this.disabled = true"{{ ' disabled' if sw.asked }}>use reserve <i class="lamp"></i><span class="slot"><span class="knob"></span></span></button>
+          hx-on::before-request="this.classList.add('on-its-way'); this.disabled = true"{{ ' disabled' if sw.asked }}>keep board order <i class="lamp"></i><span class="slot"><span class="knob"></span></span></button>
         {% endif %}
       </div>
       {{ ab.allowance_bar(a, pace) }}
@@ -62,12 +62,12 @@
     <span><i class="swatch under-mark"></i>green: under the mark</span>
     <span><i class="swatch past-mark"></i>yellow: past the mark</span>
     <span><i class="swatch nearly-out"></i>red: above 95%</span>
-    <span>the mark: lead tickets stop here until the week's last hours. On the week, planning and reviews go on past it; on the 5-hour window, the rest is the owner's</span>
+    <span>the mark: past it, lead tickets go after developers, planning and reviews; only 100% makes them wait</span>
     <span><i class="swatch pace"></i>dashed yellow post: today's pace; lead tickets start only under it</span>
     <span><i class="swatch over-pace"></i>striped: used beyond today's pace; lead tickets wait until the post catches up</span>
     <span><i class="swatch ahead"></i>hatched: where the meter will be at the reset, at this rate</span>
     <span><span class="lever mini" aria-hidden="true" style="min-height:0"><span class="slot"><span class="knob"></span></span></span>
-      use reserve: let the factory work past the mark; on lasts 24 hours, then turns itself off</span>
+      keep board order: lead tickets keep the board's order past the mark; on lasts 24 hours, then turns itself off</span>
     <span><span class="lever mini" aria-hidden="true" aria-checked="true" style="min-height:0"><span class="slot" style="background:repeating-linear-gradient(135deg,var(--hazard) 0 5px,var(--hazard-ink) 5px 10px)"><span class="knob" style="left:24px"></span></span></span>
       striped and lit: on</span>
     <span>halfway, with a dashed orange edge: a lever you pulled, on its way to the runner</span>
