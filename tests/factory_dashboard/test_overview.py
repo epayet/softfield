@@ -1339,9 +1339,9 @@ def test_in_the_last_hours_a_full_week_says_everything_waits_for_the_reset(db_pa
 
 
 def test_pace_rounding_discrepancy_stripe_width_equals_fill_minus_post(db_path):
-    """f266: when rounding used-post alone gives one percent less than rounded fill minus rounded
-    post, the stripe width equals the fill's percent minus the post's (the live case on 2026-11-18
-    pattern: 0.357 used, line 0.264, fill 36%, post 26%, stripe 10%)."""
+    """f266: when rounding used - post alone gives one percent less than the rounded fill minus the
+    rounded post (35.5% used, post 33.3%: 2% alone, 36% - 33% = 3%), the stripe's width is the
+    fill's percent minus the post's, so no green shows past its end."""
     resets_in = timedelta(days=4, hours=16)
     html = pace_client(db_path, 0.355, resets_in).get("/").text
     meter = _meter(html)
