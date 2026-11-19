@@ -305,10 +305,10 @@ def test_a_server_that_never_answers_is_recorded(app, shoot, monkeypatch):
 
 
 def test_a_slow_page_gets_its_pictures_and_no_readiness_request(app, shoot):
-    """Slower than the old 5 s check; the app gets one request per picture and none for `/`."""
+    """The app gets one request per picture and none for `/`."""
     slow = APP.replace("import http.server,", "import time, http.server,").replace(
         "        found = page.is_file()\n",
-        "        found = page.is_file()\n        time.sleep(6 if found else 0)\n",
+        "        found = page.is_file()\n        time.sleep(0.4 if found else 0)\n",
     )
     (app / "app.py").write_text(slow)
     git(app, "add", "-A")
@@ -460,6 +460,7 @@ def test_real_pictures_and_a_page_that_tries_everything(app, other_host, monkeyp
     a form and reaches for another host, directly and through a redirect."""
     other, other_hits = other_host
     monkeypatch.setenv("APP_OTHER", other)
+    monkeypatch.setattr(shots, "SETTLE_LIMIT", 500)
     (app / "pages" / "first.html").write_text(
         f"""<h1>new first</h1>
         <img src="{other}/image">
@@ -497,7 +498,9 @@ def test_a_500_is_recorded_by_the_browser(app):
     assert _pngs(app) == []
 
 
-def test_a_page_without_its_stylesheet_is_a_failed_picture(app):
+def test_a_page_without_its_stylesheet_is_a_failed_picture(app, monkeypatch):
+    monkeypatch.setattr(shots, "SETTLE_LIMIT", 500)
+    monkeypatch.setattr(shots, "PAGE_LIMIT", 2000)
     (app / "pages" / "first.html").write_text('<link rel="stylesheet" href="/static/app.css">hi')
     (app / "pages" / "second.html").write_text('<link rel="stylesheet" href="/ok.css">hi')
     (app / "pages" / "ok.css.html").write_text("body{}")
@@ -512,7 +515,9 @@ def test_a_page_without_its_stylesheet_is_a_failed_picture(app):
     assert pictures["after-wide-2.png"] == {"state": shots.TAKEN, "reason": ""}
 
 
-def test_a_stylesheet_on_another_host_is_refused_and_failed(app, other_host):
+def test_a_stylesheet_on_another_host_is_refused_and_failed(app, other_host, monkeypatch):
+    monkeypatch.setattr(shots, "SETTLE_LIMIT", 500)
+    monkeypatch.setattr(shots, "PAGE_LIMIT", 2000)
     other, other_hits = other_host
     (app / "pages" / "first.html").write_text(f'<link rel="stylesheet" href="{other}/x.css">hi')
     _take(app)
@@ -530,6 +535,7 @@ def test_softfields_own_shots_picture_the_dashboard(tmp_path, monkeypatch):
     machine = tmp_path / "machine.toml"
     machine.write_text(re.sub(r'(?m)^db = "[^"]*"', f'db = "{db}"', MACHINE.read_text()))
     monkeypatch.setenv("SOFTFIELD_CONFIG", str(machine))
+    monkeypatch.setattr(shots, "SETTLE_LIMIT", 500)
     found = project_shots(ROOT)
     assert found is not None
     folder = tmp_path / "pictures"
