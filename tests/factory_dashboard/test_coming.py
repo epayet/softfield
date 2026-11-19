@@ -1025,9 +1025,11 @@ def test_a_change_that_isnt_stored_leaves_the_row_open(page, planning, db_path, 
     page.route("**/requests", lambda route: route.fulfill(status=400, body="Bad request"))
     page.click(f"#waiting-{ducks} summary")
     page.fill(f'#edit-{ducks} input[name="title"]', "Geese")
+    watch_requests(page)
     with page.expect_response("**/requests"):
         page.click(f"#save-{ducks}")
-    page.wait_for_timeout(300)  # a re-fetch, if one wrongly followed, would have landed
+    sent = requests_until(page, "afterRequest post /requests")
+    assert sent == ["beforeRequest post /requests", "afterRequest post /requests"]
     assert page.input_value(f'#edit-{ducks} input[name="title"]') == "Geese"
     assert page.locator(f"details#waiting-{ducks}[open]").count() == 1
     assert _asked_changes(db_path) == []

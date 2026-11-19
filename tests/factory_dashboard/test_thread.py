@@ -21,6 +21,8 @@ from tests.factory_dashboard.conftest import (
     PROJECT,
     _at,
     poll,
+    requests_until,
+    watch_requests,
 )
 from tests.factory_dashboard.test_planning import (
     _REVIEW_ADR,
@@ -1660,9 +1662,11 @@ def test_a_message_change_that_isnt_stored_leaves_the_editor_open(page, planning
     page.route("**/requests", lambda route: route.fulfill(status=400, body="Bad request"))
     page.click(f"#edit-{said}")
     page.fill(f'#editor-{said} textarea[name="text"]', "Geese")
+    watch_requests(page)
     with page.expect_response("**/requests"):
         page.click(f"#save-{said}")
-    page.wait_for_timeout(300)  # a re-fetch, if one wrongly followed, would have landed
+    sent = requests_until(page, "afterRequest post /requests")
+    assert sent == ["beforeRequest post /requests", "afterRequest post /requests"]
     assert page.input_value(f'#editor-{said} textarea[name="text"]') == "Geese"
     assert page.locator("#conversation .on-its-way").count() == 0
     assert _asked_changes(db_path) == []
