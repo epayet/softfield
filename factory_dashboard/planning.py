@@ -23,6 +23,7 @@ from fastapi.responses import HTMLResponse
 from factory_dashboard.app import Db, Now, Project, ago, render
 from factory_dashboard.coming import (
     GENERAL,
+    REPLIES,
     DeskGroup,
     DeskItem,
     Part,
@@ -59,7 +60,6 @@ from runner.planner import (
     MERGE,
     ON_ITS_WAY,
     OPEN,
-    PLANNER,
     REJECTED,
     SENT_BACK,
     PlannerError,
@@ -130,7 +130,7 @@ def _waiting_order(
     planned = {
         str(r["subject"] or "").split("#")[0]
         for r in metrics.open_jobs(conn, project_id)
-        if r["kind"] == PLANNER
+        if r["kind"] in REPLIES
     }
     return dict.fromkeys(
         [r["card"] for r in last if r["author"] in ("owner", "runner") and r["card"] in planned]
@@ -851,9 +851,9 @@ def factory_now(conn: sqlite3.Connection, project: str, now: datetime) -> dict[s
     jobs = [j for j in running_jobs(conn, project, now) if j.live]
     project_id = metrics.find_project(conn, project)
     pending = project_id is not None and any(
-        r["kind"] == PLANNER for r in metrics.open_jobs(conn, project_id)
+        r["kind"] in REPLIES for r in metrics.open_jobs(conn, project_id)
     )
-    working = [j for j in jobs if j.role != PLANNER]
+    working = [j for j in jobs if j.role not in REPLIES]
     places = reply_line(conn, project, now, jobs)
     thread = _writing(places)
     writing: dict[str, object] | None = None

@@ -132,7 +132,9 @@
     </div>
     <label class="check"><input type="checkbox" name="app" checked>
       <span>It's an app I open in a browser: give it a Docker stack from the start, so Run works on its plate on day one.</span></label>
-    <div class="where"><span class="tag">Goes in</span><span id="goes-in" class="mono" data-root="{{ root }}">{{ root }}/</span></div>
+    <div class="where"><span class="tag">Goes in</span><span id="goes-in" class="mono" data-root="{{ root }}" data-taken="{{ taken | tojson | forceescape }}">{{ root }}/</span></div>
+    {# bug-68: Start it makes new projects only; a name whose folder exists can't be sent #}
+    <p id="name-taken" class="name-taken" role="alert" hidden></p>
     <div class="send">
       <button type="submit" class="btn go">Start it</button>
       <span class="muted">Its plate shows at once; the lead's questions and ADR 00 come on its first card.</span>
@@ -173,8 +175,22 @@
     const form = document.getElementById("start-form");
     const goesIn = document.getElementById("goes-in");
     const field = (name) => form.elements.namedItem(name);
+    const taken = new Set(JSON.parse(goesIn.dataset.taken || "[]"));
+    const warning = document.getElementById("name-taken");
+    const start = form.querySelector("button[type=submit]");
+    // the folder the runner makes from the name (`_slug` in runner/setup.py)
+    const slug = (text) => (text.normalize("NFKD").replace(/[^\x00-\x7f]/g, "").toLowerCase()
+      .match(/[a-z0-9]+/g) || []).join("-").slice(0, 40).replace(/^-+|-+$/g, "");
     form.addEventListener("input", () => {
-      goesIn.textContent = `${goesIn.dataset.root}/${field("name").value.trim()}`;
+      const folder = slug(field("name").value);
+      goesIn.textContent = `${goesIn.dataset.root}/${folder}`;
+      const clash = folder !== "" && taken.has(folder);
+      warning.hidden = !clash;
+      warning.textContent = clash
+        ? `${goesIn.dataset.root}/${folder} already exists. Start it makes new projects only: pick another name.`
+        : "";
+      field("name").setCustomValidity(clash ? warning.textContent : "");
+      start.disabled = clash;
     });
     form.addEventListener("htmx:configRequest", (event) => {
       event.detail.parameters.value = JSON.stringify({

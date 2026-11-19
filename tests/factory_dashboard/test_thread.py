@@ -726,6 +726,42 @@ def test_a_pending_reply_hides_send_and_shows_the_wait(planning, db_path, serve)
     assert "Comment…" not in html
 
 
+def test_a_pending_setup_reply_hides_the_comment_boxes_like_a_planners(planning, db_path, serve):
+    """bug-65: a project being set up answers through a `setup` row (ADR 48 item 5). Once the
+    runner has taken the owner's comment and queued it, the thread still waits for the lead: no
+    Comment… boxes on the old points to answer again (waifu-gallery's M1, 2026-11-19)."""
+    _write(db_path, lambda conn: _seven_points(conn, planning))
+    client = serve()
+    assert "Comment…" in _thread(client, "f6")
+    _write(
+        db_path,
+        lambda conn: metrics.queue_job(
+            conn, planning, "setup", "f6#2", "your message on F6", _at(timedelta(minutes=4))
+        ),
+    )
+    html = _thread(client, "f6")
+    assert "Next for the lead ·" in _text(html)
+    _note_box(html)
+    assert "Comment…" not in html
+
+
+def test_a_message_on_another_card_says_it_waits_for_the_setup(planning, db_path, serve):
+    """bug-66: while the project is being set up, a message on a card other than M1 is a planner
+    row the runner holds until ADR 00 is accepted: the thread says so, not a place in line."""
+    _write(db_path, lambda conn: _seven_points(conn, planning))
+
+    def held(conn: sqlite3.Connection) -> None:
+        name = conn.execute("SELECT name FROM projects WHERE id = ?", (planning,)).fetchone()[0]
+        metrics.set_project_paused(conn, name, metrics.SETTING_UP)
+        metrics.queue_job(conn, planning, "planner", "f6#2", "a message", _at(timedelta(minutes=4)))
+
+    _write(db_path, held)
+    text = _text(_thread(serve(), "f6"))
+    assert "Next for the lead · waits until " in text
+    assert "is set up: ADR 00 on M1 first" in text
+    assert "in line" not in text
+
+
 def test_the_latest_exchange_comes_first_and_the_older_messages_fold_newest_first(
     planning, db_path, serve
 ):

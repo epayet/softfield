@@ -13,6 +13,7 @@ from typing import NamedTuple
 from factory_dashboard.app import ago
 from factory_dashboard.overview import CANCELLING, Running, open_changes
 from runner import metrics
+from runner.dispatch import SETUP
 from runner.planner import (
     PLANNER,
     PlannerError,
@@ -31,7 +32,12 @@ from runner.requests import (
     owners_words,
     refused,
 )
+from runner.setup import FIRST_CARD
 from runner.tasks import short_key
+
+# the queued jobs that answer the owner on a thread: a planner's, or a new project's setup
+# (ADR 48 item 5), whose reply the pages wait for alike (bug-65)
+REPLIES = (PLANNER, SETUP)
 
 GENERAL = "general"
 _TYPICAL = 20  # finished jobs of the running one's role and agent that make its typical length
@@ -410,10 +416,12 @@ def _held(
     job only."""
     if project_id is None:
         return None
+    if thread is not None and (waits := _waits_for_setup(conn, project_id, thread)):
+        return waits
     until = [
         _when(r["not_before"])
         for r in metrics.open_jobs(conn, project_id)
-        if r["kind"] == PLANNER
+        if r["kind"] in REPLIES
         and r["not_before"]
         and _when(r["not_before"]) > now
         and (thread is None or str(r["subject"] or "").split("#")[0] == thread)
@@ -423,6 +431,21 @@ def _held(
     first = min(until)
     which = "weekly" if first - now > _FIVE_HOURS else "5-hour"
     return f"waits for Claude's {which} limit, until {first.astimezone():%a %H:%M}"
+
+
+def _being_set_up(conn: sqlite3.Connection, project_id: int) -> str | None:
+    """The project's name while it is being set up from the Projects page (ADR 48), else None."""
+    row = conn.execute("SELECT name, paused FROM projects WHERE id = ?", (project_id,)).fetchone()
+    return str(row["name"]) if row is not None and row["paused"] == metrics.SETTING_UP else None
+
+
+def _waits_for_setup(conn: sqlite3.Connection, project_id: int, thread: str) -> str | None:
+    """Why a message on a card other than M1 waits while its project is set up (bug-66): the
+    runner gives it a planner only once ADR 00 is accepted and the project is in the factory."""
+    name = _being_set_up(conn, project_id)
+    if name is None or thread == thread_key(FIRST_CARD):
+        return None
+    return f"waits until {name} is set up: ADR 00 on M1 first"
 
 
 def _next_reply(
@@ -443,7 +466,7 @@ def _next_reply(
     if not jobs:
         return "at the factory's next pick"
     job = _ahead(jobs)
-    what = _what(job) if job.role != PLANNER else _reply_of(writing)
+    what = _what(job) if job.role not in REPLIES else _reply_of(writing)
     typical = _typical(conn, project, job.role, job.agent)
     if typical is None:
         return f"after {what}"
@@ -455,7 +478,7 @@ def _next_reply(
 
 def _ahead(jobs: list[Running]) -> Running:
     """The live job the lead's line waits for: a planner job first (D1), else the oldest."""
-    return next((j for j in jobs if j.role == PLANNER), jobs[0])
+    return next((j for j in jobs if j.role in REPLIES), jobs[0])
 
 
 def _reply_of(thread: str | None) -> str:
@@ -488,10 +511,12 @@ def reply_line(
     project_id = metrics.find_project(conn, project)
     if project_id is None or not jobs:
         return {}
-    rows = [r for r in metrics.open_jobs(conn, project_id) if r["kind"] == PLANNER]
+    rows = [r for r in metrics.open_jobs(conn, project_id) if r["kind"] in REPLIES]
+    if _being_set_up(conn, project_id) is not None:  # only its setup runs (bug-66)
+        rows = [r for r in rows if r["kind"] == SETUP]
     live = {j.job: j for j in jobs}
     ahead = _ahead(jobs)
-    what = _what(ahead) if ahead.role != PLANNER else _reply_of(None)
+    what = _what(ahead) if ahead.role not in REPLIES else _reply_of(None)
     typical = _typical(conn, project, ahead.role, ahead.agent)
     left = None if typical is None else max(typical - ahead.elapsed, timedelta(0))
     found: dict[str, Place] = {}

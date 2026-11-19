@@ -690,6 +690,29 @@ def test_a_message_on_a_project_being_set_up_queues_its_setup_not_a_planner(repo
     ]
 
 
+def test_a_message_on_another_card_of_a_project_being_set_up_waits_for_a_planner(repo):
+    """bug-66: only M1's thread talks to the setup (ADR 48 item 5); a message on another card
+    or the general thread is a planner's, which the runner holds until the project joins the
+    factory (`loop.py` gives a project being set up nothing but its setup rows)."""
+    other = _ask(repo, "plan_message", "f2", _message("Also a dark mode."))
+    general = _ask(repo, "plan_message", "general", _message("And later?"))
+    first = _ask(repo, "plan_message", "m1", _message("Use SQLite."))
+    conn = metrics.open_db(_db(repo))
+    try:
+        metrics.set_project_paused(conn, repo.name, metrics.SETTING_UP)
+    finally:
+        conn.close()
+    _apply(repo)
+    assert _queued(repo) == [
+        ("planner", f"f2#{other}", "your message on F2", None),
+        ("planner", f"general#{general}", "your message on the general thread", None),
+        (dispatch.SETUP, f"m1#{first}", "your message on M1", None),
+    ]
+    assert [(m["author"], m["text"]) for m in _thread(repo, "f2")] == [
+        ("owner", "Also a dark mode.")
+    ]
+
+
 def test_a_messages_comments_are_kept_with_it_by_point(repo):
     _ask(repo, "plan_message", "f7", _message("Agreed otherwise.", p2="Why first?"))
     _apply(repo)
@@ -4007,12 +4030,13 @@ def test_a_refused_new_project_keeps_its_words_for_the_desk_until_dismissed(
     _apply(repo)
     conn = metrics.open_db(_db(repo))
     try:
-        rows = {r: metrics.find_request(conn, r) for r in (made, empty)}
+        made_row, empty_row = metrics.find_request(conn, made), metrics.find_request(conn, empty)
     finally:
         conn.close()
-    assert not requests.refused(rows[made])
-    assert requests.refused(rows[empty])
-    assert requests.owners_words(rows[empty]) == requests.Words("Bird log", "")
+    assert made_row is not None and empty_row is not None
+    assert not requests.refused(made_row)
+    assert requests.refused(empty_row)
+    assert requests.owners_words(empty_row) == requests.Words("Bird log", "")
     dismiss = _ask(repo, "dismiss", str(empty))
     _apply(repo)
     assert _request(repo, dismiss)[1] == f"dismissed request {empty}"

@@ -133,6 +133,9 @@ session above hold, but for the chat:
    protected and why, what stays out, one line each.
 6. **Ask only what you truly can't decide**, as a point whose `outcome` is `question`, with your
    recommendation and the alternatives. Everything else counts as agreed when they approve.
+7. **Say what approving does,** in your last point: the runner checks the project, adds it to the
+   factory, and asks the lead to plan M1 on this thread; that plan comes back for the owner's yes,
+   and only then is anything built. Pressing Run only shows the empty skeleton's page.
 
 ```json
 {"points": [{"n": 1, "title": "…", "answer": "…", "action": "…", "outcome": "info" | "question",

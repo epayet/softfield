@@ -213,6 +213,18 @@
     <a href="/projects/{{ project | urlencode }}{{ q }}">{{ project }}</a>
     {% block crumbs %}{% endblock %}
   </nav>
+  {% if setup_strip %}
+  {# bug-67: a project being set up says where its setup is, and what's next, on every page #}
+  <section id="setup-strip" class="card-plate setup-strip" aria-label="{{ project }} is being set up">
+    <header><h2>Being set up</h2><span class="stripe"></span><a class="src" href="/planning/m1{{ q }}">M1 →</a></header>
+    <div class="body">
+      <div class="stations" aria-label="Its setup: step {{ setup_strip.here + 1 }} of {{ setup_strip.stations | length }}">
+        {% for station in setup_strip.stations %}<span class="st{% if loop.index0 == setup_strip.here %} here{% elif loop.index0 < setup_strip.here %} past{% endif %}">{{ station }}</span>{% endfor %}
+      </div>
+      <p class="setup-next">{{ setup_strip.next }}</p>
+    </div>
+  </section>
+  {% endif %}
   {% block content %}{% endblock %}
 </main>
 </body>

@@ -202,6 +202,37 @@ def _setup_job(conn: sqlite3.Connection, name: str) -> bool:
     return any(job["kind"] == dispatch.SETUP for job in metrics.open_jobs(conn, project_id))
 
 
+@dataclass(frozen=True)
+class SetupStrip:
+    """bug-67: the setup's line at the top of a setting-up project's pages, as on its plate."""
+
+    here: int  # the lit station, by its index in STATIONS
+    next: str  # what happens next, in a line
+    stations: tuple[str, ...] = STATIONS
+
+
+_SETUP_NEXT = (
+    "The lead's setup is next in line. Its answer comes on M1.",
+    "The lead is setting it up. Its answer comes on M1: wait for it there.",
+    "Next: read ADR 00 on M1 and approve it. Then the lead plans M1 for your yes,"
+    " and the project is in the factory.",
+)
+
+
+def setup_strip(conn: sqlite3.Connection, project: str, now: datetime) -> SetupStrip | None:
+    """The strip while ``project`` is being set up from the Projects page (ADR 48); None after.
+    The station lit is the plate's (F122 D6): the lead's job while it waits or runs, then ADR 00
+    on the desk."""
+    from factory_dashboard.planning import desk, waiting_for_you  # planning imports app
+
+    state = metrics.project_state(conn, project)
+    if state is None or state[1] != metrics.SETTING_UP:
+        return None
+    lead = _setup_job(conn, project)
+    here = 1 if lead else (2 if waiting_for_you(desk(conn, project, now)) else 0)
+    return SetupStrip(here, _SETUP_NEXT[here])
+
+
 def projects_on_their_way(conn: sqlite3.Connection) -> list[NewProject]:
     """The `new_project` requests the runner hasn't taken yet, oldest first; a value that isn't
     the form's JSON is the idea itself, as the runner reads it."""
@@ -221,6 +252,19 @@ def projects_on_their_way(conn: sqlite3.Connection) -> list[NewProject]:
         else:
             found.append(NewProject("", raw))
     return found
+
+
+def taken_names(conn: sqlite3.Connection, root: Path) -> list[str]:
+    """The folder names Start it can't use (bug-68): every entry in the projects root, every
+    live project's name and every name a project on its way asked for. Start it makes new
+    projects only; an existing folder joins from the command line (the owner, 2026-11-19)."""
+    from runner.setup import _slug  # the runner's own folder name for the form's
+
+    names = {p.name for p in metrics.projects_in_order(conn)}
+    names |= {_slug(p.name) for p in projects_on_their_way(conn) if p.name}
+    if root.is_dir():
+        names |= {entry.name for entry in root.iterdir() if not entry.name.startswith(".")}
+    return sorted(n for n in names if n)
 
 
 def running_now(conn: sqlite3.Connection, now: datetime) -> list[NowJob]:
@@ -260,6 +304,7 @@ def projects_page(request: Request, conn: Db, project: Project, now: Now) -> HTM
     for_you = [c for c in cards if c.for_you]
     needs_you = broken + [c for c in for_you if c not in broken]
     needs_you_count = len(broken) + sum(c.for_you for c in for_you)
+    root = config.projects_root(request.app.state.db)
     return render(
         request,
         conn,
@@ -275,6 +320,7 @@ def projects_page(request: Request, conn: Db, project: Project, now: Now) -> HTM
             "asked": asked is not None,
             "starting": projects_on_their_way(conn),
             "stations": STATIONS,
-            "root": home_path(config.projects_root(request.app.state.db)),  # as the mock-up
+            "root": home_path(root),  # as the mock-up
+            "taken": taken_names(conn, root),
         },
     )

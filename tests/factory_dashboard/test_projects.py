@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from factory_dashboard import stacks_routes
+from factory_dashboard.projects import taken_names
 from runner import config, metrics, stacks
 from runner.requests import home_path
 from runner.stacks import Result
@@ -243,7 +244,9 @@ def test_send_lights_up_only_for_another_order_and_sends_the_names(page, project
     page.get_by_label("softfield's place").fill("2")
     assert send.is_enabled()
     send.click()
-    page.locator("#order-sent").get_by_text("On its way").wait_for()
+    # "On its way" shows only until /requests answers, which then replaces it: wait for the
+    # answer, which stays (it raced the click and failed about one run in three)
+    page.locator("#order-sent").get_by_text("Asked").wait_for()
     assert page.get_by_label("softfield's place").is_disabled()
     conn = metrics.open_db(db_path)
     try:
@@ -289,7 +292,7 @@ def test_the_start_panel_asks_the_idea_name_built_with_and_app_and_says_where(
     assert '<input type="text" name="built_with"' in panel
     assert '<input type="checkbox" name="app" checked>' in panel
     root = home_path(config.projects_root(db_path))  # `~/…` for a folder in the home
-    assert f'data-root="{root}">{root}/</span>' in panel
+    assert f'data-root="{root}" data-taken="' in panel and f'">{root}/</span>' in panel
     assert home_path(Path.home() / "code" / "x") == "~/code/x"
     assert "A new project is set up on its computer" not in html
 
@@ -372,11 +375,94 @@ def test_a_project_whose_adr_00_waits_lights_adr_00_for_you(
     assert 'href="/planning/m1?project=ducks"' in row
 
 
+def _strip(html: str) -> str:
+    match = re.search(r'<section id="setup-strip".*?</section>', html, re.S)
+    return match.group(0) if match else ""
+
+
+def test_a_project_being_set_up_says_so_on_its_other_pages_with_what_is_next(
+    projects_client, db_path, tmp_path, monkeypatch
+):
+    """bug-67: Planning and M1's thread carry the plate's line at the top, the same station lit,
+    and one line on what's next; the Projects page keeps it on the plate only."""
+    from factory_dashboard import planning
+
+    project_id = _setting_up(db_path, tmp_path)
+    conn = metrics.open_db(db_path)
+    try:
+        job = metrics.queue_job(conn, project_id, "setup", "m1", "new project", NOW.isoformat())
+        conn.commit()
+    finally:
+        conn.close()
+    for path in ("/planning?project=ducks", "/planning/m1?project=ducks"):
+        strip = _strip(projects_client.get(path).text)
+        assert lit(strip) == ["Set up by the lead"], path
+        assert "The lead is setting it up. Its answer comes on M1" in words(strip)
+        assert 'href="/planning/m1?project=ducks"' in strip
+    assert not _strip(projects_client.get("/projects").text)
+    conn = metrics.open_db(db_path)
+    try:
+        metrics.finish_queued(conn, job, NOW.isoformat())
+        conn.commit()
+    finally:
+        conn.close()
+    monkeypatch.setattr(planning, "desk", lambda conn, name, now: ["m1"] if name == "ducks" else [])
+    monkeypatch.setattr(planning, "waiting_for_you", lambda items: items)
+    strip = _strip(projects_client.get("/planning?project=ducks").text)
+    assert lit(strip) == ["ADR 00 for you"]
+    assert "Next: read ADR 00 on M1 and approve it. Then the lead plans M1" in words(strip)
+
+
+def test_a_project_in_the_factory_has_no_setup_strip(projects_client):
+    assert not _strip(projects_client.get("/planning?project=softfield").text)
+
+
 def test_a_live_projects_plate_has_no_stations_and_keeps_board_and_overview(projects_client):
     row = plate(projects_client.get("/projects").text, "softfield")
     assert "stations" not in row and "Answer on its first card" not in row
     assert 'href="/board?project=softfield">Board</a>' in row
     assert 'href="/?project=softfield">Overview</a>' in row
+
+
+def test_taken_names_are_the_roots_folders_the_live_projects_and_those_on_their_way(
+    db_path, tmp_path
+):
+    """bug-68: what Start it refuses before it is pressed (`_free_folder` in runner/setup.py
+    would quietly make ``name-2``)."""
+    root = tmp_path / "root"
+    (root / "old-thing").mkdir(parents=True)
+    (root / ".hidden").mkdir()
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.find_project(conn, PROJECT)
+        assert project is not None
+        value = json.dumps({"name": "Bird Log", "idea": "Birds.", "built_with": "", "app": True})
+        metrics.add_request(conn, project, "new_project", None, value, NOW.isoformat())
+        taken = taken_names(conn, root)
+    finally:
+        conn.close()
+    assert "old-thing" in taken and "bird-log" in taken
+    assert PROJECT in taken
+    assert ".hidden" not in taken and "Bird Log" not in taken
+
+
+def test_start_it_is_off_for_a_name_whose_folder_exists_and_says_why(page, projects_client):
+    """bug-68 (the owner, 2026-11-19): Start it makes new projects only. A name whose folder
+    is taken (here a live project's) turns it off with a line, before it is pressed."""
+    open_page(page, projects_client, "/projects")
+    root = page.locator("#goes-in").get_attribute("data-root")
+    start = page.get_by_role("button", name="Start it")
+    warning = page.locator("#name-taken")
+    page.get_by_label("The idea").fill("Another factory.")
+    page.get_by_label("Name").fill("SoftField")
+    assert page.locator("#goes-in").inner_text() == f"{root}/softfield"
+    assert start.is_disabled()
+    assert warning.inner_text() == (
+        f"{root}/softfield already exists. Start it makes new projects only: pick another name."
+    )
+    page.get_by_label("Name").fill("softfield two")
+    assert page.locator("#goes-in").inner_text() == f"{root}/softfield-two"
+    assert start.is_enabled() and warning.is_hidden()
 
 
 def test_start_it_sends_the_forms_json_and_shows_the_plate_at_once(page, projects_client, db_path):

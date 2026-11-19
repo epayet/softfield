@@ -404,11 +404,14 @@ def render(
 ) -> HTMLResponse:
     """A page: ``template`` with the top bar's projects and live facts, and ``q`` to keep
     ``?project=``."""
+    from factory_dashboard.projects import setup_strip  # projects imports app
     from runner import metrics
 
     names = [p.name for p in metrics.projects_in_order(conn)]
     # the clock a test pinned, as the routes' ``Now`` reads it
     now = request.app.dependency_overrides.get(get_now, get_now)()
+    # bug-67: a project being set up says so on its pages; the Projects page has it on the plate
+    strip = None if template == "projects.html" else setup_strip(conn, project, now)
     return templates.TemplateResponse(
         request,
         template,
@@ -418,6 +421,7 @@ def render(
             "q": "?" + urlencode({"project": project}),
             "version_poll": VERSION_POLL.format(version=code_version()),
             **top_bar(conn, project, now, planning_count=context.get("planning_count")),
+            "setup_strip": strip,
             **context,
         },
     )

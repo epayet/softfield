@@ -212,8 +212,10 @@ def _plan_message(
     metrics.add_planner_message(conn, thread_id, "owner", at, text, points=said or None)
     subject = planner.row_subject(thread, row["id"])
     reason = f"your message on {planner.thread_name(thread)}"
-    # a project being set up answers through its setup, not a planner (ADR 48 item 5)
-    kind = dispatch.SETUP if _setting_up(conn, project_id) else planner.PLANNER
+    # a project being set up answers through its setup, not a planner (ADR 48 item 5), on M1's
+    # thread only: another card's message is a planner's, held until the project joins (bug-66)
+    first = thread == planner.thread_key(setup.FIRST_CARD)
+    kind = dispatch.SETUP if first and _setting_up(conn, project_id) else planner.PLANNER
     metrics.queue_job(conn, project_id, kind, subject, reason, at)
     for item in metrics.open_owner_items(conn, project_id):
         if item["kind"] == planner.PLANNING and item["subject"] == thread:

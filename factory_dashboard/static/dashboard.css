@@ -1232,16 +1232,21 @@ body.has-order-bar main { padding-bottom: 120px; }
 .projects-page .way-plate .idea { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
   line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
 .projects-page .way-words { font: 12px var(--mono); color: var(--opus-ink); }
-.projects-page .stations { display: flex; margin: 6px 0 2px; counter-reset: st; }
-.projects-page .stations .st { flex: 1; position: relative; padding: 6px 6px 6px 10px; font: 600 10.5px/1.25 var(--display);
+:is(.projects-page, .setup-strip) .stations { display: flex; margin: 6px 0 2px; counter-reset: st; }
+:is(.projects-page, .setup-strip) .stations .st { flex: 1; position: relative; padding: 6px 6px 6px 10px; font: 600 10.5px/1.25 var(--display);
   letter-spacing: .06em; text-transform: uppercase; color: var(--muted); background: var(--floor);
   border: 1px solid var(--rule); border-right: 0; min-width: 0; overflow-wrap: anywhere; }
-.projects-page .stations .st:last-child { border-right: 1px solid var(--rule); }
-.projects-page .stations .st::before { counter-increment: st; content: counter(st); display: block;
+:is(.projects-page, .setup-strip) .stations .st:last-child { border-right: 1px solid var(--rule); }
+:is(.projects-page, .setup-strip) .stations .st::before { counter-increment: st; content: counter(st); display: block;
   font: 700 14px var(--display); color: var(--rule); }
-.projects-page .stations .st.past, .projects-page .stations .st.past::before { color: var(--ink-2); }
-.projects-page .stations .st.here, .projects-page .stations .st.here::before { color: var(--hazard-ink); }
-.projects-page .stations .st.here { background: var(--hazard); }
+:is(.projects-page, .setup-strip) .stations .st.past, :is(.projects-page, .setup-strip) .stations .st.past::before { color: var(--ink-2); }
+:is(.projects-page, .setup-strip) .stations .st.here, :is(.projects-page, .setup-strip) .stations .st.here::before { color: var(--hazard-ink); }
+:is(.projects-page, .setup-strip) .stations .st.here { background: var(--hazard); }
+/* bug-67: a project being set up says so at the top of its pages, the plate's line and what's next */
+.setup-strip { margin: 0 0 14px; }
+.setup-strip .stations { margin-top: 0; }
+.setup-strip .src { min-height: 44px; display: inline-flex; align-items: center; color: var(--ink-2); }
+.setup-strip .setup-next { margin: 8px 0 0; }
 .projects-page .intake { display: grid; gap: 10px; }
 .projects-page .intake label.f { display: grid; gap: 4px; font: 600 11px var(--display); letter-spacing: .1em;
   text-transform: uppercase; color: var(--muted); }
@@ -1259,6 +1264,9 @@ body.has-order-bar main { padding-bottom: 120px; }
 .projects-page .intake .where { font: 12.5px var(--mono); color: var(--ink-2); display: flex; flex-wrap: wrap;
   gap: 4px 8px; align-items: baseline; overflow-wrap: anywhere; }
 .projects-page .intake .where .tag { font: 600 10.5px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+/* bug-68: a name whose folder exists: Start it is off and this line says why */
+.projects-page .intake .name-taken { margin: 0; padding: 6px 10px; border-left: 3px solid var(--fail);
+  font: 12.5px var(--mono); color: var(--fg); overflow-wrap: anywhere; }
 .projects-page .intake .send { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 .projects-page .intake .send .muted { font-size: 13px; }
 .projects-page #start-sent { margin-left: 0; }

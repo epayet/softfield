@@ -20,6 +20,7 @@ from factory_dashboard.app import Db, Now, Project, render
 from factory_dashboard.coming import (
     _MAX_REQUEST_ID,
     GENERAL,
+    REPLIES,
     _card_titles,
     _edit_words,
     _edited,
@@ -56,7 +57,6 @@ from runner.planner import (
     APPROVED,
     ON_ITS_WAY,
     OPEN,
-    PLANNER,
     PlannerError,
     message,
     proposal_requests,
@@ -366,7 +366,7 @@ def thread_page(
         messages = _messages(rows)
         proposals = _proposals(conn, project_id, thread, rows, known)
         pending = any(
-            r["kind"] == PLANNER and str(r["subject"] or "").startswith(f"{thread}#")
+            r["kind"] in REPLIES and str(r["subject"] or "").startswith(f"{thread}#")
             for r in metrics.open_jobs(conn, project_id)
         )
         changes = open_changes(conn, project_id)
