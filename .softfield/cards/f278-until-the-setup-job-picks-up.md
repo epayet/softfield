@@ -1,4 +1,4 @@
-# Milestone F278: until the setup job picks up the work to make the first…
+# Milestone F278: A new project's M1 waits on the desk while its setup runs, not as a seed
 
 > **State:** idea · **Area:** factory
 > Planted by the owner on 2026-11-19.
