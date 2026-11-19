@@ -1289,7 +1289,7 @@ def test_the_desk_poll_moves_an_answered_seed_to_the_answers(page, planning, db_
 def test_the_factory_now_tile_updates_when_a_job_starts(page, db_path):
     """F265 D1: /planning opens with nothing running ("Nothing running right now." in
     #factory-now); a job is written to the database; within a poll #factory-now reads
-    "Running" and names it, without a reload."""
+    "Running" and names it, without a reload. #lead-window also refreshes with gauge content."""
     from factory_dashboard.app import create_app, get_now
 
     page.clock.install()
@@ -1306,6 +1306,7 @@ def test_the_factory_now_tile_updates_when_a_job_starts(page, db_path):
     _open(page, client)
 
     factory_tile = page.locator("#factory-now")
+    lead_tile = page.locator("#lead-window")
     assert "Nothing running right now." in factory_tile.text_content()
 
     # Write a job to the database
@@ -1355,6 +1356,14 @@ def test_the_factory_now_tile_updates_when_a_job_starts(page, db_path):
     tile_text = factory_tile.text_content()
     assert "Running" in tile_text
     assert "f1-04-live" in tile_text
+
+    # #lead-window also refreshes via hx-select-oob: assert its gauge content is present
+    lead_text = lead_tile.text_content()
+    assert "5-hour window" in lead_text
+    assert "week" in lead_text
+
+    # No navigation/reload occurred: the URL is unchanged since the page opened
+    assert page.url == "http://127.0.0.1:8765/planning"
 
 
 def test_two_blocked_tickets_appear_second_on_the_desk_with_their_ids_and_reason(
