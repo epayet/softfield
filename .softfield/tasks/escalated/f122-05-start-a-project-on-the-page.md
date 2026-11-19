@@ -29,3 +29,12 @@ The picture to build is `.softfield/cards/f122-mockup/projects-new.html` (Propos
 - a live project's plate is unchanged
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: stopped)
+attempts: 3
+tokens: 5771218
+logs: .softfield/var/runs/20261119-042447/f122-05-start-a-project-on-the-page
+```
