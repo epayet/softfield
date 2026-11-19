@@ -1,4 +1,4 @@
-# Milestone F274: ▎ Pre-flight refuses a command prefix that can't match.…
+# Milestone F274: Pre-flight refuses a commands: prefix that can only match itself
 
 > **State:** idea · **Area:** factory
 > Planted by the owner on 2026-11-19.
