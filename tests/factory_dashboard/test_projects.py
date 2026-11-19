@@ -495,6 +495,24 @@ def test_start_it_sends_the_forms_json_and_shows_the_plate_at_once(page, project
     ]
 
 
+def test_the_start_form_htmx_listeners_guard_on_their_own_target(projects_client):
+    """bug-68 (2026-11-19): the start form's htmx listeners must act only on the form's
+    own request, so polling from the request partial inside #start-sent doesn't bubble up
+    and append duplicate plates (the order form's listeners already have this guard)."""
+    html = projects_client.get("/projects").text
+    # Find the start form's script block (the second IIFE)
+    start_script_match = re.search(r"// Start a project.*?\(\(\) => \{(.*?)\}\)\(\)", html, re.S)
+    assert start_script_match, "no start project script"
+    script = start_script_match.group(1)
+    # Both listeners must carry the guard
+    config_lines = re.findall(r'form\.addEventListener\("htmx:configRequest".*?\}\);', script, re.S)
+    assert len(config_lines) >= 1
+    assert "if (event.target !== form) return;" in config_lines[0]
+    before_lines = re.findall(r'form\.addEventListener\("htmx:beforeRequest".*?\}\);', script, re.S)
+    assert len(before_lines) >= 1
+    assert "if (event.target !== form) return;" in before_lines[0]
+
+
 # --- each plate's app (F239 D6, f239-05) -----------------------------------------------------
 
 

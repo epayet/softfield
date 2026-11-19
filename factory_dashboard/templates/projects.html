@@ -193,6 +193,7 @@
       start.disabled = clash;
     });
     form.addEventListener("htmx:configRequest", (event) => {
+      if (event.target !== form) return;
       event.detail.parameters.value = JSON.stringify({
         name: field("name").value.trim(),
         idea: field("idea").value,
@@ -201,7 +202,8 @@
       });
       for (const name of ["idea", "name", "built_with", "app"]) delete event.detail.parameters[name];
     });
-    form.addEventListener("htmx:beforeRequest", () => {
+    form.addEventListener("htmx:beforeRequest", (event) => {
+      if (event.target !== form) return;
       const plate = document.getElementById("start-plate").content.firstElementChild.cloneNode(true);
       const name = field("name").value.trim();
       if (name) plate.querySelector(".name").textContent = name;
