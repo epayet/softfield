@@ -1138,3 +1138,86 @@ def test_ticket_page_goal_with_inline_code_shows_code_tag(db_path, later_client)
     assert "<code>run_order</code>" in goal_section
     assert "<strong>bold</strong>" in goal_section
     assert "<code>inline_html</code>" in goal_section
+
+
+def test_ticket_page_goal_with_link_shows_anchor_tag(db_path, later_client):
+    """A ticket page whose Goal holds a http link renders it as an <a> tag."""
+    from runner import metrics
+
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        f1 = metrics.upsert_milestone(conn, project, "f1")
+        metrics.upsert_ticket(
+            conn,
+            project,
+            "f1-98-link",
+            milestone_id=f1,
+            kind="developer",
+            state="later",
+            difficulty=2,
+            title="Link ticket.",
+            body=(
+                "---\nid: f1-98-link\n---\n\n"
+                "### Goal\nSee [the spec](https://example.com/spec) for details.\n\n"
+                "### Done when\n- It works\n"
+            ),
+        )
+    finally:
+        conn.close()
+
+    html = later_client.get("/tickets/f1-98-link").text
+    goal_section = section_raw(html, "goal")
+    assert 'href="https://example.com/spec"' in goal_section
+    assert "the spec" in goal_section
+
+
+def test_ticket_page_context_renders_markdown(db_path, later_client):
+    """A ticket page's Context section renders inline Markdown: backticks and bold."""
+    from runner import metrics
+
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        f1 = metrics.upsert_milestone(conn, project, "f1")
+        metrics.upsert_ticket(
+            conn,
+            project,
+            "f1-99-context-md",
+            milestone_id=f1,
+            kind="developer",
+            state="later",
+            difficulty=2,
+            title="Context markdown ticket.",
+            body=(
+                "---\nid: f1-99-context-md\n---\n\n"
+                "### Goal\nA goal.\n\n"
+                "### Context\nUse `run_order` and **bold** text.\n\n"
+                "### Done when\n- done\n"
+            ),
+        )
+    finally:
+        conn.close()
+
+    html = later_client.get("/tickets/f1-99-context-md").text
+    goal_section = section_raw(html, "goal")
+    # Context is inside a <details> element
+    assert "<details>" in goal_section
+    assert "<summary>" in goal_section
+    # Markdown in Context renders
+    assert "<code>run_order</code>" in goal_section
+    assert "<strong>bold</strong>" in goal_section
+
+
+def test_ticket_body_fallback_shows_raw_when_no_parsed_body(tickets_client):
+    """A ticket with no ### headings falls back to the raw body in a <pre> block."""
+    html = tickets_client.get("/tickets/f1-10-ticket-a").text
+    # No parsed body: the raw body shows in a <pre>
+    goal_section = section_raw(html, "goal")
+    assert "<pre" in goal_section
+    # The raw body text is present
+    assert "Goal: A ticket." in goal_section
+    assert "Done when: it passes." in goal_section
+    # No parsed structure in the goal section
+    assert "<ul>" not in goal_section
+    assert "<li>" not in goal_section
