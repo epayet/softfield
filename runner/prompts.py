@@ -23,6 +23,7 @@ SECTIONS: dict[str, tuple[str, ...]] = {
     "direction": _SUPPORTS,
     "checkpoint": _REVIEWS,
     "review": _REVIEWS,
+    "setup": ("Authority", "ADRs"),  # its guide, bootstrap.md, is its prompt (F122 D3)
 }
 _BRIEF_SECTIONS = "From runner/instructions/lead.md, the sections this job needs:\n\n"
 BRIEF_END = "---\n\n"
@@ -570,6 +571,68 @@ Never write to .softfield/tasks/: a card's own thread redirects its tickets.
 """
     + _PLANNER_TAIL
 )
+
+# F122 D3, ADR 48 items 4 and 5: a project started from the Projects page, set up headless in one
+# round from the owner's form; its guide is bootstrap.md, pasted in, not a file it may skip.
+BOOTSTRAP_DOC = "runner/instructions/bootstrap.md"
+SETUP = """\
+You are the lead, setting up {name}, a new project the owner started from the Projects page. \
+You are headless, on main in its folder, and your reply lands on its first card's thread (M1). \
+Follow the guide below, its section "From the Projects page" first. The Softfield files it \
+names (runner/instructions/…) are under {home}.
+
+The owner's form:
+- Name: {name}
+- What it's built with: {built_with}
+- An app opened in a browser: {app}
+- The idea, word for word (also in .softfield/seed.md):
+
+{idea}
+{said}
+---
+
+{guide}"""
+SETUP_SAID = """
+{who} on M1's thread, this round:
+
+{text}
+{comments}"""
+
+
+def setup_prompt(
+    home: Path,
+    name: str,
+    idea: str,
+    built_with: str,
+    app: bool,
+    said: str = "",
+    comments: dict[int, str] | None = None,
+    *,
+    runner: bool = False,
+) -> str:
+    """A setup job's prompt (``SETUP``): bootstrap.md under the form's values, and on a later
+    round what was said on M1's thread: the owner's message with their comments by point, or
+    the runner's (``runner``: what failed when ADR 00 was approved)."""
+    guide = home / BOOTSTRAP_DOC
+    lines = "".join(f"- On your point {n}: {c}\n" for n, c in (comments or {}).items())
+    told = ""
+    if said.strip() or lines:
+        who = "The runner's message (what failed)" if runner else "The owner's message"
+        told = SETUP_SAID.format(
+            who=who,
+            text=said.strip() or "(none)",
+            comments=f"\nTheir comments on your last points:\n{lines}" if lines else "",
+        )
+    return SETUP.format(
+        name=name,
+        home=home,
+        built_with=built_with.strip() or "not said: recommend one",
+        app="yes" if app else "no",
+        idea=idea.strip() or "(none)",
+        said=told,
+        guide=guide.read_text(encoding="utf-8").strip() if guide.is_file() else "",
+    )
+
 
 NARRATIVE = """\
 Read {report}, the runner's report of the last build session, and the logs it mentions under

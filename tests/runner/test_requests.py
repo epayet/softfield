@@ -663,6 +663,33 @@ def test_two_messages_on_one_thread_make_two_planner_rows_each_with_its_reason(r
     assert _apply(repo) == []  # finished once: no second row
 
 
+def test_a_message_on_a_project_being_set_up_queues_its_setup_not_a_planner(repo):
+    """F122 D3, ADR 48 item 5: while a project started from the Projects page is set up, the
+    owner's answer on its thread is another round of its setup; once it runs, a planner's."""
+    first = _ask(repo, "plan_message", "m1", _message("Use SQLite."))
+    conn = metrics.open_db(_db(repo))
+    try:
+        metrics.set_project_paused(conn, repo.name, metrics.SETTING_UP)
+    finally:
+        conn.close()
+    assert _apply(repo) == ["plan_message m1: queued for the lead"]
+    conn = metrics.open_db(_db(repo))
+    try:
+        metrics.set_project_paused(conn, repo.name, None)
+    finally:
+        conn.close()
+    second = _ask(repo, "plan_message", "m1", _message("Plan it."))
+    _apply(repo)
+    assert _queued(repo) == [
+        (dispatch.SETUP, f"m1#{first}", "your message on M1", None),
+        ("planner", f"m1#{second}", "your message on M1", None),
+    ]
+    assert [(m["author"], m["text"]) for m in _thread(repo, "m1")] == [
+        ("owner", "Use SQLite."),
+        ("owner", "Plan it."),
+    ]
+
+
 def test_a_messages_comments_are_kept_with_it_by_point(repo):
     _ask(repo, "plan_message", "f7", _message("Agreed otherwise.", p2="Why first?"))
     _apply(repo)

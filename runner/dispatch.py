@@ -5,7 +5,8 @@ callers read the metrics database, ``.softfield/tasks/`` and ``state.json``.
 
 - A ticket whose finished attempt waits only for its gates (a regate) goes right after the
   planner's jobs: its gates need no model, and main moving on would throw its work away.
-- Then by kind: planner, escalation, direction, checkpoint, review, then tickets: a parked
+- Then by kind: planner, setup (ADR 48 item 4), escalation, direction, checkpoint, review,
+  then tickets: a parked
   ticket whose reset has passed, then lead tickets, then developer tickets, each in the run
   order the caller gives (`pick_next`'s: place, milestone, id, or the place of the ticket
   that waits for it). Queued jobs of one kind
@@ -21,7 +22,8 @@ callers read the metrics database, ``.softfield/tasks/`` and ``state.json``.
 - ``plan`` lists every job and says why each waits, for the dry run and the pages. The next ticket
   itself is `loop.choose_ticket`'s, for the runner and the dry run alike (ADR 44 item 9).
 - While the owner pauses the factory, every job waits, "paused by you" (ADR 22 item 5), but
-  the planner's: the owner pauses to talk a change through on /planning (its ⚑, f6-14).
+  the planner's and the setup's: the owner pauses to talk a change through on /planning (its
+  ⚑, f6-14).
 - The fast lane goes before everything (ADR 35 item 2): the caller's ``first`` (a lane card's
   tickets and what they wait for), each queued direction or escalation about one of them,
   then those tickets in the order given. They may use both of Claude's reserves (item 4),
@@ -36,14 +38,15 @@ from datetime import datetime
 from runner import allowance
 
 PLANNER = "planner"
-# A project started from the Projects page, set up by the lead (ADR 48 item 4): queued from
-# f122-01, not one of KINDS until f122-02 runs it, so it waits as an unknown kind meanwhile
+# A project started from the Projects page, set up by the lead (ADR 48 item 4): it goes in the
+# planner's place, its reserve and the owner's pause the planner's too
 SETUP = "setup"
 ESCALATION = "escalation"
 DIRECTION = "direction"
 CHECKPOINT = "checkpoint"
 REVIEW = "review"
-KINDS = (PLANNER, ESCALATION, DIRECTION, CHECKPOINT, REVIEW)  # in the order they go
+KINDS = (PLANNER, SETUP, ESCALATION, DIRECTION, CHECKPOINT, REVIEW)  # in the order they go
+PLANNING = (PLANNER, SETUP)  # the owner's conversations: first, and never held by their pause
 TICKET = "ticket"
 
 CLAUDE = "claude"
@@ -152,15 +155,17 @@ def plan(
     tickets = [t for t in tickets if t.id not in first]
     ordered = sorted(tickets, key=lambda t: _ticket_rank(t, now))  # stable: the run order
     regate = [_ticket_line(t, windows, now) for t in ordered if t.regate]
-    lines = lane + [_queued_line(q, windows, now) for q in rows if q.kind == PLANNER]
+    lines = lane + [_queued_line(q, windows, now) for q in rows if q.kind in PLANNING]
     lines += regate  # after the planner's jobs, before every other job (bug-04)
-    lines += [_queued_line(q, windows, now) for q in rows if q.kind in KINDS and q.kind != PLANNER]
+    lines += [
+        _queued_line(q, windows, now) for q in rows if q.kind in KINDS and q.kind not in PLANNING
+    ]
     lines += [_ticket_line(t, windows, now) for t in ordered if not t.regate]
     unknown = [q for q in rows if q.kind not in KINDS]
     lines += [Line(Pick(q.kind, q.subject, q.reason), UNKNOWN_KIND) for q in unknown]
     if not paused:
         return lines
-    return [line if line.pick.kind == PLANNER else Line(line.pick, PAUSED) for line in lines]
+    return [line if line.pick.kind in PLANNING else Line(line.pick, PAUSED) for line in lines]
 
 
 def _rank(kind: str) -> int:

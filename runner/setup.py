@@ -277,6 +277,53 @@ _MAX_SLUG = 40
 _MAX_TITLE = 120  # the card's title, as a planted one's
 _IDEA_WORDS = 4  # an unnamed project's folder: its idea's first words
 NO_IDEA = "a new project needs its idea: nothing was made"
+# The form's values on the first card, where `form` reads them back for the setup job (F122 D3)
+_FIRST_VERSION = "First version of "
+_BUILT_WITH = "Built with: "
+_LEADS_CHOICE = "what the lead recommends"
+_AND = " ·"
+_AN_APP = "an app, opened in a browser"
+_NOT_AN_APP = "not an app opened in a browser"
+_SEED_RE = re.compile(r"# Seed\n\n[^\n]*\n\n(.*)", re.DOTALL)
+
+
+@dataclass(frozen=True)
+class Form:
+    """What the owner wrote on the Projects page's form (F122 D2)."""
+
+    name: str
+    idea: str
+    built_with: str  # empty: the lead recommends
+    app: bool
+
+
+def form(folder: Path, project: str) -> Form:
+    """The form a project started from the Projects page was made from, read back from its
+    files (`start_project`): the idea word for word from `.softfield/seed.md`, the name, what
+    it's built with and whether it's an app from its first card. What's missing (a seed or card
+    the setup changed) is left empty, and the name is ``project``'s."""
+    seed = folder / ".softfield/seed.md"
+    card = folder / ".softfield/cards" / f"{FIRST_CARD}.md"
+    try:
+        found = _SEED_RE.match(seed.read_bytes().decode("utf-8"))  # its line ends as written
+    except (OSError, UnicodeDecodeError):
+        found = None
+    idea = found[1] if found else ""
+    try:
+        text = card.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        text = ""
+    heading = re.search(rf"^# Milestone M1: {re.escape(_FIRST_VERSION)}(.+)$", text, re.MULTILINE)
+    # the last such line: the idea above it is the owner's, and may hold one of its own
+    lines = re.findall(rf"^{re.escape(_BUILT_WITH)}(.*){re.escape(_AND)} (.+)$", text, re.MULTILINE)
+    stack = lines[-1] if lines else None
+    built_with = stack[0].strip() if stack else ""
+    return Form(
+        name=heading[1].strip() if heading else project,
+        idea=idea,
+        built_with="" if built_with == _LEADS_CHOICE else built_with,
+        app=stack is not None and stack[1].strip() == _AN_APP,
+    )
 
 
 def _slug(text: str, words: int | None = None) -> str:
@@ -326,11 +373,11 @@ def start_project(
         seed = f"# Seed\n\n{today.isoformat()}\n\n{idea}" + ("" if idea.endswith("\n") else "\n")
         (folder / ".softfield/seed.md").write_bytes(seed.encode("utf-8"))
         title = " ".join(name.split())[:_MAX_TITLE] or project
-        stack = f"Built with: {' '.join(built_with.split()) or 'what the lead recommends'}"
-        kind = "an app, opened in a browser" if app else "not an app opened in a browser"
-        notes = f"{idea.strip()}\n\n{stack} · {kind}"
+        stack = f"{_BUILT_WITH}{' '.join(built_with.split()) or _LEADS_CHOICE}"
+        kind = _AN_APP if app else _NOT_AN_APP
+        notes = f"{idea.strip()}\n\n{stack}{_AND} {kind}"
         note = f"Started by the owner from the Projects page on {today.isoformat()}."
-        card = planner.seed_card("m1", f"First version of {title}", notes, "product", note)
+        card = planner.seed_card("m1", f"{_FIRST_VERSION}{title}", notes, "product", note)
         (folder / ".softfield/cards" / f"{FIRST_CARD}.md").write_text(card, encoding="utf-8")
         git = Git(folder)
         git.run("add", "-A")

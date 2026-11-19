@@ -4,6 +4,7 @@ import os
 import re
 import sys
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 
 import pytest
 
@@ -651,6 +652,29 @@ def test_check_tickets_says_what_approve_would_refuse(in_repo, capsys):
     assert "m4-12-a" not in out
     assert cli.main(["check-tickets", ".softfield/tasks/later/none.md"]) == 1
     assert git(in_repo, "status", "--porcelain") == before
+
+
+def test_the_runner_takes_a_project_being_set_up_but_not_a_paused_one(repo, tmp_path, monkeypatch):
+    """ADR 48: a project started from the Projects page has its setup jobs and the owner's
+    messages, so it gets a session (`loop.setting_up` gives it nothing else); one the owner
+    paused gets none."""
+    db = tmp_path / "m.sqlite"
+    machine = tmp_path / "factory.toml"
+    machine.write_text(f'[metrics]\ndb = "{db}"\n')
+    monkeypatch.setenv("SOFTFIELD_CONFIG", str(machine))
+    monkeypatch.setattr(cli, "load_config", lambda folder: SimpleNamespace(repo=folder))
+    conn = metrics.open_db(db)
+    try:
+        metrics.upsert_project(conn, repo.name, repo=str(repo))
+    finally:
+        conn.close()
+    for paused, taken in ((None, True), (metrics.SETTING_UP, True), ("2026-11-19T01:00", False)):
+        conn = metrics.open_db(db)
+        try:
+            metrics.set_project_paused(conn, repo.name, paused)
+        finally:
+            conn.close()
+        assert [c.repo for c in cli._project_configs()] == ([repo] if taken else []), paused
 
 
 def test_softfield_alone_is_a_guide_not_a_run(tmp_path, monkeypatch, capsys):

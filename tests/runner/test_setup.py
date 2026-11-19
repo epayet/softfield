@@ -799,6 +799,23 @@ def test_a_project_from_the_page_is_made_committed_and_registered_setting_up(tmp
     assert [tuple(k) for k in keys] == [("m1-first-version", "idea")]
 
 
+def test_the_setup_reads_the_form_back_from_the_projects_files(tmp_path):
+    """F122 D3: the setup job's prompt carries the form's values, read from what
+    `start_project` wrote: the idea byte for byte, the name, the stack and whether it's an app."""
+    folder, name = _start(tmp_path)
+    assert setup.form(folder, name) == setup.Form("Bird log", IDEA, "Django", True)
+    other, _ = setup.start_project(
+        tmp_path / "root", tmp_path / "m.sqlite", "", "Built with: Rust · an app, opened in a"
+        " browser", "", False, TODAY,
+    )  # fmt: skip
+    assert setup.form(other, "built-with-rust-an") == setup.Form(
+        "built-with-rust-an", "Built with: Rust · an app, opened in a browser\n", "", False
+    )
+    (folder / ".softfield/seed.md").unlink()
+    (folder / ".softfield/cards/m1-first-version.md").unlink()
+    assert setup.form(folder, name) == setup.Form(name, "", "", False)
+
+
 def test_a_taken_folder_or_live_name_takes_the_first_free_number(tmp_path):
     """F122 D2: never refused for its name."""
     (tmp_path / "root" / "bird-log").mkdir(parents=True)

@@ -182,7 +182,8 @@ def _plan_message(
     repo: Path | None = None,
 ) -> str:
     """The owner's message on a thread (ADR 20 items 3 and 9): kept on the thread with its
-    comments by point, and queued as its own ``planner`` row (ADR 22 item 1); the thread's
+    comments by point, and queued as its own ``planner`` row (ADR 22 item 1), or ``setup`` row
+    on a project being set up (ADR 48 item 5); the thread's
     reply that waited for these answers is answered. Written on the thread of a card merged
     away (F107, 2026-10-13), it is the kept card's thread's: a job there could only answer
     that it has no card."""
@@ -210,11 +211,19 @@ def _plan_message(
     metrics.add_planner_message(conn, thread_id, "owner", at, text, points=said or None)
     subject = planner.row_subject(thread, row["id"])
     reason = f"your message on {planner.thread_name(thread)}"
-    metrics.queue_job(conn, project_id, planner.PLANNER, subject, reason, at)
+    # a project being set up answers through its setup, not a planner (ADR 48 item 5)
+    kind = dispatch.SETUP if _setting_up(conn, project_id) else planner.PLANNER
+    metrics.queue_job(conn, project_id, kind, subject, reason, at)
     for item in metrics.open_owner_items(conn, project_id):
         if item["kind"] == planner.PLANNING and item["subject"] == thread:
             metrics.resolve_owner_item(conn, item["id"], at)
     return QUEUED_FOR_THE_LEAD + sent_on
+
+
+def _setting_up(conn: sqlite3.Connection, project_id: int) -> bool:
+    """Whether the project was started from the Projects page and its setup hasn't ended."""
+    row = conn.execute("SELECT paused FROM projects WHERE id = ?", (project_id,)).fetchone()
+    return row is not None and row[0] == metrics.SETTING_UP
 
 
 def _first_words(

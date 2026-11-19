@@ -85,6 +85,7 @@ LEAD_PROMPTS = {
     "direction": (prompts.DIRECTION,),
     "checkpoint": (prompts.CHECKPOINT,),
     "review": (prompts.REVIEW,),
+    "setup": (prompts.SETUP,),
 }
 
 
@@ -125,7 +126,58 @@ def test_the_roles_get_the_sections_f21_d2_lists():
         "direction": ("Known range", escalations, "Your own work"),
         "checkpoint": (review, "Sign-off sheet", "Reporting"),
         "review": (review, "Sign-off sheet", "Reporting"),
+        "setup": ("Authority", "ADRs"),  # F122 D3: bootstrap.md is its prompt
     } == prompts.SECTIONS
+
+
+def _guide(home: Path) -> None:
+    (home / prompts.BOOTSTRAP_DOC).parent.mkdir(parents=True, exist_ok=True)
+    (home / prompts.BOOTSTRAP_DOC).write_text("# Setting up\n\n## From the Projects page\nGo.\n")
+
+
+def test_the_setup_prompt_is_the_guide_under_the_forms_values(tmp_path: Path):
+    """F122 D3: bootstrap.md pasted in, the form's values above it, the idea word for word;
+    no message on the first round."""
+    _guide(tmp_path)
+    idea = "Birds I see,\n  {in the garden}."
+    text = prompts.setup_prompt(tmp_path, "Bird log", idea, "", True)
+    assert "- Name: Bird log\n" in text and "- What it's built with: not said" in text
+    assert "- An app opened in a browser: yes\n" in text and f"\n\n{idea}\n" in text
+    assert text.endswith("---\n\n# Setting up\n\n## From the Projects page\nGo.")
+    assert f"under {tmp_path}" in text and "M1's thread, this round" not in text
+    assert "- An app opened in a browser: no\n" in prompts.setup_prompt(
+        tmp_path, "Bird log", idea, "Flask", False
+    )
+
+
+def test_a_later_setup_round_carries_the_owners_message_or_the_runners(tmp_path: Path):
+    """F122 D3: their message with their comments by point; or what failed, said as such."""
+    _guide(tmp_path)
+    text = prompts.setup_prompt(tmp_path, "B", "i", "uv", False, "Use SQLite.", {2: "Why?"})
+    said = "The owner's message on M1's thread, this round:\n\nUse SQLite.\n"
+    assert said in text and "- On your point 2: Why?\n" in text
+    assert text.index(said) < text.index("# Setting up")
+    failed = prompts.setup_prompt(tmp_path, "B", "i", "", False, "doctor: no tests", runner=True)
+    assert "The runner's message (what failed) on M1's thread, this round:\n\ndoctor" in failed
+    assert "owner's message" not in failed
+
+
+def test_bootstrap_has_the_projects_page_section_and_the_stack_step():
+    """F122 D3 and D5: the headless setup's section, and the stack in "Both" for both paths."""
+    guide = (ROOT / prompts.BOOTSTRAP_DOC).read_text(encoding="utf-8")
+    sections = prompts.sections(guide)
+    page = " ".join(sections["From the Projects page"].split())
+    assert "No chat." in page and "one line of why" in page
+    assert '"A new project" and of "Both" but the review in the chat' in page
+    assert ".softfield/adr/00-initial.md" in page and "Reviewing an ADR with the owner" in page
+    assert (
+        "`question`" in page
+        and "Never** run `docker`, `softfield accept` or `softfield create`" in page
+    )
+    both = " ".join(sections["Both"].split())
+    assert "The stack, for a project with pages" in both and "run-stack.md" in both
+    assert "serves one page" in both
+    assert 'step 11 of "Both"' in guide and "11. **When they say yes**" in guide
 
 
 def test_a_brief_is_owner_md_then_the_roles_sections_and_no_other(tmp_path: Path):

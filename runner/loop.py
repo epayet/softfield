@@ -1258,10 +1258,10 @@ class Parked(Exception):
 # row waits (f8 D3). A ticket's own jobs park in state.json's `parked`, keyed by its id.
 SUPPORT = ("checkpoint", "escalation")
 DIRECTION, ESCALATION, REVIEW = dispatch.DIRECTION, dispatch.ESCALATION, dispatch.REVIEW
-PLANNER = dispatch.PLANNER
+PLANNER, SETUP = dispatch.PLANNER, dispatch.SETUP
 # The queued jobs whose rows park: the support jobs a ticket's run queues, and the owner's
-# messages to the planner (f6-01)
-QUEUED = (*SUPPORT, DIRECTION, PLANNER)
+# messages to the planner (f6-01) or to a project's setup (ADR 48 item 4)
+QUEUED = (*SUPPORT, DIRECTION, PLANNER, SETUP)
 FIVE_HOUR_HELD = "five_hour"  # a parked entry's flag: held by the owner's 25%, not a limit
 # An expired login (bug-59). A job it stopped parks as for a limit, flagged, until the next
 # check of the login (`check_login`); the item on the owner's desk is one for the whole machine.
@@ -5017,6 +5017,180 @@ def run_planner(s: Session, row: dispatch.Queued) -> None:
     _notify(s, *notify.planner_message(thread, looked=looked is not None, ok=result.ok))
 
 
+# ADR 48 item 4, exactly: it may edit anything in the new project's folder and run these. Never
+# `docker` (ADR 46 item 7), never `softfield accept` or `create`: the owner's yes does those.
+SETUP_COMMANDS = (
+    "uv",
+    "git status",
+    "git diff",
+    "git log",
+    "git add",
+    "git commit",
+    "softfield check-all",
+    "softfield doctor",
+    "ss -ltn",
+)
+ADR_00 = ".softfield/adr/00-initial.md"
+
+
+def setting_up(s: Session) -> bool:
+    """Whether the session's project was started from the Projects page and is still being set
+    up (ADR 48): the runner gives it nothing but its ``setup`` jobs until it passes."""
+    found = _record(s, metrics.project_state, s.cfg.project_name)
+    return found is not None and found[1] == metrics.SETTING_UP
+
+
+def _setup_said(s: Session, subject: str) -> tuple[str, str, dict[int, str], bool]:
+    """A setup row's thread, and what was said on it this round: nothing for the first round
+    (``m1``), the owner's message (``m1#41``) or the runner's (``m1#m12``, True)."""
+    if "#" not in subject:
+        return planner.thread_key(subject), "", {}, False
+    if (looked := planner.look_of(subject)) is not None:
+        thread, message_id = looked
+        runners = _record(s, metrics.find_planner_message, message_id)
+        if runners is None or runners["author"] != planner.RUNNER:
+            raise planner.PlannerError(f"the runner's message {message_id} is gone")
+        return thread, str(runners["text"]), {}, True
+    thread, request_id = planner.request_of(subject)
+    request = _record(s, metrics.find_request, request_id)
+    text, comments = planner.message(request["value"] if request else None)
+    return thread, text, comments, False
+
+
+def _with_adr_00(s: Session, reply: planner.Reply) -> planner.Reply:
+    """The setup's reply with ADR 00 as an ``adr`` proposal, which its Approve needs (F122 D4):
+    one the lead wrote on main without listing it is listed by the runner."""
+    if reply.note is not None or not (s.repo / ADR_00).is_file():
+        return reply
+    if any(p.get("kind") == "adr" and p.get("path") == ADR_00 for p in reply.proposals):
+        return reply
+    listed = {
+        "id": "adr-00",
+        "kind": "adr",
+        "title": "ADR 00: Initial decisions",
+        "path": ADR_00,
+        "key_points": [
+            {
+                "n": 1,
+                "title": "Listed by the runner",
+                "text": "The lead wrote ADR 00 without listing it: read it before you approve.",
+            }
+        ],
+    }
+    return replace(reply, proposals=(*reply.proposals, listed))
+
+
+def run_setup(s: Session, row: dispatch.Queued) -> None:
+    """Set a project started from the Projects page up (F122 D3, ADR 48 items 4 and 5): the
+    lead, headless, in its folder on main, with ``prompts.SETUP`` (bootstrap.md and the form)
+    and ADR 48's tools, on the planner's agents and under its reserve. It commits its own work.
+    Its reply is the lead's message on M1's thread, as a planner's is, with ADR 00 as an
+    ``adr`` proposal; a later round (the owner's message, the runner's) resumes its session.
+    A message whose request is gone is done."""
+    from runner import setup as project_setup  # it imports the planner, which imports this
+
+    if s.project_id is None:
+        return
+    if not setting_up(s):  # its tools never reach a project already in the factory
+        s.report.notes.append(f"The setup's {row.subject}: the project isn't being set up.")
+        return
+    try:
+        thread, said, comments, runners = _setup_said(s, row.subject)
+    except planner.PlannerError as exc:
+        s.report.notes.append(f"The setup's {row.subject} can't run: {exc}.")
+        return
+    if (hold := claude_hold(s, now())) is not None:
+        _park_support(s, SETUP, row.subject, hold)
+        return
+    found = _record(s, metrics.planner_thread, s.project_id, thread, now().isoformat())
+    if found is None:
+        return
+    form = project_setup.form(s.repo, s.cfg.project_name)
+    job = JobSpec(
+        role=SETUP,
+        prompt=prompts.setup_prompt(
+            config.HOME,
+            form.name,
+            form.idea,
+            form.built_with,
+            form.app,
+            said,
+            comments,
+            runner=runners,
+        ),
+        timeout=s.cfg.claude_timeout,
+        edit=(ANY,),
+        commands=SETUP_COMMANDS,
+        resume=found["session_id"] or None,
+        title=f"setting up: {row.reason}",
+    )
+    try:
+        result = call_claude(
+            s,
+            job,
+            full_key(s.repo, thread),
+            row.subject,
+            park=True,
+            routed=first_agent(s, PLANNER),  # Opus, as the planner's jobs (ADR 48 item 4)
+        )
+    except Parked:
+        return
+    _left_on_main(s, row.subject)
+    if result.ok:
+        reply = _with_adr_00(s, planner.parse_reply(result.text, planner.cards(s.repo)))
+    else:  # the owner's words, or the form, are there to try again
+        failed = f"the lead's setup failed ({result.text.strip()[:200]}): send a message to retry"
+        reply = planner.Reply("", note=failed)
+    if reply.note is not None:
+        s.report.notes.append(f"The setup's reply on {row.subject}: {reply.note}.")
+    if result.session_id:
+        _record(s, metrics.set_thread_session, found["id"], result.session_id)
+    _record(
+        s,
+        metrics.add_planner_message,
+        found["id"],
+        "lead",
+        now().isoformat(),
+        planner.stored_text(reply),
+        points=None if reply.note else reply.points,
+        proposals=None if reply.note and not reply.proposals else reply.proposals,
+        job_id=s.last_job_id,
+    )
+    name = s.cfg.project_name
+    item = (
+        f"The lead set {name} up: ADR 00 waits for your yes on its first card."
+        if result.ok
+        else f"The lead couldn't set {name} up: write on its first card to try again."
+    )
+    _record(
+        s,
+        metrics.upsert_owner_item,
+        s.project_id,
+        planner.PLANNING,
+        thread,
+        text=item,
+        created=now().isoformat(),
+    )
+    _notify(s, *notify.planner_message(thread, looked=False, ok=result.ok))
+
+
+def _left_on_main(s: Session, subject: str) -> None:
+    """After a setup job: back on main, and what it left uncommitted committed as its own, so
+    the folder stays a clean main the next pick and the owner's approval can work on."""
+    try:
+        if s.git.current_branch() != MAIN:
+            s.report.notes.append(f"The setup's {subject} left main: back on it.")
+            s.git.checkout(MAIN)
+        if not s.git.is_clean():
+            message = with_trailers(
+                "setup: what the lead left uncommitted", agent=CLAUDE_HEADLESS_AGENT
+            )
+            s.git.commit_all(message)
+            s.report.notes.append(f"The setup's {subject} left work uncommitted: committed.")
+    except GitError as exc:
+        s.report.notes.append(f"The setup's {subject} left its folder unsettled: {exc}.")
+
+
 def run_queued(s: Session, row: dispatch.Queued, *, escalate: bool) -> None:
     """Run a queued support job (ADR 22). Its row is done when the job ends, unless it parked
     again (its row then waits for the reset); one whose subject is gone is done at once."""
@@ -5044,6 +5218,9 @@ def run_queued(s: Session, row: dispatch.Queued, *, escalate: bool) -> None:
         elif row.kind == PLANNER:
             with doing(s, f"answering {row.reason}"):
                 run_planner(s, row)
+        elif row.kind == SETUP:
+            with doing(s, f"setting {s.cfg.project_name} up: {row.reason}"):
+                run_setup(s, row)
     finally:
         s.running_row = before
     if not _row_waits(s, row.kind, row.subject):
@@ -5444,8 +5621,8 @@ def _idle_holds(s: Session) -> bool:
 
 
 def _planning_goes(s: Session) -> bool:
-    """Whether a planner job could run now, paused or not (`dispatch.plan`)."""
-    rows = [row for row in open_rows(s) if row.kind == PLANNER]
+    """Whether a planner or setup job could run now, paused or not (`dispatch.plan`)."""
+    rows = [row for row in open_rows(s) if row.kind in dispatch.PLANNING]
     return dispatch.pick(rows, [], dispatch.Windows(), now(), paused=True) is not None
 
 
@@ -5692,7 +5869,9 @@ def work_queue(
         set_aside_unreadable(s)
         check_login(s)
         fresh_reading(s)
-        if reviews:
+        # ADR 48: a project started from the Projects page gets only its setup until it passes
+        being_set_up = setting_up(s)
+        if reviews and not being_set_up:
             _queue_due_review(s)
         _look_at_main(s)
         ready = load_dir(s.tasks_dir("ready"), s.cfg.default_max_diff)
@@ -5718,6 +5897,8 @@ def work_queue(
         if lane_only:  # the round's first pass (F235 D1): nothing but the lane
             rows = [r for r in rows if r.kind in dispatch.LANE_KINDS and r.subject in lane]
             task = task if task is not None and task.id in lane else None
+        if being_set_up:
+            rows, task, lane = [r for r in rows if r.kind == SETUP], None, set()
         tickets = [] if task is None else [_dispatch_ticket(s, task, ready)]
         paused_by_owner = s.state.owner_pause is not None
         job = dispatch.pick(

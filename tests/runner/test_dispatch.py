@@ -233,11 +233,24 @@ def test_an_unknown_kind_is_listed_last_and_never_picked():
     assert lines[-1].waits == "unknown kind of job"
 
 
-def test_a_queued_setup_is_left_alone_until_its_job_runs():
-    """F122: f122-01 queues `setup`, f122-02 runs it; meanwhile the pick takes what's next."""
-    queued = [_row(SETUP, "m1")]
-    assert pick(queued, [_dev("f8-07")], OPEN, NOW) == pick([], [_dev("f8-07")], OPEN, NOW)
-    assert pick(queued, [], OPEN, NOW) is None
+def test_a_queued_setup_goes_in_the_planners_place_even_while_paused():
+    """F122 D3, ADR 48 item 4: after the owner's planner messages, before every other job,
+    and the owner's pause doesn't hold it: it answers their words, as the planner does."""
+    queued = [_row("escalation", "f8-01"), _row(SETUP, "m1"), _row("planner", "f7#1")]
+    lines = plan(queued, [_dev("f8-07")], OPEN, NOW)
+    assert [(line.pick.kind, line.pick.subject) for line in lines] == [
+        ("planner", "f7#1"),
+        (SETUP, "m1"),
+        ("escalation", "f8-01"),
+        ("ticket", "f8-07"),
+    ]
+    picked = pick([_row(SETUP, "m1")], [_dev("f8-07")], OPEN, NOW)
+    assert picked is not None and picked.kind == SETUP
+    paused = plan(queued[:2], [], OPEN, NOW, paused=True)
+    assert [(line.pick.kind, line.waits) for line in paused] == [
+        (SETUP, None),
+        ("escalation", "paused by you"),
+    ]
 
 
 def test_nothing_queued_and_no_ticket_picks_nothing():

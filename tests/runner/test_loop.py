@@ -22,6 +22,7 @@ from runner import (
     backup,
     checks,
     claude,
+    config,
     dispatch,
     gates,
     local_model,
@@ -6602,6 +6603,214 @@ def test_a_failed_planner_job_says_so_on_the_thread(repo, fake_model, monkeypatc
     assert thread["session_id"] is None  # nothing to resume
     [item] = [i for i in _rows(repo, "owner_items") if i["kind"] == "planning"]
     assert item["text"] == "The lead couldn't answer your message on F7: send it again."
+
+
+# --- a project started from the Projects page is set up by the lead (F122 D3, ADR 48) -------
+
+ROOT = Path(__file__).resolve().parents[2]  # Softfield's own checkout, for the real guide
+IDEA = "A log of the birds I see,\n  {with braces} and two lines."
+SETUP_TOOLS = (
+    "Read",
+    "Glob",
+    "Grep",
+    "Edit",
+    "Write",
+    *(
+        f"Bash({c}:*)"
+        for c in (
+            "uv",
+            "git status",
+            "git diff",
+            "git log",
+            "git add",
+            "git commit",
+            "softfield check-all",
+            "softfield doctor",
+            "ss -ltn",
+        )
+    ),
+)
+SETUP_REPLY = (
+    "ADR 00 is drafted.\n\n```json\n"
+    + json.dumps(
+        {
+            "points": [
+                {
+                    "n": 1,
+                    "title": "Flask",
+                    "answer": "As you said.",
+                    "action": "ADR 00 item 1",
+                    "outcome": "info",
+                    "proposal": "adr-00",
+                }
+            ],
+            "proposals": [
+                {
+                    "id": "adr-00",
+                    "kind": "adr",
+                    "title": "ADR 00: Initial decisions",
+                    "path": ".softfield/adr/00-initial.md",
+                    "key_points": [{"n": 1, "title": "Flask", "text": "Built with Flask."}],
+                }
+            ],
+        }
+    )
+    + "\n```"
+)
+
+
+def _started_from_the_page(repo: Path, *, paused: str | None = metrics.SETTING_UP) -> int:
+    """What `setup.start_project` leaves (f122-01): the seed, the first card with the form's
+    values, the project registered "setting up", and its setup queued on M1's thread."""
+    from runner import setup
+
+    seed = repo / ".softfield/seed.md"
+    seed.write_text(f"# Seed\n\n2026-11-19\n\n{IDEA}\n", encoding="utf-8")
+    card = planner.seed_card(
+        "m1",
+        "First version of Bird log",
+        f"{IDEA}\n\nBuilt with: Flask · an app, opened in a browser",
+        "product",
+        "Started by the owner from the Projects page on 2026-11-19.",
+    )
+    (repo / ".softfield/cards").mkdir(exist_ok=True)
+    (repo / ".softfield/cards" / f"{setup.FIRST_CARD}.md").write_text(card, encoding="utf-8")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "softfield init")
+    conn = metrics.open_db(_config(repo).metrics_db)
+    try:
+        project = metrics.upsert_project(conn, repo.name, repo=str(repo))
+        metrics.set_project_paused(conn, repo.name, paused)
+        at = loop.now().isoformat()
+        metrics.queue_job(conn, project, "setup", "m1", "its setup", at)
+    finally:
+        conn.close()
+    return project
+
+
+SetupJobs = list[tuple[ClaudeJob, Path, str | None]]  # each job, its folder, its resumed session
+
+
+def _sets_up(monkeypatch, jobs: SetupJobs, reply=SETUP_REPLY):
+    """Headless Claude as the setup: it writes ADR 00 and the skeleton, commits, and replies."""
+
+    def run_claude(job, repo_, timeout, log_path, now, resume=None):
+        jobs.append((job, repo_, resume))
+        (repo_ / ".softfield/adr").mkdir(exist_ok=True)
+        (repo_ / ".softfield/adr/00-initial.md").write_text(f"# ADR 00\n\n{len(jobs)}\n")
+        git(repo_, "add", "-A")
+        git(repo_, "commit", "-q", "-m", "ADR 00 and the skeleton")
+        return JobResult(ok=True, text=reply, duration_s=1.0, session_id="s9")
+
+    monkeypatch.setattr(claude, "run_claude", run_claude)
+
+
+def test_a_queued_setup_runs_the_lead_in_the_projects_folder_and_replies_on_m1(
+    repo, fake_model, monkeypatch
+):
+    """F122 D3's Done when: Claude in the project's folder on main, with `prompts.SETUP` (the
+    guide and the form's values) and ADR 48 item 4's tools exactly, on the planner's Opus; its
+    reply is the lead's message on M1's thread, points and ADR 00's proposal, for the owner."""
+    project = _started_from_the_page(repo)
+    _lead_docs(repo, monkeypatch)
+    guide = config.HOME / prompts.BOOTSTRAP_DOC
+    guide.parent.mkdir(parents=True, exist_ok=True)
+    guide.write_text((ROOT / prompts.BOOTSTRAP_DOC).read_text(encoding="utf-8"), encoding="utf-8")
+    _lead_task(repo, "m1-01-lead")  # a being-set-up project runs nothing else
+    jobs: SetupJobs = []
+    _sets_up(monkeypatch, jobs)
+    _run(repo)
+    [(job, folder, resume)] = jobs
+    assert (job.kind, job.model, folder, resume) == ("setup", "opus", repo, None)
+    assert job.allowed_tools == SETUP_TOOLS
+    assert "docker" not in str(job.allowed_tools) and "accept" not in str(job.allowed_tools)
+    assert "- Name: Bird log\n" in job.prompt and "- What it's built with: Flask\n" in job.prompt
+    assert "- An app opened in a browser: yes\n" in job.prompt and IDEA in job.prompt
+    assert "## From the Projects page" in job.prompt  # bootstrap.md, pasted in
+    assert "on M1's thread, this round" not in job.prompt  # the first round: no message
+    assert "## ADRs" in job.system and "## Authority" in job.system
+    [thread] = _rows(repo, "planner_threads")
+    assert (thread["project_id"], thread["card"], thread["session_id"]) == (project, "m1", "s9")
+    [reply] = _messages(repo)
+    assert (reply["author"], reply["text"]) == ("lead", "ADR 00 is drafted.")
+    assert [p["title"] for p in json.loads(str(reply["points"]))] == ["Flask"]
+    [adr] = json.loads(str(reply["proposals"]))
+    assert (adr["kind"], adr["path"]) == ("adr", ".softfield/adr/00-initial.md")
+    [setup_job] = [j for j in _rows(repo, "jobs") if j["role"] == "setup"]
+    assert reply["job_id"] == setup_job["id"]
+    assert all(r["done"] is not None for r in _rows(repo, "work_queue"))
+    [item] = [i for i in _rows(repo, "owner_items") if i["kind"] == "planning"]
+    assert (item["subject"], item["resolved"]) == ("m1", None)
+    assert "ADR 00 waits for your yes" in str(item["text"])
+    assert (repo / ".softfield/tasks/ready/m1-01-lead.md").is_file()  # not run
+    assert git(repo, "branch", "--show-current").strip() == "main"
+    assert git(repo, "status", "--porcelain") == ""
+
+
+def test_the_owners_message_on_a_setting_up_project_runs_the_setup_again_with_it(
+    repo, fake_model, monkeypatch
+):
+    """ADR 48 item 5: their answer is another round of the setup, in its session, carrying
+    their words and comments; and a reply that isn't the JSON is kept as run_planner keeps one."""
+    _started_from_the_page(repo)
+    jobs: SetupJobs = []
+    _sets_up(monkeypatch, jobs)
+    _run(repo)
+    _ask_from_the_dashboard(
+        repo, "plan_message", "m1", json.dumps({"text": "Use SQLite.", "comments": {"1": "ok"}})
+    )
+    _sets_up(monkeypatch, jobs, reply="Done, no block.")
+    _run(repo)
+    [_, (job, _, resume)] = jobs
+    assert job.kind == "setup" and resume == "s9"
+    assert "The owner's message on M1's thread, this round:\n\nUse SQLite." in job.prompt
+    assert "- On your point 1: ok" in job.prompt
+    kinds = [(r["kind"], r["reason"]) for r in _rows(repo, "work_queue")]
+    assert kinds == [("setup", "its setup"), ("setup", "your message on M1")]
+    broken = _messages(repo)[-1]
+    assert broken["author"] == "lead" and broken["points"] is None
+    assert str(broken["text"]).startswith("Done, no block.") and "no json block" in str(
+        broken["text"]
+    )
+
+
+def test_a_setup_that_left_work_uncommitted_or_its_adr_unlisted_is_settled_by_the_runner(
+    repo, fake_model, monkeypatch
+):
+    """The folder stays a clean main, and ADR 00 always reaches the owner with its Approve."""
+    _started_from_the_page(repo)
+    unlisted = 'Here.\n```json\n{"points": []}\n```'
+
+    def run_claude(job, repo_, timeout, log_path, now, resume=None):
+        (repo_ / ".softfield/adr").mkdir(exist_ok=True)
+        (repo_ / ".softfield/adr/00-initial.md").write_text("# ADR 00\n", encoding="utf-8")
+        return JobResult(ok=True, text=unlisted, duration_s=1.0, session_id="s9")
+
+    monkeypatch.setattr(claude, "run_claude", run_claude)
+    _run(repo)
+    assert git(repo, "status", "--porcelain") == ""
+    assert "setup: what the lead left uncommitted" in git(repo, "log", "--format=%s")
+    [reply] = _messages(repo)
+    [adr] = json.loads(str(reply["proposals"]))
+    assert (adr["id"], adr["kind"], adr["path"]) == (
+        "adr-00",
+        "adr",
+        ".softfield/adr/00-initial.md",
+    )
+
+
+def test_a_setup_row_on_a_project_already_in_the_factory_is_done_without_a_job(
+    repo, fake_model, monkeypatch
+):
+    """Only a project being set up runs setup jobs: the setup's tools (any edit, `uv`, a
+    commit on main) never reach a live project's main; its late row is done, and said."""
+    _started_from_the_page(repo, paused=None)
+    jobs: SetupJobs = []
+    _sets_up(monkeypatch, jobs)
+    report = _run(repo)
+    assert jobs == [] and _messages(repo) == []
+    assert all(r["done"] is not None for r in _rows(repo, "work_queue"))
+    assert any("isn't being set up" in note for note in report.notes)
 
 
 # --- support jobs are queued before they run (ADR 22 item 1, f8-03) --------------------------

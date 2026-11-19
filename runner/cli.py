@@ -113,7 +113,8 @@ _UNLOADED: set[str] = set()  # projects whose project.toml didn't load, said onc
 
 
 def _project_configs() -> list[Config]:
-    """The registered projects the runner works on, in the owner's order: not paused, with a
+    """The registered projects the runner works on, in the owner's order: not paused, or being
+    set up (ADR 48: the runner gives it its setup jobs alone, `loop.setting_up`), with a
     ``.softfield/project.toml`` that loads (ADR 30 item 6). One that doesn't load is said."""
     db = machine_metrics_db()
     if not db.is_file():
@@ -126,7 +127,8 @@ def _project_configs() -> list[Config]:
     configs = []
     for row in rows:
         repo = Path(row.repo) if row.repo else None
-        if row.paused or repo is None or not (repo / PROJECT_TOML).is_file():
+        held = row.paused not in (None, metrics.SETTING_UP)
+        if held or repo is None or not (repo / PROJECT_TOML).is_file():
             continue
         try:
             configs.append(load_config(repo))
