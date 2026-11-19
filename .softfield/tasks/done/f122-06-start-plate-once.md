@@ -22,3 +22,12 @@ Read the second script at the bottom of `factory_dashboard/templates/projects.ht
 - the rendered page's start script carries that guard for both listeners, and nothing else on the page changes
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 786
+gate_failures: []
+tokens: 169415
+```
