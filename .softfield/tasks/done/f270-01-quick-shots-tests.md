@@ -25,3 +25,12 @@ Read "What happens today" and D1–D3 in `.softfield/cards/f270-tests-runner-tes
 - each changed test still fails when what it checks is broken (try one: e.g. make `_serving` send a GET to `/` and see the slow-page test fail)
 - the file passes on 16 workers (`-n 16`) three runs in a row
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 2770
+gate_failures: []
+tokens: 1282220
+```
