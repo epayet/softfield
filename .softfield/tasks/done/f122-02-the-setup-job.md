@@ -35,3 +35,10 @@ Read D3 and D5 in `.softfield/cards/f122-new-project-from-the-projects-page.md` 
 - bootstrap.md has the page's section and the stack step
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
