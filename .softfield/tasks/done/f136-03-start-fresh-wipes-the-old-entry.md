@@ -27,3 +27,10 @@ Read D2 and D3 in `.softfield/cards/f136-if-i-forgot-about-a-projject.md`, then 
 - `--previous fresh` without `--yes` exits 1 having written nothing
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
