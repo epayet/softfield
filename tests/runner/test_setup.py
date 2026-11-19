@@ -269,6 +269,141 @@ def test_forget_takes_a_project_off_every_list_but_keeps_its_rows(tmp_path, monk
     assert cli.main(["forget", "nope", "--yes"]) == 1
 
 
+def _row(db: Path, name: str) -> tuple[str | None, str | None] | None:
+    conn = metrics.open_db(db)
+    try:
+        return metrics.project_state(conn, name)
+    finally:
+        conn.close()
+
+
+def _old_hello(db: Path, paused: str | None, repo: str = "/r/hello") -> int:
+    conn = metrics.open_db(db)
+    try:
+        project = metrics.upsert_project(conn, "hello", repo=repo)
+        metrics.upsert_milestone(conn, project, "m1", title="old")
+        metrics.set_project_paused(conn, "hello", paused)
+        return project
+    finally:
+        conn.close()
+
+
+def _hello_folder(tmp_path: Path) -> Path:
+    folder = tmp_path / "hello"
+    folder.mkdir()
+    return folder
+
+
+def test_init_asks_about_a_forgotten_project_and_keep_renames_the_old_one(tmp_path):
+    """F136 D1, D2: the old row is kept as hello-1, forgotten, with its history."""
+    db = tmp_path / "m.sqlite"
+    old = _old_hello(db, metrics.FORGOTTEN)
+    folder = _hello_folder(tmp_path)
+    asked = []
+
+    def ask(said: str, choices: list[str]) -> str:
+        asked.append(choices)
+        assert not any(folder.iterdir())  # nothing is written before the question
+        return "keep"
+
+    setup.init(folder, db, ask=ask)
+    assert asked == [["keep"]]  # no continue: the folder doesn't hold the old project
+    assert _row(db, "hello-1") == ("/r/hello", metrics.FORGOTTEN)
+    assert _row(db, "hello") == (str(folder), metrics.SETTING_UP)
+    conn = metrics.open_db(db)
+    try:
+        assert metrics.find_project(conn, "hello-1") == old
+        assert metrics.find_project(conn, "hello") != old
+        kept = conn.execute("SELECT key FROM milestones WHERE project_id = ?", (old,)).fetchall()
+    finally:
+        conn.close()
+    assert [k[0] for k in kept] == ["m1"]
+
+
+def test_keep_takes_the_first_free_number(tmp_path):
+    db = tmp_path / "m.sqlite"
+    _old_hello(db, metrics.FORGOTTEN)
+    conn = metrics.open_db(db)
+    try:
+        metrics.upsert_project(conn, "hello-1", repo="/r/x")
+    finally:
+        conn.close()
+    setup.init(_hello_folder(tmp_path), db, previous="keep")
+    assert _row(db, "hello-2") == ("/r/hello", metrics.FORGOTTEN)
+
+
+def test_continue_is_offered_when_the_folder_names_the_project_and_writes_nothing(tmp_path):
+    db = tmp_path / "m.sqlite"
+    old = _old_hello(db, metrics.FORGOTTEN)
+    folder = _hello_folder(tmp_path)
+    setup.init(folder, tmp_path / "other.sqlite")  # the folder's files, under another database
+    head = git(folder, "rev-parse", "HEAD")
+    offered = []
+
+    def ask(said: str, choices: list[str]) -> str:
+        offered.append(choices)
+        return "continue"
+
+    setup.init(folder, db, ask=ask)
+    assert offered == [["keep", "continue"]]
+    assert git(folder, "rev-parse", "HEAD") == head and git(folder, "status", "--porcelain") == ""
+    assert _row(db, "hello") == (str(folder), metrics.SETTING_UP)
+    conn = metrics.open_db(db)
+    try:
+        assert metrics.find_project(conn, "hello") == old
+    finally:
+        conn.close()
+
+
+def test_a_live_project_of_the_name_means_a_new_one_called_name_2(tmp_path, machine):
+    db = tmp_path / "m.sqlite"
+    _old_hello(db, None)
+    folder = _hello_folder(tmp_path)
+    with pytest.raises(setup.SetupError, match="continue"):
+        setup.init(folder, db, previous="continue")
+    setup.init(folder, db, previous="keep")
+    assert load_config(folder).project_name == "hello-2"
+    assert _row(db, "hello") == ("/r/hello", None)  # the live row is unchanged
+    assert _row(db, "hello-2") == (str(folder), metrics.SETTING_UP)
+
+
+def test_without_an_old_row_init_asks_nothing(tmp_path):
+    def ask(said: str, choices: list[str]) -> str:
+        raise AssertionError("no question expected")
+
+    setup.init(_hello_folder(tmp_path), tmp_path / "m.sqlite", ask=ask)
+
+
+def test_init_without_a_terminal_or_a_flag_writes_nothing_and_exits_1(
+    tmp_path, monkeypatch, capsys
+):
+    db = tmp_path / "m.sqlite"
+    machine = tmp_path / "factory.toml"
+    machine.write_text(f'[metrics]\ndb = "{db}"\n')
+    monkeypatch.setenv("SOFTFIELD_CONFIG", str(machine))
+    _old_hello(db, metrics.FORGOTTEN)
+    folder = _hello_folder(tmp_path)
+    monkeypatch.chdir(folder)
+    assert cli.main(["init", "--no-claude"]) == 1
+    assert "--previous keep" in capsys.readouterr().out
+    assert not any(folder.iterdir())
+    assert _row(db, "hello") == ("/r/hello", metrics.FORGOTTEN)
+    assert cli.main(["init", "--no-claude", "--previous", "fresh"]) == 1  # f136-03
+    assert not any(folder.iterdir())
+    assert cli.main(["init", "--no-claude", "--previous", "keep"]) == 0
+    assert _row(db, "hello-1") == ("/r/hello", metrics.FORGOTTEN)
+
+
+def test_forget_says_a_later_init_will_ask(tmp_path, monkeypatch, capsys):
+    db = tmp_path / "m.sqlite"
+    machine = tmp_path / "factory.toml"
+    machine.write_text(f'[metrics]\ndb = "{db}"\n')
+    monkeypatch.setenv("SOFTFIELD_CONFIG", str(machine))
+    _old_hello(db, None)
+    assert cli.main(["forget", "hello", "--yes"]) == 0
+    assert "later `softfield init` under the name hello will ask" in capsys.readouterr().out
+
+
 def test_the_units_run_softfield_with_the_installers_path(tmp_path):
     """ADR 30 item 5: a service doesn't get the shell's PATH, and the runner needs claude,
     opencode, uv and git from it."""

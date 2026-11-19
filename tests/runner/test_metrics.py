@@ -76,6 +76,19 @@ def test_a_fresh_path_gets_every_table_and_the_latest_version(tmp_path):
     conn.close()
 
 
+def test_a_project_can_be_renamed_with_its_history_and_names_run_on_from_a_number(db):
+    project = metrics.upsert_project(db, "hello", repo="/r/hello")
+    metrics.upsert_milestone(db, project, "m1", title="old")
+    metrics.upsert_project(db, "hello-1")
+    assert metrics.free_name(db, "hello", 1) == "hello-2"
+    assert metrics.free_name(db, "hello", 3) == "hello-3"
+    metrics.rename_project(db, "hello", "hello-2")
+    assert metrics.find_project(db, "hello") is None
+    assert metrics.find_project(db, "hello-2") == project
+    assert metrics.project_state(db, "hello-2") == ("/r/hello", None)
+    assert metrics.project_state(db, "hello") is None
+
+
 def test_the_board_order_is_rewritten_whole_per_project(db):
     """F222 D5: the dashboard's copy of each project's queue list."""
     first = metrics.upsert_project(db, "coucou")

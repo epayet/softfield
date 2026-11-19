@@ -204,7 +204,15 @@ def _forget(name: str, db: Path, *, ask: bool) -> int:
     finally:
         conn.close()
     print(f"{name}: forgotten. Its folder stays: {row.repo}")
+    print(f"A later `softfield init` under the name {name} will ask what to do with this entry.")
     return 0
+
+
+def _ask_previous(said: str, choices: list[str]) -> str:
+    """`softfield init`'s question about an old entry: the first choice is the default."""
+    print(said)
+    answer = input(f"What now? {' / '.join(choices)} [{choices[0]}] ").strip().lower()
+    return answer or choices[0]
 
 
 def _notify(action: str) -> int:
@@ -241,19 +249,24 @@ def _machine_command(args: argparse.Namespace) -> int:
     db = machine_metrics_db()
     if args.command == "init":
         folder = Path.cwd()
+        ask = _ask_previous if sys.stdin.isatty() else None
         try:
-            origin, written = setup.init(folder, db)
+            origin, written = setup.init(folder, db, args.previous, ask)
         except (setup.SetupError, GitError) as exc:
             print(f"softfield: {exc}")
             return 1
+        name = setup.project_name(folder) or folder.name
         kind = "a new" if origin == "new" else "an existing"
-        print(f"{folder.name}: set up as {kind} project, registered, committed.")
-        print("Wrote " + ", ".join(written) + ".")
+        if written:
+            print(f"{name}: set up as {kind} project, registered, committed.")
+            print("Wrote " + ", ".join(written) + ".")
+        else:
+            print(f"{name}: registered again, with its history. Nothing written.")
         if args.no_claude:
             print(f"Next: open Claude here and follow {setup.bootstrap()}.")
             return 0
         print("\n" + setup.NEXT + "\n")
-        command = setup.claude_command(folder, origin)
+        command = setup.claude_command(folder, origin, name)
         os.execvp(command[0], command)  # noqa: S606 - the owner's Claude, in their terminal
     if args.command == "lead":
         command = setup.lead_command(Path.cwd(), args.claude_args)
@@ -535,6 +548,11 @@ def main(argv: list[str] | None = None) -> int:
         "init", help="set this folder up as a project, new or existing, then open Claude (ADR 30)"
     )
     init.add_argument("--no-claude", action="store_true", help="write the files only")
+    init.add_argument(
+        "--previous",
+        choices=("continue", "keep", "fresh"),
+        help="what to do with an old entry of the same name, without asking (fresh: not built yet)",
+    )
     doctor = sub.add_parser("doctor", help="whether this project is ready for the web (ADR 30)")
     doctor.add_argument("--quick", action="store_true", help="skip running check-all")
     forget = sub.add_parser(

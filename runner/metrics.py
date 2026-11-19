@@ -475,6 +475,26 @@ def find_project(conn: sqlite3.Connection, name: str) -> int | None:
     return None if row is None else int(row[0])
 
 
+def project_state(conn: sqlite3.Connection, name: str) -> tuple[str | None, str | None] | None:
+    """A project's (repo, paused), a forgotten one too; None when no row has the name."""
+    row = conn.execute("SELECT repo, paused FROM projects WHERE name = ?", (name,)).fetchone()
+    return None if row is None else (row[0], row[1])
+
+
+def free_name(conn: sqlite3.Connection, name: str, first: int) -> str:
+    """``name-N`` for the first N from ``first`` that no project has."""
+    number = first
+    while find_project(conn, f"{name}-{number}") is not None:
+        number += 1
+    return f"{name}-{number}"
+
+
+def rename_project(conn: sqlite3.Connection, old: str, new: str) -> None:
+    """The project's row under another name; its history follows (rows point at its id)."""
+    with conn:
+        conn.execute("UPDATE projects SET name = ? WHERE name = ?", (new, old))
+
+
 def upsert_milestone(
     conn: sqlite3.Connection,
     project_id: int,

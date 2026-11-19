@@ -12,6 +12,7 @@ import os
 import re
 import shutil
 import tomllib
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -54,12 +55,88 @@ def is_new(folder: Path) -> bool:
     return not [p for p in folder.iterdir() if p.name not in (".git", ".gitignore")]
 
 
-def init(folder: Path, db: Path) -> tuple[str, list[str]]:
+def project_name(folder: Path) -> str | None:
+    """The name in the folder's project.toml; None without one, or when it can't be read."""
+    try:
+        text = (folder / PROJECT_TOML).read_text(encoding="utf-8")
+        return str(tomllib.loads(text)["project"]["name"])
+    except (OSError, KeyError, ValueError):
+        return None
+
+
+PREVIOUS = ("keep", "continue")  # `init --previous`; "fresh" is f136-03
+
+
+def _decide(
+    folder: Path,
+    db: Path,
+    previous: str | None,
+    ask: Callable[[str, list[str]], str] | None,
+) -> tuple[str, str, str | None]:
+    """What ``init`` does about a project the database already holds under the folder's name
+    (F136 D1, D2, D4), before it writes anything. Returns (the new project's name, "new",
+    "continue" or "keep", the old row to rename)."""
+    named = project_name(folder)
+    name = named or folder.name
+    is_project = (folder / PROJECT_TOML).is_file()
+    conn = metrics.open_db(db)
+    try:
+        state = metrics.project_state(conn, name)
+        if state is None:
+            if is_project:
+                raise SetupError(f"{folder} is a project already: `softfield doctor` says what")
+            return name, "new", None
+        repo, paused = state
+        if paused == metrics.FORGOTTEN:
+            choices = ["keep"] + (["continue"] if named else [])
+            said = f"{name} is a forgotten project in the database (its folder: {repo})."
+            old = name
+            new_name = name
+        elif is_project:
+            raise SetupError(
+                f"{folder} is a project already: `softfield doctor` says what it needs"
+            )
+        elif repo == str(folder):
+            return name, "new", None
+        else:
+            choices = ["keep"]
+            new_name = metrics.free_name(conn, name, 2)
+            said = f"{name} is a project already, in {repo}; this one would be {new_name}."
+            old = None
+    finally:
+        conn.close()
+    if previous == "fresh":
+        raise SetupError("`--previous fresh` is not built yet: choose keep or continue")
+    if previous is not None and previous not in choices:
+        raise SetupError(f"--previous {previous} isn't possible here: {' or '.join(choices)}")
+    if previous is None:
+        if ask is None:
+            raise SetupError(
+                f"{said} Say what to do with it: `softfield init --previous {'|'.join(choices)}`"
+            )
+        previous = ask(said, choices)
+        if previous not in choices:
+            raise SetupError(f"no such choice: {previous}")
+    return new_name, previous, old
+
+
+def init(
+    folder: Path,
+    db: Path,
+    previous: str | None = None,
+    ask: Callable[[str, list[str]], str] | None = None,
+) -> tuple[str, list[str]]:
     """The factory's files in ``folder`` (``git init`` first if needed), committed, and the
     project registered last in the owner's order. Returns ("new" or "existing", the paths
-    written). Refuses a folder that is a project already, or a repo off its main or dirty."""
-    if (folder / PROJECT_TOML).is_file():
-        raise SetupError(f"{folder} is a project already: `softfield doctor` says what it needs")
+    written). Refuses a folder that is a project already, or a repo off its main or dirty.
+    A project of the same name in the database means a choice first (``previous``, or ``ask``)."""
+    name, action, old = _decide(folder, db, previous, ask)
+    if action == "continue":  # the old entry comes back: nothing written or committed
+        register(folder, db, name)
+        origin = tomllib.loads((folder / PROJECT_TOML).read_text(encoding="utf-8"))["project"].get(
+            "origin", "existing"
+        )
+        return str(origin), []
     origin = "new" if is_new(folder) else "existing"
     git = Git(folder)
     if not (folder / ".git").exists():
@@ -73,7 +150,6 @@ def init(folder: Path, db: Path) -> tuple[str, list[str]]:
         )
     elif not git.is_clean():
         raise SetupError("commit or stash your changes first: init commits what it writes")
-    name = folder.name
     written = []
     for directory in FACTORY_DIRS:
         (folder / ".softfield" / directory).mkdir(parents=True, exist_ok=True)
@@ -97,27 +173,36 @@ def init(folder: Path, db: Path) -> tuple[str, list[str]]:
         exclude.write_text(kept + "BLOCKED.md\n", encoding="utf-8")
     git.run("config", "core.hooksPath", ".softfield/hooks")
     git.run("add", "-A")
-    git.run(
-        "-c", "user.name=Softfield runner", "-c", "user.email=runner@softfield.invalid",
-        "commit", "-q", "--no-verify", "-m", "softfield init: the factory's files (ADR 30 item 7)",
-    )  # fmt: skip
-    register(folder, db)
+    if not git.is_clean():
+        git.run(
+            "-c", "user.name=Softfield runner", "-c", "user.email=runner@softfield.invalid",
+            "commit", "-q", "--no-verify", "-m", "softfield init: the factory's files (ADR 30)",
+        )  # fmt: skip
+    if old is not None:  # kept, forgotten, with its history, under the first free name-N
+        conn = metrics.open_db(db)
+        try:
+            metrics.rename_project(conn, old, metrics.free_name(conn, old, 1))
+        finally:
+            conn.close()
+    register(folder, db, name)
     return origin, written
 
 
-def register(folder: Path, db: Path) -> None:
+def register(folder: Path, db: Path, name: str | None = None) -> None:
     """The project in the metrics database, last in the owner's order, and paused while it is
-    set up: the runner leaves it alone until `softfield doctor` passes (``ready``)."""
+    set up: the runner leaves it alone until `softfield doctor` passes (``ready``). ``name``
+    is the one in its project.toml (the folder's name unless init had to change it)."""
+    name = name or folder.name
     conn = metrics.open_db(db)
     try:
         last = max((p.priority for p in metrics.projects_in_order(conn)), default=0)
-        metrics.upsert_project(conn, folder.name, repo=str(folder))
+        metrics.upsert_project(conn, name, repo=str(folder))
         with conn:
             conn.execute(
                 "UPDATE projects SET priority = ? WHERE name = ? AND priority = 100",
-                (min(last + 1, 99), folder.name),
+                (min(last + 1, 99), name),
             )
-        metrics.set_project_paused(conn, folder.name, metrics.SETTING_UP)
+        metrics.set_project_paused(conn, name, metrics.SETTING_UP)
     finally:
         conn.close()
 
@@ -213,16 +298,15 @@ def lead_command(folder: Path, args: list[str]) -> list[str]:
     return ["claude", *add, "--append-system-prompt", system, *args]
 
 
-def claude_command(folder: Path, origin: str) -> list[str]:
+def claude_command(folder: Path, origin: str, name: str | None = None) -> list[str]:
     """The interactive Claude session that sets the project up with the owner: the setup guide
     is its instructions (not a file it may read), and it opens with the steps (the owner,
     2026-10-14: the first try said nothing, then built the idea)."""
     guide = bootstrap().read_text(encoding="utf-8") if bootstrap().is_file() else ""
-    opening = (
-        f"Start the setup of {folder.name}, a {origin} project: your first message, then the idea."
-    )
+    name = name or folder.name
+    opening = f"Start the setup of {name}, a {origin} project: your first message, then the idea."
     if origin == "existing":
-        opening = f"Start the setup of {folder.name}, an existing project: your first message."
+        opening = f"Start the setup of {name}, an existing project: your first message."
     return [
         "claude",
         "--add-dir",
