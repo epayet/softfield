@@ -20,7 +20,7 @@ from typing import NamedTuple
 
 import yaml
 
-from runner import loop, metrics, milestone, notify, order, owner, planner
+from runner import config, dispatch, loop, metrics, milestone, notify, order, owner, planner, setup
 from runner.config import project_name
 from runner.gitops import RUNNER_AUTHOR, Git, GitError, with_trailers
 from runner.state import State
@@ -61,6 +61,8 @@ CHANGE = "change"  # (F14 D1)
 # no subject; value: a JSON list, the open cards' short keys and bug ticket ids in the board's
 REORDER = "reorder"  # order (F15 D3)
 PROJECT_ORDER = "project_order"  # value: a JSON list of project names, first first (ADR 30)
+# on Softfield's own row; value: {name, idea, built_with, app} (F122 D2, ADR 48 item 1)
+NEW_PROJECT = "new_project"
 _STATE_ONLY = (RESERVE, PAUSE, RESUME)  # they change state.json alone: a wait takes them
 _APPROVALS = (ACCEPT_ADR, APPROVE_PLAN)  # they commit on main: the only way drafts reach it
 _COMMITS = (SIGNOFF, QUEUE, SET_ASIDE, PLANT, DROP_SEED, REORDER, REJECT, *_APPROVALS)
@@ -100,7 +102,8 @@ def _what(row: sqlite3.Row) -> str:
     ``plant`` alone, its words being the owner's to read on the card."""
     if row["kind"] == PLANT and not row["subject"]:
         return PLANT
-    if row["kind"] in (REORDER, PROJECT_ORDER):  # its value is the whole board, or every project
+    # its value is the whole board, every project, or the owner's idea
+    if row["kind"] in (REORDER, PROJECT_ORDER, NEW_PROJECT):
         return str(row["kind"])
     if row["kind"] == CHANGE:  # its value is the owner's words too
         return " ".join(filter(None, [CHANGE, row["subject"]]))
@@ -1938,13 +1941,21 @@ def _apply(
             return _reorder(repo, conn, project_id, state, value)
         if kind == PROJECT_ORDER:
             return _project_order(conn, value)
+        if kind == NEW_PROJECT:
+            return _new_project(db, now, value)
         if kind == DISMISS:
             return _dismiss(conn, project_id, now, subject)
         if kind == REJECT:
             return _reject(repo, conn, project_id, now, subject)
         if kind == CHANGE:
             return _change(conn, project_id, now, row)
-    except (owner.OwnerError, loop.RunnerError, TaskError, planner.PlannerError) as exc:
+    except (
+        owner.OwnerError,
+        loop.RunnerError,
+        TaskError,
+        planner.PlannerError,
+        setup.SetupError,
+    ) as exc:
         return str(exc)
     except Exception as exc:
         return f"{type(exc).__name__}: {exc}"
@@ -1967,6 +1978,56 @@ def _project_order(conn: sqlite3.Connection, value: str | None) -> str:
     names_now = ", ".join(p.name for p in metrics.projects_in_order(conn))
     return f"the projects' order: {names_now}" + (
         f" (no project {', '.join(unknown)})" if unknown else ""
+    )
+
+
+_YES = (True, "yes", "on", "true", "1")
+
+
+def _home_path(path: Path) -> str:
+    """``~/projects/bird-log`` for a folder in the home, else the whole path."""
+    try:
+        return f"~/{path.relative_to(Path.home()).as_posix()}"
+    except ValueError:
+        return str(path)
+
+
+def _new_project(db: Path, now: datetime, value: str | None) -> str:
+    """A project started from the Projects page (F122 D2, ADR 48 items 1 to 3): its folder under
+    the machine's projects root, the owner's words kept, registered "setting up", and its
+    ``setup`` job queued on M1's thread. Nothing in this repo changes, so it never waits for a
+    clean main. A value not as the page writes it is the idea itself: the owner's words are
+    never refused for their form, only an empty idea is."""
+    try:
+        data = json.loads(value or "")
+    except ValueError:
+        data = None
+    if not isinstance(data, dict):
+        data = {"idea": value or ""}
+    name, idea, built_with = (data.get(k) for k in ("name", "idea", "built_with"))
+    if not isinstance(idea, str) or not idea.strip():
+        return setup.NO_IDEA
+    folder, project = setup.start_project(
+        config.projects_root(db),
+        db,
+        name if isinstance(name, str) else "",
+        idea,
+        built_with if isinstance(built_with, str) else "",
+        data.get("app") in _YES,
+        now.astimezone().date(),
+    )
+    conn = metrics.open_db(db)
+    try:
+        project_id = metrics.find_project(conn, project)
+        if project_id is None:  # just registered
+            raise setup.SetupError(f"{project} is not in the factory's list")
+        thread = planner.thread_key(setup.FIRST_CARD)
+        reason = f"{project}'s setup, from the Projects page"
+        metrics.queue_job(conn, project_id, dispatch.SETUP, thread, reason, now.isoformat())
+    finally:
+        conn.close()
+    return (
+        f"set up in {_home_path(folder)}; its setup comes on {planner.thread_name(thread)}'s thread"
     )
 
 

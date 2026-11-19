@@ -66,6 +66,15 @@ def test_each_kind_keeps_its_subject_or_value(client, db_path):
     ]
 
 
+def test_starting_a_project_writes_one_row_with_the_owners_words(client, db_path):
+    """F122 D2: the Projects page's Start, on Softfield's own row; the runner makes the folder."""
+    value = '{"name": "Bird log", "idea": "Birds I saw.", "built_with": "", "app": true}'
+    assert _post(client, _body("new_project", None, value), HTMX).status_code == 200
+    assert [(r["kind"], r["subject"], r["value"]) for r in _rows(db_path)] == [
+        ("new_project", None, value)
+    ]
+
+
 def test_setting_a_blocked_ticket_aside_writes_one_row(client, db_path):
     """F106 D3: the blocked item's "Set aside"."""
     assert _post(client, "kind=set_aside&subject=f21-01-planner", HTMX).status_code == 200

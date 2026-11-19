@@ -215,3 +215,55 @@ def test_the_package_ships_what_it_injects():
         assert (config.INSTRUCTIONS / name).is_file(), name
     for name in ("owner.md", "known-range.md"):
         assert "~/.config/softfield/" in (config.INSTRUCTIONS / "author" / name).read_text(), name
+
+
+def _home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """A home of the test's own: ``~`` is never the real one."""
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    return home
+
+
+def _projects(db: Path, *rows: tuple[str, str, str | None]) -> None:
+    from runner import metrics
+
+    conn = metrics.open_db(db)
+    try:
+        for name, repo, paused in rows:
+            metrics.upsert_project(conn, name, repo=repo)
+            metrics.set_project_paused(conn, name, paused)
+    finally:
+        conn.close()
+
+
+def test_the_projects_root_is_the_machine_files_with_home_expanded(tmp_path, monkeypatch):
+    """F122 D1: `[projects] root` wins over the projects' own folders."""
+    home = _home(tmp_path, monkeypatch)
+    machine = tmp_path / "factory.toml"
+    machine.write_text('[projects]\nroot = "~/code"\n', encoding="utf-8")
+    monkeypatch.setenv(config.MACHINE_ENV, str(machine))
+    db = tmp_path / "m.sqlite"
+    _projects(db, ("softfield", "/x/epayet/softfield", None))
+    assert config.projects_root(db) == home / "code"
+
+
+def test_without_a_root_it_is_the_folder_the_live_projects_share(tmp_path, monkeypatch):
+    """F122 D1: a forgotten project's folder doesn't count, a paused one's does."""
+    home = _home(tmp_path, monkeypatch)
+    db = tmp_path / "m.sqlite"
+    _projects(
+        db,
+        ("softfield", "/x/epayet/softfield", None),
+        ("coucou", "/x/epayet/coucou", "paused by you"),
+        ("old", "/elsewhere/old", "forgotten"),
+    )
+    assert config.projects_root(db) == Path("/x/epayet")
+    _projects(db, ("ducks", "/y/ducks", None))
+    assert config.projects_root(db) == home / "projects"  # no folder they all share
+
+
+def test_with_no_project_and_no_root_it_is_projects_in_home(tmp_path, monkeypatch):
+    home = _home(tmp_path, monkeypatch)
+    db = tmp_path / "m.sqlite"
+    assert config.projects_root(db) == home / "projects"
+    assert not db.exists()  # reading makes no database

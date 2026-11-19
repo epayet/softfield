@@ -3795,6 +3795,74 @@ def test_dismiss_refuses_an_edit_that_worked_and_any_cancel(repo, change, taken,
     assert _row(repo, asked)["dismissed"] is None
 
 
+def _projects_root(tmp_path_factory, monkeypatch) -> Path:
+    """The machine's `[projects] root`, in a home of the test's own, apart from the repo."""
+    home: Path = tmp_path_factory.mktemp("home")
+    monkeypatch.setenv("HOME", str(home))
+    machine = home / "factory.toml"
+    machine.write_text('[projects]\nroot = "~/code"\n', encoding="utf-8")
+    monkeypatch.setenv("SOFTFIELD_CONFIG", str(machine))
+    return home / "code"
+
+
+def _new_project(name: str, idea: str) -> str:
+    return json.dumps({"name": name, "idea": idea, "built_with": "", "app": False})
+
+
+def test_a_new_project_request_makes_the_project_and_queues_its_setup_on_m1(
+    repo, tmp_path_factory, monkeypatch
+):
+    """F122 D2, ADR 48 items 1 to 3: on Softfield's own row, as the Projects page's order is; the
+    runner makes the folder and the card, and a `setup` job waits on M1's thread. Nothing in
+    Softfield's own repo changes, so another branch doesn't hold it."""
+    root = _projects_root(tmp_path_factory, monkeypatch)
+    git(repo, "checkout", "-q", "-b", "elsewhere")
+    head = git(repo, "rev-parse", "HEAD")
+    asked = _ask(repo, "new_project", value=_new_project("Bird log", "Birds I see."))
+    said = "set up in ~/code/bird-log; its setup comes on M1's thread"
+    assert _apply(repo) == [f"new_project: {said}"]
+    assert _request(repo, asked) == (NOW.isoformat(), said)
+    assert (root / "bird-log" / ".softfield/cards/m1-first-version.md").is_file()
+    assert git(repo, "rev-parse", "HEAD") == head
+    conn = metrics.open_db(_db(repo))
+    try:
+        assert metrics.project_state(conn, "bird-log") == (
+            str(root / "bird-log"),
+            metrics.SETTING_UP,
+        )
+        project = metrics.find_project(conn, "bird-log")
+        assert project is not None
+        jobs = [(j["kind"], j["subject"]) for j in metrics.open_jobs(conn, project)]
+    finally:
+        conn.close()
+    assert jobs == [(dispatch.SETUP, "m1")]
+
+
+def test_a_new_project_without_its_idea_is_refused_and_nothing_is_made(
+    repo, tmp_path_factory, monkeypatch
+):
+    """F122 D2: only an empty idea is refused, with words its status shows."""
+    root = _projects_root(tmp_path_factory, monkeypatch)
+    asked = _ask(repo, "new_project", value=_new_project("Bird log", "  "))
+    unsaid = _ask(repo, "new_project", value='{"name": "Bird log"}')
+    _apply(repo)
+    assert "needs its idea" in str(_request(repo, asked)[1])
+    assert "needs its idea" in str(_request(repo, unsaid)[1])
+    assert not root.exists()
+
+
+def test_a_new_projects_words_not_as_the_page_writes_them_are_its_idea(
+    repo, tmp_path_factory, monkeypatch
+):
+    """The owner's words are never refused for their form: a value that isn't the page's JSON
+    is the idea itself, its folder named from its first words."""
+    root = _projects_root(tmp_path_factory, monkeypatch)
+    _ask(repo, "new_project", value="Bird log, for the garden")
+    _apply(repo)
+    seed = (root / "bird-log-for-the" / ".softfield/seed.md").read_text(encoding="utf-8")
+    assert seed.endswith("Bird log, for the garden\n")
+
+
 def test_the_projects_page_order_is_applied_at_the_next_pick_without_a_commit(repo):
     """ADR 30 item 6: the Projects page sends the whole order; the runner works in it from its
     next pick. It touches no file, so a dirty tree or another branch doesn't hold it."""

@@ -13,8 +13,10 @@ import re
 import shutil
 import sqlite3
 import tomllib
+import unicodedata
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 
 from runner import checks, config, metrics, prompts
@@ -247,10 +249,11 @@ def init(
     return origin, written
 
 
-def register(folder: Path, db: Path, name: str | None = None) -> None:
+def register(folder: Path, db: Path, name: str | None = None, paused: str | None = None) -> None:
     """The project in the metrics database, last in the owner's order and not paused: the
-    runner takes it from its next round. Only `create` calls it, once `doctor`'s checks pass
-    (F236 D1). A forgotten row of the same folder comes back, history and place included.
+    runner takes it from its next round. `create` calls it once `doctor`'s checks pass (F236
+    D1); a project started from the Projects page comes in ``paused`` "setting up" (ADR 48
+    item 3). A forgotten row of the same folder comes back, history and place included.
     ``name`` is the one in its project.toml."""
     name = name or folder.name
     conn = metrics.open_db(db)
@@ -262,9 +265,86 @@ def register(folder: Path, db: Path, name: str | None = None) -> None:
                 "UPDATE projects SET priority = ? WHERE name = ? AND priority = 100",
                 (min(last + 1, 99), name),
             )
-        metrics.set_project_paused(conn, name, None)
+        metrics.set_project_paused(conn, name, paused)
     finally:
         conn.close()
+
+
+# --- a project started from the Projects page (F122 D2, ADR 48 items 1 to 3) ------------------
+
+FIRST_CARD = "m1-first-version"
+_MAX_SLUG = 40
+_MAX_TITLE = 120  # the card's title, as a planted one's
+_IDEA_WORDS = 4  # an unnamed project's folder: its idea's first words
+NO_IDEA = "a new project needs its idea: nothing was made"
+
+
+def _slug(text: str, words: int | None = None) -> str:
+    plain = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode().lower()
+    found = re.findall(r"[a-z0-9]+", plain)
+    return "-".join(found[:words])[:_MAX_SLUG].strip("-")
+
+
+def _free_folder(root: Path, db: Path, base: str) -> str:
+    """``base``, or ``base-N`` for the first N from 2 that is neither a folder in ``root`` nor
+    a live project's name. A forgotten project's name is free: `init` keeps the old one aside."""
+    conn = metrics.open_db(db)
+    try:
+        live = {p.name for p in metrics.projects_in_order(conn)}
+    finally:
+        conn.close()
+    name, number = base, 2
+    while (root / name).exists() or name in live:
+        name, number = f"{base}-{number}", number + 1
+    return name
+
+
+def start_project(
+    root: Path,
+    db: Path,
+    name: str,
+    idea: str,
+    built_with: str,
+    app: bool,
+    today: date,
+) -> tuple[Path, str]:
+    """What `init` and the setup's first steps do, without Claude: ``<root>/<slug>`` with the
+    factory's files, the idea byte for byte in `.softfield/seed.md`, the first card M1, in one
+    commit on main; then the project registered paused "setting up", its card on its board.
+    The name is never refused (taken: ``-2``; empty: the idea's first words); only an empty idea
+    is, before anything is written. Returns (the folder, the project's name)."""
+    if not idea.strip():
+        raise SetupError(NO_IDEA)
+    from runner import planner  # runner.planner imports the loop
+
+    base = _slug(name) or _slug(idea, _IDEA_WORDS) or "project"
+    project = _free_folder(root, db, base)
+    folder = root / project
+    folder.mkdir(parents=True)
+    try:
+        init(folder, db, previous="keep")
+        seed = f"# Seed\n\n{today.isoformat()}\n\n{idea}" + ("" if idea.endswith("\n") else "\n")
+        (folder / ".softfield/seed.md").write_bytes(seed.encode("utf-8"))
+        title = " ".join(name.split())[:_MAX_TITLE] or project
+        stack = f"Built with: {' '.join(built_with.split()) or 'what the lead recommends'}"
+        kind = "an app, opened in a browser" if app else "not an app opened in a browser"
+        notes = f"{idea.strip()}\n\n{stack} · {kind}"
+        note = f"Started by the owner from the Projects page on {today.isoformat()}."
+        card = planner.seed_card("m1", f"First version of {title}", notes, "product", note)
+        (folder / ".softfield/cards" / f"{FIRST_CARD}.md").write_text(card, encoding="utf-8")
+        git = Git(folder)
+        git.run("add", "-A")
+        git.run(
+            "-c", "user.name=Softfield runner", "-c", "user.email=runner@softfield.invalid",
+            "commit", "-q", "--amend", "--no-verify", "-m",
+            f"softfield init: {project}'s factory files, its idea and its first card (ADR 48)",
+        )  # fmt: skip
+    except BaseException:
+        shutil.rmtree(folder)  # made here a moment ago: a failure leaves no half project
+        raise
+    register(folder, db, project, paused=metrics.SETTING_UP)
+    publish_cards(folder, project, db)
+    return folder, project
 
 
 CREATE_NOTHING = "Nothing was added to the factory."

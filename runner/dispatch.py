@@ -36,6 +36,9 @@ from datetime import datetime
 from runner import allowance
 
 PLANNER = "planner"
+# A project started from the Projects page, set up by the lead (ADR 48 item 4): queued from
+# f122-01, not one of KINDS until f122-02 runs it, so it waits as an unknown kind meanwhile
+SETUP = "setup"
 ESCALATION = "escalation"
 DIRECTION = "direction"
 CHECKPOINT = "checkpoint"

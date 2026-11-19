@@ -758,6 +758,97 @@ def test_doctor_puts_the_first_card_on_the_desk_at_once(tmp_path):
     assert [tuple(r) for r in rows] == [("m1-say-hi", "Say hi", "idea")]
 
 
+IDEA = "A log of the birds I see.\r\n\r\n> From the kitchen window, mostly.  \n"
+TODAY = date(2026, 11, 19)
+
+
+def _start(tmp_path: Path, name: str = "Bird log", idea: str = IDEA) -> tuple[Path, str]:
+    return setup.start_project(
+        tmp_path / "root", tmp_path / "m.sqlite", name, idea, "Django", True, TODAY
+    )
+
+
+def test_a_project_from_the_page_is_made_committed_and_registered_setting_up(tmp_path):
+    """F122 D2, ADR 48 items 1 and 3: the folder, the owner's words byte for byte, the first card,
+    one commit on main; then the row, paused "setting up", with the card on its board."""
+    folder, name = _start(tmp_path)
+    assert (folder, name) == (tmp_path / "root" / "bird-log", "bird-log")
+    seed = (folder / ".softfield/seed.md").read_bytes()
+    assert seed.startswith(b"# Seed\n\n2026-11-19\n\n")
+    assert IDEA.encode() in seed
+    card = (folder / ".softfield/cards/m1-first-version.md").read_text(encoding="utf-8")
+    assert card.startswith("# Milestone M1: First version of Bird log\n")
+    assert "**State:** idea" in card and "**Area:** product" in card
+    notes = card.split("## Notes\n", 1)[1]
+    assert "A log of the birds I see." in notes and "Built with: Django" in notes
+    assert "an app, opened in a browser" in notes
+    assert 'name = "bird-log"' in (folder / ".softfield/project.toml").read_text()
+    assert 'origin = "new"' in (folder / ".softfield/project.toml").read_text()
+    assert git(folder, "rev-list", "--count", "HEAD").strip() == "1"
+    assert git(folder, "branch", "--show-current").strip() == "main"
+    assert git(folder, "status", "--porcelain") == ""
+    assert _row(tmp_path / "m.sqlite", "bird-log") == (str(folder), metrics.SETTING_UP)
+    conn = metrics.open_db(tmp_path / "m.sqlite")
+    try:
+        keys = conn.execute(
+            "SELECT m.key, m.state FROM milestones m JOIN projects p ON p.id = m.project_id"
+            " WHERE p.name = 'bird-log'"
+        ).fetchall()
+    finally:
+        conn.close()
+    assert [tuple(k) for k in keys] == [("m1-first-version", "idea")]
+
+
+def test_a_taken_folder_or_live_name_takes_the_first_free_number(tmp_path):
+    """F122 D2: never refused for its name."""
+    (tmp_path / "root" / "bird-log").mkdir(parents=True)
+    conn = metrics.open_db(tmp_path / "m.sqlite")
+    try:
+        metrics.upsert_project(conn, "bird-log-2", repo="/r/elsewhere")
+    finally:
+        conn.close()
+    folder, name = _start(tmp_path)
+    assert name == "bird-log-3" and folder == tmp_path / "root" / "bird-log-3"
+    assert 'name = "bird-log-3"' in (folder / ".softfield/project.toml").read_text()
+
+
+def test_a_forgotten_project_of_the_name_is_kept_under_another(tmp_path):
+    """F122 D2: F136's "keep"."""
+    db = tmp_path / "m.sqlite"
+    conn = metrics.open_db(db)
+    try:
+        metrics.upsert_project(conn, "bird-log", repo="/r/old-birds")
+        metrics.set_project_paused(conn, "bird-log", metrics.FORGOTTEN)
+    finally:
+        conn.close()
+    folder, name = _start(tmp_path)
+    assert name == "bird-log"
+    assert _row(db, "bird-log-1") == ("/r/old-birds", metrics.FORGOTTEN)
+    assert _row(db, "bird-log") == (str(folder), metrics.SETTING_UP)
+
+
+@pytest.mark.parametrize(
+    ("name", "folder"),
+    [
+        ("", "a-log-of-the"),  # the idea's first words
+        ("  Ça va? Les Oiseaux!! ", "ca-va-les-oiseaux"),
+        ("x" * 60, "x" * 40),
+        ("🐦", "a-log-of-the"),  # nothing left of the name
+        ("../../.ssh", "ssh"),  # a name never leaves the root
+    ],
+)
+def test_the_folder_is_the_name_made_a_slug(tmp_path, name, folder):
+    made, project = _start(tmp_path, name=name)
+    assert project == folder and made.parent == tmp_path / "root"
+
+
+def test_an_empty_idea_is_refused_and_nothing_is_written(tmp_path):
+    with pytest.raises(setup.SetupError, match="idea"):
+        _start(tmp_path, idea=" \n ")
+    assert not (tmp_path / "root").exists()
+    assert not (tmp_path / "m.sqlite").exists() or _projects(tmp_path / "m.sqlite") == []
+
+
 def test_removing_the_dot_folder_leaves_the_repo_as_it_was(tmp_path):
     """ADR 41 item 1: the factory's footprint is its folder."""
     folder = tmp_path / "shop"

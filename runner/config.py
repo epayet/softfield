@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from runner import metrics
 from runner.agents import Agent, WindowSeed
 
 DEFAULT_METRICS_DB = "~/.local/share/software-factory/factory-metrics.sqlite"
@@ -165,6 +166,31 @@ def machine_ntfy() -> str | None:
     table = data.get("notify")
     address = table.get("ntfy") if isinstance(table, dict) else None
     return str(address) if address else None
+
+
+DEFAULT_PROJECTS_ROOT = "~/projects"
+
+
+def projects_root(db: Path | None = None) -> Path:
+    """Where a project started from the Projects page gets its folder (F122 D1, ADR 48 item 2):
+    `[projects] root` in the machine's file, ``~`` expanded; without it, the folder every live
+    (not forgotten) project's repo is in, when they share one; else ``~/projects``. ``db``: the
+    metrics database, the machine's by default; one that isn't there is not made."""
+    machine = machine_file()
+    data = tomllib.loads(machine.read_text(encoding="utf-8")) if machine.is_file() else {}
+    table = data.get("projects")
+    if isinstance(table, dict) and table.get("root"):
+        return Path(str(table["root"])).expanduser()
+    db = machine_metrics_db() if db is None else db
+    if db.is_file():
+        conn = metrics.open_db(db)
+        try:
+            parents = {Path(p.repo).parent for p in metrics.projects_in_order(conn) if p.repo}
+        finally:
+            conn.close()
+        if len(parents) == 1:
+            return parents.pop()
+    return Path(DEFAULT_PROJECTS_ROOT).expanduser()
 
 
 def project_name(repo: Path) -> str:

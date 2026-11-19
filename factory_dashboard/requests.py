@@ -26,6 +26,7 @@ from runner.requests import (
     CHANGE,
     DISMISS,
     DROP_SEED,
+    NEW_PROJECT,
     PAUSE,
     PLAN_MESSAGE,
     PLANT,
@@ -46,8 +47,8 @@ router = APIRouter()
 # (2026-10-07; f6-18's priority went with the number, ADR 45), dismissing
 # words that didn't go through (F31 D9), rejecting a proposal (F31 D2), and editing or
 # cancelling a waiting plant or message (F14 D1), the board's order sent whole (F15 D3), and
-# the Projects page's order (ADR 30 item 6), and a blocked ticket set aside (F106 D3); the runner
-# checks each value, as for the first three
+# the Projects page's order (ADR 30 item 6) and a project started there (F122 D2), and a blocked
+# ticket set aside (F106 D3); the runner checks each value, as for the first three
 KINDS = (
     SIGNOFF,
     RESERVE,
@@ -67,6 +68,7 @@ KINDS = (
     CHANGE,
     REORDER,
     PROJECT_ORDER,
+    NEW_PROJECT,
 )
 
 

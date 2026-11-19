@@ -4,7 +4,7 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
 from runner import allowance
-from runner.dispatch import Pick, Queued, Ticket, Windows, pick, plan
+from runner.dispatch import SETUP, Pick, Queued, Ticket, Windows, pick, plan
 
 NOW = datetime(2026, 10, 5, 12, 0, tzinfo=UTC)
 OPEN = Windows()  # nothing holds Claude back
@@ -231,6 +231,13 @@ def test_an_unknown_kind_is_listed_last_and_never_picked():
     lines = plan([_row("mystery", "x"), _row("review", "f7")], [_dev("f8-07")], OPEN, NOW)
     assert _order(lines)[-1] == ("mystery", "x")
     assert lines[-1].waits == "unknown kind of job"
+
+
+def test_a_queued_setup_is_left_alone_until_its_job_runs():
+    """F122: f122-01 queues `setup`, f122-02 runs it; meanwhile the pick takes what's next."""
+    queued = [_row(SETUP, "m1")]
+    assert pick(queued, [_dev("f8-07")], OPEN, NOW) == pick([], [_dev("f8-07")], OPEN, NOW)
+    assert pick(queued, [], OPEN, NOW) is None
 
 
 def test_nothing_queued_and_no_ticket_picks_nothing():
