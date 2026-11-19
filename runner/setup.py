@@ -11,6 +11,7 @@ import json
 import os
 import re
 import shutil
+import sqlite3
 import tomllib
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -64,14 +65,13 @@ def project_name(folder: Path) -> str | None:
         return None
 
 
-PREVIOUS = ("keep", "continue")  # `init --previous`; "fresh" is f136-03
-
-
 def _decide(
     folder: Path,
     db: Path,
     previous: str | None,
     ask: Callable[[str, list[str]], str] | None,
+    yes: bool = False,
+    confirm: Callable[[str], str] | None = None,
 ) -> tuple[str, str, str | None]:
     """What ``init`` does about a project the database already holds under the folder's name
     (F136 D1, D2, D4), before it writes anything. Returns (the new project's name, "new",
@@ -92,6 +92,7 @@ def _decide(
             said = f"{name} is a forgotten project in the database (its folder: {repo})."
             old = name
             new_name = name
+            goes = _what_goes(conn, name)
         elif is_project:
             raise SetupError(
                 f"{folder} is a project already: `softfield doctor` says what it needs"
@@ -103,10 +104,11 @@ def _decide(
             new_name = metrics.free_name(conn, name, 2)
             said = f"{name} is a project already, in {repo}; this one would be {new_name}."
             old = None
+            goes = ""
     finally:
         conn.close()
-    if previous == "fresh":
-        raise SetupError("`--previous fresh` is not built yet: choose keep or continue")
+    if old is not None:
+        choices.append("fresh")
     if previous is not None and previous not in choices:
         raise SetupError(f"--previous {previous} isn't possible here: {' or '.join(choices)}")
     if previous is None:
@@ -117,7 +119,33 @@ def _decide(
         previous = ask(said, choices)
         if previous not in choices:
             raise SetupError(f"no such choice: {previous}")
+        if previous == "fresh":
+            typed = (
+                confirm(f"Start fresh deletes {goes}.\nType {name} to do it: ") if confirm else ""
+            )
+            if typed.strip() != name:
+                raise SetupError("not confirmed: nothing was changed")
+    elif previous == "fresh" and not yes:
+        raise SetupError(f"`--previous fresh` deletes {goes}: add --yes to say so")
     return new_name, previous, old
+
+
+def _what_goes(conn: sqlite3.Connection, name: str) -> str:
+    """What "start fresh" deletes of a project, in words."""
+    row = conn.execute(
+        "SELECT"
+        " (SELECT count(*) FROM milestones WHERE project_id = p.id),"
+        " (SELECT count(*) FROM tickets WHERE project_id = p.id),"
+        " (SELECT count(*) FROM planner_threads WHERE project_id = p.id),"
+        " (SELECT count(*) FROM runs WHERE project_id = p.id)"
+        " FROM projects p WHERE p.name = ?",
+        (name,),
+    ).fetchone()
+    cards, tickets, threads, runs = row
+    return (
+        f"{name}'s old entry for good: {cards} cards, {tickets} tickets, {threads} threads,"
+        f" {runs} runs and their costs"
+    )
 
 
 def init(
@@ -125,12 +153,14 @@ def init(
     db: Path,
     previous: str | None = None,
     ask: Callable[[str, list[str]], str] | None = None,
+    yes: bool = False,
+    confirm: Callable[[str], str] | None = None,
 ) -> tuple[str, list[str]]:
     """The factory's files in ``folder`` (``git init`` first if needed), committed, and the
     project registered last in the owner's order. Returns ("new" or "existing", the paths
     written). Refuses a folder that is a project already, or a repo off its main or dirty.
     A project of the same name in the database means a choice first (``previous``, or ``ask``)."""
-    name, action, old = _decide(folder, db, previous, ask)
+    name, action, old = _decide(folder, db, previous, ask, yes, confirm)
     if action == "continue":  # the old entry comes back: nothing written or committed
         register(folder, db, name)
         origin = tomllib.loads((folder / PROJECT_TOML).read_text(encoding="utf-8"))["project"].get(
@@ -178,10 +208,14 @@ def init(
             "-c", "user.name=Softfield runner", "-c", "user.email=runner@softfield.invalid",
             "commit", "-q", "--no-verify", "-m", "softfield init: the factory's files (ADR 30)",
         )  # fmt: skip
-    if old is not None:  # kept, forgotten, with its history, under the first free name-N
+    if old is not None:  # forgotten: kept under the first free name-N, or deleted for good
         conn = metrics.open_db(db)
         try:
-            metrics.rename_project(conn, old, metrics.free_name(conn, old, 1))
+            if action == "fresh":
+                if (old_id := metrics.find_project(conn, old)) is not None:
+                    metrics.delete_project(conn, old_id)
+            else:
+                metrics.rename_project(conn, old, metrics.free_name(conn, old, 1))
         finally:
             conn.close()
     register(folder, db, name)

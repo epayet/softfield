@@ -89,6 +89,38 @@ def test_a_project_can_be_renamed_with_its_history_and_names_run_on_from_a_numbe
     assert metrics.project_state(db, "hello") is None
 
 
+def test_deleting_a_project_takes_all_it_holds_and_leaves_ratings_and_others(db, ids):
+    """F136 D3: children before parents; a rating change stays, its ticket cleared."""
+    job = _job(db, ids)
+    metrics.queue_job(db, ids["project"], "planner", "f1", "why", T0)
+    db.execute("UPDATE work_queue SET started_job = ?", (job,))
+    thread = metrics.planner_thread(db, ids["project"], "f1", T0)
+    metrics.add_planner_message(db, thread["id"], "owner", T0, "hi", job_id=job)
+    db.execute(
+        "INSERT INTO findings (job_id, milestone_id, ticket_id, key) VALUES (?, ?, ?, 'k')",
+        (job, ids["milestone"], ids["ticket"]),
+    )
+    metrics.set_board_order(db, ids["project"], ["f1"])
+    metrics.add_rating_change(db, "a", "s", 1, 2, at=T0, ticket_id=ids["ticket"])
+    metrics.add_usage_event(db, "claude", T0, "used", value=1)
+    other = metrics.upsert_project(db, "other")
+    metrics.upsert_milestone(db, other, "f9", title="stays")
+    db.commit()
+
+    metrics.delete_project(db, ids["project"])
+
+    assert metrics.find_project(db, "coucou") is None
+    for table in (
+        "milestones", "runs", "tickets", "jobs", "findings", "work_queue",
+        "planner_threads", "planner_messages", "board_order",
+    ):  # fmt: skip
+        count = _count(db, table)
+        assert count == (1 if table == "milestones" else 0), table
+    assert db.execute("SELECT ticket_id FROM rating_changes").fetchall()[0][0] is None
+    assert _count(db, "usage_events") == 1
+    assert metrics.find_project(db, "other") == other
+
+
 def test_the_board_order_is_rewritten_whole_per_project(db):
     """F222 D5: the dashboard's copy of each project's queue list."""
     first = metrics.upsert_project(db, "coucou")

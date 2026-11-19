@@ -307,7 +307,7 @@ def test_init_asks_about_a_forgotten_project_and_keep_renames_the_old_one(tmp_pa
         return "keep"
 
     setup.init(folder, db, ask=ask)
-    assert asked == [["keep"]]  # no continue: the folder doesn't hold the old project
+    assert asked == [["keep", "fresh"]]  # no continue: the folder doesn't hold the old project
     assert _row(db, "hello-1") == ("/r/hello", metrics.FORGOTTEN)
     assert _row(db, "hello") == (str(folder), metrics.SETTING_UP)
     conn = metrics.open_db(db)
@@ -345,7 +345,7 @@ def test_continue_is_offered_when_the_folder_names_the_project_and_writes_nothin
         return "continue"
 
     setup.init(folder, db, ask=ask)
-    assert offered == [["keep", "continue"]]
+    assert offered == [["keep", "continue", "fresh"]]
     assert git(folder, "rev-parse", "HEAD") == head and git(folder, "status", "--porcelain") == ""
     assert _row(db, "hello") == (str(folder), metrics.SETTING_UP)
     conn = metrics.open_db(db)
@@ -353,6 +353,91 @@ def test_continue_is_offered_when_the_folder_names_the_project_and_writes_nothin
         assert metrics.find_project(conn, "hello") == old
     finally:
         conn.close()
+
+
+def _fat_hello(db: Path) -> int:
+    old = _old_hello(db, metrics.FORGOTTEN)
+    conn = metrics.open_db(db)
+    try:
+        run = metrics.upsert_run(conn, old, "r1", command="x", started="2026-01-01T00:00:00+00:00")
+        ticket = metrics.upsert_ticket(conn, old, "t1")
+        metrics.start_job(
+            conn, run, ticket_id=ticket, milestone_id=None, role="developer", agent="a", attempt=1,
+            started="2026-01-01T00:00:00+00:00",
+        )  # fmt: skip
+        thread = metrics.planner_thread(conn, old, "m1", "2026-01-01T00:00:00+00:00")
+        metrics.add_planner_message(conn, thread["id"], "owner", "2026-01-01T00:00:00+00:00", "hi")
+        metrics.add_rating_change(
+            conn, "a", "s", 1, 2, at="2026-01-01T00:00:00+00:00", ticket_id=ticket
+        )
+    finally:
+        conn.close()
+    return old
+
+
+def _count_rows(db: Path, table: str) -> int:
+    conn = metrics.open_db(db)
+    try:
+        return int(conn.execute(f"SELECT count(*) FROM {table}").fetchone()[0])  # noqa: S608
+    finally:
+        conn.close()
+
+
+def test_start_fresh_deletes_the_old_entry_once_its_name_is_typed(tmp_path):
+    db = tmp_path / "m.sqlite"
+    old = _fat_hello(db)
+    folder = _hello_folder(tmp_path)
+    prompts = []
+
+    def confirm(prompt: str) -> str:
+        prompts.append(prompt)
+        return "hello"
+
+    setup.init(folder, db, ask=lambda said, choices: "fresh", confirm=confirm)
+    assert "cards" in prompts[0] and "runs" in prompts[0]
+    assert _row(db, "hello") == (str(folder), metrics.SETTING_UP)
+    conn = metrics.open_db(db)
+    try:
+        for table in ("runs", "tickets", "jobs", "planner_threads", "planner_messages"):
+            assert _count_rows(db, table) == 0, table
+        assert (
+            conn.execute("SELECT count(*) FROM milestones WHERE project_id = ?", (old,)).fetchone()[
+                0
+            ]
+            == 0
+        )
+        assert conn.execute("SELECT ticket_id FROM rating_changes").fetchone()[0] is None
+    finally:
+        conn.close()
+
+
+def test_a_wrong_name_typed_back_cancels_with_nothing_written(tmp_path):
+    db = tmp_path / "m.sqlite"
+    _fat_hello(db)
+    folder = _hello_folder(tmp_path)
+    with pytest.raises(setup.SetupError, match="nothing was changed"):
+        setup.init(folder, db, ask=lambda said, choices: "fresh", confirm=lambda prompt: "nope")
+    assert not any(folder.iterdir())
+    assert _row(db, "hello") == ("/r/hello", metrics.FORGOTTEN)
+    assert _count_rows(db, "runs") == 1
+
+
+def test_previous_fresh_needs_yes_before_anything_is_written(tmp_path):
+    db = tmp_path / "m.sqlite"
+    _fat_hello(db)
+    folder = _hello_folder(tmp_path)
+    with pytest.raises(setup.SetupError, match="--yes"):
+        setup.init(folder, db, previous="fresh")
+    assert not any(folder.iterdir()) and _count_rows(db, "runs") == 1
+    setup.init(folder, db, previous="fresh", yes=True)
+    assert _count_rows(db, "runs") == 0
+
+
+def test_fresh_is_never_offered_for_a_live_project(tmp_path):
+    db = tmp_path / "m.sqlite"
+    _old_hello(db, None)
+    with pytest.raises(setup.SetupError, match="isn't possible"):
+        setup.init(_hello_folder(tmp_path), db, previous="fresh", yes=True)
 
 
 def test_a_live_project_of_the_name_means_a_new_one_called_name_2(tmp_path, machine):

@@ -251,7 +251,9 @@ def _machine_command(args: argparse.Namespace) -> int:
         folder = Path.cwd()
         ask = _ask_previous if sys.stdin.isatty() else None
         try:
-            origin, written = setup.init(folder, db, args.previous, ask)
+            origin, written = setup.init(
+                folder, db, args.previous, ask, args.yes, input if ask else None
+            )
         except (setup.SetupError, GitError) as exc:
             print(f"softfield: {exc}")
             return 1
@@ -551,8 +553,10 @@ def main(argv: list[str] | None = None) -> int:
     init.add_argument(
         "--previous",
         choices=("continue", "keep", "fresh"),
-        help="what to do with an old entry of the same name, without asking (fresh: not built yet)",
+        help="what to do with an old entry of the same name, without asking"
+        " (fresh deletes it: needs --yes)",
     )
+    init.add_argument("--yes", action="store_true", help="confirm `--previous fresh`")
     doctor = sub.add_parser("doctor", help="whether this project is ready for the web (ADR 30)")
     doctor.add_argument("--quick", action="store_true", help="skip running check-all")
     forget = sub.add_parser(

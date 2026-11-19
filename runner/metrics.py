@@ -495,6 +495,44 @@ def rename_project(conn: sqlite3.Connection, old: str, new: str) -> None:
         conn.execute("UPDATE projects SET name = ? WHERE name = ?", (new, old))
 
 
+def delete_project(conn: sqlite3.Connection, project_id: int) -> None:
+    """The project's row and everything under it, in one transaction (F136 D3): children before
+    parents. Rating changes stay, their ticket cleared; usage events belong to no project."""
+    pid = (project_id,)
+    with conn:
+        conn.execute(
+            "UPDATE rating_changes SET ticket_id = NULL WHERE ticket_id IN"
+            " (SELECT id FROM tickets WHERE project_id = ?)",
+            pid,
+        )
+        conn.execute(
+            "DELETE FROM planner_messages WHERE thread_id IN"
+            " (SELECT id FROM planner_threads WHERE project_id = ?)",
+            pid,
+        )
+        conn.execute(
+            "DELETE FROM findings WHERE milestone_id IN"
+            " (SELECT id FROM milestones WHERE project_id = ?)",
+            pid,
+        )
+        # a queued job points at the job it started, so it goes before the jobs
+        conn.execute("DELETE FROM work_queue WHERE project_id = ?", pid)
+        conn.execute(
+            "DELETE FROM jobs WHERE run_id IN (SELECT id FROM runs WHERE project_id = ?)", pid
+        )
+        for table in (
+            "planner_threads",
+            "owner_requests",
+            "owner_items",
+            "board_order",
+            "tickets",
+            "runs",
+            "milestones",
+        ):
+            conn.execute(f"DELETE FROM {table} WHERE project_id = ?", pid)  # noqa: S608
+        conn.execute("DELETE FROM projects WHERE id = ?", pid)
+
+
 def upsert_milestone(
     conn: sqlite3.Connection,
     project_id: int,
