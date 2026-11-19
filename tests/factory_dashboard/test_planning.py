@@ -1153,11 +1153,21 @@ def _asked_changes(db_path: Path) -> list[tuple[str | None, dict[str, Any]]]:
 
 def test_desk_has_a_poll_wrapper_with_correct_attributes(planning, serve):
     """The desk has a poll wrapper with hx-get="/planning?project=coucou",
-    hx-trigger="every 5s [window.liveIdle()]" and hx-select="#desk"."""
+    hx-trigger="every 5s [window.liveIdle()]", hx-select="#desk", hx-select-oob
+    for the two tiles, and hx-disinherit naming both hx-select and hx-select-oob."""
     html = _page(serve())
     assert 'hx-get="/planning' in html
     assert 'hx-trigger="every 5s [window.liveIdle()]"' in html
     assert 'hx-select="#desk"' in html
+    assert 'hx-select-oob="#factory-now:innerHTML,#lead-window:innerHTML"' in html
+    assert 'hx-disinherit="hx-select hx-select-oob"' in html
+
+
+def test_only_live_desk_carries_hx_select_oob(planning, serve):
+    """Only #live-desk carries hx-select-oob on the page; no other element does."""
+    html = _page(serve())
+    count = html.count("hx-select-oob=")
+    assert count == 1
 
 
 def test_desk_coming_poll_wrapper_when_items_exist(planning, db_path, serve):
@@ -1274,6 +1284,77 @@ def test_the_desk_poll_moves_an_answered_seed_to_the_answers(page, planning, db_
     poll(page)
     assert page.locator('#desk-answers a[href^="/planning/f9"]').count() == 1
     assert page.locator('#desk-seeds a[href^="/planning/f9"]').count() == 0
+
+
+def test_the_factory_now_tile_updates_when_a_job_starts(page, db_path):
+    """F265 D1: /planning opens with nothing running ("Nothing running right now." in
+    #factory-now); a job is written to the database; within a poll #factory-now reads
+    "Running" and names it, without a reload."""
+    from factory_dashboard.app import create_app, get_now
+
+    page.clock.install()
+    fresh_db = db_path.parent / "fresh.sqlite"
+    conn = metrics.open_db(fresh_db)
+    try:
+        metrics.upsert_project(conn, PROJECT)
+    finally:
+        conn.close()
+
+    app = create_app(fresh_db, PROJECT)
+    app.dependency_overrides[get_now] = lambda: NOW
+    client = TestClient(app, base_url="http://127.0.0.1:8765")
+    _open(page, client)
+
+    factory_tile = page.locator("#factory-now")
+    assert "Nothing running right now." in factory_tile.text_content()
+
+    # Write a job to the database
+    conn = metrics.open_db(fresh_db)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        f1 = metrics.upsert_milestone(conn, project, "f1", verdict="ready")
+        live = metrics.upsert_ticket(
+            conn, project, "f1-04-live", milestone_id=f1, kind="developer", state="running"
+        )
+        run = metrics.upsert_run(
+            conn,
+            project,
+            "20261002-113500",
+            command="milestone f1",
+            started=_at(timedelta(minutes=25)),
+            heartbeat=_at(timedelta(seconds=30)),
+        )
+        job = metrics.start_job(
+            conn,
+            run,
+            ticket_id=live,
+            milestone_id=f1,
+            role="developer",
+            agent=LOCAL,
+            attempt=2,
+            started=_at(timedelta(minutes=12)),
+        )
+        metrics.update_running_job(conn, job, tokens_in=42_000, steps=17)
+    finally:
+        conn.close()
+
+    # Initialise the poll tracker and advance the page's clock past the 5 s poll
+    page.evaluate(
+        """() => {
+            window.polls = { sent: 0, done: 0 };
+            document.addEventListener("htmx:beforeRequest",
+                () => { window.polls.sent += 1; });
+            document.addEventListener("htmx:afterRequest",
+                () => { window.polls.done += 1; });
+        }"""
+    )
+    page.clock.run_for(6_000)
+    page.wait_for_function("() => window.polls && window.polls.done > 0")
+    page.clock.run_for(100)
+
+    tile_text = factory_tile.text_content()
+    assert "Running" in tile_text
+    assert "f1-04-live" in tile_text
 
 
 def test_two_blocked_tickets_appear_second_on_the_desk_with_their_ids_and_reason(

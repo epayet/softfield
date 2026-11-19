@@ -119,7 +119,7 @@
   </div>
   </div>
 
-  <div id="live-desk" hx-get="/planning{{ q }}" hx-trigger="every 5s [window.liveIdle()]" hx-select="#desk" hx-swap="innerHTML" hx-disinherit="hx-select">
+  <div id="live-desk" hx-get="/planning{{ q }}" hx-trigger="every 5s [window.liveIdle()]" hx-select="#desk" hx-swap="innerHTML" hx-select-oob="#factory-now:innerHTML,#lead-window:innerHTML" hx-disinherit="hx-select hx-select-oob">
   <section id="desk" class="panel desk" aria-label="Your desk">
     <h2>Your desk{% if planning_count %} · {{ planning_count }}{% endif %}</h2>
     {% for group in groups if group.items %}
