@@ -25,3 +25,12 @@ Read D1–D3 in `.softfield/cards/f265-the-factory-now-section-in-planning.md`.
 - in the browser: Dismiss on a refused note still shows "Asked" (`test_dismiss_takes_the_item_off_at_once_and_a_reload_keeps_it_off` passes unchanged)
 - the listed `tests:` pass, and the new ones fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 1765
+gate_failures: []
+tokens: 2213200
+```
