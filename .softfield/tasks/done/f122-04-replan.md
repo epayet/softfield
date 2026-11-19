@@ -23,3 +23,10 @@ Read `.softfield/cards/f122-new-project-from-the-projects-page.md` (Decisions, T
 - the card doc has a `## Replan` section listing each difference found, or saying none was
 - f122-05's Context names only functions and paths that exist on main, and passes `softfield check-tickets`
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
