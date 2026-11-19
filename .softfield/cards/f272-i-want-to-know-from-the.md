@@ -1,4 +1,4 @@
-# Milestone F272: I want to know from the headbar how long the job has been…
+# Milestone F272: The top bar says how long the job has run and which attempt it is
 
 > **State:** idea · **Area:** factory
 > Planted by the owner on 2026-11-19.
