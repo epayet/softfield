@@ -140,13 +140,17 @@ def _now() -> str:
 
 
 def _write(repo: Path, db: Path | None, write: Callable[[sqlite3.Connection, int], None]) -> None:
-    """One write to the metrics database; the owner's commands work on without it."""
+    """One write to the metrics database; the owner's commands work on without it. Only to a
+    project that is registered: a folder still being set up has no row, and nothing on the desk
+    to write to (F236 D3: `softfield create` is what adds the project)."""
     if db is None:
         return
     try:
         conn = metrics.open_db(db)
         try:
-            write(conn, metrics.upsert_project(conn, project_name(repo), repo=str(repo)))
+            project = metrics.find_project(conn, project_name(repo))
+            if project is not None:
+                write(conn, project)
         finally:
             conn.close()
     except Exception as exc:

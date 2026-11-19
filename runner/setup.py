@@ -1,9 +1,9 @@
 """`softfield init`, `softfield doctor` and `softfield service install` (ADR 30 items 5, 7, 8).
 
-``init`` writes the factory's files into the folder it runs in, new or existing, registers the
-project and hands over to an interactive Claude session that sets the rest up with the owner
-(``runner/instructions/bootstrap.md``). ``doctor`` says whether a project is ready for the web.
-``service``
+``init`` writes the factory's files into the folder it runs in, new or existing, and hands over
+to an interactive Claude session that sets the rest up with the owner
+(``runner/instructions/bootstrap.md``). ``doctor`` says whether a project is ready for the web;
+``create`` adds it to the factory once it is (F236). ``service``
 writes the systemd user units that keep the runner and the dashboard up.
 """
 
@@ -156,13 +156,13 @@ def init(
     yes: bool = False,
     confirm: Callable[[str], str] | None = None,
 ) -> tuple[str, list[str]]:
-    """The factory's files in ``folder`` (``git init`` first if needed), committed, and the
-    project registered last in the owner's order. Returns ("new" or "existing", the paths
-    written). Refuses a folder that is a project already, or a repo off its main or dirty.
-    A project of the same name in the database means a choice first (``previous``, or ``ask``)."""
+    """The factory's files in ``folder`` (``git init`` first if needed), committed. The project
+    is not registered: `softfield create` does that once `doctor` passes. Returns ("new" or
+    "existing", the paths written). Refuses a folder that is a project already, or a repo off
+    its main or dirty. A project of the same name in the database means a choice first
+    (``previous``, or ``ask``)."""
     name, action, old = _decide(folder, db, previous, ask, yes, confirm)
-    if action == "continue":  # the old entry comes back: nothing written or committed
-        register(folder, db, name)
+    if action == "continue":  # nothing written or committed; `create` brings the old entry back
         origin = tomllib.loads((folder / PROJECT_TOML).read_text(encoding="utf-8"))["project"].get(
             "origin", "existing"
         )
@@ -218,14 +218,14 @@ def init(
                 metrics.rename_project(conn, old, metrics.free_name(conn, old, 1))
         finally:
             conn.close()
-    register(folder, db, name)
     return origin, written
 
 
 def register(folder: Path, db: Path, name: str | None = None) -> None:
-    """The project in the metrics database, last in the owner's order, and paused while it is
-    set up: the runner leaves it alone until `softfield doctor` passes (``ready``). ``name``
-    is the one in its project.toml (the folder's name unless init had to change it)."""
+    """The project in the metrics database, last in the owner's order and not paused: the
+    runner takes it from its next round. Only `create` calls it, once `doctor`'s checks pass
+    (F236 D1). A forgotten row of the same folder comes back, history and place included.
+    ``name`` is the one in its project.toml."""
     name = name or folder.name
     conn = metrics.open_db(db)
     try:
@@ -236,7 +236,41 @@ def register(folder: Path, db: Path, name: str | None = None) -> None:
                 "UPDATE projects SET priority = ? WHERE name = ? AND priority = 100",
                 (min(last + 1, 99), name),
             )
-        metrics.set_project_paused(conn, name, metrics.SETTING_UP)
+        metrics.set_project_paused(conn, name, None)
+    finally:
+        conn.close()
+
+
+CREATE_NOTHING = "Nothing was added to the factory."
+
+
+def registration(folder: Path, db: Path, name: str) -> str:
+    """What `create` finds under ``name`` in the database: "new" (no row), "back" (this folder's
+    forgotten row), "finish" (this folder's, still marked set up by an older init), "already"
+    (registered), or raises SetupError naming the other folder that holds the name (F236 D1)."""
+    conn = metrics.open_db(db)
+    try:
+        state = metrics.project_state(conn, name)
+    finally:
+        conn.close()
+    if state is None:
+        return "new"
+    repo, paused = state
+    if repo != str(folder):
+        raise SetupError(
+            f"{name} is held by {repo or 'another folder'}, not this one: nothing was written."
+            " Change `name` in .softfield/project.toml, or `softfield forget` that project first"
+        )
+    if paused == metrics.FORGOTTEN:
+        return "back"
+    return "finish" if paused == metrics.SETTING_UP else "already"
+
+
+def registered(db: Path, name: str) -> bool:
+    """Whether a live (not forgotten) project of this name is in the factory's list."""
+    conn = metrics.open_db(db)
+    try:
+        return any(p.name == name for p in metrics.projects_in_order(conn))
     finally:
         conn.close()
 
@@ -269,20 +303,6 @@ def publish_cards(folder: Path, name: str, db: Path) -> list[str]:
             )
             published.append(key)
         return published
-    finally:
-        conn.close()
-
-
-def ready(name: str, db: Path) -> bool:
-    """`softfield doctor` passed: a project still being set up goes to the runner, which takes
-    it from its next round. Whether it was waiting for that."""
-    conn = metrics.open_db(db)
-    try:
-        row = next((p for p in metrics.projects_in_order(conn) if p.name == name), None)
-        if row is None or row.paused != metrics.SETTING_UP:
-            return False
-        metrics.set_project_paused(conn, name, None)
-        return True
     finally:
         conn.close()
 
@@ -419,7 +439,7 @@ def first_card(folder: Path) -> str | None:
 
 
 def hand_over(name: str, card: str | None, host: str, *, planning: bool = False) -> str:
-    """What `doctor` says when the project is ready: where it is and what to do next."""
+    """What `create` says when the project is in the factory: where it is and what to do next."""
     base = f"http://{host}:8765"
     lines = [f"Done: {name} is in the factory.", f"  The Projects page: {base}/projects"]
     if card:
@@ -451,7 +471,7 @@ def doctor(
     """Whether the web can take over (ADR 30 item 8): each check, passed or not, in order."""
     found: list[Finding] = []
     try:
-        cfg = load_config(folder)
+        load_config(folder)
         project = tomllib.loads((folder / PROJECT_TOML).read_text(encoding="utf-8"))["project"]
         found.append(Finding(True, f"{PROJECT_TOML} loads"))
     except (OSError, KeyError, ValueError, ConfigError) as exc:
@@ -466,12 +486,6 @@ def doctor(
     found.append(_adr_00_finding(folder))
     cards = [p for p in (folder / ".softfield" / "cards").glob("*.md")]
     found.append(Finding(bool(cards), "a first card in .softfield/cards/"))
-    conn = metrics.open_db(db)
-    try:
-        registered = metrics.find_project(conn, cfg.project_name) is not None
-    finally:
-        conn.close()
-    found.append(Finding(registered, f"registered as {cfg.project_name}"))
     git = Git(folder)
     try:
         on_main = git.run("rev-parse", "--abbrev-ref", "HEAD").strip() == "main"

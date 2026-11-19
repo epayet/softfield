@@ -217,7 +217,33 @@ def test_accept_and_reject_set_an_adrs_status(repo: Path):
 
 
 def _db(repo: Path) -> Path:
-    return repo / "var" / "factory-metrics.sqlite"  # never the real one
+    """The test database, with the project registered: the owner's commands write only to a
+    registered project (F236 D3)."""
+    path = repo / "var" / "factory-metrics.sqlite"  # never the real one
+    conn = metrics.open_db(path)
+    try:
+        metrics.upsert_project(conn, project_name(repo), repo=str(repo))
+    finally:
+        conn.close()
+    return path
+
+
+def test_the_owners_commands_write_nothing_for_a_project_without_a_row(repo: Path):
+    """F236 D3: `softfield accept 0` while a project is being set up creates no row."""
+    adr = repo / ".softfield" / "adr" / "00-initial.md"
+    adr.parent.mkdir(parents=True)
+    adr.write_text("# ADR 00\n\n- **Status:** Proposed\n")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "adr")
+    path = repo / "var" / "factory-metrics.sqlite"
+    owner.decide_adr(repo, 0, "Accepted", TODAY, db=path)
+    assert "Accepted" in adr.read_text()
+    assert git(repo, "log", "-1", "--format=%s").strip() == "ADR 0 accepted by the owner"
+    conn = metrics.open_db(path)
+    try:
+        assert conn.execute("SELECT count(*) FROM projects").fetchone()[0] == 0
+    finally:
+        conn.close()
 
 
 def _items(repo: Path) -> dict[tuple[str, str], dict[str, object]]:
@@ -478,10 +504,11 @@ def test_signoff_without_a_score_leaves_it_empty(repo: Path):
 @pytest.mark.parametrize("score", [0, 11])
 def test_signoff_refuses_a_score_out_of_range_before_changing_anything(repo: Path, score: int):
     _milestone(repo)
+    path = repo / "var" / "factory-metrics.sqlite"  # not `_db`, which makes the file
     with pytest.raises(owner.OwnerError, match="1 to 10"):
-        owner.signoff(repo, "m1", TODAY, db=_db(repo), score=score)
+        owner.signoff(repo, "m1", TODAY, db=path, score=score)
     assert git(repo, "tag") == "" and git(repo, "status", "--porcelain") == ""
-    assert not _db(repo).exists()
+    assert not path.exists()
 
 
 def test_the_verdict_is_on_the_milestone_row(repo: Path):

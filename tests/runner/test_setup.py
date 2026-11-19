@@ -19,8 +19,8 @@ def _projects(db: Path) -> list[tuple[str, str | None, int]]:
 
 
 def test_init_sets_up_an_empty_folder_as_a_new_project_on_main(tmp_path, machine):
-    """ADR 30 item 7: the factory's files, committed on main, the hook on, the project
-    registered last in the owner's order."""
+    """ADR 30 item 7: the factory's files, committed on main, the hook on, and no row for the
+    project: `softfield create` adds it (F236 D1)."""
     db = tmp_path / "m.sqlite"
     conn = metrics.open_db(db)
     try:
@@ -51,13 +51,8 @@ def test_init_sets_up_an_empty_folder_as_a_new_project_on_main(tmp_path, machine
     assert git(folder, "status", "--porcelain") == ""
     assert git(folder, "config", "core.hooksPath").strip() == ".softfield/hooks"
     assert (folder / ".softfield/hooks/pre-commit").stat().st_mode & 0o111
-    assert _projects(db) == [("softfield", "/r/softfield", 1), ("ducks", str(folder), 2)]
-    conn = metrics.open_db(db)
-    try:  # the runner leaves it alone until `softfield doctor` passes
-        paused = {p.name: p.paused for p in metrics.projects_in_order(conn)}
-    finally:
-        conn.close()
-    assert paused == {"softfield": None, "ducks": metrics.SETTING_UP}
+    assert _projects(db) == [("softfield", "/r/softfield", 1)]  # F236: no row until `create`
+    assert _row(db, "ducks") is None
 
 
 def test_init_keeps_what_an_existing_repo_has_and_says_existing(tmp_path):
@@ -148,8 +143,7 @@ def test_doctor_says_what_the_web_still_needs_then_passes(tmp_path, machine):
     found = setup.doctor(folder, db, run_checks=False)
     assert setup.passes(found)  # the phone's notifications aren't set up: they don't hold it
     assert [f.ok for f in found if not f.needed] == [False]
-    assert setup.ready("ducks", db)  # doctor passed: the runner takes it
-    assert not setup.ready("ducks", db)  # once
+    assert _row(db, "ducks") is None  # doctor only checks: no row, passing or not
 
 
 def test_doctor_says_whether_the_phones_notifications_are_set_up(tmp_path, monkeypatch, capsys):
@@ -309,11 +303,10 @@ def test_init_asks_about_a_forgotten_project_and_keep_renames_the_old_one(tmp_pa
     setup.init(folder, db, ask=ask)
     assert asked == [["keep", "fresh"]]  # no continue: the folder doesn't hold the old project
     assert _row(db, "hello-1") == ("/r/hello", metrics.FORGOTTEN)
-    assert _row(db, "hello") == (str(folder), metrics.SETTING_UP)
+    assert _row(db, "hello") is None  # the new project is registered by `create`
     conn = metrics.open_db(db)
     try:
         assert metrics.find_project(conn, "hello-1") == old
-        assert metrics.find_project(conn, "hello") != old
         kept = conn.execute("SELECT key FROM milestones WHERE project_id = ?", (old,)).fetchall()
     finally:
         conn.close()
@@ -347,7 +340,7 @@ def test_continue_is_offered_when_the_folder_names_the_project_and_writes_nothin
     setup.init(folder, db, ask=ask)
     assert offered == [["keep", "continue", "fresh"]]
     assert git(folder, "rev-parse", "HEAD") == head and git(folder, "status", "--porcelain") == ""
-    assert _row(db, "hello") == (str(folder), metrics.SETTING_UP)
+    assert _row(db, "hello") == ("/r/hello", metrics.FORGOTTEN)  # `create` brings it back
     conn = metrics.open_db(db)
     try:
         assert metrics.find_project(conn, "hello") == old
@@ -395,7 +388,7 @@ def test_start_fresh_deletes_the_old_entry_once_its_name_is_typed(tmp_path):
 
     setup.init(folder, db, ask=lambda said, choices: "fresh", confirm=confirm)
     assert "cards" in prompts[0] and "runs" in prompts[0]
-    assert _row(db, "hello") == (str(folder), metrics.SETTING_UP)
+    assert _row(db, "hello") is None
     conn = metrics.open_db(db)
     try:
         for table in ("runs", "tickets", "jobs", "planner_threads", "planner_messages"):
@@ -449,7 +442,7 @@ def test_a_live_project_of_the_name_means_a_new_one_called_name_2(tmp_path, mach
     setup.init(folder, db, previous="keep")
     assert load_config(folder).project_name == "hello-2"
     assert _row(db, "hello") == ("/r/hello", None)  # the live row is unchanged
-    assert _row(db, "hello-2") == (str(folder), metrics.SETTING_UP)
+    assert _row(db, "hello-2") is None
 
 
 def test_without_an_old_row_init_asks_nothing(tmp_path):
@@ -512,8 +505,10 @@ def test_softfield_init_without_claude_from_the_folder(tmp_path, monkeypatch, ca
     folder.mkdir()
     monkeypatch.chdir(folder)
     assert cli.main(["init", "--no-claude"]) == 0
-    assert "ducks: set up as a new project" in capsys.readouterr().out
-    assert _projects(tmp_path / "m.sqlite") == [("ducks", str(folder), 1)]
+    out = capsys.readouterr().out
+    assert "ducks: set up as a new project" in out
+    assert "`softfield create` adds ducks to the factory" in out
+    assert _projects(tmp_path / "m.sqlite") == []
     assert subprocess.run(["git", "status", "--porcelain"], cwd=folder, capture_output=True,
                           text=True).stdout == ""  # fmt: skip
 
@@ -543,6 +538,123 @@ def test_doctor_offers_to_accept_adr_00_first(tmp_path, monkeypatch, machine, ca
     assert "- **Status:** Accepted" in adr.read_text()
     assert setup.proposed_adr_00(folder) is None
     assert "ok  ADR 00 accepted" in out
+    assert _row(db, "ducks") is None  # neither the question nor the accept made a row
+
+
+def _ready_ducks(tmp_path: Path, db: Path) -> Path:
+    """A folder everything `doctor` needs passes in, with its database in project.toml."""
+    folder = tmp_path / "ducks"
+    folder.mkdir()
+    setup.init(folder, db)
+    toml = folder / ".softfield/project.toml"
+    toml.write_text(
+        toml.read_text().replace('description = ""', 'description = "Ducks."')
+        + f'\n[metrics]\ndb = "{db}"\n'
+    )
+    (folder / ".softfield/seed.md").write_text("# Seed\n\nA duck counter.\n")
+    (folder / ".softfield/adr/00-initial.md").write_text(
+        "# ADR 00: Initial decisions\n\n- **Status:** Proposed\n"
+    )
+    card = "# Milestone M1: Count\n\n> **State:** idea · **Area:** product\n"
+    (folder / ".softfield/cards/m1-count.md").write_text(card)
+    git(folder, "config", "user.email", "t@example.com")
+    git(folder, "config", "user.name", "Test")
+    git(folder, "add", "-A")
+    git(folder, "commit", "-q", "--no-verify", "-m", "set up")
+    owner.decide_adr(folder, 0, "Accepted", date(2026, 11, 19))
+    return folder
+
+
+def test_doctor_passing_on_an_unregistered_project_points_to_create(
+    tmp_path, monkeypatch, machine, capsys
+):
+    db = tmp_path / "m.sqlite"
+    folder = _ready_ducks(tmp_path, db)
+    monkeypatch.chdir(folder)
+    assert cli.main(["doctor", "--quick"]) == 0
+    assert capsys.readouterr().out.splitlines()[-1] == (
+        "Ready: `softfield create` adds ducks to the factory."
+    )
+    assert _row(db, "ducks") is None
+
+
+def test_create_registers_the_project_last_and_hands_it_over(
+    tmp_path, monkeypatch, machine, capsys
+):
+    db = tmp_path / "m.sqlite"
+    conn = metrics.open_db(db)
+    try:
+        metrics.upsert_project(conn, "softfield", repo="/r/softfield")
+        metrics.set_project_order(conn, ["softfield"])
+    finally:
+        conn.close()
+    folder = _ready_ducks(tmp_path, db)
+    monkeypatch.chdir(folder)
+    assert cli.main(["create", "--quick"]) == 0
+    out = capsys.readouterr().out
+    assert "Done: ducks is in the factory." in out
+    assert _projects(db) == [("softfield", "/r/softfield", 1), ("ducks", str(folder), 2)]
+    assert _row(db, "ducks") == (str(folder), None)  # not paused
+    conn = metrics.open_db(db)
+    try:
+        keys = [r[0] for r in conn.execute("SELECT key FROM milestones").fetchall()]
+        asked = conn.execute("SELECT kind, subject FROM owner_requests").fetchall()
+    finally:
+        conn.close()
+    assert keys == ["m1-count"]
+    assert [tuple(r) for r in asked] == [("plan_message", "m1")]
+    assert cli.main(["create", "--quick"]) == 0  # again: says so, changes nothing
+    assert "in the factory already" in capsys.readouterr().out
+    assert _count_rows(db, "owner_requests") == 1 and len(_projects(db)) == 2
+
+
+def test_create_with_a_needed_check_failing_writes_no_row(tmp_path, monkeypatch, machine, capsys):
+    db = tmp_path / "m.sqlite"
+    folder = _ready_ducks(tmp_path, db)
+    (folder / "stray.py").write_text("X = 1\n")  # uncommitted: "everything committed" fails
+    monkeypatch.chdir(folder)
+    assert cli.main(["create", "--quick"]) == 1
+    out = capsys.readouterr().out
+    assert "--  everything committed, on main" in out
+    assert out.rstrip().endswith("Nothing was added to the factory.")
+    assert _row(db, "ducks") is None and _count_rows(db, "milestones") == 0
+
+
+def test_create_refuses_a_name_another_folder_holds(tmp_path, monkeypatch, machine, capsys):
+    db = tmp_path / "m.sqlite"
+    folder = _ready_ducks(tmp_path, db)
+    conn = metrics.open_db(db)
+    try:
+        metrics.upsert_project(conn, "ducks", repo="/r/other-ducks")
+    finally:
+        conn.close()
+    monkeypatch.chdir(folder)
+    assert cli.main(["create", "--quick"]) == 1
+    assert "/r/other-ducks" in capsys.readouterr().out
+    assert _row(db, "ducks") == ("/r/other-ducks", None)
+    assert _count_rows(db, "milestones") == 0
+
+
+def test_create_brings_a_forgotten_project_of_this_folder_back(
+    tmp_path, monkeypatch, machine, capsys
+):
+    """F136's "continue": the old row, history included, un-forgotten only by `create`."""
+    db = tmp_path / "m.sqlite"
+    folder = _ready_ducks(tmp_path, db)
+    conn = metrics.open_db(db)
+    try:
+        old = metrics.upsert_project(conn, "ducks", repo=str(folder))
+        metrics.set_project_paused(conn, "ducks", metrics.FORGOTTEN)
+    finally:
+        conn.close()
+    monkeypatch.chdir(folder)
+    assert cli.main(["create", "--quick"]) == 0
+    assert _row(db, "ducks") == (str(folder), None)
+    conn = metrics.open_db(db)
+    try:
+        assert metrics.find_project(conn, "ducks") == old
+    finally:
+        conn.close()
 
 
 def test_doctor_puts_the_first_card_on_the_desk_at_once(tmp_path):

@@ -149,7 +149,8 @@ Dashboard
   softfield dashboard update     bring it to Softfield's latest main now
 Projects
   softfield init                 set up this folder as a project, then Claude finishes with you
-  softfield doctor               what a project still needs; passing hands it to the runner
+  softfield doctor               what a project still needs before it can be added
+  softfield create               add the project to the factory once doctor passes
   softfield accept N | reject N  an ADR, in its project's folder
   softfield forget <name>        take a project off the list (its folder stays)
   softfield signoff <key>        sign a milestone off, in its project's folder
@@ -243,6 +244,41 @@ def _notify(action: str) -> int:
     return 0
 
 
+def _create(repo: Path, db: Path, quick: bool) -> int:
+    """`softfield create`: everything `doctor` checks, and only when every needed check passes
+    the project is registered, its cards published, its first card's planning asked for and the
+    hand-over printed (F236 D1)."""
+    name = project_name(repo)
+    print(f"Checking {name} ({repo})")
+    try:
+        found = setup.registration(repo, db, name)
+    except setup.SetupError as exc:
+        print(f"softfield: {exc}")
+        return 1
+    if found == "already":
+        print(f"{name} is in the factory already: nothing changed.")
+        return 0
+    findings = setup.doctor(repo, db, run_checks=not quick)
+    for finding in findings:
+        print(f"{'ok' if finding.ok else '--'}  {finding.what}")
+    if not setup.passes(findings):
+        print(setup.CREATE_NOTHING)
+        return 1
+    try:
+        host = _lan_address()
+    except RunnerError:
+        host = "127.0.0.1"
+    card = setup.first_card(repo)
+    setup.register(repo, db, name)
+    setup.publish_cards(repo, name, db)  # on its desk at once
+    print("The runner takes it from its next round, between two jobs.")
+    planning = False
+    if card is not None:  # the lead plans it without waiting for a message
+        planning = setup.plan_first_card(name, card, db, loop.now().isoformat())
+    print(setup.hand_over(name, card, host, planning=planning))
+    return 0
+
+
 def _machine_command(args: argparse.Namespace) -> int:
     """The commands that need no project: `init` makes one, `service` serves them all, and
     `dashboard` outside a project opens on the first in the owner's order (ADR 30)."""
@@ -260,10 +296,11 @@ def _machine_command(args: argparse.Namespace) -> int:
         name = setup.project_name(folder) or folder.name
         kind = "a new" if origin == "new" else "an existing"
         if written:
-            print(f"{name}: set up as {kind} project, registered, committed.")
+            print(f"{name}: set up as {kind} project, committed.")
             print("Wrote " + ", ".join(written) + ".")
         else:
-            print(f"{name}: registered again, with its history. Nothing written.")
+            print(f"{name}: the old entry comes back with `softfield create`. Nothing written.")
+        print(f"`softfield create` adds {name} to the factory when the setup is done.")
         if args.no_claude:
             print(f"Next: open Claude here and follow {setup.bootstrap()}.")
             return 0
@@ -559,6 +596,10 @@ def main(argv: list[str] | None = None) -> int:
     init.add_argument("--yes", action="store_true", help="confirm `--previous fresh`")
     doctor = sub.add_parser("doctor", help="whether this project is ready for the web (ADR 30)")
     doctor.add_argument("--quick", action="store_true", help="skip running check-all")
+    create = sub.add_parser(
+        "create", help="add this project to the factory once `softfield doctor` passes (F236)"
+    )
+    create.add_argument("--quick", action="store_true", help="skip running check-all")
     forget = sub.add_parser(
         "forget", help="take a project off the Projects page and the runner's list (not its folder)"
     )
@@ -767,19 +808,11 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"{'ok' if finding.ok else '--'}  {finding.what}")
             if not setup.passes(findings):
                 return 1
-            try:
-                host = _lan_address()
-            except RunnerError:
-                host = "127.0.0.1"
-            name, card = project_name(repo), setup.first_card(repo)
-            setup.publish_cards(repo, name, cfg.metrics_db)  # on its desk at once
-            planning = False
-            if setup.ready(name, cfg.metrics_db):
-                print("The runner takes it from its next round, between two jobs.")
-                if card is not None:  # the lead plans it without waiting for a message
-                    at = loop.now().isoformat()
-                    planning = setup.plan_first_card(name, card, cfg.metrics_db, at)
-            print(setup.hand_over(name, card, host, planning=planning))
+            name = project_name(repo)
+            if not setup.registered(cfg.metrics_db, name):
+                print(f"Ready: `softfield create` adds {name} to the factory.")
+        elif args.command == "create":
+            return _create(repo, cfg.metrics_db, args.quick)
         elif args.command == "check-tickets":
             given = args.tickets or sorted(
                 p.relative_to(repo).as_posix()
