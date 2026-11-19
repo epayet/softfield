@@ -34,3 +34,10 @@ Read D1 to D3 and D8 in `.softfield/cards/f236-softfield-init-adds-a-project-to.
 - `create` on a folder whose `.softfield/project.toml` names a live project held by another folder fails with a message naming that folder and writes nothing; on an already registered project it says so and changes nothing
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
