@@ -88,6 +88,42 @@ forgotten project of the same name. Joints in [ADR 48](../adr/48-start-a-project
 | f122-04-replan | lead | ADR 16 item 7 | 03 |
 | f122-05-start-a-project-on-the-page | developer | D6 | 04 |
 
+## Replan
+Checked by the lead on 2026-11-19 against what f122-01, f122-02 and f122-03 built (ADR 16 item 7),
+for f122-05. What differs from the Decisions above, and what f122-05 relies on:
+- **D2, the card has no priority.** `setup.start_project` writes M1 through `planner.seed_card`:
+  state idea, area product, the idea and the "Built with: … · an app, opened in a browser" line
+  under `## Notes`. ADR 45 retired the card's priority, so D2's "priority 1" is not built.
+- **D2, the request's shape.** Kind `new_project` (`runner.requests.NEW_PROJECT`, already in
+  `factory_dashboard/requests.py`'s `KINDS`), `value` JSON `{"name", "idea", "built_with", "app"}`.
+  `app` counts as ticked for `true`, `"yes"`, `"on"`, `"true"` or `"1"`; an empty `name` or
+  `built_with` is fine (the idea's first words; "what the lead recommends"); a value that isn't
+  that JSON is taken as the idea itself. Only an empty idea is refused. The handler ignores the
+  request's `project`, so the page posts it with the page's own `project` field, as the order
+  form does, not a hard-coded Softfield.
+- **D2, the thread.** M1's thread key is `m1` (`planner.thread_key(setup.FIRST_CARD)`); the page
+  is `/planning/m1?project=<name>`, a route that exists. Nothing waits between the request and the
+  plate: the handler registers the project, queues its `setup` job and marks the request done in
+  one go, so a project's plate replaces its waiting request's with no gap.
+- **D1, the root.** `config.projects_root(db=None)` in `runner/config.py` is as written; the
+  page shows it plus the name as typed (the folder name itself is the runner's slug, `-2` if
+  taken, so the page says "as typed").
+- **D3/D6, what a setting-up plate reads.** `ProjectCard.paused == metrics.SETTING_UP` is already
+  there. "Set up by the lead" is an open `work_queue` row of kind `dispatch.SETUP` on the project
+  (`metrics.open_jobs`; a row stays open while its job waits or runs, and a later round on the
+  thread is a new row, subject `m1#<request>` or `m1#m<message>`). "ADR 00 for you" is the
+  card's `for_you` (`waiting_for_you(desk(...))`): after a setup reply the runner leaves a
+  `planning` owner item on `m1` and the lead's ADR 00 `adr` proposal, which the desk groups as
+  one item. A failed setup reply leaves that item too (without ADR 00), so the station reads
+  "for you" there as well; the link to M1 is the answer in both cases.
+- **D4, a stopped setup.** After ADR 00's approval fails its checks twice more, the runner leaves
+  a `setup_stopped` owner item and no `setup` row: the plate then has no lit "Set up by the
+  lead" station. f122-05 shows nothing special for it (it is on the desk and on M1's thread).
+- Nothing else differs. D3 (`prompts.SETUP`, `loop.run_setup`, `SETUP_COMMANDS`) and D4
+  (`_accept_adr` calling `_setup_checked`, `setup.join`) are built as written.
+
+f122-05's Context is fixed to name these, and no code changed.
+
 ## Later (not this card)
 - The runner builds a new project's stack once when it joins, and says on the thread if it fails.
 - Pick the stack from a list once F121, projects on any main branch in any language, lands.
