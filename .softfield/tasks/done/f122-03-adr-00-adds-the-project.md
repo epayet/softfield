@@ -30,3 +30,10 @@ Read D4 in `.softfield/cards/f122-new-project-from-the-projects-page.md` and ADR
 - approving an ADR on a live project does what it did before
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
