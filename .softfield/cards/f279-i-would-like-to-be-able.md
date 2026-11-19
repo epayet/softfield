@@ -1,4 +1,4 @@
-# Milestone F279: I would like to be able to see the queue across the whole…
+# Milestone F279: The queue: the whole factory's line on one page, in the runner's order
 
 > **State:** idea · **Area:** factory
 > Planted by the owner on 2026-11-19.
