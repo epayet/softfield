@@ -958,6 +958,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** the card waited three weeks after its plan, first for ADR 37 to be accepted and then for its place in the board order. This review got the new brief itself; it had nothing to look at, since the diff changed no page, and its report says so in the lines ADR 37 item 3 asks for. Whether the rule catches anything shows only on the next page milestones.
 - **Decisions affected:** ADR 37 as accepted (amends ADR 28 item 5 for reviews).
 
+### F122 (2026-11-19): start a new project from the Projects page ([review](../reviews/f122-new-project-from-the-projects-page.md))
+
+- **Q1:** four lead tickets (01–03 on Opus, the replan 04 on Sonnet), all passed on their first real attempt (03 parked 2 h 20 on the usage limit first); the page ticket 05 was the local model's and failed three times (two 20-minute no-edit stops, one timeout) before the lead finished it from its branch. No checkpoint. Review round 1: one should-fix (a refused new project lost the owner's idea once its plate went; fixed by the review), one nit fixed, two left for later, one reported. Score 8.
+- **Q3:** the runner side all Claude's (about $12); the local model spent 2 hours on 05 for nothing kept. See the review's numbers.
+- **Q5:** see the review's numbers.
+- **Anything else:** a new request kind that carries the owner's words must join `owners_words` and `_WORKED` when it is made, or its refusals reach no desk; no ticket owned that here. The replan after three lead tickets made 05's context exact, but a page with a JS form, a template and four station states was still too wide for the local model.
+- **Decisions affected:** ADR 48 as built.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.

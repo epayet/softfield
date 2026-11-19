@@ -3996,6 +3996,28 @@ def test_a_new_project_without_its_idea_is_refused_and_nothing_is_made(
     assert not root.exists()
 
 
+def test_a_refused_new_project_keeps_its_words_for_the_desk_until_dismissed(
+    repo, tmp_path_factory, monkeypatch
+):
+    """F122 review: the Projects page's plate goes once the request is done, so a new project
+    the runner refused waits on the desk as the owner's words do (F31 D9); one made doesn't."""
+    _projects_root(tmp_path_factory, monkeypatch)
+    made = _ask(repo, "new_project", value=_new_project("Bird log", "Birds I see."))
+    empty = _ask(repo, "new_project", value=_new_project("Bird log", " "))
+    _apply(repo)
+    conn = metrics.open_db(_db(repo))
+    try:
+        rows = {r: metrics.find_request(conn, r) for r in (made, empty)}
+    finally:
+        conn.close()
+    assert not requests.refused(rows[made])
+    assert requests.refused(rows[empty])
+    assert requests.owners_words(rows[empty]) == requests.Words("Bird log", "")
+    dismiss = _ask(repo, "dismiss", str(empty))
+    _apply(repo)
+    assert _request(repo, dismiss)[1] == f"dismissed request {empty}"
+
+
 def test_a_new_projects_words_not_as_the_page_writes_them_are_its_idea(
     repo, tmp_path_factory, monkeypatch
 ):

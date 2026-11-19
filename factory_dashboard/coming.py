@@ -22,6 +22,7 @@ from runner.planner import (
 from runner.requests import (
     CHANGE,
     DISMISS,
+    NEW_PROJECT,
     PLAN_MESSAGE,
     PLANT,
     SEND_BACK,
@@ -209,11 +210,12 @@ def _failed_edit(
 def _refused(conn: sqlite3.Connection, project_id: int, titles: dict[str, str]) -> list[DeskItem]:
     """The owner's words the runner refused (F31 D9), until they dismiss them: a dismiss on
     its way takes one off at once, and so does a retry (``_retried``). An edit of a waiting
-    plant or message that didn't go through is among them (f14-04), never a cancel."""
+    plant or message that didn't go through is among them (f14-04), never a cancel, and so is
+    a project started from the Projects page that wasn't made (F122 review)."""
     rows = conn.execute(
         "SELECT * FROM owner_requests WHERE project_id = ? AND done IS NOT NULL"
-        " AND dismissed IS NULL AND kind IN (?, ?, ?, ?) ORDER BY id",
-        (project_id, *WORDS, CHANGE),
+        " AND dismissed IS NULL AND kind IN (?, ?, ?, ?, ?) ORDER BY id",
+        (project_id, *WORDS, CHANGE, NEW_PROJECT),
     ).fetchall()
     dismissing = {
         str(r["subject"])
@@ -234,6 +236,8 @@ def _refused(conn: sqlite3.Connection, project_id: int, titles: dict[str, str]) 
             text = _edit_words(words)
         elif r["kind"] == PLANT:
             title, again = words.title or "Your idea", ""
+        elif r["kind"] == NEW_PROJECT:  # started again from the Projects page's form
+            title, again = f"Your new project {words.title}".strip(), ""
         else:
             thread = _message_thread(r)
             title, again = f"Your message on {_thread_title(thread, titles)}", f"/planning/{thread}"

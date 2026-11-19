@@ -18,7 +18,7 @@ from factory_dashboard.app import Db, Now, Project, render
 from factory_dashboard.overview import running_jobs
 from factory_dashboard.stacks_routes import STACK_PLANT, AppRow, plant_value, row_of, stack_of
 from runner import config, metrics, stacks
-from runner.requests import NEW_PROJECT, PROJECT_ORDER
+from runner.requests import NEW_PROJECT, PROJECT_ORDER, home_path
 
 router = APIRouter()
 
@@ -275,6 +275,6 @@ def projects_page(request: Request, conn: Db, project: Project, now: Now) -> HTM
             "asked": asked is not None,
             "starting": projects_on_their_way(conn),
             "stations": STATIONS,
-            "root": str(config.projects_root(request.app.state.db)),
+            "root": home_path(config.projects_root(request.app.state.db)),  # as the mock-up
         },
     )

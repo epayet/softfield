@@ -88,6 +88,7 @@ _WORKED = {
     PLAN_MESSAGE: QUEUED_FOR_THE_LEAD,
     SEND_BACK: QUEUED_FOR_THE_LEAD,
     CHANGE: CHANGED,
+    NEW_PROJECT: "set up in ",  # its idea is the owner's words too (F122 review)
 }
 # What a change may change (F14 D3): each one's word for taken, and the keys its words are under
 _CHANGEABLE = {PLANT: "planted", PLAN_MESSAGE: "sent"}
@@ -1383,6 +1384,15 @@ def _plant_words(data: object) -> Words | None:
     return Words(title.strip(), thoughts.strip())
 
 
+def _new_project_words(data: object) -> Words | None:
+    if not isinstance(data, dict):
+        return None
+    name, idea = data.get("name") or "", data.get("idea") or ""
+    if not (isinstance(name, str) and isinstance(idea, str)):
+        return None
+    return Words(name.strip(), idea.strip())
+
+
 def _message_words(data: object) -> Words | None:
     if not isinstance(data, dict):
         return None
@@ -1409,9 +1419,10 @@ def _edit_words(data: object) -> Words | None:
 def owners_words(row: _Row) -> Words | None:
     """The owner's words a ``plant`` (not a seed's), ``plan_message`` or ``send_back`` carries,
     or a ``change`` that is an edit, read leniently: a value the runner couldn't read is still
-    theirs, so it is kept whole. None for another kind, or with no words."""
+    theirs, so it is kept whole. A ``new_project``'s are its name and idea (F122 review). None
+    for another kind, or with no words."""
     kind, value = row["kind"], row["value"]
-    if kind not in (*WORDS, CHANGE) or not isinstance(value, str):
+    if kind not in (*WORDS, CHANGE, NEW_PROJECT) or not isinstance(value, str):
         return None
     if kind == PLANT and row["subject"]:
         return None
@@ -1421,6 +1432,8 @@ def owners_words(row: _Row) -> Words | None:
         data = None
     if kind == CHANGE:
         words = _edit_words(data)
+    elif kind == NEW_PROJECT:
+        words = _new_project_words(data)
     else:
         words = _plant_words(data) if kind == PLANT else _message_words(data)
     if words is None:  # not as the dashboard writes it
@@ -2056,8 +2069,9 @@ def _project_order(conn: sqlite3.Connection, value: str | None) -> str:
 _YES = (True, "yes", "on", "true", "1")
 
 
-def _home_path(path: Path) -> str:
-    """``~/projects/bird-log`` for a folder in the home, else the whole path."""
+def home_path(path: Path) -> str:
+    """``~/projects/bird-log`` for a folder in the home, else the whole path (the Projects
+    page's "Goes in" too)."""
     try:
         return f"~/{path.relative_to(Path.home()).as_posix()}"
     except ValueError:
@@ -2099,7 +2113,7 @@ def _new_project(db: Path, now: datetime, value: str | None) -> str:
     finally:
         conn.close()
     return (
-        f"set up in {_home_path(folder)}; its setup comes on {planner.thread_name(thread)}'s thread"
+        f"set up in {home_path(folder)}; its setup comes on {planner.thread_name(thread)}'s thread"
     )
 
 

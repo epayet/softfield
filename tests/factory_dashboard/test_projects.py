@@ -1,11 +1,13 @@
 import json
 import re
 from html import unescape
+from pathlib import Path
 
 import pytest
 
 from factory_dashboard import stacks_routes
 from runner import config, metrics, stacks
+from runner.requests import home_path
 from runner.stacks import Result
 from tests.factory_dashboard import test_stacks_routes
 from tests.factory_dashboard.conftest import NOW, PROJECT
@@ -286,8 +288,9 @@ def test_the_start_panel_asks_the_idea_name_built_with_and_app_and_says_where(
     assert '<input type="text" name="name"' in panel
     assert '<input type="text" name="built_with"' in panel
     assert '<input type="checkbox" name="app" checked>' in panel
-    root = str(config.projects_root(db_path))
+    root = home_path(config.projects_root(db_path))  # `~/…` for a folder in the home
     assert f'data-root="{root}">{root}/</span>' in panel
+    assert home_path(Path.home() / "code" / "x") == "~/code/x"
     assert "A new project is set up on its computer" not in html
 
 

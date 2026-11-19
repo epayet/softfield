@@ -574,6 +574,22 @@ def test_a_refused_plant_waits_first_on_the_desk_with_its_words_and_counts(
     assert [i.title for i in refused.items] == ["Rubber ducks"]
 
 
+def test_a_new_project_the_runner_couldnt_make_keeps_its_idea_on_the_desk(planning, db_path, serve):
+    """F122 review: the Projects page's waiting plate goes once the request is done, so a
+    refusal's words wait here, with no Try again (sending again would make another folder)."""
+    value = json.dumps(
+        {"name": "Bird log", "idea": "Birds I <see>.", "built_with": "", "app": True}
+    )
+    asked = _finished(db_path, planning, "new_project", None, value, "GitError: no git")
+    _finished(db_path, planning, "new_project", None, value, "set up in ~/code/bird-log; …")
+    html = _page(serve())
+    items = _refused_items(html)
+    assert list(items) == [str(asked)]
+    for words in ("Your new project Bird log", "Birds I <see>.", "GitError: no git"):
+        assert words in items[str(asked)]
+    assert "Try again" not in items[str(asked)] and "Dismiss" in items[str(asked)]
+
+
 def test_a_refused_message_shows_and_try_again_opens_its_thread_with_it(planning, db_path, serve):
     message = json.dumps({"text": "Make it <calm>.", "comments": {"2": "Shorter."}})
     asked = _finished(db_path, planning, "plan_message", "f6", message, "the thread is gone")
