@@ -26,3 +26,12 @@ The two refused-edit tests prove "no re-fetch followed" from the page's own list
 - each still fails when a request follows the refused post (try it once, e.g. have the page send an htmx GET on `htmx:afterRequest`, and see it fail)
 - the listed `tests:` pass on 16 workers (`-n 16`)
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 1200
+gate_failures: []
+tokens: 872525
+```
