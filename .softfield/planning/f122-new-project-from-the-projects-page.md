@@ -41,3 +41,23 @@ The planning thread behind F122's plan, oldest first, as it was when the owner a
 > - ADR 48: Start a project from the Projects page, set up by a headless lead job (adr)
 > - Start a project on the Projects page (mockup)
 > - F122: new project from the Projects page (plan)
+
+## The lead, 2026-11-14 10:07
+
+> Approved by the owner on 2026-11-14: approved plan/f122: queued f122-01-new-project-request, f122-02-the-setup-job, f122-03-adr-00-adds-the-project, f122-04-replan, f122-05-start-a-project-on-the-page; F122 goes last on the board
+
+## The owner, 2026-11-19 09:47
+
+> When I clicked start the dashed new project appeared twice but when I reloaded the page it was back to one. Visual bug?
+
+## The lead, 2026-11-19 09:48
+
+> Yes, it's a display bug: only one project was created. I've added a small fix ticket, f122-06 (it passes pre-flight). It reaches the line only when you approve the replan.
+>
+> 1. **Yes, it's a display bug, and only one project was made**: When you press Start, the page draws the plate itself, which is correct. The 'Asked: the runner will do it' line under the form then checks the request every 5 seconds. Each check passes through the Start form's own code, and that code draws one more plate every time. You saw two because you looked about 5 seconds after pressing Start. If you had stayed on the page, a new copy would have appeared every 5 seconds until the runner took the request. For waifu-gallery that took nearly two hours: sent at 07:55, done at 09:47. A reload draws the page from the database, so you saw one again. The database has only one new_project request, and the runner made one folder, ~/projects/epayet/waifu-gallery. Nothing was duplicated except the drawing.
+>    Action: None for this part: it only explains what you saw.
+> 2. **The fix: the Start form reacts only to its own send**: The project-order form on the same page already has this guard: it ignores events from anything inside it except its own send. The Start form is missing it. The same leak also lets each check pass through the form's sending code and change what the check sends, so the fix adds the guard to that code too. It's a two-line change to an unprotected template, following an example in the same file, so it goes to a developer. Its test can only check the page's code, not watch the page in a browser. Nothing else changes.
+>    Action: Ticket f122-06-start-plate-once (developer), in F122's replan. It waits for nothing.
+>
+> Proposals:
+> - F122: the new project's plate drawn once (replan)

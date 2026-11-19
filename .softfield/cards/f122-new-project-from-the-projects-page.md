@@ -124,6 +124,13 @@ for f122-05. What differs from the Decisions above, and what f122-05 relies on:
 
 f122-05's Context is fixed to name these, and no code changed.
 
+## Fix after the owner's try (2026-11-19)
+- **The plate drawn twice.** After Start, the "Asked" line in `#start-sent` polls its request
+  every 5 s; the poll's htmx events bubble to the start form's listeners, which add one more
+  plate per poll until the runner takes the request (waifu-gallery's took about 2 hours). A
+  reload draws from the database, so one plate. Only one request was written: the runner made one
+  project. `f122-06-start-plate-once` (developer) guards both listeners as the order form's are.
+
 ## Later (not this card)
 - The runner builds a new project's stack once when it joins, and says on the thread if it fails.
 - Pick the stack from a list once F121, projects on any main branch in any language, lands.
