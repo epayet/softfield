@@ -35,3 +35,10 @@ Read D1 and D2 in `.softfield/cards/f122-new-project-from-the-projects-page.md` 
 - the dashboard's `/requests` accepts the kind
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
