@@ -17,8 +17,8 @@ from fastapi.responses import HTMLResponse
 from factory_dashboard.app import Db, Now, Project, render
 from factory_dashboard.overview import running_jobs
 from factory_dashboard.stacks_routes import STACK_PLANT, AppRow, plant_value, row_of, stack_of
-from runner import metrics, stacks
-from runner.requests import PROJECT_ORDER
+from runner import config, metrics, stacks
+from runner.requests import NEW_PROJECT, PROJECT_ORDER
 
 router = APIRouter()
 
@@ -124,6 +124,19 @@ class ProjectCard:
     app: AppRow | None = None  # its app (F239 D6); None without `[run]`, and for Softfield
     softfield: bool = False  # Softfield's own repo: it runs from `live`, with no app row
     stack_plant: str = ""  # the "Plant a card for a stack" value, for a project without one
+    setup_job: bool = False  # an open `setup` job: "Set up by the lead" is lit (F122 D6)
+
+
+# A setting-up project's line (F122 D6, .softfield/cards/f122-mockup/projects-new.html)
+STATIONS = ("Asked", "Set up by the lead", "ADR 00 for you", "In the factory")
+
+
+@dataclass(frozen=True)
+class NewProject:
+    """A `new_project` request the runner hasn't taken yet, drawn from its own value (F122 D6)."""
+
+    name: str
+    idea: str
 
 
 @dataclass(frozen=True)
@@ -173,9 +186,41 @@ def project_cards(conn: sqlite3.Connection, now: datetime) -> list[ProjectCard]:
                 stack_plant=""
                 if stack or softfield or not row.repo
                 else plant_value(STACK_PLANT.format(name=row.name)),
+                setup_job=row.paused == metrics.SETTING_UP and _setup_job(conn, row.name),
             )
         )
     return cards
+
+
+def _setup_job(conn: sqlite3.Connection, name: str) -> bool:
+    """Whether the project has a `setup` job waiting or running (`metrics.open_jobs`)."""
+    from runner import dispatch
+
+    project_id = metrics.find_project(conn, name)
+    if project_id is None:
+        return False
+    return any(job["kind"] == dispatch.SETUP for job in metrics.open_jobs(conn, project_id))
+
+
+def projects_on_their_way(conn: sqlite3.Connection) -> list[NewProject]:
+    """The `new_project` requests the runner hasn't taken yet, oldest first; a value that isn't
+    the form's JSON is the idea itself, as the runner reads it."""
+    rows = conn.execute(
+        "SELECT value FROM owner_requests WHERE kind = ? AND done IS NULL ORDER BY id",
+        (NEW_PROJECT,),
+    ).fetchall()
+    found = []
+    for row in rows:
+        raw = row["value"] or ""
+        try:
+            value = json.loads(raw)
+        except ValueError:
+            value = None
+        if isinstance(value, dict):
+            found.append(NewProject(str(value.get("name") or ""), str(value.get("idea") or "")))
+        else:
+            found.append(NewProject("", raw))
+    return found
 
 
 def running_now(conn: sqlite3.Connection, now: datetime) -> list[NowJob]:
@@ -228,5 +273,8 @@ def projects_page(request: Request, conn: Db, project: Project, now: Now) -> HTM
             "needs_you": needs_you,
             "needs_you_count": needs_you_count,
             "asked": asked is not None,
+            "starting": projects_on_their_way(conn),
+            "stations": STATIONS,
+            "root": str(config.projects_root(request.app.state.db)),
         },
     )

@@ -1224,6 +1224,45 @@ body.has-order-bar main { padding-bottom: 120px; }
   border: 0; padding: 10px 16px; margin-top: 10px; }
 .projects-page .send-order:disabled { background: var(--plate); color: var(--muted); }
 .projects-page .on-its-way { color: var(--hazard); font-size: 13px; margin-left: 10px; }
+/* Start a project (F122 D6, .softfield/cards/f122-mockup/projects-new.html): the intake bay, a
+   machine plate with a hopper for the idea; a new project's plate waits dashed orange, on its way */
+.projects-page .proj-asked { display: grid; grid-template-columns: 52px 1fr; gap: 4px 12px; padding: 12px 0; }
+.projects-page .proj-asked > .plate { grid-column: 2; min-width: 0; }
+.projects-page .way-plate { outline: 2px dashed var(--opus); outline-offset: 2px; }
+.projects-page .way-plate .idea { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+  line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
+.projects-page .way-words { font: 12px var(--mono); color: var(--opus-ink); }
+.projects-page .stations { display: flex; margin: 6px 0 2px; counter-reset: st; }
+.projects-page .stations .st { flex: 1; position: relative; padding: 6px 6px 6px 10px; font: 600 10.5px/1.25 var(--display);
+  letter-spacing: .06em; text-transform: uppercase; color: var(--muted); background: var(--floor);
+  border: 1px solid var(--rule); border-right: 0; min-width: 0; overflow-wrap: anywhere; }
+.projects-page .stations .st:last-child { border-right: 1px solid var(--rule); }
+.projects-page .stations .st::before { counter-increment: st; content: counter(st); display: block;
+  font: 700 14px var(--display); color: var(--rule); }
+.projects-page .stations .st.past, .projects-page .stations .st.past::before { color: var(--ink-2); }
+.projects-page .stations .st.here, .projects-page .stations .st.here::before { color: var(--hazard-ink); }
+.projects-page .stations .st.here { background: var(--hazard); }
+.projects-page .intake { display: grid; gap: 10px; }
+.projects-page .intake label.f { display: grid; gap: 4px; font: 600 11px var(--display); letter-spacing: .1em;
+  text-transform: uppercase; color: var(--muted); }
+.projects-page .intake .opt { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.projects-page .intake input[type=text], .projects-page .intake textarea { font: 15px var(--body); color: var(--fg);
+  background: var(--floor); border: 1px solid var(--rule); padding: 10px; min-height: 44px; box-sizing: border-box; width: 100%; }
+.projects-page .intake textarea { min-height: 150px; resize: vertical; line-height: 1.45; }
+.projects-page .intake .hopper { position: relative; padding: 10px 10px 12px; background: var(--plate); border: 1px solid var(--rule); }
+.projects-page .intake .hopper::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 4px;
+  background: var(--stripe); opacity: .6; }
+.projects-page .intake .row { display: grid; gap: 10px; grid-template-columns: 1fr; }
+@media (min-width: 560px) { .projects-page .intake .row { grid-template-columns: 1fr 1fr; } }
+.projects-page .intake .check { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; color: var(--ink-2); }
+.projects-page .intake .check input { width: 20px; height: 20px; margin-top: 2px; accent-color: var(--hazard); flex: none; }
+.projects-page .intake .where { font: 12.5px var(--mono); color: var(--ink-2); display: flex; flex-wrap: wrap;
+  gap: 4px 8px; align-items: baseline; overflow-wrap: anywhere; }
+.projects-page .intake .where .tag { font: 600 10.5px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.projects-page .intake .send { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.projects-page .intake .send .muted { font-size: 13px; }
+.projects-page #start-sent { margin-left: 0; }
+.projects-page #start-sent:empty { display: none; }
 /* A project's app row (F239 D6, .softfield/cards/f239-mockup/projects-run.html): a machine plate
    under the facts, its lamp and word the state; red only for a crash or a failed update */
 .app-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-top: 6px;

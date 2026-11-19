@@ -2,6 +2,16 @@
 {% block title %}Projects{% endblock %}
 {% block crumbs %}{% endblock %}
 {% block content %}
+{% macro asked_plate(name, idea) %}
+<div class="plate way-plate">
+  <div class="head"><span class="name">{{ name or "(named from its idea)" }}</span></div>
+  <div class="what idea">{{ idea }}</div>
+  <div class="stations" aria-label="Its setup: step 1 of {{ stations | length }}">
+    {% for station in stations %}<span class="st{% if loop.first %} here{% endif %}">{{ station }}</span>{% endfor %}
+  </div>
+  <span class="way-words">On its way: the runner makes its folder at its next pick</span>
+</div>
+{% endmacro %}
 {# The page above every project (ADR 30 item 6, after .softfield/cards/projects-page-mockup/projects.html):
    what runs now in any project, what waits for the owner, then the projects in the order the runner works in #}
 <div class="page projects-page">
@@ -50,7 +60,13 @@
             <span class="name">{{ card.name }}</span>
           </div>
           {% if card.description %}<div class="what">{{ card.description }}</div>{% endif %}
-          {% if card.paused == "setting up" %}<div class="muted">Being set up on its computer; the runner takes it once that's done.</div>
+          {% set setting_up = card.paused == "setting up" %}
+          {% if setting_up %}
+          {# where its setup is (F122 D6): the lead's job while it waits or runs, then ADR 00 on the desk #}
+          {% set here = 1 if card.setup_job else (2 if card.for_you else 0) %}
+          <div class="stations" aria-label="Its setup: step {{ here + 1 }} of {{ stations | length }}">
+            {% for station in stations %}<span class="st{% if loop.index0 == here %} here{% elif loop.index0 < here %} past{% endif %}">{{ station }}</span>{% endfor %}
+          </div>
           {% elif card.paused %}<div class="muted">Paused: the runner leaves it alone.</div>{% endif %}
           <div class="facts">
             <span><b>{{ card.ready }}</b> ready</span>
@@ -61,8 +77,12 @@
           </div>
           <div class="links">
             <a href="/planning?project={{ card.name | urlencode }}">Planning</a>
+            {% if setting_up %}
+            <a href="/planning/m1?project={{ card.name | urlencode }}">Answer on its first card →</a>
+            {% else %}
             <a href="/board?project={{ card.name | urlencode }}">Board</a>
             <a href="/?project={{ card.name | urlencode }}">Overview</a>
+            {% endif %}
           </div>
           {% if card.app %}{% with row = card.app %}{% include "_partials/app_row.html" %}{% endwith %}
           {% elif card.stack_plant %}
@@ -80,11 +100,46 @@
         </div>
       </li>
       {% endfor %}
+      {# a new project the runner hasn't taken yet, drawn from its request (F122 D6): not `.proj`,
+         which the order script reorders, and no place to change #}
+      {% for new in starting %}
+      <li class="proj-asked">{{ asked_plate(new.name, new.idea) }}</li>
+      {% endfor %}
     </ol>
     <button type="submit" class="send-order btn go" disabled>Send new order</button>
     <span id="order-sent" class="on-its-way">{% if asked %}On its way: the runner takes it at its next pick{% endif %}</span>
   </form>
-  <p class="muted" style="font-size: 13px">A new project is set up on its computer, in its folder; it shows here once it's ready.</p>
+</section>
+
+<section id="projects-start" class="panel">
+  <h2>Start a project <span class="src">the lead sets it up from your words</span></h2>
+  <form id="start-form" class="intake" hx-post="/requests" hx-target="#start-sent" hx-swap="innerHTML">
+    <input type="hidden" name="kind" value="new_project">
+    <input type="hidden" name="project" value="{{ project }}">
+    <input type="hidden" name="value" value="">
+    <div class="hopper">
+      <label class="f">The idea
+        <textarea name="idea" required placeholder="As long or short as you like. Kept word for word as the project's seed."></textarea>
+      </label>
+    </div>
+    <div class="row">
+      <label class="f">Name
+        <input type="text" name="name" autocomplete="off" placeholder="from the idea's first words">
+      </label>
+      <label class="f">Built with <span class="opt">(optional)</span>
+        <input type="text" name="built_with" autocomplete="off" placeholder="the lead recommends one">
+      </label>
+    </div>
+    <label class="check"><input type="checkbox" name="app" checked>
+      <span>It's an app I open in a browser: give it a Docker stack from the start, so Run works on its plate on day one.</span></label>
+    <div class="where"><span class="tag">Goes in</span><span id="goes-in" class="mono" data-root="{{ root }}">{{ root }}/</span></div>
+    <div class="send">
+      <button type="submit" class="btn go">Start it</button>
+      <span class="muted">Its plate shows at once; the lead's questions and ADR 00 come on its first card.</span>
+    </div>
+    <div id="start-sent" class="on-its-way"></div>
+  </form>
+  <template id="start-plate"><li class="proj-asked">{{ asked_plate("", "") }}</li></template>
 </section>
 
 </div>
@@ -110,6 +165,33 @@
       for (const input of form.querySelectorAll("input[type=number]")) { input.classList.add("asked"); input.disabled = true; }
       send.disabled = true;
       document.getElementById("order-sent").textContent = "On its way: the runner takes it at its next pick";
+    });
+  })();
+  // Start a project (F122 D6): /requests keeps only kind, project, subject and value, so the
+  // form's fields go as D2's JSON in `value`; the plate shows at once, on its way, from the words
+  (() => {
+    const form = document.getElementById("start-form");
+    const goesIn = document.getElementById("goes-in");
+    const field = (name) => form.elements.namedItem(name);
+    form.addEventListener("input", () => {
+      goesIn.textContent = `${goesIn.dataset.root}/${field("name").value.trim()}`;
+    });
+    form.addEventListener("htmx:configRequest", (event) => {
+      event.detail.parameters.value = JSON.stringify({
+        name: field("name").value.trim(),
+        idea: field("idea").value,
+        built_with: field("built_with").value.trim(),
+        app: field("app").checked,
+      });
+      for (const name of ["idea", "name", "built_with", "app"]) delete event.detail.parameters[name];
+    });
+    form.addEventListener("htmx:beforeRequest", () => {
+      const plate = document.getElementById("start-plate").content.firstElementChild.cloneNode(true);
+      const name = field("name").value.trim();
+      if (name) plate.querySelector(".name").textContent = name;
+      plate.querySelector(".idea").textContent = field("idea").value;
+      document.querySelector("#order-form .rank").append(plate);
+      for (const input of form.querySelectorAll("textarea, input:not([type=hidden]), button")) input.disabled = true;
     });
   })();
 </script>

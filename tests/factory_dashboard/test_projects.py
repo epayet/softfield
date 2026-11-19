@@ -251,16 +251,159 @@ def test_send_lights_up_only_for_another_order_and_sends_the_names(page, project
         conn.close()
 
 
-def test_a_project_being_set_up_says_so(projects_client, db_path):
-    """ADR 30: `softfield init` registers a project paused until `softfield doctor` passes."""
+# --- starting a project from the page (F122 D6, .softfield/cards/f122-mockup/projects-new.html) --
+
+
+def _setting_up(db_path, tmp_path, name="ducks") -> int:
+    """A project the runner registered from a `new_project` request: paused `setting up`."""
+    (tmp_path / name).mkdir()
     conn = metrics.open_db(db_path)
     try:
-        metrics.upsert_project(conn, "ducks", repo="/r/ducks")
-        metrics.set_project_paused(conn, "ducks", metrics.SETTING_UP)
+        project_id = metrics.upsert_project(conn, name, repo=str(tmp_path / name))
+        metrics.set_project_paused(conn, name, metrics.SETTING_UP)
+        conn.commit()
     finally:
         conn.close()
-    order = section(projects_client.get("/projects").text, "projects-order")
-    assert "ducks Being set up on its computer; the runner takes it once that's done." in order
+    return project_id
+
+
+def lit(row: str) -> list[str]:
+    """The stations lit (``here``) in a plate's line of four."""
+    return re.findall(r'<span class="st here">([^<]*)</span>', row)
+
+
+def test_the_start_panel_asks_the_idea_name_built_with_and_app_and_says_where(
+    projects_client, db_path
+):
+    html = projects_client.get("/projects").text
+    start = re.search(r'<section id="projects-start".*?</section>', html, re.S)
+    assert start, "no Start a project panel"
+    panel = start.group(0)
+    assert 'hx-post="/requests"' in panel
+    assert '<input type="hidden" name="kind" value="new_project">' in panel
+    assert f'<input type="hidden" name="project" value="{PROJECT}">' in panel
+    assert '<textarea name="idea"' in panel
+    assert '<input type="text" name="name"' in panel
+    assert '<input type="text" name="built_with"' in panel
+    assert '<input type="checkbox" name="app" checked>' in panel
+    root = str(config.projects_root(db_path))
+    assert f'data-root="{root}">{root}/</span>' in panel
+    assert "A new project is set up on its computer" not in html
+
+
+def test_a_waiting_new_project_draws_its_plate_on_its_way_until_the_runner_takes_it(
+    projects_client, db_path
+):
+    idea = "Note the birds from the balcony, with the date and a photo."
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.find_project(conn, PROJECT)
+        assert project is not None
+        value = json.dumps({"name": "bird-log", "idea": idea, "built_with": "", "app": True})
+        request = metrics.add_request(conn, project, "new_project", None, value, NOW.isoformat())
+        conn.commit()
+    finally:
+        conn.close()
+    html = projects_client.get("/projects").text
+    match = re.search(r'<li class="proj-asked">(.*?)</li>', html, re.S)
+    assert match, "no waiting plate"
+    row = match.group(1)
+    assert "way-plate" in row
+    assert words(row) == (
+        f"bird-log {idea} Asked Set up by the lead ADR 00 for you In the factory"
+        " On its way: the runner makes its folder at its next pick"
+    )
+    assert lit(row) == ["Asked"]
+    assert "<input" not in row  # no place to change
+    assert html.index('<li class="proj-asked">') > html.rindex('<li class="proj"')  # at the end
+    assert "bird-log" in section(html, "projects-order")
+    conn = metrics.open_db(db_path)
+    try:
+        conn.execute("UPDATE owner_requests SET done = ? WHERE id = ?", (NOW.isoformat(), request))
+        conn.commit()
+    finally:
+        conn.close()
+    after = section(projects_client.get("/projects").text, "projects-order")
+    assert "bird-log" not in after and "On its way" not in after
+
+
+def test_a_project_set_up_by_the_lead_lights_that_station_and_links_to_m1(
+    projects_client, db_path, tmp_path
+):
+    project_id = _setting_up(db_path, tmp_path)
+    conn = metrics.open_db(db_path)
+    try:
+        metrics.queue_job(conn, project_id, "setup", "m1", "new project", NOW.isoformat())
+        conn.commit()
+    finally:
+        conn.close()
+    row = plate(projects_client.get("/projects").text, "ducks")
+    assert lit(row) == ["Set up by the lead"]
+    assert '<span class="st past">Asked</span>' in row
+    assert 'href="/planning/m1?project=ducks">Answer on its first card →</a>' in row
+    assert "/board?project=ducks" not in row and 'href="/?project=ducks"' not in row
+
+
+def test_a_project_whose_adr_00_waits_lights_adr_00_for_you(
+    projects_client, db_path, tmp_path, monkeypatch
+):
+    """After the setup job's reply its row is done, and M1's thread with ADR 00 waits on the
+    desk (one item, as `test_a_crashed_app_and_desk_items_are_two_lines_counted_once` stands
+    it in)."""
+    from factory_dashboard import planning
+
+    project_id = _setting_up(db_path, tmp_path)
+    conn = metrics.open_db(db_path)
+    try:
+        job = metrics.queue_job(conn, project_id, "setup", "m1", "new project", NOW.isoformat())
+        metrics.finish_queued(conn, job, NOW.isoformat())
+        conn.commit()
+    finally:
+        conn.close()
+    monkeypatch.setattr(planning, "desk", lambda conn, name, now: ["m1"] if name == "ducks" else [])
+    monkeypatch.setattr(planning, "waiting_for_you", lambda items: items)
+    row = plate(projects_client.get("/projects").text, "ducks")
+    assert lit(row) == ["ADR 00 for you"]
+    past = re.findall(r'<span class="st past">([^<]*)</span>', row)
+    assert past == ["Asked", "Set up by the lead"]
+    assert 'href="/planning/m1?project=ducks"' in row
+
+
+def test_a_live_projects_plate_has_no_stations_and_keeps_board_and_overview(projects_client):
+    row = plate(projects_client.get("/projects").text, "softfield")
+    assert "stations" not in row and "Answer on its first card" not in row
+    assert 'href="/board?project=softfield">Board</a>' in row
+    assert 'href="/?project=softfield">Overview</a>' in row
+
+
+def test_start_it_sends_the_forms_json_and_shows_the_plate_at_once(page, projects_client, db_path):
+    open_page(page, projects_client, "/projects")
+    root = page.locator("#goes-in").get_attribute("data-root")
+    page.get_by_label("The idea").fill("A tiny app for the birds on the balcony.")
+    page.get_by_label("Name").fill("bird-log")
+    assert page.locator("#goes-in").inner_text() == f"{root}/bird-log"
+    page.get_by_role("button", name="Start it").click()
+    plate_ = page.locator("#order-form .proj-asked")
+    plate_.get_by_text("On its way: the runner makes its folder at its next pick").wait_for()
+    assert plate_.locator(".name").inner_text() == "bird-log"
+    assert page.get_by_label("The idea").is_disabled()
+    page.locator("#start-sent").get_by_text("Asked").wait_for()
+    conn = metrics.open_db(db_path)
+    try:
+        rows = conn.execute("SELECT kind, value FROM owner_requests").fetchall()
+    finally:
+        conn.close()
+    assert [(r[0], json.loads(r[1])) for r in rows] == [
+        (
+            "new_project",
+            {
+                "name": "bird-log",
+                "idea": "A tiny app for the birds on the balcony.",
+                "built_with": "",
+                "app": True,
+            },
+        )
+    ]
 
 
 # --- each plate's app (F239 D6, f239-05) -----------------------------------------------------
