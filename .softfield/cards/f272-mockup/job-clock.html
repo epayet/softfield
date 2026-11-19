@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F272 mock-up: the job's time and attempt in the top bar</title>
+<style>
+  /* The dashboard's own tokens (factory_dashboard/static/dashboard.css), dark theme */
+  :root {
+    color-scheme: dark;
+    --floor: #12161b; --bay: #181e25; --plate: #1f2730; --grid: #222b34; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2; --ink: var(--fg);
+    --hazard: #f2b10a; --hazard-ink: #1a1405; --opus: #ff9640; --dev: #5b9cf5; --good: #5fd17a; --warn-ink: #f2b10a;
+    --tick: var(--ink-2);
+    --notch: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
+    --display: "Chakra Petch", "Bahnschrift", "DIN Alternate", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+    --control-h: 36px; /* F256's token, on main before this card */
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--floor); color: var(--fg); font: 15px/1.5 var(--body); padding: 16px; }
+  h1 { font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 4px; }
+  h3 { font: 600 13px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 20px 0 8px; }
+  p.lede { color: var(--ink-2); max-width: 760px; margin: 0 0 10px; }
+  .switch { display: inline-flex; border: 1px solid var(--rule); margin-bottom: 8px; }
+  .switch button { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 10px 16px;
+    min-height: 44px; background: var(--bay); color: var(--muted); border: 0; border-right: 1px solid var(--rule); cursor: pointer; }
+  .switch button:last-child { border-right: 0; }
+  .switch button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+  .versions { display: grid; gap: 22px; grid-template-columns: minmax(0, 1fr); }
+  .col-head { font: 700 15px var(--display); letter-spacing: .08em; text-transform: uppercase; margin: 4px 0 0; }
+  [data-version][data-off] { display: none; }
+  @media (min-width: 900px) {
+    .versions { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+    .switch { display: none; }
+    [data-version][data-off] { display: block !important; }
+  }
+  .scaler { overflow: hidden; }
+  .frame { border: 1px solid var(--rule); background: var(--floor); position: relative; transform-origin: 0 0; overflow: hidden; }
+  .frame.w1280 { width: 1280px; height: 170px; }
+  .frame.w1000 { width: 1000px; height: 200px; }
+  .frame.w390 { width: 390px; height: 220px; }
+  ul.notes { list-style: none; margin: 10px 0 0; padding: 0; color: var(--ink-2); font-size: 13.5px; max-width: 640px; }
+  ul.notes li { padding: 4px 0 4px 12px; border-left: 2px solid var(--rule); margin-bottom: 6px; }
+  .legend-new { outline: 1px dashed var(--good); padding: 0 4px; }
+  code { font: 12.5px var(--mono); background: var(--bay); padding: 1px 5px; }
+
+  /* ================= TODAY: copied from dashboard.css (lines 87-160, 463-488) ================= */
+  header.bar { background: var(--floor); border-bottom: 1px solid var(--rule); display: grid; gap: 10px;
+    grid-template-columns: minmax(0, 1fr); padding: 12px 16px 10px; position: relative; z-index: 5; }
+  .bar-top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 18px; }
+  .brand { font: 700 22px/1.1 var(--display); letter-spacing: .04em; display: flex; align-items: center; gap: 4px;
+    text-decoration: none; color: var(--ink); min-height: 44px; }
+  .brand svg { flex: none; width: 28px; height: 28px; }
+  .brand-soft { color: var(--warn-ink); }
+  .brand-field { color: var(--good); }
+  .brand small { font: 400 12px var(--mono); letter-spacing: 0; color: var(--muted); margin-left: 8px; }
+  .brand svg .sprout { stroke: var(--good); }
+  .brand svg .crate { fill: var(--hazard); stroke: var(--hazard-ink); }
+  .hazard { height: 6px; background: repeating-linear-gradient(-45deg, var(--hazard) 0 10px, var(--floor) 10px 20px); opacity: .85; }
+  .factory-status { display: flex; align-items: center; gap: 4px; align-self: center; position: relative;
+    border: 1px solid transparent; padding: 0 2px; }
+  .factory-status .dot-btn { width: 28px; height: 44px; display: grid; place-items: center; flex: none;
+    background: none; border: 0; padding: 0; }
+  .factory-status .dot { width: 14px; height: 14px; border-radius: 50%; background: var(--dev);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--dev) 18%, transparent); }
+  .factory-status .words { font: 600 15px/1.3 var(--display); letter-spacing: .03em; padding-right: 6px; }
+  .factory-status .sign { width: 36px; height: 36px; display: grid; place-items: center; flex: none;
+    border: 1px solid var(--hazard); background: var(--hazard); color: var(--hazard-ink); font-size: 18px; padding: 0; }
+  .factory-status .uptime { display: inline-flex; align-items: stretch; align-self: center; border: 1px solid var(--rule);
+    background: var(--plate); clip-path: var(--notch); font: 12px/1 var(--mono); color: var(--fg); white-space: nowrap; margin-left: 14px; }
+  .factory-status .uptime .key { display: inline-flex; align-items: center; gap: 5px; padding: 5px 7px; border-right: 1px solid var(--rule);
+    font: 600 11px/1 var(--display); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+  .factory-status .uptime .key svg { width: 11px; height: 11px; color: var(--ink-2); }
+  .factory-status .uptime .val { padding: 5px 14px 5px 8px; font-variant-numeric: tabular-nums; }
+  .factory-status .words .on { display: none; margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--rule);
+    font: 12px var(--mono); color: var(--ink-2); }
+  .filters { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 0 auto; }
+  .filters label { font: 500 12px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  select, button { font: inherit; font-size: 13px; padding: 3px 6px; text-transform: none;
+    letter-spacing: 0; border: 1px solid var(--rule); border-radius: 0; background: var(--plate); color: var(--ink); }
+  .theme-switch { flex: none; width: 36px; height: 36px; padding: 0; background: none; border: 0; display: grid; place-items: center; }
+  .theme-switch .plate { position: relative; width: 24px; height: 36px; background: var(--plate); border: 1px solid var(--rule);
+    border-radius: 4px; display: grid; grid-template-rows: 1fr 1fr; place-items: center; }
+  .theme-switch svg { width: 12px; height: 12px; position: relative; z-index: 1; color: var(--muted); }
+  .theme-switch .moon { color: var(--hazard-ink); }
+  .theme-switch .knob { position: absolute; left: 2px; right: 2px; top: 2px; height: 15px; border-radius: 2px;
+    background: var(--hazard); box-shadow: inset 0 -2px 0 rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.35); }
+  nav.tabs { display: flex; flex-wrap: wrap; justify-self: start; border-top: 1px solid var(--rule); border-left: 1px solid var(--rule); }
+  nav.tabs a { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--muted);
+    padding: 8px 14px; border: solid var(--rule); border-width: 0 1px 1px 0; white-space: nowrap; text-decoration: none; }
+  nav.tabs a[aria-current="page"] { background: var(--hazard); color: var(--hazard-ink); }
+
+  /* the phone's bar (under 640 px), copied; the frame stands in for the media query */
+  .phone header.bar { padding-top: 2px; padding-bottom: 2px; row-gap: 2px; }
+  .phone .bar-top { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; align-items: center;
+    gap: 6px; padding: 2px 4px; position: relative; }
+  .phone .filters { display: contents; }
+  .phone .filters label { grid-area: 1 / 3; font-size: 0; min-width: 0; }
+  .phone .filters select { width: 100%; min-width: 0; }
+  .phone .factory-status { grid-area: 1 / 2; position: static; }
+  .phone .theme-switch { grid-area: 1 / 4; width: 44px; height: 44px; }
+  .phone .theme-switch .plate { height: 40px; }
+  .phone .theme-switch .knob { height: 17px; }
+  .phone .factory-status .dot-btn, .phone .factory-status .sign { width: 44px; height: 44px; }
+  .phone .factory-status .words { display: none; }
+  .phone .bar-top.show-words .factory-status .words { display: block; position: absolute; top: 100%; left: 4px; right: auto;
+    z-index: 6; max-width: calc(100% - 8px); padding: 6px 10px; font: 500 13px var(--body);
+    background: var(--plate); border: 1px solid var(--rule); box-shadow: 0 4px 12px rgba(0, 0, 0, .4); }
+  .phone .factory-status > .uptime { display: none; }
+  .phone .factory-status .words .on { display: block; }
+  .phone .brand { font-size: 18px; letter-spacing: .02em; white-space: nowrap; gap: 3px; }
+  .phone .brand svg { width: 24px; height: 24px; }
+  .phone .brand small { display: none; }
+  .phone .hazard { margin-top: -2px; height: 4px; }
+  .phone nav.tabs { flex-wrap: nowrap; overflow-x: hidden; border-top: 0; width: 100%; }
+
+  /* ================= PROPOSED: on F256's one-line bar ================= */
+  .proposed.wide .bar-top { display: flex; flex-wrap: nowrap; align-items: center; gap: 0 14px; min-height: 44px; }
+  .proposed.wide .brand { margin-left: -2px; flex: none; }
+  .proposed.wide .factory-status { flex: 0 1 auto; min-width: 0; gap: 6px; }
+  .proposed.wide .factory-status .words { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .proposed.wide .factory-status .sign { height: var(--control-h); width: var(--control-h); }
+  .proposed.wide .factory-status .uptime { height: var(--control-h); margin-left: 8px; flex: none; }
+  .proposed.wide .factory-status .uptime .key, .proposed.wide .factory-status .uptime .val { padding-top: 0; padding-bottom: 0; display: inline-flex; align-items: center; }
+  .proposed.wide .filters { margin-left: auto; flex: none; flex-wrap: nowrap; }
+  .proposed.wide .filters label { display: inline-flex; align-items: stretch; height: var(--control-h); border: 1px solid var(--rule);
+    background: var(--plate); clip-path: var(--notch); }
+  .proposed.wide .filters .key { display: inline-flex; align-items: center; padding: 0 8px; border-right: 1px solid var(--rule);
+    font: 600 11px/1 var(--display); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+  .proposed.wide .filters select { border: 0; height: 100%; padding: 0 18px 0 8px; font: 600 13px var(--display); background: transparent; }
+  .proposed.wide .theme-switch { width: auto; height: var(--control-h); }
+  .proposed nav.tabs.slots { display: grid; grid-template-columns: 120px 150px 92px 130px; }
+  .proposed nav.tabs.slots a { display: flex; align-items: center; justify-content: center; }
+
+  /* NEW: the job plate, the "On" plate's twin: a key with a clock, then the time and the attempt */
+  .factory-status .job { display: inline-flex; align-items: stretch; flex: none; height: var(--control-h);
+    border: 1px solid var(--rule); background: var(--plate); clip-path: var(--notch);
+    font: 12px/1 var(--mono); color: var(--fg); white-space: nowrap; }
+  .factory-status .job .key { display: inline-flex; align-items: center; gap: 5px; padding: 0 7px; border-right: 1px solid var(--rule);
+    font: 600 11px/1 var(--display); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+  .factory-status .job .key svg { width: 11px; height: 11px; color: var(--ink-2); }
+  .factory-status .job .val { display: inline-flex; align-items: center; gap: 8px; padding: 0 14px 0 8px; font-variant-numeric: tabular-nums; }
+  .factory-status .job .val b { font-weight: 600; }
+  .factory-status .job .val .sep { width: 1px; align-self: stretch; margin: 8px 0; background: var(--rule); }
+  /* under 1200 px the plate hides: the hover title carries it */
+  .proposed.narrow .factory-status .job { display: none; }
+  /* the phone's tapped box gains a line, above the computer's */
+  .factory-status .words .jobline { display: none; margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--rule);
+    font: 12px var(--mono); color: var(--fg); }
+  .phone .factory-status .words .jobline { display: block; }
+  /* a drawn hover title (the browser draws its own; this shows what it says) */
+  .tip { position: absolute; z-index: 12; background: #f4f4f0; color: #111; font: 12px/1.35 system-ui, sans-serif;
+    padding: 4px 7px; border: 1px solid #888; box-shadow: 0 2px 6px rgba(0,0,0,.4); white-space: pre; }
+  .cursor { position: absolute; z-index: 12; width: 0; height: 0; border-left: 7px solid #fff; border-top: 7px solid transparent;
+    border-bottom: 7px solid transparent; transform: rotate(-30deg); filter: drop-shadow(0 0 1px #000); }
+
+  /* the marks */
+  .new { outline: 1px dashed var(--good); outline-offset: 3px; }
+  .tag { position: absolute; z-index: 10; font: 600 10px/1 var(--mono); color: var(--floor); background: var(--good);
+    padding: 2px 4px; pointer-events: none; }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute"><symbol id="moon" viewBox="0 0 16 16"><path d="M10.5 1.5a6.5 6.5 0 1 0 4 11.2A5.2 5.2 0 0 1 10.5 1.5z" fill="currentColor"/></symbol><symbol id="sun" viewBox="0 0 16 16"><g fill="currentColor"><circle cx="8" cy="8" r="3.2"/><rect x="7.2" y="0" width="1.6" height="3"/><rect x="7.2" y="13" width="1.6" height="3"/><rect x="0" y="7.2" width="3" height="1.6"/><rect x="13" y="7.2" width="3" height="1.6"/></g></symbol>
+<symbol id="logo" viewBox="0 0 28 28"><rect class="crate" x="2" y="12" width="24" height="14" rx="2" stroke-width="1.5"/><line x1="10" y1="12" x2="10" y2="26" stroke="#1a1405" stroke-width="1.5"/><line x1="18" y1="12" x2="18" y2="26" stroke="#1a1405" stroke-width="1.5"/><path class="sprout" d="M14 12 L14 6" stroke-width="2" stroke-linecap="round"/><path class="sprout" d="M14 8 Q10 6 10 3" stroke-width="1.5" fill="none" stroke-linecap="round"/><path class="sprout" d="M14 10 Q18 8 18 5" stroke-width="1.5" fill="none" stroke-linecap="round"/></symbol>
+<symbol id="power" viewBox="0 0 12 12"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M6 1v4.5"/><path d="M3.2 3a4 4 0 1 0 5.6 0"/></g></symbol>
+<symbol id="clock" viewBox="0 0 12 12"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="6" cy="6" r="4.6"/><path d="M6 3.4V6l1.8 1.2"/></g></symbol></svg>
+
+<h1>F272: how long the job has run, and which attempt</h1>
+<p class="lede">The top bar while travel-companion's developer worked on <code>m8-04b-place-note-chip</code> this morning: job 2463, its second attempt of three, started 08:25 and seen at 09:30. The computer had been on 2 d 15 h, since Mon 16 Nov 19:14.</p>
+<div class="switch" role="group" aria-label="Which version">
+  <button type="button" data-show="today" aria-pressed="false">Today</button>
+  <button type="button" data-show="proposed" aria-pressed="true">Proposed</button>
+</div>
+
+<div class="versions">
+  <section data-version="today" data-off>
+    <p class="col-head">Today</p>
+    <h3>Wide screen, 1280 px</h3>
+    <div class="scaler"><div class="frame w1280 today">
+      <header class="bar">
+        <div class="bar-top">
+          <a class="brand"><svg><use href="#logo"/></svg><span class="brand-soft">Soft</span><span class="brand-field">Field</span><small>127.0.0.1</small></a>
+          <div class="factory-status"><button type="button" class="dot-btn"><i class="dot"></i></button><span class="words">Running: travel-companion · m8-04b-place-note-chip</span><button type="button" class="sign">⏸</button><span class="uptime"><span class="key"><svg><use href="#power"/></svg>On</span><span class="val">2 d 15 h</span></span></div>
+          <div class="filters"><label>Project <select><option selected>softfield</option></select></label></div>
+          <button type="button" class="theme-switch"><span class="plate"><span class="knob"></span><svg class="moon"><use href="#moon"/></svg><svg class="sun"><use href="#sun"/></svg></span></button>
+        </div>
+        <div class="hazard" aria-hidden="true"></div>
+        <nav class="tabs"><a>Projects</a><a aria-current="page">Overview</a><a>Planning · 1</a><a>Board</a><a>Tickets</a><a>Jobs</a><a>Runs</a><a>Timeline</a><a>Agents</a><a>Bench</a></nav>
+      </header>
+    </div></div>
+    <ul class="notes">
+      <li>The bar names the ticket, nothing more. How long the job has run and its attempt are only in the Overview's "Now" panel, further down the page.</li>
+      <li>The dot's hover title repeats the words.</li>
+    </ul>
+    <h3>Phone, 390 px, dot tapped</h3>
+    <div class="scaler"><div class="frame w390 phone">
+      <header class="bar">
+        <div class="bar-top show-words">
+          <a class="brand"><svg><use href="#logo"/></svg><span class="brand-soft">Soft</span><span class="brand-field">Field</span></a>
+          <div class="factory-status"><button type="button" class="dot-btn"><i class="dot"></i></button><span class="words">Running: travel-companion · m8-04b-place-note-chip<span class="on">Computer on 2 d 15 h · since Mon 16 Nov 19:14</span></span><button type="button" class="sign">⏸</button></div>
+          <div class="filters"><label>Project <select><option selected>softfield</option></select></label></div>
+          <button type="button" class="theme-switch"><span class="plate"><span class="knob"></span><svg class="moon"><use href="#moon"/></svg><svg class="sun"><use href="#sun"/></svg></span></button>
+        </div>
+        <div class="hazard" aria-hidden="true"></div>
+        <nav class="tabs"><a>Projects</a><a aria-current="page">Overview</a><a>Planning · 1</a><a>Board</a></nav>
+      </header>
+    </div></div>
+    <ul class="notes">
+      <li>A tap on the dot opens the words, with the computer's time on under them (F251).</li>
+    </ul>
+  </section>
+
+  <section data-version="proposed">
+    <p class="col-head">Proposed</p>
+    <h3>Wide screen, 1280 px</h3>
+    <div class="scaler"><div class="frame w1280 proposed wide">
+      <header class="bar">
+        <div class="bar-top">
+          <a class="brand"><svg><use href="#logo"/></svg><span class="brand-soft">Soft</span><span class="brand-field">Field</span><small>127.0.0.1</small></a>
+          <div class="factory-status"><button type="button" class="dot-btn"><i class="dot"></i></button><span class="words">Running: travel-companion · m8-04b-place-note-chip</span><span class="job new"><span class="key"><svg><use href="#clock"/></svg>Job</span><span class="val"><b>1 h 5 min</b><i class="sep"></i>attempt 2 of 3</span></span><button type="button" class="sign">⏸</button><span class="uptime"><span class="key"><svg><use href="#power"/></svg>On</span><span class="val">2 d 15 h</span></span></div>
+          <div class="filters"><label><span class="key">Project</span><select><option selected>softfield</option></select></label></div>
+          <button type="button" class="theme-switch"><span class="plate"><span class="knob"></span><svg class="moon"><use href="#moon"/></svg><svg class="sun"><use href="#sun"/></svg></span></button>
+        </div>
+        <div class="hazard" aria-hidden="true"></div>
+        <nav class="tabs slots"><a aria-current="page">Overview</a><a>Planning · 1</a><a>Board</a><a>More ▾</a></nav>
+      </header>
+      <span class="tag" style="left: 640px; top: 2px">new: the job plate</span>
+    </div></div>
+    <ul class="notes">
+      <li><span class="legend-new">Dashed green</span> marks what changes. The bar is drawn as F256 (The top bar on one line) leaves it.</li>
+      <li><b>A "Job" plate</b> right after the words, the "On" plate's twin: how long this job has run, then its attempt. It counts on at each 5-second refresh: in the "On" plate's own words: "14 min" under an hour, then "1 h 5 min".</li>
+      <li>The attempt shows only on a ticket's job, where it means a try: "attempt 2 of 3" for a developer, "attempt 3 of 3, the last" when the lead has given direction, "attempt 2" on a lead ticket. A planner, a review or a checkpoint shows the time alone.</li>
+      <li>With no job running (between jobs, waiting for Claude, stopped) there's no plate.</li>
+    </ul>
+    <h3>Narrower window, 1000 px</h3>
+    <div class="scaler"><div class="frame w1000 proposed wide narrow">
+      <header class="bar">
+        <div class="bar-top">
+          <a class="brand"><svg><use href="#logo"/></svg><span class="brand-soft">Soft</span><span class="brand-field">Field</span><small>127.0.0.1</small></a>
+          <div class="factory-status"><button type="button" class="dot-btn"><i class="dot"></i></button><span class="words new">Running: travel-companion · m8-04b-place-note-chip</span><button type="button" class="sign">⏸</button><span class="uptime"><span class="key"><svg><use href="#power"/></svg>On</span><span class="val">2 d 15 h</span></span></div>
+          <div class="filters"><label><span class="key">Project</span><select><option selected>softfield</option></select></label></div>
+          <button type="button" class="theme-switch"><span class="plate"><span class="knob"></span><svg class="moon"><use href="#moon"/></svg><svg class="sun"><use href="#sun"/></svg></span></button>
+        </div>
+        <div class="hazard" aria-hidden="true"></div>
+        <nav class="tabs slots"><a aria-current="page">Overview</a><a>Planning · 1</a><a>Board</a><a>More ▾</a></nav>
+      </header>
+      <i class="cursor" style="left: 360px; top: 30px"></i>
+      <div class="tip" style="left: 368px; top: 44px">Running: travel-companion · m8-04b-place-note-chip
+Job running 1 h 5 min · attempt 2 of 3</div>
+      <span class="tag" style="left: 300px; top: 2px">hover: the job's line</span>
+    </div></div>
+    <ul class="notes">
+      <li><b>Under 1200 px the plate steps aside</b> so the ticket's name keeps its room; hovering the words or the dot shows the whole sentence and the job's line under it.</li>
+    </ul>
+    <h3>Phone, 390 px, dot tapped</h3>
+    <div class="scaler"><div class="frame w390 phone proposed">
+      <header class="bar">
+        <div class="bar-top show-words">
+          <a class="brand"><svg><use href="#logo"/></svg><span class="brand-soft">Soft</span><span class="brand-field">Field</span></a>
+          <div class="factory-status"><button type="button" class="dot-btn"><i class="dot"></i></button><span class="words">Running: travel-companion · m8-04b-place-note-chip<span class="jobline new">Job running 1 h 5 min · attempt 2 of 3</span><span class="on">Computer on 2 d 15 h · since Mon 16 Nov 19:14</span></span><button type="button" class="sign">⏸</button></div>
+          <div class="filters"><label>Project <select><option selected>softfield</option></select></label></div>
+          <button type="button" class="theme-switch"><span class="plate"><span class="knob"></span><svg class="moon"><use href="#moon"/></svg><svg class="sun"><use href="#sun"/></svg></span></button>
+        </div>
+        <div class="hazard" aria-hidden="true"></div>
+        <nav class="tabs"><a aria-current="page">Overview</a><a>Planning · 1</a><a>Board</a><a>More ▾</a></nav>
+      </header>
+    </div></div>
+    <ul class="notes">
+      <li><b>On a phone</b> the tapped words gain one line, above the computer's: "Job running 1 h 5 min · attempt 2 of 3". Nothing new sits on the row.</li>
+    </ul>
+  </section>
+</div>
+
+<script>
+  // The pictures are plain HTML above; this only flips Today and Proposed and scales the frames.
+  (function () {
+    function fit() {
+      document.querySelectorAll(".scaler").forEach(function (box) {
+        if (!box.offsetWidth) return;
+        var frame = box.querySelector(".frame");
+        var scale = Math.min(1, box.clientWidth / frame.offsetWidth);
+        frame.style.transform = "scale(" + scale + ")";
+        box.style.height = (frame.offsetHeight * scale) + "px";
+      });
+    }
+    document.querySelectorAll(".switch button").forEach(function (button) {
+      button.addEventListener("click", function () {
+        document.querySelectorAll(".switch button").forEach(function (b) { b.setAttribute("aria-pressed", String(b === button)); });
+        document.querySelectorAll("[data-version]").forEach(function (v) { v.toggleAttribute("data-off", v.dataset.version !== button.dataset.show); });
+        fit();
+      });
+    });
+    addEventListener("resize", fit);
+    fit();
+  })();
+</script>
+</body>
+</html>
