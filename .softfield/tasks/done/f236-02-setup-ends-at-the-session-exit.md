@@ -29,3 +29,10 @@ Read D4 to D6 in `.softfield/cards/f236-softfield-init-adds-a-project-to.md`, th
 - bootstrap.md's step 10 asks before `softfield create` and ends with the line saying the owner can leave
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
