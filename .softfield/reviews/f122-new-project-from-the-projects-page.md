@@ -1,6 +1,6 @@
 # Review: F122, start a new project from the Projects page
 
-- **Status:** reviewed (round 1), waiting for your sign-off.
+- **Status:** done, signed off by the owner on 2026-11-19.
 
 ## Sign-off sheet
 

@@ -1,6 +1,7 @@
 # Milestone F122: Start a new project from the Projects page
 
-> **State:** ready · **Area:** factory · **Fast lane:** yes
+> **State:** done · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-19. Base: git tag `f122-new-project-from-the-projects-page-start`. Report: [`.softfield/reviews/f122-new-project-from-the-projects-page.md`](../reviews/f122-new-project-from-the-projects-page.md).
 > Planted by the owner on 2026-10-14.
 
 ## Notes
