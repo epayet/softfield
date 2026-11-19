@@ -423,6 +423,11 @@ def test_nothing_is_left_behind(app, shoot, monkeypatch, tmp_path_factory, fails
 
 
 # --- with real Chromium ---------------------------------------------------------------------
+# A test of two pages takes about 5 s, the dashboard's one page about 3 s: a browser process per
+# round, and Playwright's "networkidle" waits 500 ms of quiet per picture even on a page that
+# rests at once. The limits
+# can't be shortened from here: the browser runs in its own process (`_shoot`), which a
+# `monkeypatch.setattr(shots, ...)` never reaches (F270's review).
 
 
 def _png_width(path: Path) -> int:
@@ -460,7 +465,6 @@ def test_real_pictures_and_a_page_that_tries_everything(app, other_host, monkeyp
     a form and reaches for another host, directly and through a redirect."""
     other, other_hits = other_host
     monkeypatch.setenv("APP_OTHER", other)
-    monkeypatch.setattr(shots, "SETTLE_LIMIT", 500)
     (app / "pages" / "first.html").write_text(
         f"""<h1>new first</h1>
         <img src="{other}/image">
@@ -498,9 +502,7 @@ def test_a_500_is_recorded_by_the_browser(app):
     assert _pngs(app) == []
 
 
-def test_a_page_without_its_stylesheet_is_a_failed_picture(app, monkeypatch):
-    monkeypatch.setattr(shots, "SETTLE_LIMIT", 500)
-    monkeypatch.setattr(shots, "PAGE_LIMIT", 2000)
+def test_a_page_without_its_stylesheet_is_a_failed_picture(app):
     (app / "pages" / "first.html").write_text('<link rel="stylesheet" href="/static/app.css">hi')
     (app / "pages" / "second.html").write_text('<link rel="stylesheet" href="/ok.css">hi')
     (app / "pages" / "ok.css.html").write_text("body{}")
@@ -515,9 +517,7 @@ def test_a_page_without_its_stylesheet_is_a_failed_picture(app, monkeypatch):
     assert pictures["after-wide-2.png"] == {"state": shots.TAKEN, "reason": ""}
 
 
-def test_a_stylesheet_on_another_host_is_refused_and_failed(app, other_host, monkeypatch):
-    monkeypatch.setattr(shots, "SETTLE_LIMIT", 500)
-    monkeypatch.setattr(shots, "PAGE_LIMIT", 2000)
+def test_a_stylesheet_on_another_host_is_refused_and_failed(app, other_host):
     other, other_hits = other_host
     (app / "pages" / "first.html").write_text(f'<link rel="stylesheet" href="{other}/x.css">hi')
     _take(app)
@@ -535,7 +535,6 @@ def test_softfields_own_shots_picture_the_dashboard(tmp_path, monkeypatch):
     machine = tmp_path / "machine.toml"
     machine.write_text(re.sub(r'(?m)^db = "[^"]*"', f'db = "{db}"', MACHINE.read_text()))
     monkeypatch.setenv("SOFTFIELD_CONFIG", str(machine))
-    monkeypatch.setattr(shots, "SETTLE_LIMIT", 500)
     found = project_shots(ROOT)
     assert found is not None
     folder = tmp_path / "pictures"
