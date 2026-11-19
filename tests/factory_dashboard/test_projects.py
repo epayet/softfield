@@ -474,6 +474,7 @@ def test_start_it_sends_the_forms_json_and_shows_the_plate_at_once(page, project
     page.get_by_role("button", name="Start it").click()
     plate_ = page.locator("#order-form .proj-asked")
     plate_.get_by_text("On its way: the runner makes its folder at its next pick").wait_for()
+    assert plate_.count() == 1, "expected exactly one plate"
     assert plate_.locator(".name").inner_text() == "bird-log"
     assert page.get_by_label("The idea").is_disabled()
     page.locator("#start-sent").get_by_text("Asked").wait_for()
