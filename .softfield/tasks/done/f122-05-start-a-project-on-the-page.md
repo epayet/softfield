@@ -38,3 +38,9 @@ attempts: 3
 tokens: 5771218
 logs: .softfield/var/runs/20261119-042447/f122-05-start-a-project-on-the-page
 ```
+
+```yaml
+# --- runner ---
+result: done
+finished_by: lead
+```
