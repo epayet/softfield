@@ -65,6 +65,32 @@ def project_name(folder: Path) -> str | None:
         return None
 
 
+def carrying_on(folder: Path, db: Path) -> str | None:
+    """The origin ("new" or "existing") of a folder set up by `init` whose project no row of the
+    database holds: `init` there again carries the setup on and writes nothing (F236 D6). None
+    for any other folder."""
+    if not (folder / PROJECT_TOML).is_file():
+        return None
+    conn = metrics.open_db(db)
+    try:
+        state = metrics.project_state(conn, project_name(folder) or folder.name)
+    finally:
+        conn.close()
+    if state is not None:
+        return None
+    try:
+        data = tomllib.loads((folder / PROJECT_TOML).read_text(encoding="utf-8"))
+        return str(data["project"].get("origin", "existing"))
+    except (OSError, KeyError, ValueError):
+        return "existing"
+
+
+def carry_on_opening(name: str) -> str:
+    return (
+        f"Carry on the setup of {name}: run `softfield doctor` first and pick up from what it says."
+    )
+
+
 def _decide(
     folder: Path,
     db: Path,
@@ -342,7 +368,8 @@ def bootstrap() -> Path:
 NEXT = """What happens now: Claude asks for your idea and how to build it, keeps your words as
 the project's seed, drafts ADR 00 (the starting decisions) for your yes, and puts the first
 piece of work on a card. It doesn't build the idea: the factory does, from the card, and you
-plan and follow it on the dashboard. Claude ends by saying where."""
+plan and follow it on the dashboard. Claude asks before adding the project to the factory, and
+tells you when you can leave (/exit)."""
 
 
 def lead_command(folder: Path, args: list[str]) -> list[str]:
@@ -352,7 +379,9 @@ def lead_command(folder: Path, args: list[str]) -> list[str]:
     return ["claude", *add, "--append-system-prompt", system, *args]
 
 
-def claude_command(folder: Path, origin: str, name: str | None = None) -> list[str]:
+def claude_command(
+    folder: Path, origin: str, name: str | None = None, carry_on: bool = False
+) -> list[str]:
     """The interactive Claude session that sets the project up with the owner: the setup guide
     is its instructions (not a file it may read), and it opens with the steps (the owner,
     2026-10-14: the first try said nothing, then built the idea)."""
@@ -361,6 +390,8 @@ def claude_command(folder: Path, origin: str, name: str | None = None) -> list[s
     opening = f"Start the setup of {name}, a {origin} project: your first message, then the idea."
     if origin == "existing":
         opening = f"Start the setup of {name}, an existing project: your first message."
+    if carry_on:
+        opening = carry_on_opening(name)
     return [
         "claude",
         "--add-dir",

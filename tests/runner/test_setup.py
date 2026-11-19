@@ -497,6 +497,86 @@ def test_the_units_run_softfield_with_the_installers_path(tmp_path):
     assert "dashboard --lan" in (tmp_path / "softfield-dashboard.service").read_text()
 
 
+def _init_env(tmp_path, monkeypatch):
+    db = tmp_path / "m.sqlite"
+    machine = tmp_path / "factory.toml"
+    machine.write_text(f'[metrics]\ndb = "{db}"\n')
+    monkeypatch.setenv("SOFTFIELD_CONFIG", str(machine))
+    folder = tmp_path / "ducks"
+    folder.mkdir()
+    monkeypatch.chdir(folder)
+    return db, folder
+
+
+def _stub_claude(monkeypatch, ran, effect=None):
+    real = subprocess.run
+
+    def run(cmd, **kw):
+        if cmd[0] != "claude":  # git and the rest are real
+            return real(cmd, **kw)
+        ran.append(cmd)
+        if effect:
+            effect()
+        return subprocess.CompletedProcess(cmd, 1)
+
+    monkeypatch.setattr(subprocess, "run", run)
+
+
+def _head(folder: Path) -> str:
+    return subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=folder, capture_output=True, text=True, check=True
+    ).stdout.strip()
+
+
+def test_init_runs_claude_as_a_child_and_says_how_to_finish_when_left_early(
+    tmp_path, monkeypatch, capsys
+):
+    """F236 D5: Claude exits at once (or fails): no row, and two lines say how to finish."""
+    db, _folder = _init_env(tmp_path, monkeypatch)
+    ran: list[list[str]] = []
+    _stub_claude(monkeypatch, ran)
+    assert cli.main(["init"]) == 0
+    out = capsys.readouterr().out
+    assert ran and ran[0][0] == "claude"
+    assert "ducks isn't in the factory yet." in out
+    assert "To finish: `softfield init` here again carries on with Claude" in out
+    assert "`softfield create` adds it if it's ready." in out
+    assert _projects(db) == []
+
+
+def test_init_says_nothing_more_when_claude_registered_the_project(tmp_path, monkeypatch, capsys):
+    db, folder = _init_env(tmp_path, monkeypatch)
+    ran: list[list[str]] = []
+    _stub_claude(monkeypatch, ran, lambda: setup.register(folder, db, "ducks"))
+    assert cli.main(["init"]) == 0
+    out = capsys.readouterr().out
+    assert "isn't in the factory yet" not in out and "To finish" not in out
+
+
+def test_a_second_init_in_an_unregistered_folder_carries_on_and_writes_nothing(
+    tmp_path, monkeypatch, capsys
+):
+    """F236 D6."""
+    _db, folder = _init_env(tmp_path, monkeypatch)
+    assert cli.main(["init", "--no-claude"]) == 0
+    before = _head(folder)
+    ran: list[list[str]] = []
+    _stub_claude(monkeypatch, ran)
+    assert cli.main(["init"]) == 0
+    assert "Carry on the setup of ducks: run `softfield doctor` first" in ran[0][-1]
+    assert _head(folder) == before
+    capsys.readouterr()
+    ran.clear()
+    cli.main(["init", "--no-claude"])  # what doctor finds, and no session
+    assert not ran and "project.toml" in capsys.readouterr().out
+
+
+def test_bootstrap_asks_before_create_and_says_the_owner_can_leave():
+    guide = setup.bootstrap().read_text(encoding="utf-8")
+    assert "Ready to add" in guide and "softfield create" in guide
+    assert "You can leave this session now (/exit)." in guide
+
+
 def test_softfield_init_without_claude_from_the_folder(tmp_path, monkeypatch, capsys):
     machine = tmp_path / "factory.toml"
     machine.write_text(f'[metrics]\ndb = "{tmp_path / "m.sqlite"}"\n')

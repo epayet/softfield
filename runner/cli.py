@@ -286,27 +286,46 @@ def _machine_command(args: argparse.Namespace) -> int:
     if args.command == "init":
         folder = Path.cwd()
         ask = _ask_previous if sys.stdin.isatty() else None
-        try:
-            origin, written = setup.init(
-                folder, db, args.previous, ask, args.yes, input if ask else None
-            )
-        except (setup.SetupError, GitError) as exc:
-            print(f"softfield: {exc}")
-            return 1
         name = setup.project_name(folder) or folder.name
-        kind = "a new" if origin == "new" else "an existing"
-        if written:
-            print(f"{name}: set up as {kind} project, committed.")
-            print("Wrote " + ", ".join(written) + ".")
+        carry = setup.carrying_on(folder, db)
+        if carry is not None:  # set up, not in the factory: nothing written (F236 D6)
+            origin = carry
+            print(f"{name} is set up but not in the factory yet: nothing written.")
+            if args.no_claude:
+                findings = setup.doctor(folder, db, run_checks=False)
+                for finding in findings:
+                    print(f"{'ok' if finding.ok else '--'}  {finding.what}")
+                return 0 if setup.passes(findings) else 1
         else:
-            print(f"{name}: the old entry comes back with `softfield create`. Nothing written.")
-        print(f"`softfield create` adds {name} to the factory when the setup is done.")
-        if args.no_claude:
-            print(f"Next: open Claude here and follow {setup.bootstrap()}.")
-            return 0
+            try:
+                origin, written = setup.init(
+                    folder, db, args.previous, ask, args.yes, input if ask else None
+                )
+            except (setup.SetupError, GitError) as exc:
+                print(f"softfield: {exc}")
+                return 1
+            name = setup.project_name(folder) or folder.name
+            kind = "a new" if origin == "new" else "an existing"
+            if written:
+                print(f"{name}: set up as {kind} project, committed.")
+                print("Wrote " + ", ".join(written) + ".")
+            else:
+                print(f"{name}: the old entry comes back with `softfield create`. Nothing written.")
+            print(f"`softfield create` adds {name} to the factory when the setup is done.")
+            if args.no_claude:
+                print(f"Next: open Claude here and follow {setup.bootstrap()}.")
+                return 0
         print("\n" + setup.NEXT + "\n")
-        command = setup.claude_command(folder, origin, name)
-        os.execvp(command[0], command)  # noqa: S606 - the owner's Claude, in their terminal
+        command = setup.claude_command(folder, origin, name, carry_on=carry is not None)
+        # a child, not execvp: what follows runs after the owner leaves Claude (F236 D5)
+        subprocess.run(command, check=False)
+        if not setup.registered(db, name):
+            print(f"\n{name} isn't in the factory yet.")
+            print(
+                "To finish: `softfield init` here again carries on with Claude, or"
+                " `softfield create` adds it if it's ready."
+            )
+        return 0
     if args.command == "lead":
         command = setup.lead_command(Path.cwd(), args.claude_args)
         os.execvp(command[0], command)  # noqa: S606 - the owner's Claude, in their terminal
