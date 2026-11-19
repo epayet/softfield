@@ -11,7 +11,7 @@ from typing import Any, cast
 
 import pytest
 
-from runner import cli, dispatch, loop, metrics, milestone, planner, requests
+from runner import cli, dispatch, loop, metrics, milestone, planner, requests, setup
 from runner.gitops import Git, GitError
 from runner.state import State, load_state, save_state
 from runner.tasks import append_footer, load_dir
@@ -1544,6 +1544,124 @@ def test_accept_adr_of_an_adr_already_on_main_accepts_it(repo):
     asked = _ask(repo, "accept_adr", "f7", "23")
     _apply(repo)
     assert _request(repo, asked)[1] == "accepted .softfield/adr/23-parallel-planners.md"
+
+
+ADR_00 = "# ADR 00: Initial decisions\n\n- **Status:** Proposed\n- **Date:** 2026-10-01\n"
+M1 = "# Milestone M1: First version of bird log\n\n- **State:** idea\n- **Area:** product\n"
+
+
+def _being_set_up(repo: Path, monkeypatch, failing: list[str]) -> list[str]:
+    """A project from the Projects page with ADR 00 on main, still paused setting up; `create`'s
+    checks stubbed (they run `check-all` in its folder), failing on ``failing``'s words, which
+    the test changes between approvals. Returns that list."""
+    (repo / ".softfield" / "cards").mkdir(exist_ok=True)
+    (repo / ".softfield" / "cards" / "m1-first-version.md").write_text(M1)
+    _main_adr(repo, "00-initial.md", ADR_00)
+    _ask(repo, "plan_message", "m1", _message("Use SQLite."))
+    conn = metrics.open_db(_db(repo))
+    try:
+        metrics.set_project_paused(conn, repo.name, metrics.SETTING_UP)
+    finally:
+        conn.close()
+    _apply(repo)  # the thread has begun
+
+    def doctor(folder, db, **_):
+        assert folder == repo
+        return [setup.Finding(True, "ADR 00 accepted")] + [
+            setup.Finding(False, what) for what in failing
+        ]
+
+    monkeypatch.setattr(setup, "doctor", doctor)
+    return failing
+
+
+def _projects_pause(repo: Path) -> object:
+    conn = metrics.open_db(_db(repo))
+    try:
+        state = metrics.project_state(conn, repo.name)
+    finally:
+        conn.close()
+    return None if state is None else state[1]
+
+
+def test_approving_adr_00_of_a_project_being_set_up_adds_it_once_its_checks_pass(repo, monkeypatch):
+    """F122 D4, ADR 48 item 6: `create`'s checks pass, so the project is unpaused, its cards on
+    its board, and "Plan this card." goes to M1 though its thread has begun."""
+    _being_set_up(repo, monkeypatch, [])
+    asked = _ask(repo, "accept_adr", "m1", "0")
+    _apply(repo)
+    said = f"{repo.name} is in the factory; the lead is asked to plan its first card"
+    assert _request(repo, asked)[1] == f"accepted .softfield/adr/00-initial.md; {said}"
+    assert _projects_pause(repo) is None
+    conn = metrics.open_db(_db(repo))
+    try:
+        project = metrics.find_project(conn, repo.name)
+        assert project is not None
+        cards = conn.execute("SELECT key FROM milestones WHERE project_id = ?", (project,))
+        assert [row["key"] for row in cards] == ["m1-first-version"]
+    finally:
+        conn.close()
+    _apply(repo)  # the runner's next round takes the message
+    planners = [(k, s) for k, s, _, _ in _queued(repo) if k == planner.PLANNER]
+    assert len(planners) == 1 and str(planners[0][1]).startswith("m1#")
+    # only the setup the owner's "Use SQLite." queued before the approval
+    assert len([k for k, *_ in _queued(repo) if k == dispatch.SETUP]) == 1
+
+
+def test_a_failed_check_after_adr_00_sends_the_setup_back_with_the_findings(repo, monkeypatch):
+    """F122 D4: the project stays setting up, and a setup job waits on the runner's message that
+    lists what failed."""
+    _being_set_up(repo, monkeypatch, ["softfield check-all passes: tests failed"])
+    asked = _ask(repo, "accept_adr", "m1", "0")
+    _apply(repo)
+    assert "the setup goes back to the lead: softfield check-all passes" in str(
+        _request(repo, asked)[1]
+    )
+    assert _projects_pause(repo) == metrics.SETTING_UP
+    runners = [m for m in _thread(repo, "m1") if m["author"] == planner.RUNNER]
+    assert len(runners) == 1
+    assert "- softfield check-all passes: tests failed" in str(runners[0]["text"])
+    assert _queued(repo)[-1][:2] == (dispatch.SETUP, f"m1#m{runners[0]['id']}")
+    assert not [k for k, *_ in _queued(repo) if k == planner.PLANNER]
+
+
+def test_a_third_failure_in_a_row_stops_the_setup_on_the_desk_until_an_approval_passes(
+    repo, monkeypatch
+):
+    """F122 D4: two setup jobs at most, then an owner item, cleared when a later approval
+    passes."""
+    failing = _being_set_up(repo, monkeypatch, ["a one-line description in [project]"])
+    for _ in range(3):
+        _ask(repo, "accept_adr", "m1", "0")
+        _apply(repo)
+    setups = [s for k, s, _, _ in _queued(repo) if k == dispatch.SETUP and "#m" in str(s)]
+    assert len(setups) == 2  # the third failure queued none
+    stopped = f"{repo.name}'s setup stopped at: a one-line description in [project]"
+    conn = metrics.open_db(_db(repo))
+    try:
+        project = metrics.find_project(conn, repo.name)
+        assert project is not None
+        items = [(i["kind"], i["text"]) for i in metrics.open_owner_items(conn, project)]
+    finally:
+        conn.close()
+    assert (requests.SETUP_STOPPED, stopped) in items
+    failing.clear()
+    _ask(repo, "accept_adr", "m1", "0")
+    _apply(repo)
+    assert _projects_pause(repo) is None
+    assert not [i for i in _items(repo) if i[0] == requests.SETUP_STOPPED and i[3]]
+
+
+def test_approving_an_adr_00_on_a_project_in_the_factory_runs_no_setup_check(repo, monkeypatch):
+    """F122 D4 only ends a setup: a live project's ADR 00 asks for its card's plan, as before."""
+    (repo / ".softfield" / "cards").mkdir()
+    (repo / ".softfield" / "cards" / "m1-first-version.md").write_text(M1)
+    _main_adr(repo, "00-initial.md", ADR_00)
+    monkeypatch.setattr(setup, "doctor", lambda *a, **k: pytest.fail("no checks run"))
+    asked = _ask(repo, "accept_adr", "m1", "0")
+    _apply(repo)
+    assert _request(repo, asked)[1] == "accepted .softfield/adr/00-initial.md"
+    assert [k for k, *_ in _queued(repo)] == [planner.PLANNER]
 
 
 @pytest.mark.parametrize(

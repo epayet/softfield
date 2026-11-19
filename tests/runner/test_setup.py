@@ -2,10 +2,11 @@ import json
 import subprocess
 from datetime import date
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
-from runner import cli, config, metrics, owner, setup
+from runner import checks, cli, config, metrics, owner, setup
 from runner.config import load_config
 from tests.runner.conftest import MACHINE, git
 
@@ -237,6 +238,8 @@ def test_the_hand_over_asks_the_lead_to_plan_the_first_card_once(tmp_path):
     finally:
         conn.close()
     assert not setup.plan_first_card("hello", "m1-hello-world", db, at)  # its thread began
+    # a project set up from the Projects page talked on it: asked all the same (F122 D4)
+    assert setup.plan_first_card("hello", "m1-hello-world", db, at, begun=True)
 
 
 def test_forget_takes_a_project_off_every_list_but_keeps_its_rows(tmp_path, monkeypatch, capsys):
@@ -643,6 +646,50 @@ def _ready_ducks(tmp_path: Path, db: Path) -> Path:
     git(folder, "commit", "-q", "--no-verify", "-m", "set up")
     owner.decide_adr(folder, 0, "Accepted", date(2026, 11, 19))
     return folder
+
+
+def test_a_project_set_up_from_the_page_joins_only_when_check_all_passes_in_its_folder(
+    tmp_path, monkeypatch, machine
+):
+    """F122 D4, ADR 48 item 6: `create`'s checks, `check-all` in the project's folder among
+    them (stubbed); failed, it stays setting up and the failures come back; passed, it is
+    unpaused, its cards on its board and its first card's planning asked for on a begun
+    thread."""
+    db = tmp_path / "m.sqlite"
+    folder = _ready_ducks(tmp_path, db)
+    setup.register(folder, db, "ducks", paused=metrics.SETTING_UP)
+    conn = metrics.open_db(db)
+    try:
+        project = metrics.find_project(conn, "ducks")
+        assert project is not None
+        metrics.planner_thread(conn, project, "m1", "2026-11-19T09:00:00+00:00")  # it talked
+    finally:
+        conn.close()
+    ran: list[Path] = []
+    failed = ["tests"]
+
+    def check_all(where, timeout):
+        ran.append(where)
+        return [SimpleNamespace(name=n, ok=False) for n in failed]
+
+    monkeypatch.setattr(checks, "check_all", check_all)
+    at = "2026-11-19T10:00:00+00:00"
+    assert [f.what for f in setup.join(folder, db, "ducks", at)] == [
+        "softfield check-all passes: tests failed"
+    ]
+    assert ran == [folder]
+    assert _row(db, "ducks") == (str(folder), metrics.SETTING_UP)
+    failed.clear()
+    assert setup.join(folder, db, "ducks", at) == []
+    assert _row(db, "ducks") == (str(folder), None)
+    conn = metrics.open_db(db)
+    try:
+        cards = [r["key"] for r in conn.execute("SELECT key FROM milestones")]
+        asked = [(r["kind"], r["subject"]) for r in conn.execute("SELECT * FROM owner_requests")]
+    finally:
+        conn.close()
+    assert cards == ["m1-count"]
+    assert asked == [("plan_message", "m1")]
 
 
 def test_doctor_passing_on_an_unregistered_project_points_to_create(

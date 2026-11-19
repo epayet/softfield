@@ -460,18 +460,21 @@ def publish_cards(folder: Path, name: str, db: Path) -> list[str]:
         conn.close()
 
 
-def plan_first_card(name: str, card: str, db: Path, at: str) -> bool:
+def plan_first_card(name: str, card: str, db: Path, at: str, *, begun: bool = False) -> bool:
     """The hand-over asks the lead to plan the first card, as the owner's "Plan this card." on
     its thread, so a proposal waits on the desk (2026-10-15: the card sat unplanned until the
-    owner wrote to it). Not when the card's thread has begun or a message waits for it. Whether
-    it asked."""
+    owner wrote to it). Not when a message waits for it, nor when the card's thread has begun,
+    unless ``begun`` says it has and asks all the same: a project set up from the Projects page
+    talked on it (F122 D4). Whether it asked."""
     from runner import planner
 
     thread = planner.thread_key(card)
     conn = metrics.open_db(db)
     try:
         project = metrics.find_project(conn, name)
-        if project is None or metrics.find_thread(conn, project, thread) is not None:
+        if project is None:
+            return False
+        if not begun and metrics.find_thread(conn, project, thread) is not None:
             return False
         waiting = conn.execute(
             "SELECT 1 FROM owner_requests WHERE project_id = ? AND kind = ? AND subject = ?"
@@ -659,6 +662,22 @@ def doctor(
             f": {', '.join(failed)} failed" if failed else "")))  # fmt: skip
     found.append(_phone_finding())
     return found
+
+
+def join(folder: Path, db: Path, name: str, at: str) -> list[Finding]:
+    """A project set up from the Projects page joins the factory once its ADR 00 is approved
+    (F122 D4, ADR 48 item 6), on `create`'s checks (``doctor``, `check-all` in its folder):
+    when every needed one passes, it is unpaused, its cards published and its first card's
+    planning asked for, though its thread has begun. Returns the needed checks that failed,
+    none when it joined."""
+    failed = [f for f in doctor(folder, db) if f.needed and not f.ok]
+    if failed:
+        return failed
+    register(folder, db, name)
+    publish_cards(folder, name, db)
+    if (card := first_card(folder)) is not None:
+        plan_first_card(name, card, db, at, begun=True)
+    return []
 
 
 # --- service ----------------------------------------------------------------------------------

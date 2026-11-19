@@ -1156,9 +1156,72 @@ def _accept_adr(
         result = f"accepted {target}"
         if target != draft:
             result += f" (number {number} was taken, so it is ADR {new})"
+    if number == 0 and _setting_up(conn, project_id):  # its setup's end (F122 D4)
+        where = thread if thread != planner.GENERAL else planner.thread_key(setup.FIRST_CARD)
+        return f"{result}; {_setup_checked(repo, db, conn, project_id, now, where)}"
     if thread != planner.GENERAL and not _has_tickets(git, branch, thread):
         _ask_for_the_plan(conn, project_id, now, thread, f"ADR {number}")
     return result
+
+
+SETUP_STOPPED = "setup_stopped"  # the owner item when a setup's checks failed too often
+_SETUP_FAILED = "(Sent by the runner.) ADR 00 is accepted, but the factory's checks on {name}"
+_SETUP_TRIES = 2  # the setup jobs a row of failed checks queues before it stops (F122 D4)
+
+
+def _failures_in_a_row(conn: sqlite3.Connection, thread_id: int) -> int:
+    """The runner's failed-checks messages on the thread since the owner last wrote there."""
+    count = 0
+    for message in reversed(metrics.planner_messages(conn, thread_id)):
+        if message["author"] == "owner":
+            break
+        if message["author"] == planner.RUNNER and str(message["text"]).startswith(
+            _SETUP_FAILED.split("{", 1)[0]
+        ):
+            count += 1
+    return count
+
+
+def _setup_checked(
+    repo: Path,
+    db: Path,
+    conn: sqlite3.Connection,
+    project_id: int,
+    now: datetime,
+    thread: str,
+) -> str:
+    """ADR 00 approved on a project being set up (F122 D4, ADR 48 item 6): `create`'s checks.
+    Passed, it joins the factory (``setup.join``) and a stopped setup's item clears. Failed, the
+    runner says what failed on the thread and the lead's setup is sent back to it, at most twice
+    in a row; after that only an owner item says where it stopped."""
+    row = conn.execute("SELECT name FROM projects WHERE id = ?", (project_id,)).fetchone()
+    name = str(row["name"])
+    at = now.isoformat()
+    failed = setup.join(repo, db, name, at)
+    if not failed:
+        for item in metrics.open_owner_items(conn, project_id):
+            if item["kind"] == SETUP_STOPPED:
+                metrics.resolve_owner_item(conn, item["id"], at)
+        return f"{name} is in the factory; the lead is asked to plan its first card"
+    found = metrics.planner_thread(conn, project_id, thread, at)
+    if found["archived"] is not None:
+        metrics.set_thread_archived(conn, found["id"], None)
+    lines = "\n".join(f"- {f.what}" for f in failed)
+    text = (
+        f"{_SETUP_FAILED.format(name=name)} didn't pass:\n{lines}\n"
+        "Set them right; ADR 00 then waits for the owner's yes again."
+    )
+    said = metrics.add_planner_message(conn, found["id"], planner.RUNNER, at, text)
+    what = "; ".join(f.what for f in failed)
+    if _failures_in_a_row(conn, found["id"]) > _SETUP_TRIES:
+        stopped = f"{name}'s setup stopped at: {what}"
+        metrics.upsert_owner_item(conn, project_id, SETUP_STOPPED, thread, text=stopped, created=at)
+        return stopped
+    reason = f"{name}'s checks after ADR 00"
+    metrics.queue_job(
+        conn, project_id, dispatch.SETUP, planner.look_subject(thread, said), reason, at
+    )
+    return f"the checks failed, so the setup goes back to the lead: {what}"
 
 
 # --- planting: a seed card without Claude (ADR 20 item 8, f6 D5) -----------------------------
