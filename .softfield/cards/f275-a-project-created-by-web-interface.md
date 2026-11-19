@@ -1,4 +1,4 @@
-# Milestone F275: a project created by web interface takes first place…
+# Milestone F275: A project started from the Projects page goes first, not last
 
 > **State:** idea · **Area:** factory
 > Planted by the owner on 2026-11-19.
