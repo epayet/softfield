@@ -40,6 +40,33 @@ def section_raw(html: str, name: str) -> str:
     return match.group(1)
 
 
+def _status(html: str) -> tuple[str, str, dict[str, str]]:
+    """The top bar's status: its words, its dot, and its sign's name (``aria-label``) -> the
+    request it posts. The dot's button names the same words; the sign shows only ⏸ or ▶."""
+    block = re.search(r'<div id="factory-status"[^>]*>(.*?)</div>', html, re.S)
+    assert block, "no #factory-status"
+    words = re.search(r'<span class="words" role="status">([^<]*)</span>', block[1])
+    assert words, block[1]
+    dot = re.fullmatch(
+        r'\s*<button type="button" class="dot-btn" aria-label="([^"]*)" title="\1">'
+        r'<i class="dot (\w+)"></i></button>.*',
+        block[1],
+        re.S,
+    )
+    assert dot and dot[1] == words[1], block[1]
+    buttons = {}
+    for attrs, _text in re.findall(
+        r'<button type="button" class="sign"([^>]*)>([^<]*)</button>', block[1]
+    ):
+        assert 'hx-post="/requests"' in attrs, attrs
+        kind = re.search(r'"kind": "(\w+)"', attrs)
+        name = re.search(r'aria-label="([^"]*)"', attrs)
+        assert kind and name, attrs
+        buttons[name[1]] = kind[1]
+    assert len(re.findall(r"<button", block[1])) == 1 + len(buttons), block[1]
+    return words[1], dot[2], buttons
+
+
 def away_row(html: str, ticket: str) -> str:
     """The raw HTML of ``ticket``'s row in While you were away."""
     match = re.search(r'<section[^>]*\bid="away"[^>]*>(.*?)</section>', html, re.S)
@@ -1486,7 +1513,7 @@ def test_next_in_line_names_a_due_review_first(client, db_path):
         conn.close()
     html = client.get("/").text
     rows = section(html, "queue").split("Next in line", 1)[1]
-    assert re.search(r"\b1 review F1 · a batch\b", rows)
+    assert re.search(r"\b1 review F1 · The factory measures itself\b", rows)
     assert "/tickets/None" not in html and 'href="/tickets/"' not in html
     assert "2 f1-05-first" in rows
 
@@ -1513,7 +1540,10 @@ def test_next_in_line_says_what_a_parked_review_waits_for(client, db_path):
     rows = section(client.get("/").text, "queue").split("Next in line", 1)[1]
     assert rows.index("1 f1-05-first") < rows.index("2 f1-06-second") < rows.index("3 review F1")
     reset = f"Claude's reset at {until.astimezone():%H:%M}"
-    assert rows.endswith(f"3 review F1 · a batch · waits for {reset}")
+    assert rows.endswith(
+        "3 review F1 · The factory measures itself · the lead reads what it built"
+        f" · waits for {reset}"
+    )
 
 
 def test_next_in_line_li_sits_directly_in_ol_and_no_empty_n_spans(client):
@@ -1684,7 +1714,9 @@ def test_only_a_due_review_shows_its_row_and_no_count(queue_client, db_path):
     finally:
         conn.close()
     queue_section = section(queue_client.get("/").text, "queue")
-    assert re.search(r"\b1 review F1 · a batch\b", queue_section.split("Next in line", 1)[1])
+    assert re.search(
+        r"\b1 review F1 · The factory measures itself\b", queue_section.split("Next in line", 1)[1]
+    )
     assert queue_section.startswith("Queue Next in line"), queue_section
 
 
@@ -5477,3 +5509,186 @@ def test_a_ticketless_job_of_another_role_on_a_card_shows_no_card_line(client, d
     assert "/planning/" not in now_raw
     assert "The factory measures itself" not in now
     assert 'class="doing"' not in now_raw
+
+
+# --- f62-02: top bar and next name the card ---------------------------------------------------
+
+
+def test_a_ticketless_review_top_bar_says_running_with_card_name(client, db_path):
+    """f62-02: a running review on f158-milestones-don-t-show-me-their has the top bar say
+    "Running: review F158"."""
+    one_project(db_path)
+    from runner import metrics
+
+    conn = metrics.open_db(db_path)
+    try:
+        run = conn.execute("SELECT id FROM runs WHERE run_dir = '20261002-113500'").fetchone()[0]
+        conn.execute(
+            "UPDATE jobs SET outcome = 'passed' WHERE run_id = ? AND outcome = 'running'", (run,)
+        )
+        project = conn.execute("SELECT id FROM projects WHERE name = ?", (PROJECT,)).fetchone()[
+            "id"
+        ]
+        f158 = metrics.upsert_milestone(
+            conn,
+            project,
+            "f158-milestones-don-t-show-me-their",
+            title="Milestones don't show their own details",
+        )
+        job_id = metrics.start_job(
+            conn,
+            run,
+            ticket_id=None,
+            milestone_id=f158,
+            role="review",
+            agent=OPUS,
+            attempt=1,
+            started=NOW.isoformat(),
+        )
+        metrics.update_running_job(conn, job_id, tokens_in=10_000, steps=5)
+    finally:
+        conn.close()
+    html = client.get("/").text
+    words, _, _ = _status(html)
+    assert "Running: review F158" in words
+
+
+def test_a_paused_review_top_bar_says_pausing_after(client, db_path):
+    """f62-02: when a pause is asked the top bar says "Pausing after review F158"."""
+    one_project(db_path)
+    from runner import metrics
+
+    conn = metrics.open_db(db_path)
+    try:
+        run = conn.execute("SELECT id FROM runs WHERE run_dir = '20261002-113500'").fetchone()[0]
+        conn.execute(
+            "UPDATE jobs SET outcome = 'passed' WHERE run_id = ? AND outcome = 'running'", (run,)
+        )
+        project = conn.execute("SELECT id FROM projects WHERE name = ?", (PROJECT,)).fetchone()[
+            "id"
+        ]
+        f158 = metrics.upsert_milestone(
+            conn,
+            project,
+            "f158-milestones-don-t-show-me-their",
+            title="Milestones don't show their own details",
+        )
+        job_id = metrics.start_job(
+            conn,
+            run,
+            ticket_id=None,
+            milestone_id=f158,
+            role="review",
+            agent=OPUS,
+            attempt=1,
+            started=NOW.isoformat(),
+        )
+        metrics.update_running_job(conn, job_id, tokens_in=10_000, steps=5)
+        metrics.add_request(conn, project, "pause", None, None, NOW.isoformat())
+    finally:
+        conn.close()
+    html = client.get("/").text
+    words, _, _ = _status(html)
+    assert "Pausing after review F158" in words
+
+
+def test_a_running_job_with_ticket_keeps_ticket_in_top_bar(client, db_path):
+    """f62-02: a running job with a ticket keeps "Running: … · <ticket>" in the top bar."""
+    one_project(db_path)
+    from runner import metrics
+
+    conn = metrics.open_db(db_path)
+    try:
+        run = conn.execute("SELECT id FROM runs WHERE run_dir = '20261002-113500'").fetchone()[0]
+        conn.execute(
+            "UPDATE jobs SET outcome = 'passed' WHERE run_id = ? AND outcome = 'running'", (run,)
+        )
+        f1 = conn.execute("SELECT id FROM milestones WHERE key = 'f1'").fetchone()["id"]
+        project = conn.execute("SELECT id FROM projects WHERE name = ?", (PROJECT,)).fetchone()[
+            "id"
+        ]
+        ticket = metrics.upsert_ticket(
+            conn,
+            project,
+            "f1-dev-test",
+            milestone_id=f1,
+            kind="developer",
+            state="running",
+            title="Dev test title.",
+        )
+        job_id = metrics.start_job(
+            conn,
+            run,
+            ticket_id=ticket,
+            milestone_id=f1,
+            role="developer",
+            agent=LOCAL,
+            attempt=1,
+            started=NOW.isoformat(),
+        )
+        metrics.update_running_job(conn, job_id, tokens_in=10_000, steps=5)
+    finally:
+        conn.close()
+    html = client.get("/").text
+    words, _, _ = _status(html)
+    assert "Running: f1-dev-test" in words
+
+
+def test_a_ticketless_job_with_no_card_keeps_role_job_in_top_bar(client, db_path):
+    """f62-02: a ticketless job with no card keeps "<role>, job <n>" in the top bar."""
+    one_project(db_path)
+    from runner import metrics
+
+    conn = metrics.open_db(db_path)
+    try:
+        run = conn.execute("SELECT id FROM runs WHERE run_dir = '20261002-113500'").fetchone()[0]
+        conn.execute(
+            "UPDATE jobs SET outcome = 'passed' WHERE run_id = ? AND outcome = 'running'", (run,)
+        )
+        job_id = metrics.start_job(
+            conn,
+            run,
+            ticket_id=None,
+            milestone_id=None,
+            role="developer",
+            agent=LOCAL,
+            attempt=1,
+            started=NOW.isoformat(),
+        )
+        metrics.update_running_job(conn, job_id, tokens_in=10_000, steps=5)
+    finally:
+        conn.close()
+    html = client.get("/").text
+    words, _, _ = _status(html)
+    assert "Running: developer, job" in words
+
+
+def test_a_due_review_in_next_shows_card_title_not_batch(queue_client, db_path):
+    """f62-02: a due review on f68-… with a title has Next in line show "review F68" linked
+    to /planning/f68, its title and "the lead reads what it built", and not "a batch"."""
+    from runner import metrics
+
+    conn = metrics.open_db(db_path)
+    try:
+        project = conn.execute("SELECT id FROM projects WHERE name = ?", (PROJECT,)).fetchone()[
+            "id"
+        ]
+        metrics.upsert_milestone(
+            conn,
+            project,
+            "f68-the-factory-is-softfield",
+            title="The factory is softfield",
+            status=metrics.REVIEW_DUE,
+        )
+    finally:
+        conn.close()
+
+    html = queue_client.get("/live").text
+    queue_section = section(html, "queue")
+    queue_raw = section_raw(html, "queue")
+    next_section = queue_section.split("Next in line", 1)[1]
+    assert "review F68" in next_section
+    assert 'href="/planning/f68?' in queue_raw
+    assert "The factory is softfield" in next_section
+    assert "the lead reads what it built" in next_section
+    assert "a batch" not in next_section

@@ -649,6 +649,9 @@ def test_a_due_review_heads_the_queue_as_a_batch_crate(line_db):
         "title": "review F8",
         "kind": "batch",
         "milestone": "f8",
+        "card_title": "Ripe one",
+        "card_key": "f8",
+        "project": PROJECT,
         "number": 1,
         "waits": [],
     }
@@ -700,6 +703,9 @@ def test_a_parked_review_waits_behind_the_tickets_that_can_run(line_db, status):
         "title": "review F8",
         "kind": "batch",
         "milestone": "f8",
+        "card_title": "Ripe one",
+        "card_key": "f8",
+        "project": PROJECT,
         "number": 3,
         "waits": [reset],
     }

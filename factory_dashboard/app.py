@@ -350,7 +350,12 @@ def factory_status(conn: sqlite3.Connection, project: str, now: datetime) -> Sta
     activity = next((r.activity for r in runs if r.activity), None) or PICKING
     # which job, still (the owner, 2026-10-08: the bar lost it), or the run's own work (F184)
     if job:
-        doing = job.ticket or f"{job.role}, job {job.job}"
+        if job.ticket:
+            doing = job.ticket
+        elif job.job_card:
+            doing = f"{job.role} {job.job_card['key']}"
+        else:
+            doing = f"{job.role}, job {job.job}"
     elif waiting or activity == PICKING or activity.startswith(IDLE):
         doing = "this job"
     else:

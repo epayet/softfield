@@ -607,9 +607,10 @@ def _due_reviews(conn: sqlite3.Connection, project: str, now: datetime) -> list[
             if until > now:
                 parked[job["subject"]] = until
     keys = [
-        r["key"]
+        r
         for r in conn.execute(
-            "SELECT m.key, m.status FROM milestones m JOIN projects p ON p.id = m.project_id"
+            "SELECT m.key, m.title, m.status "
+            "FROM milestones m JOIN projects p ON p.id = m.project_id"
             " WHERE p.name = ? AND m.status IN (?, 'review')",
             (project, metrics.REVIEW_DUE),
         )
@@ -619,14 +620,19 @@ def _due_reviews(conn: sqlite3.Connection, project: str, now: datetime) -> list[
         {
             "ticket": None,
             "role": "review",
-            "title": f"review {short_key(key).upper()}",
+            "title": f"review {short_key(r['key']).upper()}",
             "kind": "batch",
-            "milestone": key,
+            "milestone": r["key"],
+            "card_title": r["title"],
+            "card_key": short_key(r["key"]),
+            "project": project,
             "waits": (
-                [f"Claude's reset at {parked[key].astimezone():%H:%M}"] if key in parked else []
+                [f"Claude's reset at {parked[r['key']].astimezone():%H:%M}"]
+                if r["key"] in parked
+                else []
             ),
         }
-        for key in sorted(keys, key=milestone_order)
+        for r in sorted(keys, key=lambda x: milestone_order(x["key"]))
     ]
 
 

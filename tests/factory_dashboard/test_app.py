@@ -2964,7 +2964,7 @@ def test_factory_wide_status_ranks_live_job_before_between_jobs(db_path):
 
 
 def test_factory_wide_status_ranks_planner_job(db_path):
-    """D1: a planner job shows ``planner, job <id>`` with the lead's dot."""
+    """D1: a planner job with a milestone shows the card name with the lead's dot."""
     from factory_dashboard.app import PICKING, factory_wide_status
 
     conn = metrics.open_db(db_path)
@@ -2993,7 +2993,7 @@ def test_factory_wide_status_ranks_planner_job(db_path):
             started=(NOW - timedelta(minutes=25)).isoformat(),
             heartbeat=(NOW - timedelta(seconds=10)).isoformat(),
         )
-        job_id = metrics.start_job(
+        metrics.start_job(
             conn,
             sf_run,
             ticket_id=None,
@@ -3004,7 +3004,7 @@ def test_factory_wide_status_ranks_planner_job(db_path):
             started=(NOW - timedelta(minutes=12)).isoformat(),
         )
         status = factory_wide_status(conn, PROJECT, NOW)
-        assert status.words == f"Running: softfield · planner, job {job_id}"
+        assert status.words == "Running: softfield · planner F1"
         assert status.dot == "lead"
     finally:
         conn.close()
@@ -3366,7 +3366,7 @@ def booted(monkeypatch):
 
 def _uptime(html: str) -> tuple[str, str] | None:
     """The top bar's "On" plate: its words and its title; None when there is none."""
-    block = re.search(r'<div id="factory-status"[^>]*>(.*?)\n</div>', html, re.S)
+    block = re.search(r'<div id="factory-status"[^>]*>(.*?)\s*</div>', html, re.S)
     assert block, "no #factory-status"
     plate = re.search(
         r'<span class="uptime" title="([^"]*)"><span class="key"><svg[^>]*>.*?</svg>(\w+)</span>'
