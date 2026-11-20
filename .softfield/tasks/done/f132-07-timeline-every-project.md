@@ -28,3 +28,12 @@ Read `.softfield/cards/f132-the-overview-shows-the-whole-factory.md` ("What happ
 - `current_milestone` is gone
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 2
+duration_s: 5249
+gate_failures: ['task-tests']
+tokens: 6531274
+```
