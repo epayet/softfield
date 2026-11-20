@@ -50,6 +50,8 @@ def timeline_data(
         if milestone:
             conditions.append("m.key = ?")
             params.append(milestone)
+            conditions.append("p.name = ?")
+            params.append(project)
         if run:
             conditions.append("r.run_dir = ?")
             params.append(run)

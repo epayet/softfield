@@ -178,12 +178,46 @@ def multi_project_runs_client(db_path: Path):
 
 def test_runs_shows_every_project(multi_project_runs_client):
     html = multi_project_runs_client.get("/runs").text
-    assert "proj" in html
-    assert "coucou" in html
-    assert "other" in html
+    rows = re.findall(r"<tr>(.*?)</tr>", html, re.S)
+    tbody_rows = [r for r in rows if "<td" in r and "<th" not in r]
+    projects_in_rows: dict[str, bool] = {}
+    proj_count = 0
+    for row in tbody_rows:
+        td_match = re.search(r'<td class="proj">(.*?)</td>', row, re.S)
+        assert td_match, f"no Project cell in row with {row[:80]}"
+        proj_count += 1
+        cell_text = re.sub(r"<[^>]+>", " ", td_match.group(1)).strip()
+        projects_in_rows[cell_text] = True
+    assert proj_count > 0, "no Project cells found"
+    assert "coucou" in projects_in_rows
+    assert "other" in projects_in_rows
 
 
 def test_run_page_opens_for_any_project(multi_project_runs_client):
     html = multi_project_runs_client.get("/runs/20261003-100000").text
     info = section(html, "info")
     assert "merged" in info
+
+
+@pytest.fixture
+def single_project_runs_client(db_path: Path) -> TestClient:
+    """A client with only the coucou project (no Project column on Runs)."""
+    from factory_dashboard.app import create_app, get_now
+
+    conn = open_db(db_path)
+    try:
+        write_fixture(conn)
+        write_runs(conn)
+    finally:
+        conn.close()
+
+    app = create_app(db_path, PROJECT)
+    app.dependency_overrides[get_now] = lambda: NOW
+    return TestClient(app, base_url="http://127.0.0.1:8765")
+
+
+def test_with_one_project_runs_has_no_project_column(single_project_runs_client):
+    html = single_project_runs_client.get("/runs").text
+    rows = re.findall(r"<tr>(.*?)</tr>", html, re.S)
+    thead = [r for r in rows if "<th" in r]
+    assert not any("Project" in r for r in thead), "single project should not show Project column"

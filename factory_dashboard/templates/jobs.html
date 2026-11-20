@@ -27,13 +27,13 @@
 
   {% if jobs %}
   <div class="scroll"><table>
-    <thead><tr><th>Project</th><th>Started</th><th>Link</th><th>Ticket</th><th>Role</th><th>Agent</th><th>Attempt</th><th>Outcome</th><th>Min</th><th>In</th><th>Out</th><th>Failed gate</th></tr></thead>
+    <thead><tr>{% if many_projects %}<th>Project</th>{% endif %}<th>Started</th><th>Link</th><th>Ticket</th><th>Role</th><th>Agent</th><th>Attempt</th><th>Outcome</th><th>Min</th><th>In</th><th>Out</th><th>Failed gate</th></tr></thead>
     <tbody>
       {% for job in jobs %}
       <tr>
-        <td class="proj">{% with name=job.project %}{% include "_partials/project_plate.html" %}{% endwith %}</td>
+        <td class="proj">{% if many_projects %}{% with name=job.project %}{% include "_partials/project_plate.html" %}{% endwith %}{% else %}{{ job.project }}{% endif %}</td>
         <td class="time">{{ job.started | local }}</td>
-        <td class="id"><a href="/jobs/{{ job.id }}{{ q }}&project={{ job.project | urlencode }}">{{ job.id }}</a></td>
+        <td class="id"><a href="/jobs/{{ job.id }}?project={{ job.project | urlencode }}">{{ job.id }}</a></td>
         <td class="id">{% if job.ticket %}<a href="/tickets/{{ job.ticket }}?project={{ job.project | urlencode }}">{{ job.ticket }}</a>{% else %}–{% endif %}</td>
         <td>{{ job.role }}</td>
         <td>{{ job.agent }}</td>

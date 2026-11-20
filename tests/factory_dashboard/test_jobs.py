@@ -326,6 +326,50 @@ def test_jobs_shows_every_project_newest_first(multi_project_jobs_client):
 
 def test_jobs_shows_plates_for_each_project(multi_project_jobs_client):
     html = multi_project_jobs_client.get("/jobs").text
+    rows = re.findall(r"<tr>(.*?)</tr>", html, re.S)
+    tbody_rows = [r for r in rows if "<td" in r and "<th" not in r]
+    projects_in_rows: dict[str, bool] = {}
+    proj_count = 0
+    for row in tbody_rows:
+        td_match = re.search(r'<td class="proj">(.*?)</td>', row, re.S)
+        assert td_match, f"no Project cell in row with {row[:80]}"
+        proj_count += 1
+        cell_text = re.sub(r"<[^>]+>", " ", td_match.group(1)).strip()
+        projects_in_rows[cell_text] = True
+    assert proj_count > 0, "no Project cells found"
+    assert "coucou" in projects_in_rows
+    assert "other" in projects_in_rows
+
+
+@pytest.fixture
+def single_project_jobs_client(db_path: Path) -> TestClient:
+    """A client with only the coucou project (no Project column on Jobs)."""
+    from factory_dashboard.app import create_app, get_now
+
+    conn = open_db(db_path)
+    try:
+        write_jobs(conn)
+    finally:
+        conn.close()
+
+    app = create_app(db_path, PROJECT)
+    app.dependency_overrides[get_now] = lambda: NOW
+    return TestClient(app, base_url="http://127.0.0.1:8765")
+
+
+def test_with_one_project_jobs_has_no_project_column(single_project_jobs_client):
+    html = single_project_jobs_client.get("/jobs").text
+    rows = re.findall(r"<tr>(.*?)</tr>", html, re.S)
+    thead = [r for r in rows if "<th" in r]
+    assert not any("Project" in r for r in thead), "single project should not show Project column"
+
+
+def test_job_detail_page_shows_own_project(client_with_jobs):
+    """A job page's top bar and links carry its own project, never the ticket's name."""
+    client, failed_id, _ = client_with_jobs
+    html = client.get(f"/jobs/{failed_id}").text
+    # The project plate should show "coucou" in the top bar area
     assert "proj" in html
     assert "coucou" in html
-    assert "other" in html
+    # Links should carry ?project=coucou, not the ticket id
+    assert "?project=coucou" in html

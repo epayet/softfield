@@ -22,6 +22,7 @@ from tests.factory_dashboard.conftest import (
     SONNET,
     _at,
     write_f1_run,
+    write_fixture,
     write_live,
 )
 
@@ -300,20 +301,33 @@ def test_timeline_run_filter_no_jobs_in_milestone(timeline_run_no_jobs_client):
 def test_timeline_shows_every_projects_bars(two_project_client):
     """The timeline shows bars from every project, not just the picked one."""
     html = two_project_client.get("/timeline").text
-    data = charts(html)
-    projects = {bar["project"] for lane in data["timeline"]["lanes"] for bar in lane["bars"]}
-    assert PROJECT in projects
-    assert "travel-companion" in projects
+    projects_in_rows: dict[str, bool] = {}
+    tbody = re.search(r'<section id="jobs".*?</section>', html, re.S)
+    assert tbody
+    proj_count = 0
+    for row in re.findall(r"<tr>(.*?)</tr>", tbody[0], re.S):
+        if "<th" in row:
+            continue
+        # The Project column is the second <td> in each row
+        td_matches = re.findall(r"<td[^>]*>(.*?)</td>", row, re.S)
+        assert len(td_matches) >= 2, f"expected at least 2 cells in row with {row[:80]}"
+        proj_count += 1
+        cell_text = re.sub(r"<[^>]+>", " ", td_matches[1]).strip()
+        projects_in_rows[cell_text] = True
+    assert proj_count > 0, "no Project cells found"
+    assert PROJECT in projects_in_rows
+    assert "travel-companion" in projects_in_rows
 
 
 def test_milestone_filter_shows_only_that_milestones_bars(two_project_with_m1_client):
-    """?milestone= of a travel-companion milestone shows its bars only."""
-    html = two_project_with_m1_client.get("/timeline?milestone=tc-m1").text
-    data = charts(html)
-    total_bars = sum(len(lane["bars"]) for lane in data["timeline"]["lanes"])
-    assert total_bars == 1
-    tickets = {bar["ticket"] for lane in data["timeline"]["lanes"] for bar in lane["bars"]}
-    assert tickets == {"m1-01-test"}
+    """?milestone= filters to the current project's milestone only."""
+    html = two_project_with_m1_client.get("/timeline?milestone=f1").text
+    projects = {
+        bar["project"] for lane in charts(html)["timeline"]["lanes"] for bar in lane["bars"]
+    }
+    # The milestone filter is scoped to the current project, so only coucou's f1 jobs appear
+    assert PROJECT in projects
+    assert "travel-companion" not in projects
 
 
 def test_each_bars_link_carries_its_project(two_project_client):
@@ -438,6 +452,133 @@ def two_project_with_m1_client(db_path: Path) -> TestClient:
     app = create_app(db_path, PROJECT)
     app.dependency_overrides[get_now] = lambda: NOW
     return TestClient(app, base_url="http://127.0.0.1:8765")
+
+
+@pytest.fixture
+def single_project_timeline_client(db_path: Path) -> TestClient:
+    """A client with only the coucou project (no Project column on Timeline)."""
+    conn = open_db(db_path)
+    try:
+        write_fixture(conn)
+    finally:
+        conn.close()
+
+    app = create_app(db_path, PROJECT)
+    app.dependency_overrides[get_now] = lambda: NOW
+    return TestClient(app, base_url="http://127.0.0.1:8765")
+
+
+def test_with_one_project_timeline_has_no_project_column(single_project_timeline_client):
+    html = single_project_timeline_client.get("/timeline").text
+    rows = re.findall(r"<tr>(.*?)</tr>", html, re.S)
+    thead = [r for r in rows if "<th" in r]
+    assert not any("Project" in r for r in thead), "single project should not show Project column"
+
+
+@pytest.fixture
+def two_project_same_milestone_key_client(db_path: Path) -> TestClient:
+    """Two projects that both have a milestone with key ``m1``."""
+    conn = open_db(db_path)
+    try:
+        write_fixture(conn)
+        write_live(conn, timedelta(seconds=30))
+        # Add an m1 milestone with a job in the current PROJECT (coucou)
+        project = metrics.upsert_project(conn, PROJECT)
+        proj_m1 = metrics.upsert_milestone(
+            conn,
+            project,
+            "m1",
+            title="Coucou m1",
+            started=(NOW - timedelta(hours=12)).isoformat(),
+        )
+        proj_run = metrics.upsert_run(
+            conn,
+            project,
+            (NOW - timedelta(hours=6)).strftime("%Y%m%d-%H%M%S"),
+        )
+        proj_ticket = metrics.upsert_ticket(
+            conn,
+            project,
+            "proj-m1-job",
+            milestone_id=proj_m1,
+            kind="developer",
+            state="done",
+        )
+        metrics.start_job(
+            conn,
+            proj_run,
+            ticket_id=proj_ticket,
+            milestone_id=proj_m1,
+            role="developer",
+            agent=OPUS,
+            attempt=1,
+            started=(NOW - timedelta(hours=5)).isoformat(),
+        )
+        metrics.finish_job(
+            conn,
+            proj_run,
+            ended=(NOW - timedelta(hours=4)).isoformat(),
+            outcome="passed",
+            tokens_in=10_000,
+            tokens_out=1_000,
+        )
+        # Add another project with its own m1 milestone
+        tc_project = metrics.upsert_project(conn, "travel-companion")
+        tc_m1 = metrics.upsert_milestone(
+            conn,
+            tc_project,
+            "m1",
+            title="Travel companion m1",
+            started=(NOW - timedelta(hours=12)).isoformat(),
+        )
+        tc_run = metrics.upsert_run(
+            conn,
+            tc_project,
+            (NOW - timedelta(hours=6)).strftime("%Y%m%d-%H%M%S"),
+        )
+        tc_ticket = metrics.upsert_ticket(
+            conn,
+            tc_project,
+            "tc-m1-job",
+            milestone_id=tc_m1,
+            kind="developer",
+            state="done",
+        )
+        metrics.start_job(
+            conn,
+            tc_run,
+            ticket_id=tc_ticket,
+            milestone_id=tc_m1,
+            role="developer",
+            agent=LOCAL,
+            attempt=1,
+            started=(NOW - timedelta(hours=5)).isoformat(),
+        )
+        metrics.finish_job(
+            conn,
+            tc_run,
+            ended=(NOW - timedelta(hours=4)).isoformat(),
+            outcome="passed",
+            tokens_in=10_000,
+            tokens_out=1_000,
+        )
+    finally:
+        conn.close()
+
+    app = create_app(db_path, PROJECT)
+    app.dependency_overrides[get_now] = lambda: NOW
+    return TestClient(app, base_url="http://127.0.0.1:8765")
+
+
+def test_milestone_filter_scoped_to_project(two_project_same_milestone_key_client):
+    """When two projects share the same milestone key, filtering shows only the current project."""
+    html = two_project_same_milestone_key_client.get("/timeline?milestone=m1").text
+    projects = {
+        bar["project"] for lane in charts(html)["timeline"]["lanes"] for bar in lane["bars"]
+    }
+    # Only coucou's m1 should show (the picked project), not travel-companion's
+    assert PROJECT in projects
+    assert "travel-companion" not in projects
 
 
 @pytest.fixture

@@ -37,14 +37,14 @@
   <h2>Jobs</h2>
   <table>
     <thead>
-      <tr><th>Ticket</th><th>Project</th><th>Agent</th><th>Role</th><th>Started</th><th>Ended</th><th>Outcome</th></tr>
+      <tr><th>Ticket</th>{% if many_projects %}<th>Project</th>{% endif %}<th>Agent</th><th>Role</th><th>Started</th><th>Ended</th><th>Outcome</th></tr>
     </thead>
     <tbody>
       {% for lane in data.lanes %}
       {% for bar in lane.bars %}
       <tr>
-        <td><a href="/jobs/{{ bar.job_id }}?project={{ bar.project }}">{% if bar.ticket %}{{ bar.ticket }}{% else %}&ndash;{% endif %}</a></td>
-        <td>{{ bar.project }}</td>
+        <td><a href="/jobs/{{ bar.job_id }}?project={{ bar.project | urlencode }}">{% if bar.ticket %}{{ bar.ticket }}{% else %}&ndash;{% endif %}</a></td>
+        <td>{% if many_projects %}{% with name=bar.project %}{% include "_partials/project_plate.html" %}{% endwith %}{% else %}{{ bar.project }}{% endif %}</td>
         <td>{{ lane.agent }}</td>
         <td>{{ bar.role }}</td>
         <td>{{ bar.start | local }}</td>

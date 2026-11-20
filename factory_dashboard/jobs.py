@@ -65,6 +65,7 @@ class JobDetail:
     findings: list[FindingRow]
     ticket: str | None
     milestone_key: str | None
+    project: str
 
 
 def _parse_gates(gates_json: str | None) -> list[dict[str, object]] | None:
@@ -91,7 +92,7 @@ def get_job_detail(conn: sqlite3.Connection, job_id: int) -> JobDetail | None:
         "j.tokens_out, j.requests, j.cost_usd, j.steps, "
         "j.peak_context, j.context_limit, j.edit_streak, j.refused_commands, "
         "j.gates, j.note, j.session_id, j.log_path, "
-        "t.ticket, m.key AS milestone_key "
+        "t.ticket, m.key AS milestone_key, p.name AS project_name "
         "FROM jobs j "
         "JOIN runs r ON r.id = j.run_id "
         "JOIN projects p ON p.id = r.project_id "
@@ -147,6 +148,7 @@ def get_job_detail(conn: sqlite3.Connection, job_id: int) -> JobDetail | None:
         findings=findings,
         ticket=row["ticket"],
         milestone_key=row["milestone_key"],
+        project=row["project_name"],
     )
 
 
@@ -280,7 +282,7 @@ def job_page(job_id: int, request: Request, conn: Db, project: Project) -> HTMLR
     return render(
         request,
         conn,
-        detail.ticket or project,
+        detail.project,
         "job.html",
         {
             "active": "/jobs",
