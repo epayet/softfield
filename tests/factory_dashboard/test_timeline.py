@@ -20,9 +20,9 @@ from tests.factory_dashboard.conftest import (
     OPUS,
     PROJECT,
     SONNET,
+    _at,
     write_f1_run,
     write_live,
-    write_m1_jobs,
 )
 
 
@@ -46,12 +46,12 @@ def _add_f2_jobs(conn: sqlite3.Connection) -> None:
         role="developer",
         agent=LOCAL,
         attempt=1,
-        started="2026-10-02T10:00:00+02:00",
+        started="2026-10-02T12:00:00+02:00",
     )
     runner_metrics.finish_job(
         conn,
         job1,
-        ended="2026-10-02T10:05:00+02:00",
+        ended="2026-10-02T12:10:00+02:00",
         outcome="passed",
         tokens_in=10_000,
         tokens_out=1_000,
@@ -67,16 +67,47 @@ def _add_f2_jobs(conn: sqlite3.Connection) -> None:
         role="developer",
         agent=SONNET,
         attempt=1,
-        started="2026-10-02T10:10:00+02:00",
+        started="2026-10-02T12:10:00+02:00",
     )
     runner_metrics.finish_job(
         conn,
         job2,
-        ended="2026-10-02T10:15:00+02:00",
+        ended="2026-10-02T12:15:00+02:00",
         outcome="passed",
         tokens_in=10_000,
         tokens_out=1_000,
     )
+
+
+def write_recent_m1_jobs(conn: sqlite3.Connection) -> int:
+    """An m1 milestone within the last 24 hours with a job, for the timeline milestone filter."""
+    project = metrics.upsert_project(conn, PROJECT)
+    m1 = metrics.upsert_milestone(
+        conn, project, "m1", title="Milestone one", started=_at(timedelta(hours=12))
+    )
+    m1_run = metrics.upsert_run(conn, project, "20261002-000000")
+    ticket = metrics.upsert_ticket(
+        conn, project, "m1-01-test", milestone_id=m1, kind="developer", state="done"
+    )
+    job = metrics.start_job(
+        conn,
+        m1_run,
+        ticket_id=ticket,
+        milestone_id=m1,
+        role="developer",
+        agent=LOCAL,
+        attempt=1,
+        started=(NOW - timedelta(hours=11)).isoformat(),
+    )
+    metrics.finish_job(
+        conn,
+        job,
+        ended=(NOW - timedelta(hours=10)).isoformat(),
+        outcome="passed",
+        tokens_in=10_000,
+        tokens_out=1_000,
+    )
+    return m1
 
 
 def charts(html: str) -> dict[str, Any]:
@@ -119,13 +150,13 @@ def test_json_block_has_one_lane_per_agent_and_one_bar_per_job(client):
     data = charts(html)
     assert "timeline" in data
     lanes = data["timeline"]["lanes"]
-    # 3 agents with jobs in f1
-    assert len(lanes) == 3
+    # Only LOCAL and OPUS have jobs within the last 24 hours
+    assert len(lanes) == 2
     agents = {lane["agent"] for lane in lanes}
-    assert agents == {LOCAL, OPUS, SONNET}
-    # Total bars = 12 (9 from write_fixture + 1 running from write_live + 2 from write_f1_run)
+    assert agents == {LOCAL, OPUS}
+    # Total bars: 2 from write_f1_run + 1 running from write_live + 1 from other project
     total_bars = sum(len(lane["bars"]) for lane in lanes)
-    assert total_bars == 12
+    assert total_bars == 4
     # Each bar has the required fields
     for lane in lanes:
         for bar in lane["bars"]:
@@ -134,12 +165,13 @@ def test_json_block_has_one_lane_per_agent_and_one_bar_per_job(client):
             assert "outcome" in bar
             assert "start" in bar
             assert "end" in bar
+            assert "project" in bar
 
 
 def test_running_job_bar_ends_at_render_time(client):
     html = client.get("/timeline").text
     data = charts(html)
-    # Find the running job
+    # Find the running job (only within last 24 hours)
     found = False
     for lane in data["timeline"]["lanes"]:
         for bar in lane["bars"]:
@@ -171,14 +203,13 @@ def test_milestone_filter_shows_only_that_milestones_jobs(client_with_m1):
 
 
 def test_empty_milestone_returns_all_milestones(client_with_m1):
-    """?milestone= (empty) shows jobs from every milestone."""
+    """?milestone= (empty) shows jobs from the last 24 hours across all milestones."""
     html = client_with_m1.get("/timeline?milestone=").text
     data = charts(html)
     total_bars = sum(len(lane["bars"]) for lane in data["timeline"]["lanes"])
-    assert total_bars > 1
+    assert total_bars == 1
     tickets = {bar["ticket"] for lane in data["timeline"]["lanes"] for bar in lane["bars"]}
     assert "m1-01-test" in tickets
-    assert "f1-01-first" in tickets
 
 
 def test_milestone_filter_with_f2(client_with_f2):
@@ -189,20 +220,6 @@ def test_milestone_filter_with_f2(client_with_f2):
     assert total_bars == 2
     tickets = {bar["ticket"] for lane in data["timeline"]["lanes"] for bar in lane["bars"]}
     assert tickets == {"f2-01-test", "f2-02-test"}
-
-
-def test_no_milestone_param_uses_default(client):
-    """No milestone parameter falls back to the current milestone."""
-    html = client.get("/timeline").text
-    data = charts(html)
-    total_bars = sum(len(lane["bars"]) for lane in data["timeline"]["lanes"])
-    # Only f1 jobs (default milestone): 9 from write_fixture
-    # + 1 running from write_live + 2 from write_f1_run
-    assert total_bars == 12
-    tickets = {bar["ticket"] for lane in data["timeline"]["lanes"] for bar in lane["bars"]}
-    assert "f1-01-first" in tickets
-    assert "f1-02-escalated" in tickets
-    assert "m1-01-test" not in tickets
 
 
 def test_form_preserves_project(client):
@@ -236,7 +253,7 @@ def test_timeline_bar_has_job_id(client):
 
 
 def test_timeline_milestone_select_shows_filter(client):
-    """The milestone select shows the filter actually applied, not 'All milestones'."""
+    """The milestone select shows 'All milestones' when no filter is applied."""
     html = client.get("/timeline").text
     # Read the select's raw HTML to find the selected option.
     select_match = re.search(r'<select[^>]*name="milestone"[^>]*>(.*?)</select>', html, re.S)
@@ -246,7 +263,7 @@ def test_timeline_milestone_select_shows_filter(client):
     selected_match = re.search(r"<option[^>]*\bselected\b[^>]*>(.*?)</option>", select_html, re.S)
     assert selected_match, "no selected option in milestone select"
     selected_text = re.sub(r"<[^>]+>", " ", selected_match.group(1)).strip()
-    assert selected_text == "F1"
+    assert selected_text == "All milestones"
 
 
 def test_timeline_milestone_select_non_default(client_with_m1):
@@ -273,11 +290,154 @@ def test_timeline_run_filter(client):
 
 
 def test_timeline_run_filter_no_jobs_in_milestone(timeline_run_no_jobs_client):
-    """A run with no jobs in the default milestone shows 0 bars."""
+    """A run filter without the 24 h window shows that run's jobs."""
     html = timeline_run_no_jobs_client.get("/timeline?run=20260922-100000").text
     data = charts(html)
     total_bars = sum(len(lane["bars"]) for lane in data["timeline"]["lanes"])
-    assert total_bars == 0
+    assert total_bars == 1
+
+
+def test_timeline_shows_every_projects_bars(two_project_client):
+    """The timeline shows bars from every project, not just the picked one."""
+    html = two_project_client.get("/timeline").text
+    data = charts(html)
+    projects = {bar["project"] for lane in data["timeline"]["lanes"] for bar in lane["bars"]}
+    assert PROJECT in projects
+    assert "travel-companion" in projects
+
+
+def test_milestone_filter_shows_only_that_milestones_bars(two_project_with_m1_client):
+    """?milestone= of a travel-companion milestone shows its bars only."""
+    html = two_project_with_m1_client.get("/timeline?milestone=tc-m1").text
+    data = charts(html)
+    total_bars = sum(len(lane["bars"]) for lane in data["timeline"]["lanes"])
+    assert total_bars == 1
+    tickets = {bar["ticket"] for lane in data["timeline"]["lanes"] for bar in lane["bars"]}
+    assert tickets == {"m1-01-test"}
+
+
+def test_each_bars_link_carries_its_project(two_project_client):
+    """Each bar's link opens its job with its own project."""
+    html = two_project_client.get("/timeline").text
+    data = charts(html)["timeline"]
+    # Verify each bar in JSON has a project, and the HTML renders the href correctly
+    for lane in data["lanes"]:
+        for bar in lane["bars"]:
+            assert "project" in bar
+            assert bar["project"]
+            # The href in HTML should contain the job_id and project
+            expected = f"/jobs/{bar['job_id']}?project={bar['project']}"
+            assert expected in html, f"Expected {expected!r} in HTML but not found"
+
+
+@pytest.fixture
+def two_project_client(db_path: Path) -> TestClient:
+    """A client with jobs from both coucou and travel-companion in the last 24 hours."""
+    conn = open_db(db_path)
+    try:
+        write_live(conn, timedelta(seconds=30))
+        write_f1_run(conn)
+        # Add a project "travel-companion" with a job within 24 hours
+        tc_project = metrics.upsert_project(conn, "travel-companion")
+        tc_m1 = metrics.upsert_milestone(
+            conn,
+            tc_project,
+            "m1",
+            title="Travel companion milestone",
+            started=(NOW - timedelta(hours=12)).isoformat(),
+        )
+        tc_run = metrics.upsert_run(
+            conn,
+            tc_project,
+            (NOW - timedelta(hours=6)).strftime("%Y%m%d-%H%M%S"),
+        )
+        tc_ticket = metrics.upsert_ticket(
+            conn,
+            tc_project,
+            "tc-01-test",
+            milestone_id=tc_m1,
+            kind="developer",
+            state="done",
+        )
+        tc_job = metrics.start_job(
+            conn,
+            tc_run,
+            ticket_id=tc_ticket,
+            milestone_id=tc_m1,
+            role="developer",
+            agent=OPUS,
+            attempt=1,
+            started=(NOW - timedelta(hours=5)).isoformat(),
+        )
+        metrics.finish_job(
+            conn,
+            tc_job,
+            ended=(NOW - timedelta(hours=4)).isoformat(),
+            outcome="passed",
+            tokens_in=10_000,
+            tokens_out=1_000,
+        )
+    finally:
+        conn.close()
+
+    app = create_app(db_path, PROJECT)
+    app.dependency_overrides[get_now] = lambda: NOW
+    return TestClient(app, base_url="http://127.0.0.1:8765")
+
+
+@pytest.fixture
+def two_project_with_m1_client(db_path: Path) -> TestClient:
+    """A client with jobs from both projects plus an m1 milestone in travel-companion."""
+    conn = open_db(db_path)
+    try:
+        write_live(conn, timedelta(seconds=30))
+        write_f1_run(conn)
+        # travel-companion with an m1 milestone
+        tc_project = metrics.upsert_project(conn, "travel-companion")
+        tc_m1 = metrics.upsert_milestone(
+            conn,
+            tc_project,
+            "tc-m1",
+            title="Travel companion milestone",
+            started=(NOW - timedelta(hours=12)).isoformat(),
+        )
+        tc_run = metrics.upsert_run(
+            conn,
+            tc_project,
+            (NOW - timedelta(hours=6)).strftime("%Y%m%d-%H%M%S"),
+        )
+        tc_ticket = metrics.upsert_ticket(
+            conn,
+            tc_project,
+            "m1-01-test",
+            milestone_id=tc_m1,
+            kind="developer",
+            state="done",
+        )
+        tc_job = metrics.start_job(
+            conn,
+            tc_run,
+            ticket_id=tc_ticket,
+            milestone_id=tc_m1,
+            role="developer",
+            agent=OPUS,
+            attempt=1,
+            started=(NOW - timedelta(hours=5)).isoformat(),
+        )
+        metrics.finish_job(
+            conn,
+            tc_job,
+            ended=(NOW - timedelta(hours=4)).isoformat(),
+            outcome="passed",
+            tokens_in=10_000,
+            tokens_out=1_000,
+        )
+    finally:
+        conn.close()
+
+    app = create_app(db_path, PROJECT)
+    app.dependency_overrides[get_now] = lambda: NOW
+    return TestClient(app, base_url="http://127.0.0.1:8765")
 
 
 @pytest.fixture
@@ -299,10 +459,10 @@ def client(db_path: Path) -> TestClient:
 
 @pytest.fixture
 def client_with_m1(db_path: Path) -> TestClient:
-    """A client over the fixture plus an m1 milestone with jobs."""
+    """A client over the fixture plus a recent m1 milestone with jobs."""
     conn = open_db(db_path)
     try:
-        write_m1_jobs(conn)
+        write_recent_m1_jobs(conn)
     finally:
         conn.close()
 

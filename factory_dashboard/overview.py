@@ -621,20 +621,6 @@ _OVERVIEW_TITLES = {
 }
 
 
-# --- the allowance, current milestone ---------------------------------------------
-
-
-def current_milestone(conn: sqlite3.Connection, project: str) -> sqlite3.Row | None:
-    """The newest milestone not done yet, or the newest one."""
-    row: sqlite3.Row | None = conn.execute(
-        "SELECT m.key, m.title, m.status, m.verdict FROM milestones m"
-        " JOIN projects p ON p.id = m.project_id WHERE p.name = ?"
-        " ORDER BY m.status IS 'done', m.started DESC, m.id DESC LIMIT 1",
-        (project,),
-    ).fetchone()
-    return row
-
-
 # --- the allowance ---------------------------------------------
 
 

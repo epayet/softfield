@@ -1205,12 +1205,12 @@ def write_f1_run(conn: sqlite3.Connection) -> None:
         role="developer",
         agent=LOCAL,
         attempt=1,
-        started="2026-10-01T10:00:00+02:00",
+        started=_at(timedelta(hours=5)),
     )
     metrics.finish_job(
         conn,
         job1,
-        ended="2026-10-01T10:05:00+02:00",
+        ended=_at(timedelta(hours=4, minutes=55)),
         outcome="failed",
         tokens_in=10_000,
         tokens_out=1_000,
@@ -1223,12 +1223,12 @@ def write_f1_run(conn: sqlite3.Connection) -> None:
         role="escalation",
         agent=OPUS,
         attempt=1,
-        started="2026-10-01T10:06:00+02:00",
+        started=_at(timedelta(hours=4, minutes=54)),
     )
     metrics.finish_job(
         conn,
         job2,
-        ended="2026-10-01T10:11:00+02:00",
+        ended=_at(timedelta(hours=4, minutes=49)),
         outcome="passed",
         cost_usd=1.0,
         tokens_in=10_000,

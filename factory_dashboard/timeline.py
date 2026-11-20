@@ -2,13 +2,13 @@
 
 import sqlite3
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import HTMLResponse
 
 from factory_dashboard.app import Db, Now, Project, render
-from factory_dashboard.overview import current_milestone
+from factory_dashboard.overview import every_project
 
 router = APIRouter()
 
@@ -22,6 +22,7 @@ class Bar:
     end: str | None
     minutes: float | None
     job_id: int
+    project: str
 
 
 @dataclass(frozen=True)
@@ -38,22 +39,29 @@ def timeline_data(
     run: str | None = None,
     now: datetime,
 ) -> dict[str, object]:
-    """The timeline chart data: lanes per agent, bars per job, refusal markers."""
-    conditions = ["p.name = ?"]
-    params: list[object] = [project]
+    """The timeline chart data: lanes per agent, bars per job, refusal markers.
 
-    if milestone:
-        conditions.append("m.key = ?")
-        params.append(milestone)
-    if run:
-        conditions.append("r.run_dir = ?")
-        params.append(run)
-
-    where = " AND ".join(conditions)
+    With no milestone or run filter, shows jobs from the last 24 hours
+    across every project. A milestone or run filter disables the time window.
+    """
+    if milestone or run:
+        conditions: list[str] = []
+        params: list[object] = []
+        if milestone:
+            conditions.append("m.key = ?")
+            params.append(milestone)
+        if run:
+            conditions.append("r.run_dir = ?")
+            params.append(run)
+        where = " AND ".join(conditions) if conditions else "1=1"
+    else:
+        conditions = ["j.started >= ?"]
+        params = [(now - timedelta(hours=24)).isoformat()]
+        where = " AND ".join(conditions)
 
     rows = conn.execute(
         "SELECT j.id, j.started, j.ended, j.role, j.agent, j.outcome, "
-        "t.ticket "
+        "t.ticket, p.name AS project_name "
         "FROM jobs j "
         "JOIN runs r ON r.id = j.run_id "
         "JOIN projects p ON p.id = r.project_id "
@@ -88,6 +96,7 @@ def timeline_data(
                 end=end_str,
                 minutes=round(minutes) if minutes is not None else None,
                 job_id=row["id"],
+                project=row["project_name"],
             )
         )
 
@@ -117,6 +126,7 @@ def timeline_data(
                         "end": b.end,
                         "minutes": b.minutes,
                         "job_id": b.job_id,
+                        "project": b.project,
                     }
                     for b in agent_bars[agent]
                 ],
@@ -139,14 +149,9 @@ def timeline_page(
     run: str | None = Query(default=None),
     now: Now,
 ) -> HTMLResponse:
-    # Get default milestone
-    default_milestone: str | None = None
-    current = current_milestone(conn, project)
-    if current:
-        default_milestone = current["key"]
+    filter_milestone = milestone
 
-    filter_milestone = milestone if milestone is not None else default_milestone
-
+    names = every_project(conn, project)
     data = timeline_data(conn, project, milestone=filter_milestone, run=run, now=now)
 
     milestones = conn.execute(
@@ -175,5 +180,6 @@ def timeline_page(
             "runs": runs,
             "filter_milestone": filter_milestone,
             "run_filter": run,
+            "many_projects": len(names) > 1,
         },
     )

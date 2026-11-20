@@ -9,7 +9,7 @@
     <input type="hidden" name="project" value="{{ project }}" />
     <label>Milestone:
       <select name="milestone">
-        <option value="">All milestones</option>
+        <option value=""{% if not filter_milestone %} selected{% endif %}>All milestones</option>
         {% for m in milestones %}
         <option value="{{ m.key }}"{% if m.key == filter_milestone %} selected{% endif %}>{{ m.key | upper }}</option>
         {% endfor %}
@@ -37,13 +37,14 @@
   <h2>Jobs</h2>
   <table>
     <thead>
-      <tr><th>Ticket</th><th>Agent</th><th>Role</th><th>Started</th><th>Ended</th><th>Outcome</th></tr>
+      <tr><th>Ticket</th><th>Project</th><th>Agent</th><th>Role</th><th>Started</th><th>Ended</th><th>Outcome</th></tr>
     </thead>
     <tbody>
       {% for lane in data.lanes %}
       {% for bar in lane.bars %}
       <tr>
-        <td>{% if bar.ticket %}<a href="/jobs/{{ bar.job_id }}">{{ bar.ticket }}</a>{% else %}&ndash;{% endif %}</td>
+        <td><a href="/jobs/{{ bar.job_id }}?project={{ bar.project }}">{% if bar.ticket %}{{ bar.ticket }}{% else %}&ndash;{% endif %}</a></td>
+        <td>{{ bar.project }}</td>
         <td>{{ lane.agent }}</td>
         <td>{{ bar.role }}</td>
         <td>{{ bar.start | local }}</td>
