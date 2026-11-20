@@ -1,6 +1,7 @@
 # Milestone F194: The menu: Overview, Planning, Board in fixed places, the rest in a sub menu
 
-> **State:** ready · **Area:** factory
+> **State:** done · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-20. Base: git tag `f194-the-menu-is-a-bit-weird-start`. Report: [`.softfield/reviews/f194-the-menu-is-a-bit-weird.md`](../reviews/f194-the-menu-is-a-bit-weird.md).
 > Planted by the owner on 2026-11-02.
 
 ## Notes

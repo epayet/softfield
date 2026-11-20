@@ -1,6 +1,6 @@
 # Review: F194, the menu: Overview, Planning, Board in fixed places, the rest in a sub menu
 
-- **Status:** reviewed (round 1), waiting for the owner's sign-off and the phone check.
+- **Status:** done, signed off by the owner on 2026-11-20.
 
 ## Sign-off sheet
 
