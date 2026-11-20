@@ -30,3 +30,12 @@ f132-09 hid the `<th>Project</th>` header when `many_projects` is false, but eac
 - the picker test reads the chosen option of the page it loads
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 1708
+gate_failures: []
+tokens: 1346913
+```
