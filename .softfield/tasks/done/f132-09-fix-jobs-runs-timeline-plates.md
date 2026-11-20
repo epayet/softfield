@@ -32,3 +32,12 @@ Read `.softfield/cards/f132-the-overview-shows-the-whole-factory.md` (D3) and f1
 - two projects: each row's Project cell holds that row's project plate, checked on the row and not on the page
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 3473
+gate_failures: []
+tokens: 5522586
+```
