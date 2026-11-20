@@ -1272,36 +1272,42 @@ def write_more_jobs(conn: sqlite3.Connection, count: int) -> int:
     project = metrics.upsert_project(conn, PROJECT)
     f1 = metrics.upsert_milestone(conn, project, "f1")
     run = metrics.upsert_run(conn, project, "20260930-100000")
-    last = 0
-    for i in range(count):
-        ticket = metrics.upsert_ticket(
-            conn,
-            project,
-            f"f1-overflow-{i:04d}",
-            milestone_id=f1,
-            kind="developer",
-            state="done",
-            difficulty=3,
-        )
-        job = metrics.start_job(
-            conn,
-            run,
-            ticket_id=ticket,
-            milestone_id=f1,
-            role="developer",
-            agent=LOCAL,
-            attempt=1,
-            started="2026-09-30T11:00:00+02:00",
-        )
-        metrics.finish_job(
-            conn,
-            job,
-            ended="2026-09-30T11:01:00+02:00",
-            outcome="passed",
-            tokens_in=10_000,
-            tokens_out=1_000,
-        )
-        last = job
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        last = 0
+        for i in range(count):
+            ticket = metrics.upsert_ticket(
+                conn,
+                project,
+                f"f1-overflow-{i:04d}",
+                milestone_id=f1,
+                kind="developer",
+                state="done",
+                difficulty=3,
+            )
+            job = metrics.start_job(
+                conn,
+                run,
+                ticket_id=ticket,
+                milestone_id=f1,
+                role="developer",
+                agent=LOCAL,
+                attempt=1,
+                started="2026-09-30T11:00:00+02:00",
+            )
+            metrics.finish_job(
+                conn,
+                job,
+                ended="2026-09-30T11:01:00+02:00",
+                outcome="passed",
+                tokens_in=10_000,
+                tokens_out=1_000,
+            )
+            last = job
+        conn.execute("COMMIT")
+    except BaseException:
+        conn.execute("ROLLBACK")
+        raise
     return last
 
 
