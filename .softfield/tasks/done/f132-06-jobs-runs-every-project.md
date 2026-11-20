@@ -32,3 +32,12 @@ Read `.softfield/cards/f132-the-overview-shows-the-whole-factory.md` (D2–D4).
 - one project only: no plate and no Project column
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 3162
+gate_failures: []
+tokens: 3893781
+```
