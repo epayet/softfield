@@ -457,9 +457,6 @@ def test_the_desk_page_lays_out_at_phone_and_display_sizes(page, planning, db_pa
     assert page.locator("#desk-seeds").is_visible()
     assert page.locator("#desk-refused").is_visible()
     assert page.locator(f"#set-aside-{SECOND}").is_visible()
-    # On a phone the tabs scroll sideways by design, Planning centred, Overview cut off (f3-30:
-    # test_phone_top_bar_is_compact_and_tabs_scroll in test_app.py checks them)
-    page.evaluate("() => document.querySelector('nav.tabs').setAttribute('data-layout', 'overlay')")
     assert layout_problems(page) == []
 
 
@@ -508,7 +505,6 @@ def test_the_planning_room_draws_a_plate_on_every_panel(
     display = "e => getComputedStyle(e).display"
     assert page.locator("#live-desk").evaluate(display) == "contents"
     assert page.locator("#live-desk-coming").evaluate(display) == "contents"
-    page.evaluate("() => document.querySelector('nav.tabs').setAttribute('data-layout', 'overlay')")
     assert layout_problems(page) == []
 
 

@@ -85,11 +85,6 @@
       if (html.includes("version-tag") && window.liveIdle()) location.reload();
     }).catch(() => {});
   });
-  // Scroll the active tab into view on phone (f3-30)
-  document.addEventListener("DOMContentLoaded", () => {
-    const tab = document.querySelector("nav.tabs a[aria-current='page']");
-    if (tab) tab.scrollIntoView({ inline: "center", block: "nearest" });
-  });
   // Theme switch button (f69-01): sets data-theme, stores the choice, dispatches themechange.
   document.addEventListener("DOMContentLoaded", () => {
     var btn = document.getElementById("theme-btn");
@@ -168,6 +163,14 @@
     if (offered === askedKind) event.detail.shouldSwap = false;
     else askedKind = null;
   });
+  // The sub menu (F194 D2) closes on a tap outside it or Escape; the template lights its slot
+  document.addEventListener("click", (event) => {
+    if (!(event.target instanceof Element)) return;
+    document.querySelectorAll("details.more[open]").forEach((d) => { if (!d.contains(event.target)) d.open = false; });
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") document.querySelectorAll("details.more[open]").forEach((d) => { d.open = false; });
+  });
 </script>
 </head>
 <svg width="0" height="0" style="position:absolute"><symbol id="moon" viewBox="0 0 16 16"><path d="M10.5 1.5a6.5 6.5 0 1 0 4 11.2A5.2 5.2 0 0 1 10.5 1.5z" fill="currentColor"/></symbol><symbol id="sun" viewBox="0 0 16 16"><g fill="currentColor"><circle cx="8" cy="8" r="3.2"/><rect x="7.2" y="0" width="1.6" height="3"/><rect x="7.2" y="13" width="1.6" height="3"/><rect x="0" y="7.2" width="3" height="1.6"/><rect x="13" y="7.2" width="3" height="1.6"/><rect x="7.2" y="0" width="1.6" height="3" transform="rotate(45 8 8)"/><rect x="7.2" y="13" width="1.6" height="3" transform="rotate(45 8 8)"/><rect x="0" y="7.2" width="3" height="1.6" transform="rotate(45 8 8)"/><rect x="13" y="7.2" width="3" height="1.6" transform="rotate(45 8 8)"/></g></symbol></svg>
@@ -180,17 +183,33 @@
       <small>{{ request.url.netloc }}</small>
     </a>
     {% include "_partials/bar_status.html" %}
+    <form class="filters" method="get" action="{{ picker_to or active }}">
+      <label>Project
+        <select name="project" onchange="this.form.submit()">
+          {% for name in projects %}
+          <option value="{{ name }}"{% if name == project %} selected{% endif %}>{{ name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <noscript><button>Show</button></noscript>
+    </form>
     <button id="theme-btn" class="theme-switch" role="switch" aria-label="Night theme" aria-checked="false" title="Switch to the light theme"><span class="plate"><span class="knob"></span><svg class="moon"><use href="#moon"/></svg><svg class="sun"><use href="#sun"/></svg></span></button>
   </div>
   {# The version poller sits on the stripe (f38): its "New version" tag hangs over it, so nothing moves #}
   <div class="bar-stripe"><div class="hazard" aria-hidden="true"></div>{{ version_poll | safe }}</div>
-  <nav class="tabs" aria-label="Pages">
-    <a href="/projects{{ q }}"{% if active == "/projects" %} aria-current="page"{% endif %}>Projects</a><a href="/{{ q }}"{% if active == "/" %} aria-current="page"{% endif %}>Overview</a>
-    <span class="bay-group">
-      <span class="picker">Project <form class="filters" method="get" action="{{ picker_to or active }}" style="display:inline"><select name="project" onchange="this.form.submit()">{% for name in projects %}<option value="{{ name }}"{% if name == project %} selected{% endif %}>{{ name }}</option>{% endfor %}</select></form><noscript><button>Show</button></noscript></span>
-      <a href="/planning{{ q }}"{% if active == "/planning" %} aria-current="page"{% endif %} id="planning-tab">Planning{% if planning_count %} · {{ planning_count }}{% endif %}</a><a href="/board{{ q }}"{% if active == "/board" %} aria-current="page"{% endif %}>Board</a><a href="/tickets{{ q }}"{% if active == "/tickets" %} aria-current="page"{% endif %}>Tickets</a>
-    </span>
-    <a href="/jobs{{ q }}"{% if active == "/jobs" %} aria-current="page"{% endif %}>Jobs</a><a href="/runs{{ q }}"{% if active == "/runs" %} aria-current="page"{% endif %}>Runs</a><a href="/timeline{{ q }}"{% if active == "/timeline" %} aria-current="page"{% endif %}>Timeline</a><a href="/agents{{ q }}"{% if active == "/agents" %} aria-current="page"{% endif %}>Agents</a><a href="/bench{{ q }}"{% if active == "/bench" %} aria-current="page"{% endif %}>Bench</a>
+  <nav class="tabs slots" aria-label="Pages">
+    <a href="/{{ q }}"{% if active == "/" %} aria-current="page"{% endif %}>Overview</a><a href="/planning{{ q }}"{% if active == "/planning" %} aria-current="page"{% endif %} id="planning-tab">Planning{% if planning_count %} · {{ planning_count }}{% endif %}</a><a href="/board{{ q }}"{% if active == "/board" %} aria-current="page"{% endif %}>Board</a>
+    {# F194: four slots that never move; the other pages hang from the fourth, which names the page it's on (D4) #}
+    {% set more_pages = [("/projects", "Projects", "every project, and the order the runner works in"), ("/tickets", "Tickets", "this project's tickets, latest work first"), ("/jobs", "Jobs", "every job an agent ran, newest first"), ("/runs", "Runs", "every runner command, newest first"), ("/timeline", "Timeline", "the jobs along the day"), ("/agents", "Agents", "who did what, and how well"), ("/bench", "Bench", "finished tickets replayed by chosen agents")] %}
+    {% set here = more_pages | selectattr(0, "equalto", active) | list | first %}
+    <details class="more">
+      <summary{% if here %} class="here"{% endif %}><span class="slot-name">{{ here[1] if here else "More" }}</span> <span class="caret">▾</span></summary>
+      <div class="more-panel"><div class="more-head">More pages</div>
+        {% for path, label, words in more_pages %}
+        <a href="{{ path }}{{ q }}"{% if path == active %} aria-current="page"{% endif %}><b>{{ label }}</b><span>{{ words }}</span></a>
+        {% endfor %}
+      </div>
+    </details>
   </nav>
 </header>
 {% block live_poll %}

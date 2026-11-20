@@ -192,7 +192,7 @@ def test_the_projects_come_in_the_owners_order_with_what_waits_in_each(projects_
     assert order.index("softfield") < order.index(PROJECT)
     assert "The factory. 2 ready" in order
     assert 'href="/board?project=softfield"' in html
-    assert 'aria-current="page">Projects' in html  # the first tab, lit
+    assert 'aria-current="page"><b>Projects</b>' in html  # lit in the sub menu (F194)
     assert "Send new order" in order and "On its way" not in order
 
 
@@ -232,7 +232,6 @@ def test_the_projects_page_lays_out_at_phone_and_display_sizes(page, projects_cl
     page.set_viewport_size(size)
     open_page(page, projects_client, "/projects")
     page.evaluate("() => document.fonts.ready")
-    page.evaluate("() => document.querySelector('nav.tabs').setAttribute('data-layout', 'overlay')")
     assert layout_problems(page) == []
 
 

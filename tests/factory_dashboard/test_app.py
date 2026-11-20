@@ -1,5 +1,6 @@
 import contextlib
 import hashlib
+import itertools
 import json
 import os
 import re
@@ -54,10 +55,10 @@ def _third_party_problems(text: str) -> list[str]:
 
 
 TABS = [
-    "/projects",  # every project, first (ADR 30 item 6)
-    "/",
+    "/",  # the three slots (F194 D1), then the sub menu, Projects first (D2)
     "/planning",
     "/board",
+    "/projects",
     "/tickets",
     "/jobs",
     "/runs",
@@ -84,8 +85,8 @@ def test_the_app_refuses_to_write(db_path):
 
 def test_the_top_bar_has_a_tab_per_page_that_keeps_the_project(client):
     html = client.get(f"/?project={OTHER}").text
-    tabs = re.findall(r'<nav class="tabs"[^>]*>(.*?)</nav>', html, re.S)[0]
-    assert re.findall(r'href="([^"?]*)\?project=other"', tabs) == TABS
+    tabs = re.findall(r'<nav class="tabs slots"[^>]*>(.*?)</nav>', html, re.S)[0]
+    assert re.findall(r'href="([^"]*)"', tabs) == [f"{path}?project=other" for path in TABS]
     assert 'href="/?project=other" aria-current="page"' in tabs
     # the filter lists every project, the one shown selected
     assert re.search(r'<option value="other" selected>', html)
@@ -98,24 +99,70 @@ def test_the_project_defaults_to_the_repos(client):
     assert re.search(r'<nav class="crumbs"[^>]*>\s*The whole factory', html, re.S)
 
 
-def test_the_picker_sits_in_the_tabs_before_planning(client):
-    """F132: the project picker moves into the tab strip, right before Planning, as one bay with
-    Planning, Board and Tickets. It no longer sits in .bar-top."""
-    html = client.get("/").text
-    # no picker in .bar-top
-    bar_top = re.search(r'<div class="bar-top">(.*?)</div>', html, re.S)
-    assert bar_top
-    assert 'name="project"' not in bar_top[1], "picker should not be in .bar-top"
-    # picker in nav.tabs, before Planning
-    tabs = re.search(r'<nav class="tabs"[^>]*>(.*?)</nav>', html, re.S)
+@pytest.mark.parametrize("path", ["/", "/planning", "/board", "/jobs", "/milestones/f1"])
+def test_the_picker_sits_in_the_bar_s_top_row(client, path):
+    """F194 D3: the project picker is back in .bar-top, after the factory's status and before
+    the theme button, on every page; the tab strip holds no picker and no F132 bay."""
+    html = client.get(path).text
+    top = re.search(r'<div class="bar-top">(.*?)<button id="theme-btn"', html, re.S)
+    assert top, f"no top row on {path}"
+    assert re.search(
+        r'id="factory-status".*<form class="filters"[^>]*>.*name="project"', top[1], re.S
+    )
+    tabs = re.search(r'<nav class="tabs slots"[^>]*>(.*?)</nav>', html, re.S)
+    assert tabs and 'name="project"' not in tabs[1]
+    assert "bay-group" not in html
+    assert "bay-group" not in (STATIC / "dashboard.css").read_text()
+
+
+@pytest.mark.parametrize(
+    ("path", "slot", "lit"),
+    [
+        ("/", "More", "/"),
+        ("/planning", "More", "/planning"),
+        ("/board", "More", "/board"),
+        ("/milestones/f1", "More", "/board"),
+        ("/projects", "Projects", "/projects"),
+        ("/tickets", "Tickets", "/tickets"),
+        ("/jobs", "Jobs", "/jobs"),
+        ("/runs", "Runs", "/runs"),
+        ("/timeline", "Timeline", "/timeline"),
+        ("/agents", "Agents", "/agents"),
+        ("/bench", "Bench", "/bench"),
+    ],
+)
+def test_the_fourth_slot_names_a_sub_menu_page_and_lights_it(client, path, slot, lit):
+    """F194 D4: on a sub-menu page the fourth slot is lit and reads that page's name; on the
+    three others it reads "More" and isn't lit. A milestone's page still lights Board."""
+    html = client.get(path).text
+    tabs = re.search(r'<nav class="tabs slots"[^>]*>(.*?)</nav>', html, re.S)
     assert tabs
-    tabs_html = tabs[1]
-    assert 'name="project"' in tabs_html
-    picker_pos = tabs_html.index('name="project"')
-    planning_pos = tabs_html.index("Planning")
-    assert picker_pos < planning_pos, "picker should be before Planning"
-    # the bay-group wraps picker + Planning + Board + Tickets
-    assert 'class="bay-group"' in tabs_html
+    summary = re.search(r"<summary([^>]*)><span class=\"slot-name\">([^<]*)</span>", tabs[1])
+    assert summary and summary[2] == slot
+    assert ('class="here"' in summary[1]) == (slot != "More")
+    assert re.findall(r'<a href="([^"?]*)\?[^"]*" aria-current="page"', tabs[1]) == [lit]
+
+
+def test_the_sub_menu_lists_the_seven_pages_with_their_words(client):
+    """F194 D2: Projects, Tickets, Jobs, Runs, Timeline, Agents, Bench, in that order, each a
+    plain link keeping ?project= with the mock-up's few words."""
+    html = client.get(f"/?project={OTHER}").text
+    panel = re.search(r'<div class="more-panel">(.*?)</details>', html, re.S)
+    assert panel
+    links = re.findall(r'<a href="([^"]*)"><b>([^<]*)</b><span>([^<]*)</span></a>', panel[1])
+    assert [(href, name) for href, name, _ in links] == [
+        ("/projects?project=other", "Projects"),
+        ("/tickets?project=other", "Tickets"),
+        ("/jobs?project=other", "Jobs"),
+        ("/runs?project=other", "Runs"),
+        ("/timeline?project=other", "Timeline"),
+        ("/agents?project=other", "Agents"),
+        ("/bench?project=other", "Bench"),
+    ]
+    assert links[0][2] == "every project, and the order the runner works in"
+    assert links[4][2] == "the jobs along the day"
+    assert links[6][2] == "finished tickets replayed by chosen agents"
+    assert "Scroll the active tab" not in html  # the f3-30 script that moved the strip went (D1)
 
 
 def test_factory_wide_pages_crumbs_start_the_whole_factory(client):
@@ -418,11 +465,15 @@ def test_the_top_bar_has_the_mockups_title_hazard_stripe_and_tab_segment(client)
     assert header
     assert '<a class="brand"' in header[1]
     assert '<div class="hazard"' in header[1]
-    assert '<nav class="tabs" aria-label="Pages">' in header[1]
+    assert '<nav class="tabs slots" aria-label="Pages">' in header[1]
     css = (STATIC / "dashboard.css").read_text()
     assert re.search(r"\.brand \{[^}]*var\(--display\)[^}]*display: flex", css)
     # the segment: the current tab is a hazard-yellow plate, as in the mock-up
-    assert re.search(r'nav\.tabs a\[aria-current="page"\] \{[^}]*background: var\(--hazard\)', css)
+    assert re.search(
+        r'nav\.tabs\.slots > a\[aria-current="page"\], details\.more > summary\.here \{'
+        r"[^}]*background: var\(--hazard\)",
+        css,
+    )
     assert re.search(r"\.hazard \{[^}]*repeating-linear-gradient\(-45deg, var\(--hazard\)", css)
 
 
@@ -611,7 +662,7 @@ def test_phone_brand_name_does_not_wrap(page, client):
     page.evaluate("() => document.fonts.ready")
     # a select is as wide as its longest name: the owner's list has longer ones than the fixture's
     page.evaluate(
-        """() => document.querySelector('.picker .filters select')
+        """() => document.querySelector('.filters select')
             .add(new Option('travel-companion', 'travel-companion'))"""
     )
     soft, field = page.locator(".brand-soft"), page.locator(".brand-field")
@@ -638,7 +689,7 @@ def test_phone_title_and_filter_share_one_line_at_390px(page, client):
     """f9-30: at 390 px the brand's box and the project select's box overlap vertically
     (same line) and the select sits to the right of the brand. This fails when .bar-top
     is not a grid on the phone (the CSS-regex lines that once checked this are gone).
-    F132: the picker moved into nav.tabs, so the select sits below the brand."""
+    F194 D3: the picker is back in .bar-top, after F132 had moved it into the tabs."""
     page.set_viewport_size({"width": 390, "height": 844})
 
     def route(r) -> None:
@@ -653,20 +704,24 @@ def test_phone_title_and_filter_share_one_line_at_390px(page, client):
     page.goto(ORIGIN + "/")
     page.wait_for_selector(".brand", state="visible", timeout=REFRESH)
     brand = page.locator(".brand")
-    project = page.locator("nav.tabs .picker .filters select")
+    project = page.locator(".bar-top .filters select")
     brand_box = brand.bounding_box()
     project_box = project.bounding_box()
-    # the select sits inside nav.tabs, below the brand
-    assert project_box["y"] > brand_box["y"], (
-        f"select not below brand: brand y={brand_box['y']:.1f}, select y={project_box['y']:.1f}"
+    assert abs(brand_box["y"] - project_box["y"]) < 15, (
+        f"title and filter not on same line: "
+        f"title y={brand_box['y']:.1f}, select y={project_box['y']:.1f}"
+    )
+    assert project_box["x"] > brand_box["x"], (
+        f"select not right of brand: brand x={brand_box['x']:.1f}, select x={project_box['x']:.1f}"
     )
 
 
 @pytest.mark.parametrize("scheme", ["dark", "light"])
-def test_phone_top_bar_is_compact_and_tabs_scroll(page, client, tmp_path, scheme):
-    """f3-30: under 640 px the bar is short lines, tabs scroll sideways, current tab visible. The
-    title, the factory's status (its dot and sign, f17) share a line, and "Turn
-    on notifications" takes one more while it shows. F132: the picker moved into nav.tabs."""
+def test_phone_top_bar_is_compact_and_tabs_fill_row(page, client, tmp_path, scheme):
+    """F194: under 640 px the bar is short lines and the four slots fill the row (no sideways
+    scroll; test_the_four_slots_* below check their sizes). The title, the factory's status
+    (its dot and sign, f17) and the project share a line, and "Turn on notifications" takes one
+    more while it shows."""
     page.emulate_media(color_scheme=scheme)
     page.set_viewport_size(PHONE)
     open_overview(page, client)
@@ -674,30 +729,14 @@ def test_phone_top_bar_is_compact_and_tabs_scroll(page, client, tmp_path, scheme
     header = page.locator("header.bar")
     height = header.evaluate("el => el.getBoundingClientRect().height")
     assert height <= 150, f"header {height}px > 150px"
-    title = page.locator(".brand")
-    project = page.locator("nav.tabs .picker .filters select")
-    # the select sits inside nav.tabs, below the brand (F132)
-    assert project.bounding_box()["y"] > title.bounding_box()["y"]
+    title, project = page.locator(".brand"), page.locator(".bar-top .filters select")
+    assert title.bounding_box()["y"] == pytest.approx(project.bounding_box()["y"], abs=15)
     assert title.bounding_box()["height"] >= 44, "the title should be at least 44px tall"
-    tabs = page.locator("nav.tabs")
-    assert tabs.evaluate("el => el.scrollWidth > el.clientWidth"), "tabs not scrollable"
-    # Each tab keeps its word's width: shrunk, they overlapped (the owner, 2026-10-06)
-    squeezed = page.evaluate(
-        """() => [...document.querySelectorAll('nav.tabs a')]
-            .filter((a) => a.scrollWidth > a.clientWidth + 1).map((a) => a.textContent)"""
-    )
-    assert squeezed == [], f"tabs narrower than their words: {squeezed}"
+    tabs = page.locator("nav.tabs.slots")
+    assert not tabs.evaluate("el => el.scrollWidth > el.clientWidth"), "the slots scroll"
     assert page.evaluate(
         "() => document.documentElement.clientWidth === document.documentElement.scrollWidth"
     ), "page scrolls sideways"
-    active = page.locator("nav.tabs a[aria-current='page']")
-    if active.count() > 0:
-        active.evaluate("el => el.scrollIntoView({inline: 'center', block: 'nearest'})")
-        page.wait_for_timeout(100)
-        container_bcr = tabs.evaluate("el => el.getBoundingClientRect()")
-        tab_bcr = active.evaluate("el => el.getBoundingClientRect()")
-        assert tab_bcr["left"] >= container_bcr["left"] - 1
-        assert tab_bcr["right"] <= container_bcr["right"] + 1
     page.screenshot(path=tmp_path / f"phone-top-bar-{scheme}.png", full_page=False)
     page.evaluate("() => document.querySelector('.replay')?.setAttribute('data-layout', 'overlay')")
     assert layout_problems(page) == []
@@ -839,7 +878,7 @@ def test_desktop_bar_unchanged_at_1440(client):
     """f3-30: at 1440 px the bar is as today (host visible, tabs fit without scrolling)."""
     html = client.get("/").text
     assert re.search(r'<a class="brand".*?<small>', html, re.S), "host address hidden on desktop"
-    assert re.search(r'<nav class="tabs"[^>]*>.*?href="/\?', html, re.S)
+    assert re.search(r'<nav class="tabs slots"[^>]*>.*?href="/\?', html, re.S)
     assert re.search(r'href="/board\?', html)
     assert re.search(r'href="/tickets\?', html)
     assert re.search(r'href="/jobs\?', html)
@@ -3157,21 +3196,22 @@ def _open_tickets(page, client: TestClient, size: dict[str, int]) -> None:
 
 
 def test_on_a_phone_the_dot_and_sign_join_the_brands_row_and_a_tap_shows_the_words(page, serve):
-    """f17: at 390 px the brand, the dot, the sign share one row (their middles
+    """f17: at 390 px the brand, the dot, the sign and the project share one row (their middles
     agree: they differ in height), the dot and the sign are 44 px thumb targets, and the words
-    show only once the dot is tapped, and stay through the next poll. F132: the project picker
-    moved into nav.tabs."""
+    show only once the dot is tapped, and stay through the next poll. F194 D3: the project is
+    back in that row."""
     page.clock.install()
     _open_tickets(page, serve(), PHONE)
     parts = {
         "brand": page.locator(".brand"),
         "dot": page.locator("#factory-status .dot-btn"),
         "sign": page.get_by_role("button", name="Pause after this job", exact=True),
+        "project": page.locator(".bar-top .filters select"),
     }
     boxes = {name: part.bounding_box() for name, part in parts.items()}
     middles = {name: box["y"] + box["height"] / 2 for name, box in boxes.items()}
     assert max(middles.values()) - min(middles.values()) <= 3, middles
-    lefts = [boxes[name]["x"] for name in ("brand", "dot", "sign")]
+    lefts = [boxes[name]["x"] for name in ("brand", "dot", "sign", "project")]
     assert lefts == sorted(lefts), boxes
     for name in ("dot", "sign"):
         assert (boxes[name]["width"], boxes[name]["height"]) == (44, 44), (name, boxes[name])
@@ -3202,6 +3242,113 @@ def test_on_a_wide_screen_the_words_show_beside_the_dot(page, serve):
     assert sign["x"] >= box["x"] + box["width"], (box, sign)
     middle = lambda b: b["y"] + b["height"] / 2  # noqa: E731
     assert abs(middle(dot) - middle(box)) <= 3 and abs(middle(sign) - middle(box)) <= 3
+
+
+# --- the four slots (F194) -----------------------------------------------------------------------
+
+SLOTS = "nav.tabs.slots > a, nav.tabs.slots > details > summary"
+_SLOT_BOXES = f"""() => [...document.querySelectorAll({SLOTS!r})].map((el) => {{
+    const r = el.getBoundingClientRect();
+    return {{text: el.textContent.replace(/\\s+/g, " ").trim(), left: r.left, right: r.right,
+             width: r.width, height: r.height, cut: el.scrollWidth > el.clientWidth + 1}};
+}})"""
+_COUNT = "n => { document.getElementById('planning-tab').textContent = 'Planning · ' + n; }"
+
+
+def _open_page(page, client: TestClient, path: str, size: dict[str, int]) -> None:
+    """``path`` in Chromium at ``size``, every request answered by ``client``."""
+    page.set_viewport_size(size)
+
+    def route(r) -> None:
+        url = r.request.url.removeprefix(ORIGIN)
+        if url.split("?", 1)[0].startswith("/static/"):
+            r.fulfill(path=str(STATIC / url.split("?", 1)[0].removeprefix("/static/")))
+        else:
+            r.fulfill(body=client.get(url).text, content_type="text/html; charset=utf-8")
+
+    page.route(f"{ORIGIN}/**", route)
+    page.goto(ORIGIN + path)
+    page.evaluate("() => document.fonts.ready")
+
+
+@pytest.mark.parametrize("width", [390, 360])
+def test_the_four_slots_fill_a_phone_s_row_and_cut_no_word(page, serve, width):
+    """F194 D1: on a phone the four slots fill the row edge to edge, each at least 44 px tall,
+    with "Planning · 99" and "Timeline" in the fourth slot: no word cut, no sideways scroll."""
+    _open_page(page, serve(), "/timeline", {"width": width, "height": 800})
+    page.evaluate(_COUNT, 99)
+    slots = page.evaluate(_SLOT_BOXES)
+    assert [s["text"] for s in slots] == ["Overview", "Planning · 99", "Board", "Timeline ▾"]
+    assert slots[0]["left"] == pytest.approx(0, abs=1)
+    assert slots[-1]["right"] == pytest.approx(width, abs=1)
+    for before, after in itertools.pairwise(slots):
+        assert after["left"] == pytest.approx(before["right"], abs=1), (before, after)
+    assert [s for s in slots if s["height"] < 44 or s["cut"]] == []
+    # nothing in the bar reaches past the screen (Timeline's own table is wider than a phone)
+    past = page.evaluate(
+        """w => [...document.querySelectorAll('header.bar *')]
+            .filter((el) => el.getBoundingClientRect().right > w + 1).map((el) => el.outerHTML)""",
+        width,
+    )
+    assert past == []
+    page.locator("details.more summary").click()
+    plate = page.locator(".more-panel").bounding_box()
+    assert plate and plate["x"] >= 0 and plate["x"] + plate["width"] <= width + 1, plate
+
+
+@pytest.mark.parametrize("size", [PHONE, DISPLAY], ids=["phone", "wide"])
+def test_each_slot_keeps_its_place_on_every_page_and_whatever_the_count(page, serve, size):
+    """F194 D1: the slots' left edges are the same on Overview, Planning, Board and Timeline,
+    and when the Planning count goes from 1 to 12 (the live poll rewrites #planning-tab)."""
+    client = serve()
+    edges = {}
+    for path in ["/", "/planning", "/board", "/timeline"]:
+        _open_page(page, client, path, size)
+        page.evaluate(_COUNT, 1)
+        edges[path] = [round(s["left"]) for s in page.evaluate(_SLOT_BOXES)]
+    assert len(edges["/"]) == 4
+    assert all(lefts == edges["/"] for lefts in edges.values()), edges
+    page.evaluate(_COUNT, 12)
+    slots = page.evaluate(_SLOT_BOXES)
+    assert slots[1]["text"] == "Planning · 12"
+    assert [round(s["left"]) for s in slots] == edges["/"]
+
+
+def test_the_sub_menu_closes_on_a_tap_outside_or_escape_and_stays_open_through_a_poll(page, serve):
+    """F194 D2: the fourth slot opens the sub menu; it stays open through the live poll and
+    closes on a tap outside it, or on Escape. Its pages are plain links."""
+    page.clock.install()
+    _open_page(page, serve(), "/tickets", PHONE)
+    more = page.locator("details.more")
+    summary = more.locator("summary")
+    assert summary.text_content().split() == ["Tickets", "▾"]
+    jobs = page.locator(".more-panel a[href^='/jobs?']")
+    assert not jobs.is_visible()
+    summary.click()
+    assert jobs.is_visible()
+    assert jobs.get_attribute("href") == "/jobs?project=coucou"
+    poll(page)
+    assert more.evaluate("d => d.open"), "the poll closed the sub menu"
+    page.mouse.click(PHONE["width"] / 2, PHONE["height"] - 20)  # the page, under the plate
+    assert not more.evaluate("d => d.open"), "a tap outside left it open"
+    summary.click()
+    page.locator(".more-head").click()
+    assert more.evaluate("d => d.open"), "a tap inside closed it"
+    page.keyboard.press("Escape")
+    assert not more.evaluate("d => d.open"), "Escape left it open"
+
+
+def test_on_a_wide_screen_the_sub_menu_hangs_from_the_fourth_slot(page, serve):
+    """F194 D2: on a wide screen the plate hangs under the fourth slot, its right edge on the
+    slot's, and the slots keep their fixed widths (the mock-up's 120, 150, 92, 130 px)."""
+    _open_page(page, serve(), "/", DISPLAY)
+    slots = page.evaluate(_SLOT_BOXES)
+    assert [round(s["width"]) for s in slots] == [120, 150, 92, 130]
+    assert slots[-1]["text"] == "More ▾"
+    page.locator("details.more summary").click()
+    plate = page.locator(".more-panel").bounding_box()
+    assert plate and plate["x"] + plate["width"] == pytest.approx(slots[-1]["right"], abs=2)
+    assert plate["y"] >= page.locator("details.more summary").bounding_box()["y"] + 38
 
 
 # --- how long the computer has been on (F251) ---------------------------------------------------
@@ -4287,8 +4434,6 @@ def _shown(page) -> list[str]:
 
 def _lay_out(page) -> None:
     page.evaluate("() => document.fonts.ready")
-    # the tabs scroll sideways on a phone by design
-    page.evaluate("() => document.querySelector('nav.tabs').setAttribute('data-layout', 'overlay')")
     problems = layout_problems(page)
     assert problems == [], "\n".join(problems)
 

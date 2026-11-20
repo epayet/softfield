@@ -1415,9 +1415,14 @@ def test_the_page_posts_only_a_reorder_and_links_to_the_factory_floor(board_clie
 
 
 def test_the_top_bar_has_a_board_tab_right_after_planning(board_client):
-    tabs = re.findall(r'<nav class="tabs"[^>]*>(.*?)</nav>', board_client.get("/").text, re.S)[0]
+    html = board_client.get("/").text
+    tabs = re.findall(r'<nav class="tabs slots"[^>]*>(.*?)</nav>', html, re.S)[0]
     paths = re.findall(r'href="([^"?]*)\?', tabs)
-    assert paths[:4] == ["/projects", "/", "/planning", "/board"]  # Projects first (ADR 30)
+    # the three slots, then the sub menu, Projects first (F194 D1, D2: it replaces ADR 30's order)
+    assert paths[:4] == ["/", "/planning", "/board", "/projects"]
+    assert tabs.index("<details") > tabs.index("/board?") and tabs.index("<details") < tabs.index(
+        "/projects?"
+    )
     assert re.search(r'<a href="/board\?project=coucou">Board</a>', tabs)
     assert re.search(
         r'<a href="/board\?project=coucou" aria-current="page">Board</a>', _page(board_client)
@@ -1428,7 +1433,7 @@ def test_the_board_replaces_the_milestones_tab_and_links_to_the_list(board_clien
     """The owner, 2026-10-06: the board is how milestones are found (f5-17). The list keeps
     each card and the trends, so it still answers and the board links to it."""
     html = _page(board_client)
-    tabs = re.findall(r'<nav class="tabs"[^>]*>(.*?)</nav>', html, re.S)[0]
+    tabs = re.findall(r'<nav class="tabs slots"[^>]*>(.*?)</nav>', html, re.S)[0]
     assert "/milestones" not in re.findall(r'href="([^"?]*)\?', tabs)
     assert "Milestones" not in tabs
     assert board_client.get("/milestones").status_code == 200
@@ -1475,8 +1480,6 @@ def test_the_board_lays_out_at_phone_and_display_sizes(page, board_client, size)
     page.set_viewport_size(size)
     open_page(page, board_client, "/board")
     page.evaluate("() => document.fonts.ready")
-    # the tabs scroll sideways on a phone by design, as test_planning.py's layout test has it
-    page.evaluate("() => document.querySelector('nav.tabs').setAttribute('data-layout', 'overlay')")
     assert layout_problems(page) == []
     assert page.evaluate("() => document.documentElement.scrollWidth <= window.innerWidth"), (
         "the page scrolls sideways"
@@ -1600,7 +1603,6 @@ def test_the_on_its_way_line_fits_inside_the_card(page, board_db, size):
     box, words = moved.bounding_box(), moved.query_selector(".card-way").bounding_box()
     assert box and words
     assert box["x"] <= words["x"] and words["x"] + words["width"] <= box["x"] + box["width"] + 1
-    page.evaluate("() => document.querySelector('nav.tabs').setAttribute('data-layout', 'overlay')")
     assert layout_problems(page) == []
 
 

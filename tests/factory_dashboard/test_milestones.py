@@ -720,7 +720,7 @@ def test_the_page_links_to_the_card_s_planning_thread(card_client):
 
 def test_a_milestone_s_page_lights_the_board_tab_and_leads_back_to_the_board(card_client):
     page = card_client.get("/milestones/f24-growing").text
-    tabs = re.findall(r'<nav class="tabs"[^>]*>(.*?)</nav>', page, re.S)[0]
+    tabs = re.findall(r'<nav class="tabs slots"[^>]*>(.*?)</nav>', page, re.S)[0]
     assert re.findall(r'<a href="([^"?]*)\?[^"]*" aria-current="page"', tabs) == ["/board"]
     crumbs = re.findall(r'<nav class="crumbs"[^>]*>(.*?)</nav>', page, re.S)[0]
     assert re.search(r'<a href="/board\?project=coucou">Board</a>', crumbs)
@@ -731,8 +731,6 @@ def test_the_card_s_page_lays_out_at_phone_and_display_sizes(page, card_client, 
     page.set_viewport_size(size)
     open_page(page, card_client, "/milestones/f24-growing")
     page.evaluate("() => document.fonts.ready")
-    # the tabs scroll sideways on a phone by design, as test_planning.py's layout test has it
-    page.evaluate("() => document.querySelector('nav.tabs').setAttribute('data-layout', 'overlay')")
     problems = layout_problems(page)
     assert problems == [], "\n".join(problems)
     if size is PHONE:
@@ -3169,7 +3167,6 @@ def test_the_sheet_page_has_no_sideways_scroll_on_a_phone_and_folds_open_without
     assert not re.search(r"\son[a-z]+=", behind)
     open_page(page, client, "/milestones/f187-utc")
     page.evaluate("() => document.fonts.ready")
-    page.evaluate("() => document.querySelector('nav.tabs').setAttribute('data-layout', 'overlay')")
     problems = layout_problems(page)
     assert problems == [], "\n".join(problems)
     fold = page.locator("#findings")

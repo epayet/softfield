@@ -368,7 +368,6 @@ def test_on_a_phone_the_strip_comes_before_the_reply_box(page, planning, db_path
     for step in steps:
         box = step.bounding_box()
         assert box and box["height"] >= 44 and box["x"] + box["width"] <= PHONE["width"]
-    page.evaluate("() => document.querySelector('nav.tabs').setAttribute('data-layout', 'overlay')")
     assert page.evaluate("() => document.documentElement.scrollWidth") <= PHONE["width"]
     assert layout_problems(page) == []
 
@@ -968,7 +967,6 @@ def test_on_a_phone_one_point_shows_at_a_time(
         assert (control.bounding_box() or {"height": 0})["height"] >= 44
     for control in (previous, following, page.locator(send)):
         assert (control.bounding_box() or {"height": 0})["height"] >= 44
-    page.evaluate("() => document.querySelector('nav.tabs').setAttribute('data-layout', 'overlay')")
     assert page.evaluate("() => document.documentElement.scrollWidth") <= PHONE["width"]
     # the dock floats over the points by design: check the page with it back in the flow
     page.evaluate("() => document.querySelector('.dock').style.position = 'static'")
@@ -1993,7 +1991,6 @@ def test_a_named_number_fits_a_phone(page, planning, db_path, serve, checkout):
     page.set_viewport_size(PHONE)
     _open(page, serve(), "/planning/f6")
     assert page.locator("li.point a.ref .named").first.is_visible()
-    page.evaluate("() => document.querySelector('nav.tabs').setAttribute('data-layout', 'overlay')")
     assert page.evaluate("() => document.documentElement.scrollWidth") <= PHONE["width"]
     page.evaluate("() => document.querySelector('.dock').style.position = 'static'")
     assert layout_problems(page) == []
