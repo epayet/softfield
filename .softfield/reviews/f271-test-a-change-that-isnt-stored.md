@@ -1,6 +1,6 @@
 # Review: F271, two refused-edit tests check the request list instead of waiting 300 ms
 
-- **Status:** review done (round 1), no findings, waiting for the owner's sign-off.
+- **Status:** done, signed off by the owner on 2026-11-20.
 
 ## Sign-off sheet
 

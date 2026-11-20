@@ -1,6 +1,7 @@
 # Milestone F271: Two refused-edit tests check the request list instead of waiting 300 ms
 
-> **State:** ready · **Area:** factory
+> **State:** done · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-20. Base: git tag `f271-test-a-change-that-isnt-stored-start`. Report: [`.softfield/reviews/f271-test-a-change-that-isnt-stored.md`](../reviews/f271-test-a-change-that-isnt-stored.md).
 > Planted by the owner on 2026-11-18.
 
 ## Notes
