@@ -210,6 +210,13 @@ tbody tr:hover { background: var(--accent-wash); }
 .pill.good { --dot: var(--good); } .pill.warn { --dot: var(--warn); }
 .pill.serious { --dot: var(--serious); } .pill.critical { --dot: var(--critical); }
 .pill.running { --dot: var(--a1); }
+/* The project plate (F132 D3): whose item it is, ink and rules with two corner ticks, never a status colour.
+   A span only: the Projects page's rows are `li.proj`. */
+span.proj { display: inline-flex; align-items: center; font: 600 11px var(--mono); letter-spacing: .04em; color: var(--ink-2);
+  background: var(--plate); border: 1px solid var(--rule); padding: 0 6px; position: relative; white-space: nowrap; }
+span.proj::before, span.proj::after { content: ""; position: absolute; width: 4px; height: 4px; border: solid var(--ink-2); }
+span.proj::before { top: -1px; left: -1px; border-width: 1px 0 0 1px; }
+span.proj::after { bottom: -1px; right: -1px; border-width: 0 1px 1px 0; }
 .agent { display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 12.5px; white-space: nowrap; }
 .later { font-size: 11px; color: var(--ink-2); border: 1px dashed var(--rule); padding: 0 5px;
   white-space: nowrap; text-transform: none; letter-spacing: 0; font-weight: 400; }

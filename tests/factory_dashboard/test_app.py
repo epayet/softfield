@@ -1626,8 +1626,12 @@ def test_all_done_still_notifies_after_a_look_at_another_project(page, serve_bet
     _first_look(page, '#live-facts[data-all-done="false"]')
     _seen_first_look(page)
 
+    # Since F132 "all done" is the whole factory's on every project's look; a look kept from
+    # an older page could still say another project is done, so notify.js must keep each
+    # project's own: that look is drawn here
     other_live = client.get("/live?project=other").text
-    assert 'data-all-done="true"' in other_live
+    assert 'data-all-done="false"' in other_live
+    other_live = other_live.replace('data-all-done="false"', 'data-all-done="true"')
     _next_look(page, client, other_live)
     poll(page)
     assert page.evaluate("window.sw_notifications.length") == 0
@@ -2498,7 +2502,8 @@ def test_a_cards_conversation_and_proposals_count_once_everywhere(serve, db_path
     client = serve()
     for path in ("/", "/planning", "/tickets", "/jobs", "/live"):
         assert _tab(client.get(path).text) == "Planning · 2", path
-    assert "2 things wait for you on your desk" in client.get("/live").text
+    # two projects in the fixture: the desk line is the project's, on its plate (F132 D6)
+    assert "2 things wait on its desk" in client.get("/live").text
     assert "Proposals to review" not in client.get("/planning").text
 
 

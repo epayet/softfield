@@ -44,6 +44,15 @@ def away_row(html: str, ticket: str) -> str:
     return rows[0]  # type: ignore[no-any-return]
 
 
+def one_project(db_path: Path) -> None:
+    """The fixture's other project forgotten: the factory has coucou alone, as before F132."""
+    conn = metrics.open_db(db_path)
+    try:
+        metrics.set_project_paused(conn, OTHER, metrics.FORGOTTEN)
+    finally:
+        conn.close()
+
+
 def row_text(row: str) -> str:
     """A row's text, tags stripped."""
     return " ".join(unescape(re.sub(r"<[^>]+>", " ", row)).split())
@@ -214,11 +223,13 @@ def test_a_stale_heartbeat_is_a_needs_you_item_instead(serve):
 
 
 def test_a_project_the_runner_never_ran_shows_an_empty_queue(client):
-    """f8 review: the queued jobs looked up the project's row, and a 500 replaced the page."""
+    """f8 review: the queued jobs looked up the project's row, and a 500 replaced the page.
+    F132 D2: the Overview is the whole factory's, so it shows every project's queue."""
     assert client.get("/?project=nosuch").status_code == 200
     live = client.get("/live?project=nosuch")
     assert live.status_code == 200
-    assert "The queue is empty." in section(live.text, "queue")
+    queue_section = section(live.text, "queue")
+    assert "f1-05-first" in queue_section and "m1-01-elsewhere" in queue_section
 
 
 def test_live_poller_has_no_hx_swap_oob(client):
@@ -566,8 +577,11 @@ def test_now_holds_what_works_then_next_in_line_and_no_terminal_command(client):
     assert "softfield run" not in queue_section and "softfield run" not in now
     markup = html.split('id="queue"', 1)[1].split("</section>", 1)[0]
     assert "<code>" not in markup
+    # the count, and each project's share on its plate (F132 D5)
     assert re.search(
-        r"<p[^>]*>\s*<span class=\"count\">\d+\s*<small>[^<]+</small></span>\s*</p>", markup
+        r"<p[^>]*>\s*<span class=\"count\">\d+\s*<small>[^<]+</small></span>"
+        r"(\s*<span class=\"proj\">[^<]+</span> \d+( · )?)*</p>",
+        markup,
     )
     assert "f1-01-first" not in next_in_line  # merged
 
@@ -1405,15 +1419,31 @@ def test_the_spend_chart_holds_each_milestones_claude_dollars(serve):
     assert re.search(r"^\s+spend\(", CHARTS_JS.read_text(), re.M)
 
 
-def test_another_project_shows_only_its_own(client):
-    html = client.get(f"/?project={OTHER}").text
-    queue_section = section(html, "queue")
-    assert "m1-01-elsewhere" in queue_section
-    assert "Next in line" in queue_section
-    page = html.split("<main>", 1)[1]  # the top bar says what the whole factory does (ADR 30)
-    for mine in ("f1-05-first", "f1-04-live", "ADR 15", "3 merged, 0 not"):
-        assert mine not in page
-    assert "m1-01-elsewhere" not in client.get("/").text
+def _live_part(html: str) -> list[str]:
+    """Needs you, Now and the Queue, as text."""
+    return [section(html, name) for name in ("needs-you", "now", "queue")]
+
+
+def test_another_project_shows_the_same_live_part(client):
+    """F132 D2: the Overview's live part is the whole factory's, whichever project is picked:
+    coucou's job and both projects' tickets, each with its plate and its own project's link."""
+    mine, other = client.get("/").text, client.get(f"/?project={OTHER}").text
+    assert _live_part(mine) == _live_part(other)
+    now, queue_section = section(other, "now"), section(other, "queue")
+    assert "coucou attempt 2 f1-04-live" in now  # the job, with its plate
+    assert "m1-01-elsewhere" in queue_section and "f1-05-first" in queue_section
+    assert "3 tickets waiting: coucou 2 · other 1" in queue_section
+    assert 'href="/tickets/f1-05-first?project=coucou"' in other
+    assert 'href="/tickets/m1-01-elsewhere?project=other"' in mine
+    assert 'href="/jobs/' in other and re.search(r'href="/jobs/\d+\?project=coucou"', other)
+
+
+def test_with_one_project_no_plate_shows_and_the_count_reads_as_before(queue_client):
+    """F132 D3: one project, no plate anywhere, and the Queue says only the total."""
+    for path in ("/", "/live"):
+        html = queue_client.get(path).text
+        assert 'class="proj"' not in html
+        assert "7 tickets waiting." in section(html, "queue")
 
 
 def waits(db_path: Path) -> dict[str, str | None]:
@@ -1478,6 +1508,7 @@ def test_next_in_line_names_a_due_review_first(client, db_path):
 
 def test_next_in_line_says_what_a_parked_review_waits_for(client, db_path):
     """f53-02: parked until Claude's reset, it comes behind the tickets that can run."""
+    one_project(db_path)  # the other project's ticket that can run would come before it too
     until = NOW + timedelta(hours=1)
     conn = metrics.open_db(db_path)
     try:
@@ -1550,6 +1581,7 @@ def test_next_in_line_shows_each_card_and_sends_reordering_to_the_board(queue_cl
 def test_next_in_line_says_whom_a_ticket_runs_early_for(client, db_path):
     """F173 D7: f2-01-top (F2 first on the list) waits for f1-06-second, which comes first in
     its place."""
+    one_project(db_path)  # each row as one project's reads, with no plate after its card
     conn = metrics.open_db(db_path)
     try:
         project = conn.execute("SELECT id FROM projects WHERE name = ?", (PROJECT,)).fetchone()[0]
@@ -3782,7 +3814,7 @@ def test_an_empty_desk_has_no_entry_and_a_plain_tab(serve_between, db_path):
 
 def test_planning_row_shows_first_60_chars_and_title(client, db_path):
     """A planner row for a 100-character message: first 60 chars + …, title holds all 100,
-    link is /planning/f11."""
+    link is /planning/f11, on its own project (F132 D2)."""
     from runner import metrics
 
     conn = metrics.open_db(db_path)
@@ -3810,7 +3842,7 @@ def test_planning_row_shows_first_60_chars_and_title(client, db_path):
     assert "Planning:" in next_section
     # Find the planning row in raw HTML (href/title can't be found in stripped text)
     planning_row = html.split("Planning:")[1].split("</li>")[0]
-    assert 'href="/planning/f11"' in planning_row
+    assert 'href="/planning/f11?project=coucou"' in planning_row
     # Title attribute is on the <li>, find it from the full row
     next_html = html.split("Next in line", 1)[1]
     title_match = re.search(r'<li title="([^"]*)"[^>]*>.*?Planning:', next_html)
@@ -3951,9 +3983,9 @@ def test_an_edited_plant_shows_its_new_title_in_next_in_line(client, db_path):
     """F14: the Now page shows the change as the desk does; the other plant is as it was."""
     _plants(db_path, (0, json.dumps({"text": "Calmer colours"})))
     markup = _next_in_line(client)
-    assert _plant_rows(markup) == [
-        "Plant: Calmer colours · changed · at the runner's next pick",
-        "Plant: Rubber ducks · at the runner's next pick",
+    assert _plant_rows(markup) == [  # each with its project's plate (F132)
+        "Plant: Calmer colours · changed · at the runner's next pick · coucou",
+        "Plant: Rubber ducks · at the runner's next pick · coucou",
     ]
     assert "<s>" not in markup
 
@@ -3961,9 +3993,9 @@ def test_an_edited_plant_shows_its_new_title_in_next_in_line(client, db_path):
 def test_a_cancelled_plant_is_struck_through_in_next_in_line(client, db_path):
     _plants(db_path, (1, '{"cancel": true}'))
     markup = _next_in_line(client)
-    assert _plant_rows(markup) == [
-        "Plant: Calm colours · at the runner's next pick",
-        "Plant: Rubber ducks · cancelling at the runner's next pick",
+    assert _plant_rows(markup) == [  # each with its project's plate (F132)
+        "Plant: Calm colours · at the runner's next pick · coucou",
+        "Plant: Rubber ducks · cancelling at the runner's next pick · coucou",
     ]
     assert re.findall(r"<s>(.*?)</s>", markup) == ["Rubber ducks"]
 
@@ -4760,22 +4792,24 @@ def _counted(monkeypatch: pytest.MonkeyPatch, module: object, name: str) -> list
 
 @pytest.mark.parametrize("path", ["/", "/live"])
 def test_one_request_builds_the_board_once(client, monkeypatch, path):
-    """F228 D3: the Overview and its 5-second refresh build the board once, not four times."""
+    """F228 D3: the Overview and its 5-second refresh build the board once, not four times:
+    once a project since F132 (the fixture has two)."""
     from factory_dashboard import board
 
     calls = _counted(monkeypatch, board, "_cards")
     assert client.get(path).status_code == 200
-    assert len(calls) == 1
+    assert len(calls) == 2
 
 
 @pytest.mark.parametrize("path", ["/", "/live"])
 def test_one_request_builds_the_floor_once(client, monkeypatch, path):
-    """F228 D3: the Overview and its 5-second refresh build the floor once, not three times."""
+    """F228 D3: the Overview and its 5-second refresh build the floor once, not three times:
+    once a project since F132 (the fixture has two)."""
     from factory_dashboard import line
 
     calls = _counted(monkeypatch, line, "trips")
     assert client.get(path).status_code == 200
-    assert len(calls) == 1
+    assert len(calls) == 2
 
 
 def test_a_page_with_no_count_of_its_own_still_shows_the_planning_tabs(serve_between, db_path):
@@ -4874,3 +4908,164 @@ def test_the_fast_lane_rows_carry_the_hazard_stripe(board_db, tmp_path):
     assert "lane-row" in html, "lane-row class missing on intermediate rows"
     # No dead .lane-bay class left in the page
     assert 'class="lane-bay"' not in html, ".lane-bay class should be removed"
+
+
+# --- F132: the live part, every project (f132-02) ----------------------------------------------
+
+TRAVEL, SOFTFIELD = "travel-companion", "softfield"
+
+
+def _factory(tmp_path: Path, *, planner: bool = True) -> Path:
+    """Three projects in the owner's order: travel-companion, softfield, coucou, at ``NOW``.
+    Each has a live run; softfield's runs a planner job (unless ``planner`` is False), the
+    others pick their next ticket. travel-companion's one ticket waits for an escalated one;
+    softfield and coucou have one each that can run, and coucou a queued checkpoint. Desks:
+    travel-companion two lead replies, softfield one, coucou none; coucou an ADR item."""
+    path = tmp_path / "factory.sqlite"
+    conn = metrics.open_db(path)
+    try:
+        ids = {name: metrics.upsert_project(conn, name) for name in (TRAVEL, SOFTFIELD, PROJECT)}
+        metrics.set_project_order(conn, [TRAVEL, SOFTFIELD, PROJECT])
+        for name, pid in ids.items():
+            card = metrics.upsert_milestone(conn, pid, "f1", started=_ago(timedelta(days=1)))
+            run = metrics.upsert_run(
+                conn, pid, f"run-{name}", started=_ago(timedelta(minutes=30)),
+                heartbeat=_ago(timedelta(seconds=10)),
+            )  # fmt: skip
+            if name == SOFTFIELD and planner:
+                metrics.start_job(
+                    conn, run, ticket_id=None, milestone_id=card, role="planner",
+                    agent=OPUS, attempt=1, started=_ago(timedelta(minutes=2)),
+                )  # fmt: skip
+            else:
+                metrics.update_run_activity(conn, run, "picking the next ticket", None)
+            if name == TRAVEL:
+                metrics.upsert_ticket(
+                    conn, pid, "f1-05-stuck", milestone_id=card, state="escalated"
+                )
+                metrics.upsert_ticket(
+                    conn, pid, "f1-06-replan", milestone_id=card, kind="lead", state="ready",
+                    depends_on=["f1-05-stuck"],
+                )  # fmt: skip
+            else:
+                metrics.upsert_ticket(
+                    conn, pid, f"f1-01-{name}", milestone_id=card, state="ready",
+                    title=f"{name}'s next",
+                )  # fmt: skip
+        metrics.queue_job(conn, ids[PROJECT], "checkpoint", "f1", "A checkpoint", NOW.isoformat())
+        metrics.upsert_owner_item(
+            conn, ids[PROJECT], "adr", "ADR 9", text="Coucou's decision.", created=NOW.isoformat()
+        )
+        for name, cards in ((TRAVEL, ("f7", "f8")), (SOFTFIELD, ("f9",))):
+            for key in cards:
+                thread = metrics.planner_thread(conn, ids[name], key, NOW.isoformat())
+                metrics.add_planner_message(conn, thread["id"], "lead", NOW.isoformat(), "Hi.")
+                metrics.upsert_owner_item(conn, ids[name], "planning", key, text="Answered.")
+    finally:
+        conn.close()
+    return path
+
+
+def _ago(span: timedelta) -> str:
+    return (NOW - span).isoformat()
+
+
+def _client(path: Path) -> Any:
+    from fastapi.testclient import TestClient
+
+    from factory_dashboard.app import create_app, get_now
+
+    app = create_app(path, PROJECT)
+    app.dependency_overrides[get_now] = lambda: NOW
+    return TestClient(app, base_url="http://127.0.0.1:8765")
+
+
+def test_every_project_is_the_owners_order_without_a_forgotten_one(tmp_path):
+    """D4: the projects in the owner's order, a forgotten one left out; the picked one alone
+    when there are none."""
+    from factory_dashboard.overview import every_project
+
+    conn = metrics.open_db(tmp_path / "empty.sqlite")
+    try:
+        assert every_project(conn, "nosuch") == ["nosuch"]
+    finally:
+        conn.close()
+    conn = metrics.open_db(_factory(tmp_path))
+    try:
+        metrics.set_project_paused(conn, SOFTFIELD, metrics.FORGOTTEN)
+        assert every_project(conn, SOFTFIELD) == [TRAVEL, PROJECT]
+    finally:
+        conn.close()
+
+
+def test_now_is_the_same_job_whichever_project_is_picked(tmp_path):
+    """f132-02 Done when: softfield's planner job runs, the two others pick their next ticket:
+    each project's Overview shows the same Now, the job with its plate, and no between-jobs
+    line."""
+    client = _client(_factory(tmp_path))
+    seen = []
+    for name in (TRAVEL, SOFTFIELD, PROJECT):
+        for path in ("/", "/live"):
+            html = client.get(f"{path}?project={name}").text
+            now = section(html, "now")
+            assert now.startswith("Now refreshes every 5 s softfield attempt 1"), now
+            assert "planner" in now and "picking the next ticket" not in now
+            assert re.search(r'href="/jobs/\d+\?project=softfield"', html)
+            seen.append(_live_part(html))
+    assert all(part == seen[0] for part in seen)
+
+
+def test_with_no_job_anywhere_now_has_one_between_jobs_line(tmp_path):
+    client = _client(_factory(tmp_path, planner=False))
+    for name in (TRAVEL, PROJECT):
+        html = client.get(f"/live?project={name}").text
+        now = html.split('<section id="now"', 1)[1].split("</section>", 1)[0]
+        assert now.count('class="running-card"') == 1
+        assert section(html, "now").count("Running: picking the next ticket") == 1
+
+
+def test_needs_you_has_each_projects_desk_and_items_with_its_plate(tmp_path):
+    """D6: a desk line per project with something on its desk (its plate, count, top three
+    and Open › to its own /planning), none for an empty desk, and every project's items."""
+    html = _client(_factory(tmp_path)).get(f"/?project={SOFTFIELD}").text
+    needs = section(html, "needs-you")
+    assert "travel-companion 2 things wait on its desk" in needs
+    assert "softfield 1 thing waits on its desk" in needs
+    assert 'id="desk-entry-coucou"' not in html
+    travel = html.split('id="desk-entry-travel-companion"')[1].split("</li>")[0]
+    assert re.findall(r'href="(/planning[^"]*)"', travel) == [
+        "/planning/f8?project=travel-companion",
+        "/planning/f7?project=travel-companion",
+        "/planning?project=travel-companion",
+    ]
+    assert "Open ›" in travel
+    assert "coucou Coucou's decision." in needs  # another project's item, on its plate
+    # the Planning tab still counts the picked project's desk
+    assert planning_tab(html) == "Planning · 1"
+
+
+def test_next_in_line_is_the_runners_order_across_projects(tmp_path):
+    """D5: queued jobs first, a first project with nothing that can run passed over with its
+    first ticket's wait, then the tickets that can run project by project, then the waiting
+    ones; the count gives each project's share."""
+    client = _client(_factory(tmp_path))
+    for name in (TRAVEL, PROJECT):
+        queue_section = section(client.get(f"/live?project={name}").text, "queue")
+        assert queue_section.startswith(
+            "Queue 3 tickets waiting: travel-companion 1 · softfield 1 · coucou 1 Next in line"
+        ), queue_section
+        rows = queue_section.split("Next in line", 1)[1]
+        order = [
+            "Checkpoint: f1 · A checkpoint · coucou",
+            "Passed over: travel-companion goes first in your order, but its f1-06-replan"
+            " waits for f1-05-stuck's escalation.",
+            "1 1 f1-01-softfield softfield's next · a developer · F1 · softfield",
+            "2 2 f1-01-coucou coucou's next · a developer · F1 · coucou",
+            "3 3 f1-06-replan · the lead · waits for f1-05-stuck's escalation · F1"
+            " · travel-companion",
+        ]
+        places = [rows.index(row) for row in order]
+        assert places == sorted(places), rows
+    html = client.get("/").text
+    assert 'href="/tickets/f1-06-replan?project=travel-companion"' in html
+    assert 'href="/tickets/f1-01-softfield?project=softfield"' in html

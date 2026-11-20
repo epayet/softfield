@@ -1,15 +1,17 @@
-{# Now (D3, f3 mock-up): what works, then the next three in the run order; drawn inside the /live partial, which refreshes it every 5 s. #}
+{# Now (D3, f3 mock-up): what works, in every project (F132), each job with its plate; drawn inside the /live partial, which refreshes it every 5 s. #}
 <section id="now" class="panel">
   <h2>Now <span class="src">refreshes every 5 s</span></h2>
   {% for job in running %}
+  {% set pq = "?project=" ~ (job.project | urlencode) %}
   <div class="running-card">
     <div class="running-head">
+      {% with name=job.project %}{% include "_partials/project_plate.html" %}{% endwith %}
       <span class="pill running pulse">attempt {{ job.attempt }}</span>
       {% if job.reserve %}<span class="pill warn">on Claude's reserve</span>{% endif %}
-      {% if job.ticket %}<a class="mono" href="/tickets/{{ job.ticket }}{{ q }}">{{ job.ticket }}</a>{% endif %}
+      {% if job.ticket %}<a class="mono" href="/tickets/{{ job.ticket }}{{ pq }}">{{ job.ticket }}</a>{% endif %}
       <span class="agent">{{ job.agent }}</span>
       <span>{{ job.role }}</span>
-      <a href="/jobs/{{ job.job }}{{ q }}">job {{ job.job }} ›</a>
+      <a href="/jobs/{{ job.job }}{{ pq }}">job {{ job.job }} ›</a>
     </div>
     {% if job.title %}
     <div class="running-title">{{ job.title }}</div>
@@ -31,6 +33,7 @@
   {% for run in runs %}
   <div class="running-card">
     <div class="running-head">
+      {% with name=run.project %}{% include "_partials/project_plate.html" %}{% endwith %}
       {% if run.reserve %}<span class="pill warn">on Claude's reserve</span>{% endif %}
       {% if run.activity == "paused by you" %}{# the runner's words while it holds (f5-18) #}
       <span>Holding between jobs: nothing runs until you resume</span>

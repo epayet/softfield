@@ -18,7 +18,15 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
 from factory_dashboard import queries
-from factory_dashboard.app import Db, Now, Project, ago, factory_status, render
+from factory_dashboard.app import (
+    Db,
+    Now,
+    Project,
+    ago,
+    factory_status,
+    factory_wide_status,
+    render,
+)
 from runner import allowance, loop, metrics
 from runner.requests import CHANGE, PLANT, RESERVE, owners_words
 from runner.state import State, load_state
@@ -51,6 +59,13 @@ def _drain(key: str) -> str:
     return "softfield run"
 
 
+def every_project(conn: sqlite3.Connection, project: str) -> list[str]:
+    """F132 D4: the projects a factory-wide view shows, in the owner's order: those
+    ``metrics.projects_in_order`` gives (a forgotten one left out), or ``[project]`` when it
+    gives none. Nothing else decides which projects count."""
+    return [p.name for p in metrics.projects_in_order(conn)] or [project]
+
+
 # --- Running now and the runner's heartbeat (D3) ------------------------------------------
 
 
@@ -72,6 +87,7 @@ class Running:
     steps: int | None
     waiting_until: str | None = None  # ISO time while the run pauses for a limit
     reserve: bool = False  # the owner said yes to Claude's reserve for this command
+    project: str = ""  # whose job it is: its plate and its links (F132 D2)
 
     @property
     def live(self) -> bool:
@@ -95,6 +111,7 @@ class LiveRun:
     waiting_until: str | None
     reserve: bool
     title: str | None = None
+    project: str = ""
 
     @property
     def waiting_clock(self) -> str | None:
@@ -131,7 +148,9 @@ def live_runs(conn: sqlite3.Connection, project: str, now: datetime) -> list[Liv
                 if trow and trow["title"]:
                     title = trow["title"]
         found.append(
-            LiveRun(r["run_dir"], r["activity"], r["waiting_until"], bool(r["reserve"]), title)
+            LiveRun(
+                r["run_dir"], r["activity"], r["waiting_until"], bool(r["reserve"]), title, project
+            )
         )
     return found
 
@@ -167,6 +186,7 @@ def running_jobs(conn: sqlite3.Connection, project: str, now: datetime) -> list[
             steps=row["steps"],
             waiting_until=row["waiting_until"],
             reserve=bool(row["reserve"]),
+            project=project,
         )
         for row in rows
     ]
@@ -195,6 +215,7 @@ class Queued:
     difficulty: int | None
     milestone: str | None
     waits_for: str | None = None
+    project: str = ""
 
 
 def queue(
@@ -267,6 +288,7 @@ def queue(
                 difficulty=r["difficulty"],
                 milestone=r["milestone"],
                 waits_for=waits,
+                project=project,
             )
         )
     ready_now = [q for q in found if q.waits_for is None]
@@ -292,6 +314,7 @@ class QueuedJob:
     title: str | None = None  # plant title for Plant rows
     cancelled: bool = False  # a plant the owner cancelled, the runner yet to take it (F14)
     lane: bool = False  # a direction or escalation of a fast lane ticket: in its bay (F172 D9)
+    project: str = ""
 
 
 CANCELLING = "cancelling at the runner's next pick"
@@ -409,7 +432,11 @@ def queued_jobs(
                         if text:
                             message = text
         lane = pick.kind in dispatch.LANE_KINDS and pick.subject in first
-        found.append(QueuedJob(plain, pick.subject, pick.reason, line.waits, message, lane=lane))
+        found.append(
+            QueuedJob(
+                plain, pick.subject, pick.reason, line.waits, message, lane=lane, project=project
+            )
+        )
     # Open plant requests from owner_requests.
     plant_rows = conn.execute(
         "SELECT owner_requests.id, kind, subject, value FROM owner_requests"
@@ -424,12 +451,14 @@ def queued_jobs(
         title = (words.title if words else "") or "Your idea"
         change = changes.get(str(pr["id"]))
         if change is not None and change.cancel:
-            found.append(QueuedJob("Plant", title, CANCELLING, title=title, cancelled=True))
+            found.append(
+                QueuedJob("Plant", title, CANCELLING, title=title, cancelled=True, project=project)
+            )
             continue
         reason = "at the runner's next pick"
         if change is not None:
             title, reason = change.title or title, f"changed · {reason}"
-        found.append(QueuedJob("Plant", title, reason, title=title))
+        found.append(QueuedJob("Plant", title, reason, title=title, project=project))
     return found
 
 
@@ -444,6 +473,7 @@ class Need:
     command: str | None = None
     ticket: str | None = None
     subject: str | None = None
+    project: str = ""
 
 
 def needs_you(
@@ -469,6 +499,7 @@ def needs_you(
             i["command"],
             None,
             i["subject"],
+            project,
         )
         for i in items
     ]
@@ -486,12 +517,15 @@ def needs_you(
                 " Rerun it; it picks up where it stopped.",
                 _drain(job.milestone) if job.milestone else None,
                 ticket=job.ticket,
+                project=project,
             )
         )
-    if waiting and not runner_live(conn, project, now):
+    # one runner serves every project (ADR 30): it is idle only with no project's run live
+    if waiting and not any(runner_live(conn, p, now) for p in every_project(conn, project)):
         n = len(waiting)
         text = f"{n} ticket{'s' if n != 1 else ''} waiting and the runner is idle."
-        found.append(Need(f"{project}/queue", "queue", text, _drain(waiting[0].milestone or "")))
+        command = _drain(waiting[0].milestone or "")
+        found.append(Need(f"{project}/queue", "queue", text, command, project=project))
     return found
 
 
@@ -956,68 +990,82 @@ def _live_context(
     cards: "Board | None" = None,
 ) -> dict[str, object]:
     """What the ``/live`` partial draws: Needs you, then Now (what works and the next three in
-    the run order)."""
-    from factory_dashboard.board import board, reserve_marked  # board.py imports from here
+    the run order), for the whole factory (F132 D2): every project's, the same whichever
+    project is picked. ``line`` and ``cards`` are the picked project's, when handed in."""
     from factory_dashboard.coming import _card_titles  # coming.py imports from overview
-    from factory_dashboard.line import live_line  # line.py imports LIVE from here
-    from factory_dashboard.planning import (  # planning.py imports from overview at module level
-        _open_proposals,
-        desk,
-        waiting_for_you,
-    )
+    from factory_dashboard.planning import _open_proposals  # planning.py imports from overview
     from runner import metrics
 
-    jobs = running_jobs(conn, project, now)
-    all_queued = queue(conn, project, now)
-    # Mapping from ticket id to its ``waits_for`` reason, for tickets whose dependency isn't done.
-    waits: dict[str, str] = {q.ticket: q.waits_for for q in all_queued if q.waits_for is not None}
-    # the board and the floor once a request (F228): each is built here only when not handed in
-    if cards is None:
-        cards = board(conn, project, now)
-    if line is None:
-        line = live_line(conn, project, now.astimezone(), cards=cards)
-    # the fast lane's tickets, and their directions and escalations, go first (F172 D9)
-    reserve_cards = reserve_marked(conn, project, now, found=cards)
-    # as the runner will once it applies the requests: a card asked out has left (F192 D4)
-    lane_keys = {c.key for c in reserve_cards if c.lane_asked != "off"}
-    lane, rest = fast_lane(line["queue"], lane_keys)
-    lane_ids = {str(r["ticket"]) for r in lane}
-    # "on its way" only on a row of the card asked in, not on a ticket it waits for elsewhere
-    asked_in = {c.key for c in reserve_cards if c.lane_asked in ("on", "first")}
-    # an escalated lane ticket's row goes by the same cards as its ticket rows (F191 D3)
-    qjobs = queued_jobs(conn, project, now, first=lane_ids, card_keys=lane_keys)
-    lane = [
-        {
-            **r,
-            "card": r.get("card") or short_key(str(r["milestone"])).upper(),
-            "on_its_way": short_key(str(r["milestone"])).upper() in asked_in,
-        }
-        for r in lane[:3]
+    names = every_project(conn, project)
+    found = {
+        name: _project_live(
+            conn,
+            name,
+            now,
+            line=line if name == project else None,
+            cards=cards if name == project else None,
+        )
+        for name in names
+    }
+    # the picked project's own: the Planning tab's count, its notices, the reserve's cards
+    own = found.get(project) or _project_live(conn, project, now, line=line, cards=cards)
+    every = [found[name] for name in names]
+    pace = claude_pace(conn, project, now)
+
+    # Now (F132): every project's live job; with none, one line for the runner, the run the
+    # top bar names
+    jobs = sorted(
+        (job for p in every for job in p.jobs if job.live), key=lambda j: j.elapsed, reverse=True
+    )
+    status = factory_wide_status(conn, project, now)
+    leading = status.project or project
+    runs = [] if jobs else live_runs(conn, leading, now)[:1]
+
+    # Next in line, in the runner's order (D5): every project's lane, its queued jobs, then the
+    # tickets that can run project by project, then the waiting ones
+    lane = [r for p in every for r in p.lane][:3]
+    # each project's own run order kept (live_line's): up to its last row that can run, the rest
+    ends = {
+        p.name: max(
+            (n for n, r in enumerate(p.rest, start=1) if not _held(r, p.waits, pace.row)),
+            default=0,
+        )
+        for p in every
+    }
+    free = [r for p in every for r in p.rest[: ends[p.name]]]
+    held = [r for p in every for r in p.rest[ends[p.name] :]]
+    upcoming = [{**r, "number": n} for n, r in enumerate([*lane, *free, *held][:3], start=1)]
+    passed = []
+    if free:  # a project ahead of the first that can run is passed over, with why
+        for p in every:
+            if ends[p.name]:
+                break
+            first = next((r for r in p.rest if r.get("ticket")), None)
+            if first is not None:
+                why = _held(first, p.waits, pace.row)
+                passed.append({"project": p.name, "ticket": first["ticket"], "waits": why})
+    tickets = [q for p in every for q in p.queued]
+    counts = [(p.name, len(p.queued)) for p in every if p.queued]
+
+    # Needs you (D6): one desk line a project with something on it, then every project's items
+    desks = [
+        {"project": p.name, "count": len(p.items), "items": p.items[:3]} for p in every if p.items
     ]
-    # three tickets in all, renumbered: the lane's run before the rest
-    upcoming = [{**r, "number": n} for n, r in enumerate([*lane, *rest][:3], start=1)]
-    open_needs = needs_you(conn, project, now, jobs, all_queued)
-    # the desk's entry stands for its answers wanted, its sign-offs and its blocked tickets, so no
-    # lead reply (f6-09), no stored sign-off row (f95-01) and no blocked row shows on its own
-    needs = [n for n in open_needs if n.kind not in ("planning", "signoff", "blocked")]
+    needs = [n for p in every for n in p.needs]
+
+    # D1: word each notice from the item's kind and its card
     project_id = metrics.find_project(conn, project)
     card_titles: dict[str, str] = {}
     proposals: Sequence[DeskItem] = []
     if project_id is not None:
         card_titles = _card_titles(conn, project_id)
         proposals = _open_proposals(conn, project_id, now)
-    items = waiting_for_you(desk(conn, project, now, line=line))  # acted on waits on no one
-    if items:
-        n = len(items)
-        text = f"{n} thing{'s wait' if n != 1 else ' waits'} for you on your desk"
-        needs.insert(0, Need("desk", "desk", text))
-    # D1: word each notice from the item's kind and its card
-    notice_data = notices(open_needs, card_titles, project, proposals)
+    notice_data = notices(own.open_needs, card_titles, project, proposals)
     # Cross-project notices: every other project's open items, prefixed with project name
-    for p in metrics.projects_in_order(conn):
-        if p.name == project:
+    for name in names:
+        if name == project:
             continue
-        other_id = metrics.find_project(conn, p.name)
+        other_id = metrics.find_project(conn, name)
         if other_id is None:
             continue
         other_items = metrics.open_owner_items(conn, other_id)
@@ -1038,36 +1086,132 @@ def _live_context(
         other_notices = notices(
             other_needs,
             _card_titles(conn, other_id),
-            p.name,
+            name,
             _open_proposals(conn, other_id, now),
         )
         for oid, notice in other_notices.items():
-            key = f"{p.name}/{oid}"
-            notice["title"] = f"{p.name}: {notice['title']}"
+            key = f"{name}/{oid}"
+            notice["title"] = f"{name}: {notice['title']}"
             notice_data[key] = notice
-    pace = claude_pace(conn, project, now)
     return {
         "needs": needs,
-        "desk_items": items[:3],
-        "planning_count": len(items),  # the Planning tab's count, refreshed by the live partial
+        "desks": desks,
+        "planning_count": len(own.items),  # the Planning tab's count, refreshed by /live
         "notices": notice_data,
-        "all_done": not (all_queued or qjobs or jobs),
-        "running": [job for job in jobs if job.live],
-        "runs": live_runs(conn, project, now),
+        "all_done": not any(p.queued or p.jobs_queued or p.jobs for p in every),
+        "running": jobs,
+        "runs": runs,
         # the owner's pause on Now (f5-18), as the top bar words it (f28-02)
-        "pause_words": pause_words(conn, project, now),
-        "queue": all_queued,
+        "pause_words": pause_words(conn, leading, now),
+        "queue": tickets,
+        "queue_counts": counts,  # each project's share of the count (D5)
         "lane": upcoming[: len(lane)],
         "next": upcoming[len(lane) :],
-        "waits": waits,
-        "queued_jobs": qjobs,
+        "passed": passed,
+        "queued_jobs": [j for p in every for j in p.jobs_queued],
         # Claude's allowance and its reserve switches, below Now (f8-06)
         "allowance": agent_allowances(conn, now),
         "switches": reserve_switches(conn, project, now),
-        "reserve_cards": reserve_cards,  # named under them (F172 D6)
+        "reserve_cards": own.reserve_cards,  # named under them (F172 D6)
         "pace": pace.week,  # the week meter's post and plate (f9-29)
         "lead_holds": pace.row,  # what a held lead ticket's row says
     }
+
+
+@dataclass(frozen=True)
+class _ProjectLive:
+    """One project's share of the live part (F132): its jobs, its tickets and queued jobs, its
+    Next in line rows (the lane's and the rest, each with its project and why it waits), its
+    open needs and its desk."""
+
+    name: str
+    jobs: list[Running]
+    queued: list[Queued]
+    waits: dict[str, str]  # ticket -> what it waits for, as `queue` words it
+    jobs_queued: list[QueuedJob]
+    lane: list[dict[str, Any]]
+    rest: list[dict[str, Any]]
+    open_needs: list[Need]
+    needs: list[Need]  # what Needs you lists: the desk's line stands for the rest
+    items: list["DeskItem"]  # the desk's items waiting for the owner
+    reserve_cards: list[Any]
+
+
+def _project_live(
+    conn: sqlite3.Connection,
+    project: str,
+    now: datetime,
+    *,
+    line: dict[str, Any] | None = None,
+    cards: "Board | None" = None,
+) -> _ProjectLive:
+    """``project``'s share of the live part, its board and floor built once (F228) unless
+    handed in."""
+    from factory_dashboard.board import board, reserve_marked  # board.py imports from here
+    from factory_dashboard.line import live_line  # line.py imports LIVE from here
+    from factory_dashboard.planning import desk, waiting_for_you  # planning imports overview
+
+    jobs = running_jobs(conn, project, now)
+    all_queued = queue(conn, project, now)
+    # Mapping from ticket id to its ``waits_for`` reason, for tickets whose dependency isn't done.
+    waits: dict[str, str] = {q.ticket: q.waits_for for q in all_queued if q.waits_for is not None}
+    if cards is None:
+        cards = board(conn, project, now)
+    if line is None:
+        line = live_line(conn, project, now.astimezone(), cards=cards)
+    # the fast lane's tickets, and their directions and escalations, go first (F172 D9)
+    reserve_cards = reserve_marked(conn, project, now, found=cards)
+    # as the runner will once it applies the requests: a card asked out has left (F192 D4)
+    lane_keys = {c.key for c in reserve_cards if c.lane_asked != "off"}
+    lane, rest = fast_lane(line["queue"], lane_keys)
+    lane_ids = {str(r["ticket"]) for r in lane}
+    # "on its way" only on a row of the card asked in, not on a ticket it waits for elsewhere
+    asked_in = {c.key for c in reserve_cards if c.lane_asked in ("on", "first")}
+    # an escalated lane ticket's row goes by the same cards as its ticket rows (F191 D3)
+    qjobs = queued_jobs(conn, project, now, first=lane_ids, card_keys=lane_keys)
+
+    def mine(r: dict[str, Any]) -> dict[str, Any]:
+        return {**r, "project": project, "waits_for": waits.get(str(r.get("ticket")))}
+
+    lane = [
+        {
+            **mine(r),
+            "card": r.get("card") or short_key(str(r["milestone"])).upper(),
+            "on_its_way": short_key(str(r["milestone"])).upper() in asked_in,
+        }
+        for r in lane[:3]
+    ]
+    open_needs = needs_you(conn, project, now, jobs, all_queued)
+    # the desk's entry stands for its answers wanted, its sign-offs and its blocked tickets, so no
+    # lead reply (f6-09), no stored sign-off row (f95-01) and no blocked row shows on its own
+    needs = [n for n in open_needs if n.kind not in ("planning", "signoff", "blocked")]
+    items = waiting_for_you(desk(conn, project, now, line=line))  # acted on waits on no one
+    return _ProjectLive(
+        project,
+        jobs,
+        all_queued,
+        waits,
+        qjobs,
+        lane,
+        [mine(r) for r in rest],
+        open_needs,
+        needs,
+        items,
+        reserve_cards,
+    )
+
+
+def _held(row: dict[str, Any], waits: dict[str, str], lead_holds: str | None) -> str | None:
+    """What keeps a Next in line row from running now, in its row's words, or None when it can
+    run: a ticket it waits for, Claude (the run waits for it, or the lead's tickets wait at
+    Claude's limit), or a parked review's reset."""
+    if row.get("ticket") and row["ticket"] in waits:
+        return waits[row["ticket"]]
+    if row.get("waits"):
+        return "waits for " + ", ".join(row["waits"])
+    if row.get("kind") == "lead" and lead_holds and lead_holds.startswith("waits for Claude"):
+        return lead_holds
+    return None
 
 
 @router.get("/", response_class=HTMLResponse)

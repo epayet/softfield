@@ -3225,7 +3225,8 @@ def test_the_overview_and_the_planning_tab_count_the_same(planning, db_path, ser
     html = _page(client)
     tab = re.search(r'id="planning-tab">Planning · (\d+)</a>', html)
     assert tab
-    assert f"{tab[1]} things wait for you on your desk" in client.get("/live").text
+    # the fixture has two projects: the desk line is the project's own (F132 D6)
+    assert f"{tab[1]} things wait on its desk" in client.get("/live").text
 
 
 def test_a_ripe_cards_proposals_are_links_in_its_sign_off_row(planning, db_path, db, serve):

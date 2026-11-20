@@ -547,7 +547,8 @@ def _count(html: str) -> int:
 
 
 def _waits_on_the_desk(html: str) -> int:
-    said = re.search(r"(\d+) things? waits? for you on your desk", html)
+    # one project's words, or a project's own desk line with several (F132 D6)
+    said = re.search(r"(\d+) things? waits? (?:for you on your|on its) desk", html)
     return int(said[1]) if said else 0
 
 

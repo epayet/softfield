@@ -412,12 +412,15 @@ def render(
     now = request.app.dependency_overrides.get(get_now, get_now)()
     # bug-67: a project being set up says so on its pages; the Projects page has it on the plate
     strip = None if template == "projects.html" else setup_strip(conn, project, now)
+    projects = names if project in names else [*names, project]
     return templates.TemplateResponse(
         request,
         template,
         {
             "project": project,
-            "projects": names if project in names else [*names, project],
+            "projects": projects,
+            # F132 D3: the project plate shows only when the factory has more than one
+            "many_projects": len(projects) > 1,
             "q": "?" + urlencode({"project": project}),
             "version_poll": VERSION_POLL.format(version=code_version()),
             **top_bar(conn, project, now, planning_count=context.get("planning_count")),
