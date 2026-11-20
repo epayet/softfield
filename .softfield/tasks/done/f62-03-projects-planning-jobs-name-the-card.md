@@ -33,3 +33,12 @@ The Projects page's running line, the Planning room's "after …" wait and the J
 - Jobs list: that review's Ticket cell is `F158` linked to `/planning/f158`; a developer job keeps its ticket link; a ticketless job of another role keeps "–"
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 2
+duration_s: 6373
+gate_failures: ['task-tests']
+tokens: 8308165
+```
