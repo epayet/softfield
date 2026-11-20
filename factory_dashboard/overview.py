@@ -1246,6 +1246,7 @@ def overview(request: Request, conn: Db, project: Project, now: Now) -> HTMLResp
             "now": local,
             **_live_context(conn, project, now, line=line, cards=cards),
         },
+        is_factory_wide=True,
     )
     if "since" not in request.query_params:  # choosing a span isn't looking again (f3-F3)
         response.set_cookie(
@@ -1261,7 +1262,14 @@ def overview(request: Request, conn: Db, project: Project, now: Now) -> HTMLResp
 @router.get("/live", response_class=HTMLResponse)
 def live(request: Request, conn: Db, project: Project, now: Now) -> HTMLResponse:
     """Needs you and Running now together, for htmx to swap in every 5 s."""
-    return render(request, conn, project, "_partials/live.html", _live_context(conn, project, now))
+    return render(
+        request,
+        conn,
+        project,
+        "_partials/live.html",
+        _live_context(conn, project, now),
+        is_factory_wide=True,
+    )
 
 
 @router.get("/away", response_class=HTMLResponse)
@@ -1287,4 +1295,5 @@ def away_partial(request: Request, conn: Db, project: Project, now: Now) -> HTML
             "away": queries.away_every(conn, every_project(conn, project), since, local),
             "now": local,
         },
+        is_factory_wide=True,
     )

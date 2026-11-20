@@ -15,7 +15,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from factory_dashboard import app as app_module
-from factory_dashboard.app import HOST, PORT, Db, ago, create_app
+from factory_dashboard.app import HOST, PORT, Db, ago, create_app, get_now
 from factory_dashboard.queries import connect
 from runner import cli, metrics
 from tests.factory_dashboard.conftest import (
@@ -95,7 +95,90 @@ def test_the_top_bar_has_a_tab_per_page_that_keeps_the_project(client):
 def test_the_project_defaults_to_the_repos(client):
     html = client.get("/").text
     assert '<option value="coucou" selected>' in html
-    assert re.search(r'<nav class="crumbs"[^>]*>.*coucou', html, re.S)
+    assert re.search(r'<nav class="crumbs"[^>]*>\s*The whole factory', html, re.S)
+
+
+def test_the_picker_sits_in_the_tabs_before_planning(client):
+    """F132: the project picker moves into the tab strip, right before Planning, as one bay with
+    Planning, Board and Tickets. It no longer sits in .bar-top."""
+    html = client.get("/").text
+    # no picker in .bar-top
+    bar_top = re.search(r'<div class="bar-top">(.*?)</div>', html, re.S)
+    assert bar_top
+    assert 'name="project"' not in bar_top[1], "picker should not be in .bar-top"
+    # picker in nav.tabs, before Planning
+    tabs = re.search(r'<nav class="tabs"[^>]*>(.*?)</nav>', html, re.S)
+    assert tabs
+    tabs_html = tabs[1]
+    assert 'name="project"' in tabs_html
+    picker_pos = tabs_html.index('name="project"')
+    planning_pos = tabs_html.index("Planning")
+    assert picker_pos < planning_pos, "picker should be before Planning"
+    # the bay-group wraps picker + Planning + Board + Tickets
+    assert 'class="bay-group"' in tabs_html
+
+
+def test_factory_wide_pages_crumbs_start_the_whole_factory(client):
+    """F132 D2: factory-wide pages (the Overview, Jobs, Runs, Timeline, Agents, Bench, Projects)
+    have crumbs that start "The whole factory"."""
+    for path in ["/", "/jobs", "/runs", "/timeline", "/agents", "/bench", "/projects"]:
+        html = client.get(path).text
+        crumbs = re.search(r'<nav class="crumbs"[^>]*>(.*?)</nav>', html, re.S)
+        assert crumbs, f"no crumbs on {path}"
+        assert "The whole factory" in crumbs[1], f"{path} should say 'The whole factory'"
+
+
+def test_project_pages_crumbs_start_the_project_name(client):
+    """F132 D2: a project's pages (Planning, Board, Tickets) have crumbs that start the
+    project's name."""
+    for path in ["/planning", "/board", "/tickets"]:
+        html = client.get(path).text
+        crumbs = re.search(r'<nav class="crumbs"[^>]*>(.*?)</nav>', html, re.S)
+        assert crumbs, f"no crumbs on {path}"
+        assert "coucou" in crumbs[1], f"{path} should start with the project name"
+
+
+def test_picker_still_shows_with_one_project(db_path):
+    """F132: when there is only one project, the picker still shows (with its one name)."""
+    conn = metrics.open_db(db_path)
+    try:
+        metrics.upsert_project(conn, "other")
+        metrics.set_project_paused(conn, "other", metrics.FORGOTTEN)
+    finally:
+        conn.close()
+    app = create_app(db_path, PROJECT)
+    app.dependency_overrides[get_now] = lambda: NOW
+    client = TestClient(app, base_url="http://127.0.0.1:8765")
+    html = client.get("/").text
+    assert 'name="project"' in html
+    select_match = re.search(r'<select[^>]*name="project"[^>]*>(.*?)</select>', html, re.S)
+    assert select_match
+    options = re.findall(r'<option value="([^"]+)"', select_match[1])
+    assert options == ["coucou"], f"expected ['coucou'], got {options}"
+
+
+def test_changing_the_picker_reloads_with_the_project(client):
+    """F132: choosing a project in the picker reloads the page with that project."""
+    html = client.get("/").text
+    assert "coucou" in html
+    html_other = client.get("/?project=other").text
+    assert "other" in html_other
+    html_back = client.get("/?project=coucou").text
+    assert "coucou" in html_back
+
+
+def test_the_bay_group_uses_rule_tokens(client):
+    """F132 D7: the bay uses the existing tokens only (the rule, the plate, the hazard stripe
+    faint), never a status colour."""
+    html = client.get("/").text
+    tabs = re.search(r'<nav class="tabs"[^>]*>(.*?)</nav>', html, re.S)
+    assert tabs
+    bay = re.search(r'<span class="bay-group">(.*?)</span>', tabs[1], re.S)
+    assert bay, "no .bay-group found"
+    # no raw colours in the bay
+    assert "#" not in bay[1], "bay should not use raw colours"
+    assert "rgb" not in bay[1], "bay should not use rgb colours"
+    assert "hsl" not in bay[1], "bay should not use hsl colours"
 
 
 def test_the_picker_follows_the_owner_s_project_order(db_path):
@@ -542,7 +625,7 @@ def test_phone_brand_name_does_not_wrap(page, client):
     page.evaluate("() => document.fonts.ready")
     # a select is as wide as its longest name: the owner's list has longer ones than the fixture's
     page.evaluate(
-        """() => document.querySelector('.filters select')
+        """() => document.querySelector('.picker .filters select')
             .add(new Option('travel-companion', 'travel-companion'))"""
     )
     soft, field = page.locator(".brand-soft"), page.locator(".brand-field")
@@ -568,7 +651,8 @@ def test_no_page_shows_software_factory(client):
 def test_phone_title_and_filter_share_one_line_at_390px(page, client):
     """f9-30: at 390 px the brand's box and the project select's box overlap vertically
     (same line) and the select sits to the right of the brand. This fails when .bar-top
-    is not a grid on the phone (the CSS-regex lines that once checked this are gone)."""
+    is not a grid on the phone (the CSS-regex lines that once checked this are gone).
+    F132: the picker moved into nav.tabs, so the select sits below the brand."""
     page.set_viewport_size({"width": 390, "height": 844})
 
     def route(r) -> None:
@@ -582,23 +666,21 @@ def test_phone_title_and_filter_share_one_line_at_390px(page, client):
     page.route(f"{ORIGIN}/**", route)
     page.goto(ORIGIN + "/")
     page.wait_for_selector(".brand", state="visible", timeout=REFRESH)
-    brand, project = page.locator(".brand"), page.locator(".filters select")
+    brand = page.locator(".brand")
+    project = page.locator("nav.tabs .picker .filters select")
     brand_box = brand.bounding_box()
     project_box = project.bounding_box()
-    assert abs(brand_box["y"] - project_box["y"]) < 15, (
-        f"title and filter not on same line: "
-        f"title y={brand_box['y']:.1f}, select y={project_box['y']:.1f}"
-    )
-    assert project_box["x"] > brand_box["x"], (
-        f"select not right of brand: brand x={brand_box['x']:.1f}, select x={project_box['x']:.1f}"
+    # the select sits inside nav.tabs, below the brand
+    assert project_box["y"] > brand_box["y"], (
+        f"select not below brand: brand y={brand_box['y']:.1f}, select y={project_box['y']:.1f}"
     )
 
 
 @pytest.mark.parametrize("scheme", ["dark", "light"])
 def test_phone_top_bar_is_compact_and_tabs_scroll(page, client, tmp_path, scheme):
     """f3-30: under 640 px the bar is short lines, tabs scroll sideways, current tab visible. The
-    title, the factory's status (its dot and sign, f17) and the project share a line, and "Turn
-    on notifications" takes one more while it shows."""
+    title, the factory's status (its dot and sign, f17) share a line, and "Turn
+    on notifications" takes one more while it shows. F132: the picker moved into nav.tabs."""
     page.emulate_media(color_scheme=scheme)
     page.set_viewport_size(PHONE)
     open_overview(page, client)
@@ -606,8 +688,10 @@ def test_phone_top_bar_is_compact_and_tabs_scroll(page, client, tmp_path, scheme
     header = page.locator("header.bar")
     height = header.evaluate("el => el.getBoundingClientRect().height")
     assert height <= 150, f"header {height}px > 150px"
-    title, project = page.locator(".brand"), page.locator(".filters select")
-    assert title.bounding_box()["y"] == pytest.approx(project.bounding_box()["y"], abs=15)
+    title = page.locator(".brand")
+    project = page.locator("nav.tabs .picker .filters select")
+    # the select sits inside nav.tabs, below the brand (F132)
+    assert project.bounding_box()["y"] > title.bounding_box()["y"]
     assert title.bounding_box()["height"] >= 44, "the title should be at least 44px tall"
     tabs = page.locator("nav.tabs")
     assert tabs.evaluate("el => el.scrollWidth > el.clientWidth"), "tabs not scrollable"
@@ -3087,21 +3171,21 @@ def _open_tickets(page, client: TestClient, size: dict[str, int]) -> None:
 
 
 def test_on_a_phone_the_dot_and_sign_join_the_brands_row_and_a_tap_shows_the_words(page, serve):
-    """f17: at 390 px the brand, the dot, the sign and the project share one row (their middles
+    """f17: at 390 px the brand, the dot, the sign share one row (their middles
     agree: they differ in height), the dot and the sign are 44 px thumb targets, and the words
-    show only once the dot is tapped, and stay through the next poll."""
+    show only once the dot is tapped, and stay through the next poll. F132: the project picker
+    moved into nav.tabs."""
     page.clock.install()
     _open_tickets(page, serve(), PHONE)
     parts = {
         "brand": page.locator(".brand"),
         "dot": page.locator("#factory-status .dot-btn"),
         "sign": page.get_by_role("button", name="Pause after this job", exact=True),
-        "project": page.locator(".filters select"),
     }
     boxes = {name: part.bounding_box() for name, part in parts.items()}
     middles = {name: box["y"] + box["height"] / 2 for name, box in boxes.items()}
     assert max(middles.values()) - min(middles.values()) <= 3, middles
-    lefts = [boxes[name]["x"] for name in ("brand", "dot", "sign", "project")]
+    lefts = [boxes[name]["x"] for name in ("brand", "dot", "sign")]
     assert lefts == sorted(lefts), boxes
     for name in ("dot", "sign"):
         assert (boxes[name]["width"], boxes[name]["height"]) == (44, 44), (name, boxes[name])

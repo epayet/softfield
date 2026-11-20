@@ -406,4 +406,5 @@ def agents_page(
             "eligible": eligibility_rows(conn, project),
             "milestone": milestone,
         },
+        is_factory_wide=True,
     )

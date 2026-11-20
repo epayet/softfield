@@ -150,7 +150,9 @@ def runs_page(
     now: Now,
 ) -> HTMLResponse:
     runs = list_runs(conn, project, now=now)
-    return render(request, conn, project, "runs.html", {"active": "/runs", "runs": runs})
+    return render(
+        request, conn, project, "runs.html", {"active": "/runs", "runs": runs}, is_factory_wide=True
+    )
 
 
 @router.get("/runs/{run_dir}", response_class=HTMLResponse)
@@ -170,4 +172,5 @@ def run_page(
         str(run["project"]),
         "run.html",
         {"active": "/runs", "run": run},
+        is_factory_wide=True,
     )

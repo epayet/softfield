@@ -93,4 +93,5 @@ def bench(request: Request, conn: Db, project: Project) -> HTMLResponse:
         project,
         "bench.html",
         {"active": "/bench", "grid": bench_grid(conn, project), "command": COMMAND},
+        is_factory_wide=True,
     )

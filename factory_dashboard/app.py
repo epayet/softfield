@@ -401,6 +401,8 @@ def render(
     project: str,
     template: str,
     context: dict[str, Any],
+    *,
+    is_factory_wide: bool = False,
 ) -> HTMLResponse:
     """A page: ``template`` with the top bar's projects and live facts, and ``q`` to keep
     ``?project=``."""
@@ -421,6 +423,7 @@ def render(
             "projects": projects,
             # F132 D3: the project plate shows only when the factory has more than one
             "many_projects": len(projects) > 1,
+            "is_factory_wide": is_factory_wide,
             "q": "?" + urlencode({"project": project}),
             "version_poll": VERSION_POLL.format(version=code_version()),
             **top_bar(conn, project, now, planning_count=context.get("planning_count")),

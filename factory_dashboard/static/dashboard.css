@@ -165,6 +165,15 @@ nav.tabs a { font: 600 13px var(--display); letter-spacing: .06em; text-transfor
 nav.tabs a[aria-current="page"] { background: var(--hazard); color: var(--hazard-ink); }
 nav.tabs a:hover { text-decoration: none; color: var(--ink); background: var(--plate); }
 nav.tabs a[aria-current="page"]:hover { color: var(--hazard-ink); background: var(--hazard); }
+/* The project picker sits with the three pages it changes (F132 D7): hazard-stripe bay, picker with a right rule */
+.bay-group { display: flex; align-items: stretch; border: solid var(--rule); border-width: 0 1px 1px 0;
+  background: repeating-linear-gradient(-45deg, transparent 0 6px, rgba(242,177,10,.06) 6px 8px); }
+.bay-group .picker { display: inline-flex; align-items: center; gap: 4px; padding: 0 8px; border-right: 1px solid var(--rule);
+  font: 600 11px var(--mono); letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+.bay-group select { font: inherit; color: var(--ink); background: var(--plate); border: 1px solid var(--rule); padding: 2px 6px; }
+.bay-group form { display: inline; }
+.bay-group a { border-width: 0 1px 0 0 !important; }
+.bay-group a:last-child { border-width: 0 !important; }
 .crumbs { font-size: 13px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
 .crumbs a { color: var(--ink-2); }
 

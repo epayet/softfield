@@ -268,6 +268,7 @@ def jobs_page(
             "role_filter": role,
             "outcome_filter": outcome,
         },
+        is_factory_wide=True,
     )
 
 
@@ -287,4 +288,5 @@ def job_page(job_id: int, request: Request, conn: Db, project: Project) -> HTMLR
             "ticket": detail.ticket,
             "milestone_key": detail.milestone_key,
         },
+        is_factory_wide=True,
     )

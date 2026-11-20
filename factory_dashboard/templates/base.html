@@ -180,25 +180,17 @@
       <small>{{ request.url.netloc }}</small>
     </a>
     {% include "_partials/bar_status.html" %}
-    <form class="filters" method="get" action="{{ picker_to or active }}">
-      <label>Project
-        <select name="project" onchange="this.form.submit()">
-          {% for name in projects %}
-          <option value="{{ name }}"{% if name == project %} selected{% endif %}>{{ name }}</option>
-          {% endfor %}
-        </select>
-      </label>
-      <noscript><button>Show</button></noscript>
-    </form>
     <button id="theme-btn" class="theme-switch" role="switch" aria-label="Night theme" aria-checked="false" title="Switch to the light theme"><span class="plate"><span class="knob"></span><svg class="moon"><use href="#moon"/></svg><svg class="sun"><use href="#sun"/></svg></span></button>
   </div>
   {# The version poller sits on the stripe (f38): its "New version" tag hangs over it, so nothing moves #}
   <div class="bar-stripe"><div class="hazard" aria-hidden="true"></div>{{ version_poll | safe }}</div>
   <nav class="tabs" aria-label="Pages">
-    {# Board replaced Milestones (the owner, 2026-10-06): it links to the list, and a milestone's page lights it (f5-17) #}
-    {% for path, label in [("/projects", "Projects"), ("/", "Overview"), ("/planning", "Planning"), ("/board", "Board"), ("/tickets", "Tickets"), ("/jobs", "Jobs"), ("/runs", "Runs"), ("/timeline", "Timeline"), ("/agents", "Agents"), ("/bench", "Bench")] %}
-    <a href="{{ path }}{{ q }}"{% if path == active %} aria-current="page"{% endif %}{% if path == "/planning" %} id="planning-tab"{% endif %}>{{ label }}{% if path == "/planning" and planning_count %} · {{ planning_count }}{% endif %}</a>
-    {% endfor %}
+    <a href="/projects{{ q }}"{% if active == "/projects" %} aria-current="page"{% endif %}>Projects</a><a href="/{{ q }}"{% if active == "/" %} aria-current="page"{% endif %}>Overview</a>
+    <span class="bay-group">
+      <span class="picker">Project <form class="filters" method="get" action="{{ picker_to or active }}" style="display:inline"><select name="project" onchange="this.form.submit()">{% for name in projects %}<option value="{{ name }}"{% if name == project %} selected{% endif %}>{{ name }}</option>{% endfor %}</select></form><noscript><button>Show</button></noscript></span>
+      <a href="/planning{{ q }}"{% if active == "/planning" %} aria-current="page"{% endif %} id="planning-tab">Planning{% if planning_count %} · {{ planning_count }}{% endif %}</a><a href="/board{{ q }}"{% if active == "/board" %} aria-current="page"{% endif %}>Board</a><a href="/tickets{{ q }}"{% if active == "/tickets" %} aria-current="page"{% endif %}>Tickets</a>
+    </span>
+    <a href="/jobs{{ q }}"{% if active == "/jobs" %} aria-current="page"{% endif %}>Jobs</a><a href="/runs{{ q }}"{% if active == "/runs" %} aria-current="page"{% endif %}>Runs</a><a href="/timeline{{ q }}"{% if active == "/timeline" %} aria-current="page"{% endif %}>Timeline</a><a href="/agents{{ q }}"{% if active == "/agents" %} aria-current="page"{% endif %}>Agents</a><a href="/bench{{ q }}"{% if active == "/bench" %} aria-current="page"{% endif %}>Bench</a>
   </nav>
 </header>
 {% block live_poll %}
@@ -210,7 +202,7 @@
 <main>
   <nav class="crumbs" aria-label="Breadcrumbs">
     {# project › milestone › ticket › job (D8): a page adds its own after the project #}
-    <a href="/projects/{{ project | urlencode }}{{ q }}">{{ project }}</a>
+    {% if is_factory_wide %}The whole factory{% if many_projects %} · {{ projects | length }} projects{% endif %}{% else %}<a href="/projects/{{ project | urlencode }}{{ q }}">{{ project }}</a>{% endif %}
     {% block crumbs %}{% endblock %}
   </nav>
   {% if setup_strip %}

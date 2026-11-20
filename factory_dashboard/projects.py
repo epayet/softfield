@@ -326,4 +326,5 @@ def projects_page(request: Request, conn: Db, project: Project, now: Now) -> HTM
             "root": home_path(root),  # as the mock-up
             "taken": taken_names(conn, root),
         },
+        is_factory_wide=True,
     )

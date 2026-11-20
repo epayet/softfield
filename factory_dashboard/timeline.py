@@ -182,4 +182,5 @@ def timeline_page(
             "run_filter": run,
             "many_projects": len(names) > 1,
         },
+        is_factory_wide=True,
     )

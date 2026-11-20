@@ -1086,4 +1086,4 @@ def line_live(request: Request, conn: Db, project: Project, now: Now) -> Respons
     if "application/json" in request.headers.get("accept", ""):
         # keys sorted, as the page's own block (``tojson``): an unchanged document reads the same
         return Response(json.dumps(context["line"], sort_keys=True), media_type="application/json")
-    return render(request, conn, project, "_partials/line.html", context)
+    return render(request, conn, project, "_partials/line.html", context, is_factory_wide=True)
