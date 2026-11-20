@@ -45,3 +45,9 @@ attempts: 3
 tokens: 7006426
 logs: .softfield/var/runs/20261120-005709/f194-01-four-slot-menu
 ```
+
+```yaml
+# --- runner ---
+result: done
+finished_by: lead
+```
