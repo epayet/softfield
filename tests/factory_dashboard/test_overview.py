@@ -355,7 +355,7 @@ def test_a_waiting_run_names_its_ticket_and_until_when(serve_between, db_path):
 
 
 def test_a_checkpoint_job_shows_no_goal_line(client, db_path):
-    """A checkpoint job (no ticket) shows no goal line."""
+    """A checkpoint job (no ticket) shows its role line when the milestone has a title."""
     from runner import metrics
 
     conn = metrics.open_db(db_path)
@@ -379,13 +379,6 @@ def test_a_checkpoint_job_shows_no_goal_line(client, db_path):
     now = section(html, "now")
     assert "checkpoint" in now
     assert "Nothing is running" not in now
-    # The checkpoint card (job 14) has no title div.
-    # Find "job 14" in the HTML and check the surrounding context for running-title.
-    idx = html.index("job 14")
-    # The card content extends from "job 14" to the next "</div>" at the card level.
-    # Grab a chunk and verify no running-title appears.
-    chunk = html[idx : idx + 500]
-    assert "running-title" not in chunk
 
 
 def test_a_waiting_run_with_unknown_ticket_shows_no_title(serve_between):
@@ -5241,3 +5234,209 @@ def test_away_one_project_no_plate_reads_as_today(tmp_path):
     # no project plate when only one project
     assert "1 merged" in away
     assert "1 thing" not in away  # no "things wait on its desk" in away panel
+
+
+def test_a_running_review_job_shows_card_link_and_role_line(client, db_path):
+    """f62-01: a running review job on f158 shows F158 linked to /planning/f158,
+    the milestone title, and the role line."""
+    from runner import metrics
+
+    conn = metrics.open_db(db_path)
+    try:
+        run = conn.execute("SELECT id FROM runs WHERE run_dir = '20261002-113500'").fetchone()[0]
+        f158 = conn.execute(
+            "SELECT id FROM milestones WHERE key = 'f158'",
+        ).fetchone()
+        if not f158:
+            project = conn.execute("SELECT id FROM projects WHERE name = ?", (PROJECT,)).fetchone()[
+                "id"
+            ]
+            f158 = metrics.upsert_milestone(conn, project, "f158", title="Milestones on the board")
+        else:
+            f158 = f158["id"]
+            # ensure the title is set
+            conn.execute(
+                "UPDATE milestones SET title = 'Milestones on the board' WHERE id = ?",
+                (f158,),
+            )
+        job_id = metrics.start_job(
+            conn,
+            run,
+            ticket_id=None,
+            milestone_id=f158,
+            role="review",
+            agent=OPUS,
+            attempt=1,
+            started=NOW.isoformat(),
+        )
+        metrics.update_running_job(conn, job_id, tokens_in=10_000, steps=5)
+    finally:
+        conn.close()
+    html = client.get("/").text
+    now = section(html, "now")
+    now_raw = section_raw(html, "now")
+    assert "Nothing is running" not in now
+    assert 'href="/planning/f158' in now_raw
+    assert "F158" in now
+    assert "Milestones on the board" in now
+    assert "The lead reads what F158 built, before it's yours to sign off" in now
+
+
+def test_a_running_planner_job_shows_card_link_and_role_line(client, db_path):
+    """f62-01: a running planner job on f62 shows the card link and role line."""
+    from runner import metrics
+
+    conn = metrics.open_db(db_path)
+    try:
+        run = conn.execute("SELECT id FROM runs WHERE run_dir = '20261002-113500'").fetchone()[0]
+        f62 = conn.execute(
+            "SELECT id FROM milestones WHERE key = 'f62'",
+        ).fetchone()
+        if not f62:
+            project = conn.execute("SELECT id FROM projects WHERE name = ?", (PROJECT,)).fetchone()[
+                "id"
+            ]
+            f62 = metrics.upsert_milestone(conn, project, "f62", title="Overview allowances")
+        else:
+            f62 = f62["id"]
+            conn.execute(
+                "UPDATE milestones SET title = 'Overview allowances' WHERE id = ?",
+                (f62,),
+            )
+        job_id = metrics.start_job(
+            conn,
+            run,
+            ticket_id=None,
+            milestone_id=f62,
+            role="planner",
+            agent=OPUS,
+            attempt=1,
+            started=NOW.isoformat(),
+        )
+        metrics.update_running_job(conn, job_id, tokens_in=10_000, steps=5)
+    finally:
+        conn.close()
+    html = client.get("/").text
+    now = section(html, "now")
+    now_raw = section_raw(html, "now")
+    assert "Nothing is running" not in now
+    assert 'href="/planning/f62' in now_raw
+    assert "F62" in now
+    assert "Overview allowances" in now
+    assert "The lead answers you on F62's thread" in now
+
+
+def test_a_running_checkpoint_job_shows_card_link_and_role_line(client, db_path):
+    """f62-01: a running checkpoint job on f51 shows the card link and role line."""
+    from runner import metrics
+
+    conn = metrics.open_db(db_path)
+    try:
+        run = conn.execute("SELECT id FROM runs WHERE run_dir = '20261002-113500'").fetchone()[0]
+        f51 = conn.execute(
+            "SELECT id FROM milestones WHERE key = 'f51'",
+        ).fetchone()
+        if not f51:
+            project = conn.execute("SELECT id FROM projects WHERE name = ?", (PROJECT,)).fetchone()[
+                "id"
+            ]
+            f51 = metrics.upsert_milestone(conn, project, "f51", title="Merged tickets")
+        else:
+            f51 = f51["id"]
+            conn.execute(
+                "UPDATE milestones SET title = 'Merged tickets' WHERE id = ?",
+                (f51,),
+            )
+        job_id = metrics.start_job(
+            conn,
+            run,
+            ticket_id=None,
+            milestone_id=f51,
+            role="checkpoint",
+            agent=OPUS,
+            attempt=1,
+            started=NOW.isoformat(),
+        )
+        metrics.update_running_job(conn, job_id, tokens_in=10_000, steps=5)
+    finally:
+        conn.close()
+    html = client.get("/").text
+    now = section(html, "now")
+    now_raw = section_raw(html, "now")
+    assert "Nothing is running" not in now
+    assert 'href="/planning/f51' in now_raw
+    assert "F51" in now
+    assert "Merged tickets" in now
+    assert "Claude re-checks F51's merged tickets" in now
+
+
+def test_a_running_developer_job_with_ticket_shows_ticket_link_not_planning(client, db_path):
+    """f62-01: a running developer job with a ticket shows its ticket link and title,
+    no /planning/ link."""
+    from runner import metrics
+
+    conn = metrics.open_db(db_path)
+    try:
+        run = conn.execute("SELECT id FROM runs WHERE run_dir = '20261002-113500'").fetchone()[0]
+        f1 = conn.execute("SELECT id FROM milestones WHERE key = 'f1'").fetchone()["id"]
+        project = conn.execute("SELECT id FROM projects WHERE name = ?", (PROJECT,)).fetchone()[
+            "id"
+        ]
+        ticket = metrics.upsert_ticket(
+            conn,
+            project,
+            "f1-dev-test",
+            milestone_id=f1,
+            kind="developer",
+            state="running",
+            title="Dev test title.",
+        )
+        job_id = metrics.start_job(
+            conn,
+            run,
+            ticket_id=ticket,
+            milestone_id=f1,
+            role="developer",
+            agent=LOCAL,
+            attempt=1,
+            started=NOW.isoformat(),
+        )
+        metrics.update_running_job(conn, job_id, tokens_in=10_000, steps=5)
+    finally:
+        conn.close()
+    html = client.get("/").text
+    now = section(html, "now")
+    now_raw = section_raw(html, "now")
+    assert "Nothing is running" not in now
+    assert 'href="/tickets/f1-dev-test?' in now_raw
+    assert "Dev test title." in now
+    assert "/planning/" not in now_raw
+
+
+def test_a_running_job_with_no_ticket_no_card_shows_no_planning_link(client, db_path):
+    """f62-01: a running job with neither ticket nor card shows no /planning/ link
+    and no card line."""
+    from runner import metrics
+
+    conn = metrics.open_db(db_path)
+    try:
+        run = conn.execute("SELECT id FROM runs WHERE run_dir = '20261002-113500'").fetchone()[0]
+        job_id = metrics.start_job(
+            conn,
+            run,
+            ticket_id=None,
+            milestone_id=None,
+            role="developer",
+            agent=LOCAL,
+            attempt=1,
+            started=NOW.isoformat(),
+        )
+        metrics.update_running_job(conn, job_id, tokens_in=10_000, steps=5)
+    finally:
+        conn.close()
+    html = client.get("/").text
+    now = section(html, "now")
+    now_raw = section_raw(html, "now")
+    assert "Nothing is running" not in now
+    assert "/planning/" not in now_raw
+    assert "running-title" not in now

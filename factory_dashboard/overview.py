@@ -79,6 +79,7 @@ class Running:
     title: str | None
     difficulty: int | None
     milestone: str | None
+    m_title: str | None
     run_dir: str
     elapsed: timedelta
     heartbeat: timedelta | None  # how long ago the run last beat
@@ -88,6 +89,22 @@ class Running:
     waiting_until: str | None = None  # ISO time while the run pauses for a limit
     reserve: bool = False  # the owner said yes to Claude's reserve for this command
     project: str = ""  # whose job it is: its plate and its links (F132 D2)
+
+    @property
+    def job_card(self) -> dict[str, str | dict[str, str]] | None:
+        """The card's key, title, and role line for a ticketless job with a milestone card."""
+        if self.ticket or not self.milestone or not self.m_title:
+            return None
+        key = short_key(self.milestone).upper()
+        role_lines: dict[str, str] = {
+            "review": f"The lead reads what {key} built, before it's yours to sign off",
+            "planner": f"The lead answers you on {key}'s thread",
+            "checkpoint": f"Claude re-checks {key}'s merged tickets",
+        }
+        line = role_lines.get(self.role)
+        if line is None:
+            return None
+        return {"key": key, "title": self.m_title, "line": line}
 
     @property
     def live(self) -> bool:
@@ -159,8 +176,8 @@ def running_jobs(conn: sqlite3.Connection, project: str, now: datetime) -> list[
     """Every job still ``running``, oldest first, live or not."""
     rows = conn.execute(
         "SELECT j.id, j.role, j.agent, j.attempt, j.started, j.tokens_in, j.tokens_cached, j.steps,"
-        " t.ticket, t.title, t.difficulty, m.key AS milestone, r.run_dir, r.heartbeat,"
-        " r.waiting_until, r.reserve"
+        " t.ticket, t.title, t.difficulty, m.key AS milestone, m.title AS m_title,"
+        " r.run_dir, r.heartbeat, r.waiting_until, r.reserve"
         " FROM jobs j JOIN runs r ON r.id = j.run_id JOIN projects p ON p.id = r.project_id"
         " LEFT JOIN tickets t ON t.id = j.ticket_id"
         " LEFT JOIN milestones m ON m.id = j.milestone_id"
@@ -178,6 +195,7 @@ def running_jobs(conn: sqlite3.Connection, project: str, now: datetime) -> list[
             title=row["title"],
             difficulty=row["difficulty"],
             milestone=row["milestone"],
+            m_title=row["m_title"],
             run_dir=row["run_dir"],
             elapsed=_age(now, row["started"]) or timedelta(0),
             heartbeat=_age(now, row["heartbeat"]),
