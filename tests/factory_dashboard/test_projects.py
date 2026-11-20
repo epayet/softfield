@@ -4,6 +4,7 @@ from html import unescape
 from pathlib import Path
 
 import pytest
+from fastapi.testclient import TestClient
 
 from factory_dashboard import stacks_routes
 from factory_dashboard.projects import taken_names
@@ -804,3 +805,54 @@ def test_project_with_no_delegated_tickets_says_so(db_path):
     html = client.get("/projects/empty").text
     savings = section(html, "savings")
     assert "No delegated tickets yet." in savings
+
+
+def test_a_running_ticketless_review_names_the_card_on_projects_page(serve, db_path):
+    """A running review on f158-… names the card: "review F158" with its title, the key
+    linked to its planning page (F62 D1)."""
+    from datetime import timedelta
+
+    from factory_dashboard.app import create_app, get_now
+    from runner import metrics
+
+    conn = metrics.open_db(db_path)
+    try:
+        project_id = metrics.find_project(conn, PROJECT)
+        assert project_id is not None
+        m = metrics.upsert_milestone(
+            conn,
+            project_id,
+            "f158-milestones-don-t-show-me-their",
+            title="Milestones show their reviews",
+        )
+        run = metrics.upsert_run(
+            conn,
+            project_id,
+            "20261002-120000",
+            command="milestone f158",
+            started=(NOW - timedelta(minutes=25)).isoformat(),
+            heartbeat=(NOW - timedelta(seconds=30)).isoformat(),
+        )
+        metrics.start_job(
+            conn,
+            run,
+            ticket_id=None,
+            milestone_id=m,
+            role="review",
+            agent="claude-opus",
+            attempt=1,
+            started=(NOW - timedelta(minutes=12)).isoformat(),
+        )
+    finally:
+        conn.close()
+
+    app = create_app(db_path, PROJECT)
+    app.dependency_overrides[get_now] = lambda: NOW
+    client = TestClient(app, base_url="http://127.0.0.1:8765")
+    html = client.get("/projects").text
+    now_section = section(html, "projects-now")
+    assert "review F158" in now_section
+    assert "Milestones show their reviews" in now_section
+    assert 'href="/planning/f158?project=' in html
+    # The role "review" does not appear as bare text where the card name should be
+    assert "review F158" in now_section

@@ -401,7 +401,12 @@ def _typical(
 
 
 def _what(job: Running) -> str:
-    return job.ticket or job.role
+    if job.ticket:
+        return job.ticket
+    card = job.job_card
+    if card is not None:
+        return f"{job.role} {card['key']}"
+    return job.role
 
 
 _FIVE_HOURS = timedelta(hours=5)

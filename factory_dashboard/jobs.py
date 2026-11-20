@@ -10,6 +10,7 @@ from fastapi import APIRouter, Query, Request
 from fastapi.responses import HTMLResponse
 
 from factory_dashboard.app import Db, Project, render
+from factory_dashboard.overview import job_card
 
 router = APIRouter()
 
@@ -19,6 +20,7 @@ class JobRow:
     id: int
     started: str
     ticket: str | None
+    milestone_key: str | None
     role: str
     agent: str
     attempt: int
@@ -28,6 +30,7 @@ class JobRow:
     tokens_out: int | None
     failed_gate: str | None
     project: str
+    card: dict[str, str] | None = None
 
 
 @dataclass(frozen=True)
@@ -197,7 +200,7 @@ def list_jobs(
     query_sql = (
         f"SELECT j.id, j.started, j.ended, j.role, j.agent, j.attempt, "  # noqa: S608
         f"j.outcome, j.tokens_in, j.tokens_out, j.gates, "
-        f"t.ticket, p.name AS project_name "
+        f"t.ticket, m.key AS milestone_key, m.title AS m_title, p.name AS project_name "
         f"FROM jobs j "
         f"JOIN runs r ON r.id = j.run_id "
         f"JOIN projects p ON p.id = r.project_id "
@@ -217,11 +220,15 @@ def list_jobs(
             end = datetime.fromisoformat(row["ended"])
             minutes = (end - start).total_seconds() / 60
 
+        card: dict[str, str] | None = None
+        if not row["ticket"]:
+            card = job_card(row["role"], row["milestone_key"], row["m_title"])
         jobs.append(
             JobRow(
                 id=row["id"],
                 started=row["started"],
                 ticket=row["ticket"],
+                milestone_key=row["milestone_key"],
                 role=row["role"],
                 agent=row["agent"],
                 attempt=row["attempt"],
@@ -231,6 +238,7 @@ def list_jobs(
                 tokens_out=row["tokens_out"],
                 failed_gate=_failed_gate(row["gates"]),
                 project=row["project_name"],
+                card=card,
             )
         )
 

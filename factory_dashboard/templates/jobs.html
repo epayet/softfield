@@ -34,7 +34,7 @@
         {% if many_projects %}<td class="proj">{% with name=job.project %}{% include "_partials/project_plate.html" %}{% endwith %}</td>{% endif %}
         <td class="time">{{ job.started | local }}</td>
         <td class="id"><a href="/jobs/{{ job.id }}?project={{ job.project | urlencode }}">{{ job.id }}</a></td>
-        <td class="id">{% if job.ticket %}<a href="/tickets/{{ job.ticket }}?project={{ job.project | urlencode }}">{{ job.ticket }}</a>{% else %}–{% endif %}</td>
+        <td class="id">{% if job.ticket %}<a href="/tickets/{{ job.ticket }}?project={{ job.project | urlencode }}">{{ job.ticket }}</a>{% elif job.card %}<a href="/planning/{{ job.card.key | lower }}?project={{ job.project | urlencode }}">{{ job.card.key }}</a>{% else %}–{% endif %}</td>
         <td>{{ job.role }}</td>
         <td>{{ job.agent }}</td>
         <td class="num">{{ job.attempt }}</td>

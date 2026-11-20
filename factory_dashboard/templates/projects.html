@@ -19,7 +19,7 @@
 <section id="projects-now" class="panel">
   <h2>Now</h2>
   {% for job in now_jobs %}
-  <div><b>{{ job.project }}</b> · {% if job.ticket %}{{ job.ticket }}{% if job.title %} {{ job.title }}{% endif %}{% else %}{{ job.role }}{% endif %} · <span class="mono">{{ job.agent }}</span> · {{ job.minutes }} min</div>
+  <div><b>{{ job.project }}</b> · {% if job.ticket %}{{ job.ticket }}{% if job.title %} {{ job.title }}{% endif %}{% elif job.card %}<a href="/planning/{{ job.card.key | lower }}?project={{ project | urlencode }}">{{ job.role }} {{ job.card.key }}</a>{% if job.card.title %} · {{ job.card.title }}{% endif %}{% else %}{{ job.role }}{% endif %} · <span class="mono">{{ job.agent }}</span> · {{ job.minutes }} min</div>
   {% else %}
   <div class="muted">Nothing runs now.</div>
   {% endfor %}

@@ -13,6 +13,7 @@ from factory_dashboard.planning import desk
 from runner import metrics
 from tests.factory_dashboard.conftest import (
     NOW,
+    OPUS,
     PROJECT,
     _at,
     requests_until,
@@ -1250,3 +1251,59 @@ def test_liveIdle_is_true_again_when_waiting_plant_is_closed(page, planning, db_
     assert page.evaluate("() => window.liveIdle()") is False
     page.click(f"#waiting-{note} summary")
     assert page.evaluate("() => window.liveIdle()") is True
+
+
+def test_a_pending_message_after_a_ticketless_review_says_after_review_f158(
+    planning, db_path, serve
+):
+    """A message waiting behind a ticketless review reads "after review F158" (F62 D1)."""
+    import sqlite3
+
+    from runner import metrics
+
+    # Add a pending plant message
+    _write(
+        db_path,
+        lambda conn: metrics.queue_job(
+            conn, planning, "planner", "general#1", "a message", _at(timedelta(minutes=5))
+        ),
+    )
+
+    # Add a running ticketless review job on a new run
+    conn = metrics.open_db(db_path)
+    try:
+        conn.row_factory = sqlite3.Row
+        project = conn.execute("SELECT id FROM projects WHERE name = ?", (PROJECT,)).fetchone()[
+            "id"
+        ]
+        run = metrics.upsert_run(
+            conn,
+            project,
+            "20261002-113500",
+            command="milestone f158",
+            started=(NOW - timedelta(minutes=25)).isoformat(),
+            heartbeat=(NOW - timedelta(seconds=30)).isoformat(),
+        )
+        f158 = metrics.upsert_milestone(
+            conn,
+            project,
+            "f158-milestones-don-t-show-me-their",
+            title="Milestones don't show their own details",
+        )
+        job_id = metrics.start_job(
+            conn,
+            run,
+            ticket_id=None,
+            milestone_id=f158,
+            role="review",
+            agent=OPUS,
+            attempt=1,
+            started=(NOW - timedelta(minutes=25)).isoformat(),
+        )
+        metrics.update_running_job(conn, job_id, tokens_in=10_000, steps=5)
+    finally:
+        conn.close()
+
+    client = serve()
+    html = _page(client)
+    assert "after review F158" in _tile(html, "factory-now")

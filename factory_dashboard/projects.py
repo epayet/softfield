@@ -150,6 +150,7 @@ class NowJob:
     role: str
     agent: str
     minutes: int
+    card: dict[str, str] | None = None
 
 
 def _ready(repo: str | None) -> int:
@@ -272,12 +273,19 @@ def taken_names(conn: sqlite3.Connection, root: Path) -> list[str]:
 
 def running_now(conn: sqlite3.Connection, now: datetime) -> list[NowJob]:
     """The jobs running now in every project, from a live run (``Running.live``)."""
+    from factory_dashboard.overview import job_card
+
     found = []
     for row in metrics.projects_in_order(conn):
         for job in running_jobs(conn, row.name, now):
             if job.live:
                 minutes = int(job.elapsed.total_seconds() // 60)
-                found.append(NowJob(row.name, job.ticket, job.title, job.role, job.agent, minutes))
+                card = None
+                if not job.ticket:
+                    card = job_card(job.role, job.milestone, job.m_title)
+                found.append(
+                    NowJob(row.name, job.ticket, job.title, job.role, job.agent, minutes, card)
+                )
     return found
 
 

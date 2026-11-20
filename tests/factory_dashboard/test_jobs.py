@@ -1,6 +1,7 @@
 """Tests for the jobs page (f1-08) and the job detail page (f1-09)."""
 
 import re
+import sqlite3
 from pathlib import Path
 
 import pytest
@@ -10,6 +11,7 @@ from runner import metrics
 from runner.metrics import open_db
 from tests.factory_dashboard.conftest import (
     NOW,
+    OPUS,
     OTHER,
     OTHER_LOCAL,
     PROJECT,
@@ -381,3 +383,62 @@ def test_job_detail_page_shows_own_project(client_with_jobs):
     assert "coucou" in html
     # Links should carry ?project=coucou, not the ticket id
     assert "?project=coucou" in html
+
+
+def test_ticket_cell_names_the_card_for_ticketless_review(client_with_jobs, db_path):
+    """f62-03: a ticketless review's Ticket cell is F158 linked to /planning/f158; a developer
+    job keeps its ticket link; a ticketless job of another role keeps "–"."""
+    from factory_dashboard.jobs import list_jobs
+
+    client, _failed_id, _esc_id = client_with_jobs
+    html = client.get("/jobs").text
+
+    # Add a ticketless review job with a milestone
+    conn = open_db(db_path)
+    try:
+        project = conn.execute("SELECT id FROM projects WHERE name = ?", (PROJECT,)).fetchone()[
+            "id"
+        ]
+        f158 = metrics.upsert_milestone(
+            conn,
+            project,
+            "f158-milestones-don-t-show-me-their",
+            title="Milestones don't show their own details",
+        )
+        run = conn.execute("SELECT id FROM runs WHERE run_dir = '20260930-100000'").fetchone()["id"]
+        metrics.start_job(
+            conn,
+            run,
+            ticket_id=None,
+            milestone_id=f158,
+            role="review",
+            agent=OPUS,
+            attempt=1,
+            started="2026-09-30T10:30:00+02:00",
+        )
+    finally:
+        conn.close()
+
+    # Check the jobs page has the card key linked
+    html = client.get("/jobs").text
+    assert 'href="/planning/f158?project=' in html
+    assert "F158" in html
+
+    # Verify with the data: ticketless review has card, developer has ticket
+    conn = open_db(db_path)
+    try:
+        conn.row_factory = sqlite3.Row
+        jobs, _ = list_jobs(conn, PROJECT)
+    finally:
+        conn.close()
+
+    # Find the ticketless review job we just added
+    review_job = next((j for j in jobs if j.role == "review" and not j.ticket), None)
+    assert review_job is not None
+    assert review_job.card is not None
+    assert review_job.card["key"] == "F158"
+
+    # Find a developer job - should still have its ticket link
+    dev_job = next((j for j in jobs if j.role == "developer" and j.ticket), None)
+    assert dev_job is not None
+    assert dev_job.ticket is not None
