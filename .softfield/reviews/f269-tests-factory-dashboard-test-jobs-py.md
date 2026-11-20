@@ -1,6 +1,6 @@
 # Review: F269, the 200-jobs test writes its jobs in one transaction
 
-- **Status:** review done (round 1), waiting for the owner's sign-off.
+- **Status:** done, signed off by the owner on 2026-11-20.
 
 ## Sign-off sheet
 

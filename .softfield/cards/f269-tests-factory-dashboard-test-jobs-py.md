@@ -1,6 +1,7 @@
 # Milestone F269: The 200-jobs test writes its jobs in one transaction
 
-> **State:** ready · **Area:** factory
+> **State:** done · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-20. Base: git tag `f269-tests-factory-dashboard-test-jobs-py-start`. Report: [`.softfield/reviews/f269-tests-factory-dashboard-test-jobs-py.md`](../reviews/f269-tests-factory-dashboard-test-jobs-py.md).
 > Planted by the owner on 2026-11-18.
 
 ## Notes
