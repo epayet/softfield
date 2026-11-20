@@ -36,3 +36,12 @@ Read `.softfield/cards/f194-the-menu-is-a-bit-weird.md` (D1 to D5) and build the
 - the project picker is in the bar's top row on every page, and choosing a project reloads the page with it, as today
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: task-tests)
+attempts: 3
+tokens: 7006426
+logs: .softfield/var/runs/20261120-005709/f194-01-four-slot-menu
+```
