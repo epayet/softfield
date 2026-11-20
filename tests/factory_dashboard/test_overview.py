@@ -33,6 +33,13 @@ def section(html: str, name: str) -> str:
     return " ".join(unescape(re.sub(r"<[^>]+>", " ", match.group(1))).split())
 
 
+def section_raw(html: str, name: str) -> str:
+    """The raw HTML of the page's ``<section id="name">``."""
+    match = re.search(rf'<section[^>]*\bid="{name}"[^>]*>(.*?)</section>', html, re.S)
+    assert match, f"no section {name}"
+    return match.group(1)
+
+
 def away_row(html: str, ticket: str) -> str:
     """The raw HTML of ``ticket``'s row in While you were away."""
     match = re.search(r'<section[^>]*\bid="away"[^>]*>(.*?)</section>', html, re.S)
@@ -5069,3 +5076,191 @@ def test_next_in_line_is_the_runners_order_across_projects(tmp_path):
     html = client.get("/").text
     assert 'href="/tickets/f1-06-replan?project=travel-companion"' in html
     assert 'href="/tickets/f1-01-softfield?project=softfield"' in html
+
+
+# --- F132-03: away every project ----------------------------------------------------------------
+
+
+def _away_factory(tmp_path: Path) -> Path:
+    """Two projects: softfield (11 merged, $53.39 on Claude) and travel-companion
+    (5 merged, $34.61 on Claude). All merged tickets finish between 08:00 and 12:00 UTC.
+    Span: 08:00 to 12:00."""
+    path = tmp_path / "away-factory.sqlite"
+    conn = metrics.open_db(path)
+    try:
+        sf_id = metrics.upsert_project(conn, SOFTFIELD)
+        tr_id = metrics.upsert_project(conn, TRAVEL)
+        metrics.set_project_order(conn, [SOFTFIELD, TRAVEL])
+        m = metrics.upsert_milestone(conn, sf_id, "f1")
+        m2 = metrics.upsert_milestone(conn, tr_id, "f1")
+        run = metrics.upsert_run(
+            conn, sf_id, "20261002-040000", started="2026-10-02T04:00:00+00:00"
+        )
+        run2 = metrics.upsert_run(
+            conn, tr_id, "20261002-040000", started="2026-10-02T04:00:00+00:00"
+        )
+
+        def ticket(name, state, merged_by=None, project_id=None, milestone_id=None):
+            return metrics.upsert_ticket(
+                conn,
+                project_id or sf_id,
+                name,
+                milestone_id=milestone_id or m,
+                title=f"The {name} title.",
+                state=state,
+                merged_by=merged_by,
+            )
+
+        def job(ticket_id, role, agent, attempt, started, ended, outcome, cost=None):
+            found = metrics.start_job(
+                conn,
+                run,
+                ticket_id=ticket_id,
+                milestone_id=m,
+                role=role,
+                agent=agent,
+                attempt=attempt,
+                started=f"2026-10-02T{started}",
+            )
+            metrics.finish_job(
+                conn, found, ended=f"2026-10-02T{ended}", outcome=outcome, cost_usd=cost
+            )
+
+        def job2(ticket_id, role, agent, attempt, started, ended, outcome, cost=None):
+            found = metrics.start_job(
+                conn,
+                run2,
+                ticket_id=ticket_id,
+                milestone_id=m2,
+                role=role,
+                agent=agent,
+                attempt=attempt,
+                started=f"2026-10-02T{started}",
+            )
+            metrics.finish_job(
+                conn, found, ended=f"2026-10-02T{ended}", outcome=outcome, cost_usd=cost
+            )
+
+        # softfield: 11 merged, $53.39 on Claude
+        for i in range(11):
+            t = ticket(f"sf-{i}", "done", OPUS, sf_id, m)
+            # spread finishes between 08:10 and 11:50
+            hour = 8 + (i * 3 // 11)
+            minute = 10 + (i * 40 // 11)
+            job(
+                t,
+                "escalation",
+                OPUS,
+                1,
+                f"{hour:02d}:{(minute - 10) % 60:02d}:00+00:00",
+                f"{hour:02d}:{minute:02d}:00+00:00",
+                "passed",
+                53.39 / 11,
+            )
+
+        # travel-companion: 5 merged, $34.61 on Claude
+        for i in range(5):
+            t = ticket(f"tr-{i}", "done", OPUS, tr_id, m2)
+            hour = 9 + (i * 2 // 5)
+            minute = 30 + (i * 30 // 5)
+            job2(
+                t,
+                "escalation",
+                OPUS,
+                1,
+                f"{hour:02d}:{(minute - 30) % 60:02d}:00+00:00",
+                f"{hour:02d}:{minute:02d}:00+00:00",
+                "passed",
+                34.61 / 5,
+            )
+    finally:
+        conn.close()
+    return path
+
+
+def _away_client(path: Path, since: datetime) -> Any:
+    from fastapi.testclient import TestClient
+
+    from factory_dashboard.app import create_app, get_now
+
+    app = create_app(path, SOFTFIELD)
+    app.dependency_overrides[get_now] = lambda: NOW
+    return TestClient(app, base_url="http://127.0.0.1:8765"), since
+
+
+def test_away_every_project_sums_and_shows_plates(tmp_path):
+    """F132-03 Done when: since 08:00, softfield with 11 merged and $53.39 on Claude,
+    travel-companion with 5 merged and $34.61: the line reads "16 merged, …, $88.00 on Claude"."""
+    path = _away_factory(tmp_path)
+    since = datetime(2026, 10, 2, 8, 0, tzinfo=UTC)
+    client, _ = _away_client(path, since)
+    html = client.get(f"/?project={SOFTFIELD}&since={since.isoformat()}").text
+    away = section(html, "away")
+    assert "16 merged" in away
+    assert "$88.00 on Claude" in away
+    # both project plates show
+    assert "softfield" in away
+    assert "travel-companion" in away
+
+
+def test_away_rows_one_list_latest_finish_first_each_with_own_link(tmp_path):
+    """The rows of both projects are one list, latest finish first, each with its plate
+    and a link to its own project's ticket page."""
+    path = _away_factory(tmp_path)
+    since = datetime(2026, 10, 2, 8, 0, tzinfo=UTC)
+    client, _ = _away_client(path, since)
+    html = client.get(f"/?project={SOFTFIELD}&since={since.isoformat()}").text
+    away_raw = section_raw(html, "away")
+    # each row's link carries its own project
+    for proj in (SOFTFIELD, TRAVEL):
+        assert f'?project={proj}"' in away_raw, f"missing ?project={proj} in away links"
+
+
+def test_away_choosing_another_span_gives_same_sums(tmp_path):
+    """Choosing another span (/away) gives the same sums for any picked project."""
+    path = _away_factory(tmp_path)
+    since = datetime(2026, 10, 2, 8, 0, tzinfo=UTC)
+    client, _ = _away_client(path, since)
+    html_overview = client.get(f"/?project={SOFTFIELD}&since={since.isoformat()}").text
+    html_away = client.get(f"/away?since={since.isoformat()}").text
+    away_overview = section(html_overview, "away")
+    away_away = section(html_away, "away")
+    assert "16 merged" in away_overview
+    assert "16 merged" in away_away
+    assert "$88.00 on Claude" in away_overview
+    assert "$88.00 on Claude" in away_away
+
+
+def test_away_one_project_no_plate_reads_as_today(tmp_path):
+    """One project only: no plate, and the panel reads as today."""
+    path = tmp_path / "single.sqlite"
+    conn = metrics.open_db(path)
+    try:
+        pid = metrics.upsert_project(conn, SOFTFIELD)
+        m = metrics.upsert_milestone(conn, pid, "f1")
+        run = metrics.upsert_run(conn, pid, "20261002-040000", started="2026-10-02T04:00:00+00:00")
+        t = metrics.upsert_ticket(
+            conn, pid, "f1", milestone_id=m, state="done", merged_by=OPUS, title="Done."
+        )
+        job = metrics.start_job(
+            conn,
+            run,
+            ticket_id=t,
+            milestone_id=m,
+            role="escalation",
+            agent=OPUS,
+            attempt=1,
+            started="2026-10-02T09:00:00+00:00",
+        )
+        metrics.finish_job(
+            conn, job, ended="2026-10-02T09:30:00+00:00", outcome="passed", cost_usd=5.0
+        )
+    finally:
+        conn.close()
+    client = _client(path)
+    since = datetime(2026, 10, 2, 8, 0, tzinfo=UTC)
+    html = client.get(f"/?project={SOFTFIELD}&since={since.isoformat()}").text
+    away = section(html, "away")
+    # no project plate when only one project
+    assert "1 merged" in away
+    assert "1 thing" not in away  # no "things wait on its desk" in away panel

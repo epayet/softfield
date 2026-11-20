@@ -1522,3 +1522,113 @@ def test_trends_runs_same_sql_count_with_one_or_ten_leads(db, tmp_path):
     count_1 = len(queries_executed2)
     conn2.close()
     assert count_1 == count_10
+
+
+# --- away_every (f132-03) -----------------------------------------------------------------------
+
+
+def test_away_every_sums_across_projects_and_sorts_latest_first(tmp_path):
+    """F132 D4: across two projects, sum failed/escalations/needs_you/claude_usd,
+    merge every project's merged tickets stamped with its project, sorted latest finish first."""
+    from factory_dashboard.queries import Away, away_every
+
+    path = tmp_path / "away-every.sqlite"
+    conn = metrics.open_db(path)
+    try:
+        softfield_id = metrics.upsert_project(conn, "softfield")
+        travel_id = metrics.upsert_project(conn, "travel-companion")
+        m = metrics.upsert_milestone(conn, softfield_id, "f1")
+        m2 = metrics.upsert_milestone(conn, travel_id, "f1")
+        run = metrics.upsert_run(
+            conn, softfield_id, "20261002-040000", started="2026-10-02T04:00:00+00:00"
+        )
+        run2 = metrics.upsert_run(
+            conn, travel_id, "20261002-040000", started="2026-10-02T04:00:00+00:00"
+        )
+
+        def ticket(name, state, merged_by=None, project_id=None, milestone_id=None):
+            return metrics.upsert_ticket(
+                conn,
+                project_id or softfield_id,
+                name,
+                milestone_id=milestone_id or m,
+                title=f"The {name} title.",
+                state=state,
+                merged_by=merged_by,
+            )
+
+        def job(ticket_id, role, agent, attempt, started, ended, outcome, cost=None):
+            found = metrics.start_job(
+                conn,
+                run,
+                ticket_id=ticket_id,
+                milestone_id=m,
+                role=role,
+                agent=agent,
+                attempt=attempt,
+                started=f"2026-10-02T{started}",
+            )
+            metrics.finish_job(
+                conn, found, ended=f"2026-10-02T{ended}", outcome=outcome, cost_usd=cost
+            )
+
+        def job2(ticket_id, role, agent, attempt, started, ended, outcome, cost=None):
+            found = metrics.start_job(
+                conn,
+                run2,
+                ticket_id=ticket_id,
+                milestone_id=m2,
+                role=role,
+                agent=agent,
+                attempt=attempt,
+                started=f"2026-10-02T{started}",
+            )
+            metrics.finish_job(
+                conn, found, ended=f"2026-10-02T{ended}", outcome=outcome, cost_usd=cost
+            )
+
+        # softfield: 3 merged tickets, 1 failed, 1 escalation, 1 owner item
+        sf1 = ticket("f1", "done", OPUS, softfield_id, m)
+        sf2 = ticket("f2", "done", OPUS, softfield_id, m)
+        sf3 = ticket("f3", "done", OPUS, softfield_id, m)
+        job(sf1, "escalation", OPUS, 1, "10:00:00+00:00", "10:30:00+00:00", "passed", 10.0)
+        job(sf2, "developer", OPUS, 1, "09:00:00+00:00", "09:30:00+00:00", "passed", 5.0)
+        job(sf3, "developer", LOCAL, 1, "08:00:00+00:00", "08:30:00+00:00", "passed", 3.0)
+        job(None, "developer", LOCAL, 1, "09:45:00+00:00", "10:00:00+00:00", "failed")
+        metrics.upsert_owner_item(
+            conn, softfield_id, "adr", "old", created="2026-10-02T11:00:00+00:00"
+        )
+
+        # travel-companion: 2 merged tickets, 1 failed, $20.39
+        tr1 = ticket("t1", "done", OPUS, travel_id, m2)
+        tr2 = ticket("t2", "done", OPUS, travel_id, m2)
+        job2(tr1, "escalation", OPUS, 1, "11:00:00+00:00", "11:30:00+00:00", "passed", 20.0)
+        job2(tr2, "developer", OPUS, 1, "10:00:00+00:00", "10:30:00+00:00", "passed", 14.39)
+        job2(None, "developer", LOCAL, 1, "10:45:00+00:00", "11:00:00+00:00", "failed")
+
+        since = datetime(2026, 10, 2, 8, 0, tzinfo=UTC)
+        now = datetime(2026, 10, 2, 12, 0, tzinfo=UTC)
+    finally:
+        conn.close()
+
+    conn = connect(path)
+    try:
+        away = away_every(conn, ["softfield", "travel-companion"], since, now)
+    finally:
+        conn.close()
+
+    assert isinstance(away, Away)
+    assert away.failed == 2
+    assert away.escalations == 2
+    assert away.needs_you == 1
+    assert round(away.claude_usd, 2) == 49.39
+    assert len(away.merged) == 5
+    # latest finish first: softfield f1 (10:30), travel-companion t1 (11:30) → t1 first
+    # Actually t1 finishes at 11:30 which is later than f1 at 10:30
+    assert away.merged[0].ticket == "t1"
+    assert away.merged[0].project == "travel-companion"
+    assert away.merged[1].ticket == "f1"
+    assert away.merged[1].project == "softfield"
+    # all rows carry their project
+    for t in away.merged:
+        assert t.project in ("softfield", "travel-companion")

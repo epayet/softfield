@@ -1156,8 +1156,8 @@ def trends(conn: sqlite3.Connection, project: str) -> list[Trend]:
 class AwayTicket:
     """A ticket that reached ``done`` in the span: its name (``/tickets/<ticket>``), title,
     who merged it, the display name of the merger, how many developer attempts it had,
-    the ticket kind, a context label, the finish time, how long it took, and the blocked
-    ticket IDs."""
+    the ticket kind, a context label, the finish time, how long it took, the project
+    it belongs to, and the blocked ticket IDs."""
 
     ticket: str
     title: str | None
@@ -1169,6 +1169,7 @@ class AwayTicket:
     blocked_ids: tuple[str, ...] = ()
     finished: datetime | None = None
     took: timedelta | None = None
+    project: str | None = None
 
 
 @dataclass(frozen=True)
@@ -1320,4 +1321,59 @@ def away(conn: sqlite3.Connection, project: str, since: datetime, now: datetime)
         needs_you=sum(within(o["created"]) for o in owner),
         claude_usd=sum(dollars(j) for j in jobs if within(j["started"])),  # uncosted: its tokens
         blocked_ids=blocked_ids,
+    )
+
+
+def away_every(
+    conn: sqlite3.Connection, projects: list[str], since: datetime, now: datetime
+) -> Away:
+    """F132 D4: across ``projects``, sum the away counts and merge every project's
+    merged tickets, stamped with its project, latest finish first (f132-03)."""
+
+    total_failed = 0
+    total_escalations = 0
+    total_needs_you = 0
+    total_claude_usd = 0.0
+    total_blocked = 0
+    all_blocked_ids: set[str] = set()
+    all_merged: list[AwayTicket] = []
+
+    for proj in projects:
+        a = away(conn, proj, since, now)
+        total_failed += a.failed
+        total_escalations += a.escalations
+        total_needs_you += a.needs_you
+        total_claude_usd += a.claude_usd
+        all_blocked_ids.update(a.blocked_ids)
+        for t in a.merged:
+            all_merged.append(
+                AwayTicket(
+                    ticket=t.ticket,
+                    title=t.title,
+                    merged_by=t.merged_by,
+                    display_name=t.display_name,
+                    attempts=t.attempts,
+                    kind=t.kind,
+                    label=t.label,
+                    blocked_ids=t.blocked_ids,
+                    finished=t.finished,
+                    took=t.took,
+                    project=proj,
+                )
+            )
+        if a.blocked > 0:
+            total_blocked += a.blocked
+
+    return Away(
+        merged=tuple(
+            sorted(
+                all_merged, key=lambda t: t.finished or datetime(1, 1, 1, tzinfo=UTC), reverse=True
+            )
+        ),
+        failed=total_failed,
+        escalations=total_escalations,
+        blocked=total_blocked,
+        needs_you=total_needs_you,
+        claude_usd=total_claude_usd,
+        blocked_ids=tuple(sorted(all_blocked_ids)),
     )

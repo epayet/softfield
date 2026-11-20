@@ -1261,7 +1261,7 @@ def overview(request: Request, conn: Db, project: Project, now: Now) -> HTMLResp
             "line": line,
             "replay": url("/line/replay", since),
             "replay_day": url("/line/replay", local - timedelta(days=1)),
-            "away": queries.away(conn, project, since, local),
+            "away": queries.away_every(conn, every_project(conn, project), since, local),
             "since": since,
             "choices": choices,
             "now": local,
@@ -1306,5 +1306,9 @@ def away_partial(request: Request, conn: Db, project: Project, now: Now) -> HTML
         conn,
         project,
         "_partials/away.html",
-        {"since": since, "away": queries.away(conn, project, since, local), "now": local},
+        {
+            "since": since,
+            "away": queries.away_every(conn, every_project(conn, project), since, local),
+            "now": local,
+        },
     )

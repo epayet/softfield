@@ -1,4 +1,4 @@
-{# While you were away (f3-21): what the factory did in the chosen span (the replay bar's).
+{# While you were away (f3-21, f132-03): what the factory did in the chosen span (the replay bar's).
    Swapped in place by the #replay-span handler; always updated when the span changes. #}
 <section id="away" class="panel">
   <h2>While you were away <span class="src">since {{ since.strftime("%H:%M") }}</span></h2>
@@ -14,14 +14,14 @@
       <li>
         <span class="what">
           {% if t.display_name %}<span class="agent">{{ t.display_name }}</span>{% endif %}
-          <a class="mono" href="/tickets/{{ t.ticket }}{{ q }}">{{ t.ticket }}</a>
+          <a class="mono" href="/tickets/{{ t.ticket }}{% if t.project %}?project={{ t.project | urlencode }}{% endif %}">{{ t.ticket }}</a>
           {% if t.label or t.finished %}
           <span class="how">
             {% if t.label %}{{ t.label }} · {% endif %}
             {% if t.finished %}{% set ft = t.finished.astimezone() %}finished {% if ft.date() != now.astimezone().date() %}{{ ft.strftime('%-d %b ') }}{% endif %}{{ ft.strftime('%H:%M') }}{% if t.took %} · took {{ t.took | ago }}{% endif %}{% endif %}
           </span>
           {% endif %}
-          <span class="title">{{ t.title or "" }}</span>
+          <span class="title">{{ t.title or "" }}</span>{% if t.project %}{% with name=t.project %}{% include "_partials/project_plate.html" %}{% endwith %}{% endif %}
         </span>
       </li>
       {% endfor %}
