@@ -5,39 +5,25 @@ difficulty: 3
 depends_on: [f132-02-overview-live-every-project, f132-06-jobs-runs-every-project]
 files:
   - factory_dashboard/overview.py
-  - factory_dashboard/app.py
-  - factory_dashboard/projects.py
-  - factory_dashboard/planning.py
-  - factory_dashboard/jobs.py
   - factory_dashboard/templates/_partials/running.html
-  - factory_dashboard/templates/_partials/queue.html
-  - factory_dashboard/templates/projects.html
-  - factory_dashboard/templates/planning.html
-  - factory_dashboard/templates/jobs.html
   - factory_dashboard/static/dashboard.css
 tests:
   - tests/factory_dashboard/test_overview.py
-  - tests/factory_dashboard/test_app.py
-  - tests/factory_dashboard/test_projects.py
-  - tests/factory_dashboard/test_jobs.py
 ---
 
 ### Goal
-A job with no ticket (a review, a planner reply, a checkpoint) names its card wherever a running or queued job is shown: the card's key linked to its page, its title, and one line on what the job does.
+On the Overview's Now panel, a running job with no ticket (a review, a planner reply, a checkpoint) names its card: the card's key linked to its page, its title, and one line on what the job does. The other places (top bar, Next in line, Projects, Planning, Jobs) are left for a later ticket.
 
 ### Context
-Read `.softfield/cards/f62-claude-opus-review-on-overview-does.md` ("What happens today" lists every place, and D1–D3). The picture to build is `.softfield/cards/f62-mockup/now-names-the-card.html` (Proposed, with the plate).
-- `running_jobs` in `factory_dashboard/overview.py` already reads each job's card as `milestone`; add `job_card` and the role lines (D1, D2) beside it.
-- `short_key` is in `runner/tasks.py`; the card title from its doc follows how `factory_dashboard/planning.py` gets `card_title` (`milestone_doc`).
-- The ticket link in `factory_dashboard/templates/_partials/running.html` is the example for the card's link; the plate is the project plate partial and `.proj` that f132-02 added (`factory_dashboard/templates/_partials/`, `dashboard.css`).
-- A due review's queue row is built in `factory_dashboard/line.py` (`"kind": "batch"`, with its `milestone`) and drawn in `factory_dashboard/templates/_partials/queue.html`; change the drawing and the words, not the floor's crate.
-- The top bar words come from `factory_status` in `factory_dashboard/app.py` (both the status and the pause button's "Pausing after …" words use `job.ticket or …`).
+The card is `.softfield/cards/f62-claude-opus-review-on-overview-does.md` (D1–D3); you need nothing else from it. The picture is `.softfield/cards/f62-mockup/now-names-the-card.html` (Proposed, with the plate).
+- `running_jobs` in `factory_dashboard/overview.py` already joins the job's card as `m` (`milestones`) and reads `m.key AS milestone`; `milestones` also has a `title` column, so the card's title comes from the same query.
+- Add `job_card` (D1) beside `running_jobs`, returning the short key upper-case (`short_key` is already imported in `overview.py` from `runner/tasks.py`) and the title, and one dict of role lines (D2) keyed by the job's `role`: `review`, `planner`, `checkpoint`. Any other role, a job with a ticket, or a job with no card gets no card line.
+- In `factory_dashboard/templates/_partials/running.html`, line 11 draws the ticket's link; the card's link goes beside it in the same `{% if %}` chain, as an `<a class="proj" href="/planning/<lower-case key>">` with the key (D3), and the card title in the existing `running-title` line below. The project plate partial is not reused: it only draws when there are several projects.
+- The test to copy is `test_a_running_job_with_no_tokens_says_no_tokens_reported_yet` in `tests/factory_dashboard/test_overview.py`: it builds a running job with `runner.metrics` and reads the `now` section. For a ticketless job pass `ticket_id=None`, a `role`, and `upsert_milestone(..., title=...)`.
 
 ### Done when
-- a running review job on `f158-…`: Now shows `F158` linked to `/planning/f158`, the card's title, and "The lead reads what F158 built, before it's yours to sign off"; the top bar reads "Running: <project> · review F158"
-- a running planner job shows "The lead answers you on F62's thread"; a checkpoint "Claude re-checks F51's merged tickets"
-- a due review in Next in line shows its key, its card's title and "the lead reads what it built"; the words "a batch" are gone
-- the Projects page's running line, the Planning room's running line and the Jobs list's Ticket column name the card the same way for a job with no ticket
-- a job with a ticket shows as today; a job with neither ticket nor card (a probe) shows as today
-- the listed `tests:` pass, and fail without the change
+- a running review job on `f158-…` (title "Milestones on the board"): Now shows `F158` linked to `/planning/f158`, the title, and "The lead reads what F158 built, before it's yours to sign off"
+- a running planner job on `f62-…` shows "The lead answers you on F62's thread"; a checkpoint on `f51-…` "Claude re-checks F51's merged tickets"
+- a running developer job with a ticket shows its ticket link and title as today, and no `/planning/` link; a running job with neither ticket nor card shows no `/planning/` link and no card line
+- each of these is its own test in `tests/factory_dashboard/test_overview.py`, and each fails without the change
 - all gates pass (see `docs/workflow.md`)
