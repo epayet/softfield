@@ -1,6 +1,7 @@
 # Milestone F270: test_shots.py stops waiting on real seconds
 
-> **State:** ready · **Area:** factory
+> **State:** done · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-20. Base: git tag `f270-tests-runner-test-shots-py-waits-start`. Report: [`.softfield/reviews/f270-tests-runner-test-shots-py-waits.md`](../reviews/f270-tests-runner-test-shots-py-waits.md).
 > Planted by the owner on 2026-11-18.
 
 ## Notes

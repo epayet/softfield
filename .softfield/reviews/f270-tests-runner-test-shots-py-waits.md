@@ -1,6 +1,6 @@
 # Review: F270, test_shots.py stops waiting on real seconds
 
-- **Status:** review done (round 1), waiting for the owner's sign-off.
+- **Status:** done, signed off by the owner on 2026-11-20.
 
 ## Sign-off sheet
 
