@@ -6,9 +6,12 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from runner import metrics
 from runner.metrics import open_db
 from tests.factory_dashboard.conftest import (
     NOW,
+    OTHER,
+    OTHER_LOCAL,
     PROJECT,
     write_jobs,
     write_more_jobs,
@@ -56,12 +59,12 @@ def test_no_filter_shows_all_jobs_newest_first(client_with_jobs):
     client, _, _ = client_with_jobs
     html = client.get("/jobs").text
     rows = re.findall(r"<tr>(.*?)</tr>", html, re.S)
-    tbody_rows = [r for r in rows if "<td" in r]
+    tbody_rows = [r for r in rows if 'href="/jobs/' in r]
     assert len(tbody_rows) == 12
     expected_order = [12, 6, 4, 11, 9, 8, 7, 5, 3, 2, 1, 10]
     for i, job_id in enumerate(expected_order):
         row = tbody_rows[i]
-        link_match = re.search(r'href="/jobs/(\d+)"', row)
+        link_match = re.search(r'href="/jobs/(\d+)', row)
         assert link_match, f"row {i} has no job link"
         assert int(link_match.group(1)) == job_id
 
@@ -269,4 +272,60 @@ def test_jobs_list_shows_tokens_in_thousands(client_with_backfilled_job):
     html = client.get("/jobs").text
     row = next(r for r in re.findall(r"<tr>(.*?)</tr>", html, re.S) if f"/jobs/{job_id}" in r)
     cells = [re.sub(r"<[^>]+>", "", c).strip() for c in re.findall(r"<td[^>]*>(.*?)</td>", row)]
-    assert cells[8:10] == ["200k", "12k"]
+    assert cells[9:11] == ["200k", "12k"]
+
+
+@pytest.fixture
+def multi_project_jobs_client(db_path: Path):
+    """A client with jobs in two projects."""
+    from factory_dashboard.app import create_app, get_now
+
+    conn = open_db(db_path)
+    try:
+        write_jobs(conn)
+        other_project = metrics.upsert_project(conn, OTHER)
+        m1 = metrics.upsert_milestone(conn, other_project, "m1")
+        other_run = metrics.upsert_run(conn, other_project, "20261001-100000")
+        t = metrics.upsert_ticket(conn, other_project, "m1-01-test", milestone_id=m1)
+        job = metrics.start_job(
+            conn,
+            other_run,
+            ticket_id=t,
+            milestone_id=m1,
+            role="developer",
+            agent=OTHER_LOCAL,
+            attempt=1,
+            started="2026-10-01T10:00:00+02:00",
+        )
+        metrics.finish_job(
+            conn,
+            job,
+            ended="2026-10-01T10:10:00+02:00",
+            outcome="passed",
+            tokens_in=10_000,
+            tokens_out=1_000,
+        )
+    finally:
+        conn.close()
+
+    app = create_app(db_path, PROJECT)
+    app.dependency_overrides[get_now] = lambda: NOW
+    return TestClient(app, base_url="http://127.0.0.1:8765")
+
+
+def test_jobs_shows_every_project_newest_first(multi_project_jobs_client):
+    html = multi_project_jobs_client.get("/jobs").text
+    rows = re.findall(r"<tr>(.*?)</tr>", html, re.S)
+    tbody_rows = [r for r in rows if "<td" in r and "<th" not in r]
+    assert len(tbody_rows) >= 13
+    # The newest job (from coucou, 2026-09-30) should come first
+    first_row = tbody_rows[0]
+    assert "proj" in first_row
+    assert "coucou" in first_row
+
+
+def test_jobs_shows_plates_for_each_project(multi_project_jobs_client):
+    html = multi_project_jobs_client.get("/jobs").text
+    assert "proj" in html
+    assert "coucou" in html
+    assert "other" in html

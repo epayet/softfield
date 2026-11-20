@@ -35,17 +35,17 @@ def compute_status(heartbeat: str | None, ended: str | None, now: datetime) -> s
 
 
 def list_runs(conn: sqlite3.Connection, project: str, *, now: datetime) -> list[dict[str, object]]:
-    """All runs for ``project``, newest first, with job count and heartbeat."""
+    """All runs across every project, newest first, with job count and heartbeat."""
     rows = conn.execute(
         "SELECT r.id, r.run_dir, r.command, r.started, r.ended, r.verdict, r.heartbeat, "
+        "p.name AS project_name, "
         "COUNT(j.id) AS job_count "
         "FROM runs r "
         "JOIN projects p ON p.id = r.project_id "
         "LEFT JOIN jobs j ON j.run_id = r.id "
-        "WHERE p.name = ? "
         "GROUP BY r.id "
         "ORDER BY r.started DESC, r.id DESC",
-        (project,),
+        (),
     ).fetchall()
     found: list[dict[str, object]] = []
     for row in rows:
@@ -65,6 +65,7 @@ def list_runs(conn: sqlite3.Connection, project: str, *, now: datetime) -> list[
                 "verdict": row["verdict"],
                 "job_count": row["job_count"],
                 "status": status,
+                "project": row["project_name"],
             }
         )
     return found
@@ -78,17 +79,15 @@ class _JobRef:
     attempt: int
 
 
-def get_run(
-    conn: sqlite3.Connection, project: str, run_dir: str, *, now: datetime
-) -> dict[str, object] | None:
-    """A single run by its ``run_dir``, with jobs and tickets."""
+def get_run(conn: sqlite3.Connection, run_dir: str, *, now: datetime) -> dict[str, object] | None:
+    """A single run by its ``run_dir``, with jobs and tickets. Found in any project."""
     row = conn.execute(
         "SELECT r.id, r.run_dir, r.command, r.started, r.ended, r.heartbeat, r.verdict, "
         "p.name AS project_name "
         "FROM runs r "
         "JOIN projects p ON p.id = r.project_id "
-        "WHERE r.run_dir = ? AND p.name = ?",
-        (run_dir, project),
+        "WHERE r.run_dir = ?",
+        (run_dir,),
     ).fetchone()
     if row is None:
         return None
@@ -139,6 +138,7 @@ def get_run(
         "status": status,
         "jobs": jobs,
         "tickets": tickets,
+        "project": row["project_name"],
     }
 
 
@@ -161,7 +161,13 @@ def run_page(
     project: Project,
     now: Now,
 ) -> HTMLResponse:
-    run = get_run(conn, project, run_dir, now=now)
+    run = get_run(conn, run_dir, now=now)
     if run is None:
         return HTMLResponse(status_code=404, content="Not found")
-    return render(request, conn, project, "run.html", {"active": "/runs", "run": run})
+    return render(
+        request,
+        conn,
+        str(run["project"]),
+        "run.html",
+        {"active": "/runs", "run": run},
+    )

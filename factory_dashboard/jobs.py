@@ -27,6 +27,7 @@ class JobRow:
     tokens_in: int | None
     tokens_out: int | None
     failed_gate: str | None
+    project: str
 
 
 @dataclass(frozen=True)
@@ -159,9 +160,9 @@ def list_jobs(
     role: str | None = None,
     outcome: str | None = None,
 ) -> tuple[list[JobRow], int]:
-    """All jobs for ``project``, newest first. Returns (rows, total_count)."""
-    conditions = ["p.name = ?"]
-    params: list[object] = [project]
+    """All jobs across every project, newest first. Returns (rows, total_count)."""
+    conditions: list[str] = []
+    params: list[object] = []
 
     if milestone:
         conditions.append("m.key = ?")
@@ -179,7 +180,7 @@ def list_jobs(
         conditions.append("j.outcome = ?")
         params.append(outcome)
 
-    where = " AND ".join(conditions)
+    where = " AND ".join(conditions) if conditions else "1=1"
 
     count_sql = (
         f"SELECT COUNT(*) AS n FROM jobs j "  # noqa: S608
@@ -194,7 +195,7 @@ def list_jobs(
     query_sql = (
         f"SELECT j.id, j.started, j.ended, j.role, j.agent, j.attempt, "  # noqa: S608
         f"j.outcome, j.tokens_in, j.tokens_out, j.gates, "
-        f"t.ticket "
+        f"t.ticket, p.name AS project_name "
         f"FROM jobs j "
         f"JOIN runs r ON r.id = j.run_id "
         f"JOIN projects p ON p.id = r.project_id "
@@ -227,6 +228,7 @@ def list_jobs(
                 tokens_in=row["tokens_in"],
                 tokens_out=row["tokens_out"],
                 failed_gate=_failed_gate(row["gates"]),
+                project=row["project_name"],
             )
         )
 
@@ -277,7 +279,7 @@ def job_page(job_id: int, request: Request, conn: Db, project: Project) -> HTMLR
     return render(
         request,
         conn,
-        project,
+        detail.ticket or project,
         "job.html",
         {
             "active": "/jobs",

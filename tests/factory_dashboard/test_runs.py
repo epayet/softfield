@@ -11,6 +11,7 @@ from runner import metrics
 from runner.metrics import open_db
 from tests.factory_dashboard.conftest import (
     NOW,
+    OTHER,
     PROJECT,
     write_fixture,
     write_runs,
@@ -146,3 +147,43 @@ def test_runs_list_checks_every_row(runs_client):
         has_verdict = "merged" in row or "backfill" in row
         has_status = "running" in row or "stopped" in row or "done" in row
         assert has_verdict or has_status, f"row {i} missing verdict or status"
+
+
+@pytest.fixture
+def multi_project_runs_client(db_path: Path):
+    """A client with runs in two projects."""
+    from factory_dashboard.app import create_app, get_now
+
+    conn = open_db(db_path)
+    try:
+        write_fixture(conn)
+        write_runs(conn)
+        other_project = metrics.upsert_project(conn, OTHER)
+        metrics.upsert_run(
+            conn,
+            other_project,
+            "20261003-100000",
+            command="milestone m1",
+            started=(NOW - timedelta(hours=2)).isoformat(),
+            ended=(NOW - timedelta(hours=1)).isoformat(),
+            verdict="merged",
+        )
+    finally:
+        conn.close()
+
+    app = create_app(db_path, PROJECT)
+    app.dependency_overrides[get_now] = lambda: NOW
+    return TestClient(app, base_url="http://127.0.0.1:8765")
+
+
+def test_runs_shows_every_project(multi_project_runs_client):
+    html = multi_project_runs_client.get("/runs").text
+    assert "proj" in html
+    assert "coucou" in html
+    assert "other" in html
+
+
+def test_run_page_opens_for_any_project(multi_project_runs_client):
+    html = multi_project_runs_client.get("/runs/20261003-100000").text
+    info = section(html, "info")
+    assert "merged" in info
