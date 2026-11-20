@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F275 mock-up: a project started from the Projects page goes first</title>
+<style>
+  /* The dashboard's own tokens (factory_dashboard/static/dashboard.css), dark mode */
+  :root {
+    --floor: #12161b; --bay: #181e25; --plate: #1d242c; --grid: #222b34; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+    --hazard: #f2b10a; --hazard-ink: #1a1405; --opus: #ff9a3c; --opus-ink: #ffb877; --good: #5fd17a;
+    --display: "Chakra Petch", "Bahnschrift", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+  body { margin: 0; background: var(--floor); color: var(--fg); font: 15px/1.5 var(--body); padding: 20px; }
+  h1 { font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 4px; }
+  h3 { font: 600 13px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 20px 0 8px; }
+  p.lede { color: var(--ink-2); max-width: 760px; margin: 0 0 8px; }
+  a { color: var(--opus-ink); text-decoration: none; }
+  .switch { display: inline-flex; margin: 12px 0 0; border: 1px solid var(--rule); }
+  .switch button { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 10px 18px;
+    background: var(--bay); color: var(--muted); border: 0; cursor: pointer; }
+  .switch button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+  .versions { display: grid; gap: 24px; }
+  @media (min-width: 900px) {
+    .switch { display: none; }
+    .versions { grid-template-columns: 1fr 1fr; align-items: start; }
+    [data-version][hidden] { display: block !important; }
+  }
+  .new { outline: 1px dashed var(--good); outline-offset: 3px; position: relative; }
+  .note { display: block; font: 600 11px var(--mono); color: var(--good); margin: 2px 0 6px; }
+  .legend { color: var(--ink-2); font-size: 13px; margin: 10px 0 0; }
+  [hidden] { display: none; }
+
+  /* ---- the panel as drawn (dashboard.css, the Projects page) ---- */
+  .panel { background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; min-width: 0; }
+  .panel h2 { font: 600 14px var(--display); text-transform: uppercase; letter-spacing: .08em; margin: 0 0 8px; }
+  .panel h2 .src { font: 400 12px var(--body); text-transform: none; letter-spacing: 0; color: var(--muted); margin-left: 6px; }
+  .rank { list-style: none; margin: 0; padding: 0; }
+  .muted { color: var(--muted); }
+  .proj, .proj-asked { display: grid; grid-template-columns: 52px 1fr; gap: 4px 12px; padding: 12px 0; border-bottom: 1px solid var(--grid); }
+  .proj:last-child, .proj-asked:last-child { border-bottom: 0; }
+  .proj-asked > .plate { grid-column: 2; min-width: 0; }
+  .place { grid-row: 1 / 5; display: flex; flex-direction: column; align-items: center; }
+  .place input { width: 44px; text-align: center; font: 700 18px var(--display); background: var(--plate);
+    color: var(--fg); border: 1px solid var(--rule); padding: 4px 0; }
+  .place small { font: 500 11px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .plate { display: grid; gap: 3px; }
+  .head { display: flex; align-items: baseline; gap: 10px; }
+  .rankno { font: 700 20px var(--display); color: var(--hazard); min-width: 30px; }
+  .name { font: 700 17px var(--display); letter-spacing: .03em; }
+  .what { color: var(--ink-2); font-size: 13.5px; }
+  .facts { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13.5px; }
+  .facts b { font-family: var(--display); }
+  .way-plate { outline: 2px dashed var(--opus); outline-offset: 2px; }
+  .way-plate .idea { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+  .way-words { font: 12px var(--mono); color: var(--opus-ink); }
+  .stations { display: flex; margin: 6px 0 2px; counter-reset: st; }
+  .stations .st { flex: 1; padding: 6px 6px 6px 10px; font: 600 10.5px/1.25 var(--display); letter-spacing: .06em;
+    text-transform: uppercase; color: var(--muted); background: var(--floor); border: 1px solid var(--rule); border-right: 0; min-width: 0; }
+  .stations .st:last-child { border-right: 1px solid var(--rule); }
+  .stations .st::before { counter-increment: st; content: counter(st); display: block; font: 700 14px var(--display); color: var(--rule); }
+  .stations .st.here, .stations .st.here::before { color: var(--hazard-ink); }
+  .stations .st.here { background: var(--hazard); }
+</style>
+</head>
+<body>
+<h1>F275: a new project goes first</h1>
+<p class="lede">The Projects page the moment after "Start it", and once the runner has made the folder. The six projects and their order are the metrics database's on 2026-11-19; "kanji-cards" and its idea are an example.</p>
+<div class="switch" role="group" aria-label="Which version">
+  <button type="button" data-show="today" aria-pressed="false">Today</button>
+  <button type="button" data-show="proposed" aria-pressed="true">Proposed</button>
+</div>
+
+<div class="versions">
+<!-- Today: copied from factory_dashboard/templates/projects.html -->
+<div data-version="today" hidden>
+  <h3>Today · just after Start it</h3>
+  <section class="panel">
+    <h2>Projects <span class="src">the runner works in this order</span></h2>
+    <ol class="rank">
+      <li class="proj"><label class="place"><input type="number" value="1"><small>place</small></label><div class="plate"><div class="head"><span class="rankno">#1</span><span class="name">waifu-gallery</span></div><div class="facts"><span><b>0</b> ready</span><span><b>1</b> done</span></div></div></li>
+      <li class="proj"><label class="place"><input type="number" value="2"><small>place</small></label><div class="plate"><div class="head"><span class="rankno">#2</span><span class="name">coaster-ranker</span></div><div class="facts"><span><b>0</b> ready</span><span><b>12</b> done</span></div></div></li>
+      <li class="proj"><label class="place"><input type="number" value="3"><small>place</small></label><div class="plate"><div class="head"><span class="rankno">#3</span><span class="name">travel-companion</span></div><div class="facts"><span><b>4</b> ready</span><span><b>12</b> done</span></div></div></li>
+      <li class="proj"><label class="place"><input type="number" value="4"><small>place</small></label><div class="plate"><div class="head"><span class="rankno">#4</span><span class="name">softfield</span></div><div class="facts"><span><b>143</b> ready</span><span><b>116</b> done</span></div></div></li>
+      <li class="proj"><label class="place"><input type="number" value="5"><small>place</small></label><div class="plate"><div class="head"><span class="rankno">#5</span><span class="name">coucou</span></div><div class="facts"><span><b>1</b> ready</span><span><b>5</b> done</span></div></div></li>
+      <li class="proj"><label class="place"><input type="number" value="6"><small>place</small></label><div class="plate"><div class="head"><span class="rankno">#6</span><span class="name">duck-ascii-test</span></div><div class="facts"><span><b>0</b> ready</span><span><b>1</b> ideas</span></div></div></li>
+      <li class="proj-asked"><div class="plate way-plate"><div class="head"><span class="name">kanji-cards</span></div><div class="what idea">Flash cards for the kanji I keep forgetting, one a day.</div><div class="stations"><span class="st here">Asked</span><span class="st">Set up by the lead</span><span class="st">ADR 00 for you</span><span class="st">In the factory</span></div><span class="way-words">On its way: the runner makes its folder at its next pick</span></div></li>
+    </ol>
+  </section>
+  <p class="legend">The new plate waits at the foot of the list, and once the runner takes it, it is #7: after Softfield's 143 ready tickets, until you drag it up and send.</p>
+</div>
+
+<!-- Proposed -->
+<div data-version="proposed">
+  <h3>Proposed · just after Start it</h3>
+  <section class="panel">
+    <h2>Projects <span class="src">the runner works in this order</span></h2>
+    <ol class="rank">
+      <li class="proj-asked new"><div class="plate way-plate"><span class="note">moved: a new plate goes on top</span><div class="head"><span class="name">kanji-cards</span></div><div class="what idea">Flash cards for the kanji I keep forgetting, one a day.</div><div class="stations"><span class="st here">Asked</span><span class="st">Set up by the lead</span><span class="st">ADR 00 for you</span><span class="st">In the factory</span></div><span class="way-words">On its way: the runner makes its folder at its next pick</span></div></li>
+      <li class="proj"><label class="place"><input type="number" value="1"><small>place</small></label><div class="plate"><div class="head"><span class="rankno">#1</span><span class="name">waifu-gallery</span></div><div class="facts"><span><b>0</b> ready</span><span><b>1</b> done</span></div></div></li>
+      <li class="proj"><label class="place"><input type="number" value="2"><small>place</small></label><div class="plate"><div class="head"><span class="rankno">#2</span><span class="name">coaster-ranker</span></div><div class="facts"><span><b>0</b> ready</span><span><b>12</b> done</span></div></div></li>
+      <li class="proj"><label class="place"><input type="number" value="3"><small>place</small></label><div class="plate"><div class="head"><span class="rankno">#3</span><span class="name">travel-companion</span></div><div class="facts"><span><b>4</b> ready</span><span><b>12</b> done</span></div></div></li>
+      <li class="proj"><label class="place"><input type="number" value="4"><small>place</small></label><div class="plate"><div class="head"><span class="rankno">#4</span><span class="name">softfield</span></div><div class="facts"><span><b>143</b> ready</span><span><b>116</b> done</span></div></div></li>
+      <li class="proj"><label class="place"><input type="number" value="5"><small>place</small></label><div class="plate"><div class="head"><span class="rankno">#5</span><span class="name">coucou</span></div><div class="facts"><span><b>1</b> ready</span><span><b>5</b> done</span></div></div></li>
+      <li class="proj"><label class="place"><input type="number" value="6"><small>place</small></label><div class="plate"><div class="head"><span class="rankno">#6</span><span class="name">duck-ascii-test</span></div><div class="facts"><span><b>0</b> ready</span><span><b>1</b> ideas</span></div></div></li>
+    </ol>
+  </section>
+  <h3>Proposed · after the runner's pick</h3>
+  <section class="panel">
+    <h2>Projects <span class="src">the runner works in this order</span></h2>
+    <ol class="rank">
+      <li class="proj new"><label class="place"><input type="number" value="1"><small>place</small></label><div class="plate"><span class="note">#1 at once: nothing to drag or send</span><div class="head"><span class="rankno">#1</span><span class="name">kanji-cards</span></div><div class="what">Flash cards for the kanji I keep forgetting, one a day.</div><div class="stations"><span class="st">Asked</span><span class="st here">Set up by the lead</span><span class="st">ADR 00 for you</span><span class="st">In the factory</span></div></div></li>
+      <li class="proj"><label class="place"><input type="number" value="2"><small>place</small></label><div class="plate"><div class="head"><span class="rankno">#2</span><span class="name">waifu-gallery</span></div></div></li>
+      <li class="proj"><label class="place"><input type="number" value="3"><small>place</small></label><div class="plate"><div class="head"><span class="rankno">#3</span><span class="name">coaster-ranker</span></div></div></li>
+      <li class="proj"><label class="place"><input type="number" value="4"><small>place</small></label><div class="plate"><div class="head"><span class="rankno">#4</span><span class="name">travel-companion</span></div></div></li>
+      <li class="proj"><label class="place"><input type="number" value="5"><small>place</small></label><div class="plate"><div class="head"><span class="rankno">#5</span><span class="name">softfield</span></div></div></li>
+      <li class="proj"><label class="place"><input type="number" value="6"><small>place</small></label><div class="plate"><div class="head"><span class="rankno">#6</span><span class="name">coucou</span></div></div></li>
+      <li class="proj"><label class="place"><input type="number" value="7"><small>place</small></label><div class="plate"><div class="head"><span class="rankno">#7</span><span class="name">duck-ascii-test</span></div></div></li>
+    </ol>
+  </section>
+  <p class="legend"><span class="new" style="padding:0 4px">Outlined</span>: what F275 changes. Everyone else moves down one place.</p>
+</div>
+</div>
+
+<script>
+  function wireSwitch() {
+    const buttons = document.querySelectorAll(".switch button");
+    for (const button of buttons) {
+      button.addEventListener("click", () => {
+        for (const b of buttons) b.setAttribute("aria-pressed", String(b === button));
+        for (const v of document.querySelectorAll("[data-version]")) v.hidden = v.dataset.version !== button.dataset.show;
+      });
+    }
+  }
+  wireSwitch();
+</script>
+</body>
+</html>
