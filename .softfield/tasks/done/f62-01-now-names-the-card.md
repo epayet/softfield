@@ -27,3 +27,12 @@ The card is `.softfield/cards/f62-claude-opus-review-on-overview-does.md` (D1–
 - a running developer job with a ticket shows its ticket link and title as today, and no `/planning/` link; a running job with neither ticket nor card shows no `/planning/` link and no card line
 - each of these is its own test in `tests/factory_dashboard/test_overview.py`, and each fails without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 3
+duration_s: 7279
+gate_failures: ['stopped', 'stopped']
+tokens: 4450452
+```
