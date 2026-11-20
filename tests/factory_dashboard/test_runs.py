@@ -221,3 +221,11 @@ def test_with_one_project_runs_has_no_project_column(single_project_runs_client)
     rows = re.findall(r"<tr>(.*?)</tr>", html, re.S)
     thead = [r for r in rows if "<th" in r]
     assert not any("Project" in r for r in thead), "single project should not show Project column"
+    tbody = [r for r in rows if "<td" in r and "<th" not in r]
+    header_cells = len(re.findall(r"<th[^>]*>", thead[0]))
+    for row in tbody:
+        td_count = len(re.findall(r"<td[^>]*>", row))
+        assert td_count == header_cells, f"row has {td_count} cells, header has {header_cells}"
+        for td in re.findall(r"<td[^>]*>(.*?)</td>", row, re.S):
+            text = re.sub(r"<[^>]+>", " ", td).strip()
+            assert text != PROJECT, f"row cell holds project name: {text}"

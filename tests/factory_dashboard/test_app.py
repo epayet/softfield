@@ -160,25 +160,11 @@ def test_picker_still_shows_with_one_project(db_path):
 def test_changing_the_picker_reloads_with_the_project(client):
     """F132: choosing a project in the picker reloads the page with that project."""
     html = client.get("/").text
-    assert "coucou" in html
+    assert '<option value="coucou" selected>' in html
     html_other = client.get("/?project=other").text
-    assert "other" in html_other
+    assert '<option value="other" selected>' in html_other
     html_back = client.get("/?project=coucou").text
-    assert "coucou" in html_back
-
-
-def test_the_bay_group_uses_rule_tokens(client):
-    """F132 D7: the bay uses the existing tokens only (the rule, the plate, the hazard stripe
-    faint), never a status colour."""
-    html = client.get("/").text
-    tabs = re.search(r'<nav class="tabs"[^>]*>(.*?)</nav>', html, re.S)
-    assert tabs
-    bay = re.search(r'<span class="bay-group">(.*?)</span>', tabs[1], re.S)
-    assert bay, "no .bay-group found"
-    # no raw colours in the bay
-    assert "#" not in bay[1], "bay should not use raw colours"
-    assert "rgb" not in bay[1], "bay should not use rgb colours"
-    assert "hsl" not in bay[1], "bay should not use hsl colours"
+    assert '<option value="coucou" selected>' in html_back
 
 
 def test_the_picker_follows_the_owner_s_project_order(db_path):

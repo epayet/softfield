@@ -44,7 +44,7 @@
       {% for bar in lane.bars %}
       <tr>
         <td><a href="/jobs/{{ bar.job_id }}?project={{ bar.project | urlencode }}">{% if bar.ticket %}{{ bar.ticket }}{% else %}&ndash;{% endif %}</a></td>
-        <td>{% if many_projects %}{% with name=bar.project %}{% include "_partials/project_plate.html" %}{% endwith %}{% else %}{{ bar.project }}{% endif %}</td>
+        {% if many_projects %}<td>{% with name=bar.project %}{% include "_partials/project_plate.html" %}{% endwith %}</td>{% endif %}
         <td>{{ lane.agent }}</td>
         <td>{{ bar.role }}</td>
         <td>{{ bar.start | local }}</td>

@@ -11,7 +11,7 @@
     <tbody>
       {% for run in runs %}
       <tr>
-        <td class="proj">{% if many_projects %}{% with name=run.project %}{% include "_partials/project_plate.html" %}{% endwith %}{% else %}{{ run.project }}{% endif %}</td>
+        {% if many_projects %}<td class="proj">{% with name=run.project %}{% include "_partials/project_plate.html" %}{% endwith %}</td>{% endif %}
         <td class="id"><a href="/runs/{{ run.run_dir }}?project={{ run.project | urlencode }}">{{ run.run_dir }}</a></td>
         <td>{{ run.command or "–" }}</td>
         <td class="time">{{ run.started | local }}</td>
