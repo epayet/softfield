@@ -91,20 +91,11 @@ class Running:
     project: str = ""  # whose job it is: its plate and its links (F132 D2)
 
     @property
-    def job_card(self) -> dict[str, str | dict[str, str]] | None:
-        """The card's key, title, and role line for a ticketless job with a milestone card."""
-        if self.ticket or not self.milestone or not self.m_title:
+    def job_card(self) -> dict[str, str] | None:
+        """The card a ticketless job works on (F62 D1), from ``job_card``."""
+        if self.ticket:
             return None
-        key = short_key(self.milestone).upper()
-        role_lines: dict[str, str] = {
-            "review": f"The lead reads what {key} built, before it's yours to sign off",
-            "planner": f"The lead answers you on {key}'s thread",
-            "checkpoint": f"Claude re-checks {key}'s merged tickets",
-        }
-        line = role_lines.get(self.role)
-        if line is None:
-            return None
-        return {"key": key, "title": self.m_title, "line": line}
+        return job_card(self.role, self.milestone, self.m_title)
 
     @property
     def live(self) -> bool:
@@ -170,6 +161,25 @@ def live_runs(conn: sqlite3.Connection, project: str, now: datetime) -> list[Liv
             )
         )
     return found
+
+
+# What a ticketless job does, in one line, by its role (F62 D2); another role has no line.
+ROLE_LINES = {
+    "review": "The lead reads what {key} built, before it's yours to sign off",
+    "planner": "The lead answers you on {key}'s thread",
+    "checkpoint": "Claude re-checks {key}'s merged tickets",
+}
+
+
+def job_card(role: str, milestone: str | None, title: str | None) -> dict[str, str] | None:
+    """F62 D1: the card a ticketless job works on, as its upper-case short key, its title
+    (``milestones.title``, else empty) and the role's line; None with no card or another role.
+    Every place that names a ticketless job's card calls this."""
+    line = ROLE_LINES.get(role)
+    if not milestone or line is None:
+        return None
+    key = short_key(milestone).upper()
+    return {"key": key, "title": title or "", "line": line.format(key=key)}
 
 
 def running_jobs(conn: sqlite3.Connection, project: str, now: datetime) -> list[Running]:

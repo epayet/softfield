@@ -354,14 +354,16 @@ def test_a_waiting_run_names_its_ticket_and_until_when(serve_between, db_path):
     assert "Overview allowances." in now
 
 
-def test_a_checkpoint_job_shows_no_goal_line(client, db_path):
-    """A checkpoint job (no ticket) shows its role line when the milestone has a title."""
+def test_a_checkpoint_on_an_untitled_card_shows_its_key_and_line_but_no_title(client, db_path):
+    """A checkpoint job (no ticket) on a card with no title: its plate and its role line,
+    and no empty title line (F62)."""
     from runner import metrics
 
     conn = metrics.open_db(db_path)
     try:
         run = conn.execute("SELECT id FROM runs WHERE run_dir = '20261002-113500'").fetchone()[0]
         f1 = conn.execute("SELECT id FROM milestones WHERE key = 'f1'").fetchone()["id"]
+        conn.execute("UPDATE milestones SET title = NULL WHERE id = ?", (f1,))
         job_id = metrics.start_job(
             conn,
             run,
@@ -377,8 +379,14 @@ def test_a_checkpoint_job_shows_no_goal_line(client, db_path):
         conn.close()
     html = client.get("/").text
     now = section(html, "now")
+    now_raw = section_raw(html, "now")
     assert "checkpoint" in now
     assert "Nothing is running" not in now
+    assert 'class="proj" href="/planning/f1?' in now_raw
+    assert "Claude re-checks F1's merged tickets" in now
+    # the fixture runs other jobs too: read this job's card, from its head to its readouts
+    card = now_raw[now_raw.index(f"job {job_id} ›") :]
+    assert "running-title" not in card[: card.index('class="readouts"')]
 
 
 def test_a_waiting_run_with_unknown_ticket_shows_no_title(serve_between):
@@ -5244,21 +5252,16 @@ def test_a_running_review_job_shows_card_link_and_role_line(client, db_path):
     conn = metrics.open_db(db_path)
     try:
         run = conn.execute("SELECT id FROM runs WHERE run_dir = '20261002-113500'").fetchone()[0]
-        f158 = conn.execute(
-            "SELECT id FROM milestones WHERE key = 'f158'",
-        ).fetchone()
-        if not f158:
-            project = conn.execute("SELECT id FROM projects WHERE name = ?", (PROJECT,)).fetchone()[
-                "id"
-            ]
-            f158 = metrics.upsert_milestone(conn, project, "f158", title="Milestones on the board")
-        else:
-            f158 = f158["id"]
-            # ensure the title is set
-            conn.execute(
-                "UPDATE milestones SET title = 'Milestones on the board' WHERE id = ?",
-                (f158,),
-            )
+        project = conn.execute("SELECT id FROM projects WHERE name = ?", (PROJECT,)).fetchone()[
+            "id"
+        ]
+        # a card's key in full, as the live database has it (job 1353 reviewed this one)
+        f158 = metrics.upsert_milestone(
+            conn,
+            project,
+            "f158-milestones-don-t-show-me-their",
+            title="A card's page says what it's about: its Outcome, else your note",
+        )
         job_id = metrics.start_job(
             conn,
             run,
@@ -5276,9 +5279,9 @@ def test_a_running_review_job_shows_card_link_and_role_line(client, db_path):
     now = section(html, "now")
     now_raw = section_raw(html, "now")
     assert "Nothing is running" not in now
-    assert 'href="/planning/f158' in now_raw
+    assert '<a class="proj" href="/planning/f158?' in now_raw  # the card's plate (F62 D3)
     assert "F158" in now
-    assert "Milestones on the board" in now
+    assert "A card's page says what it's about: its Outcome, else your note" in now
     assert "The lead reads what F158 built, before it's yours to sign off" in now
 
 
@@ -5439,4 +5442,38 @@ def test_a_running_job_with_no_ticket_no_card_shows_no_planning_link(client, db_
     now_raw = section_raw(html, "now")
     assert "Nothing is running" not in now
     assert "/planning/" not in now_raw
-    assert "running-title" not in now
+    assert 'class="doing"' not in now_raw
+
+
+def test_a_ticketless_job_of_another_role_on_a_card_shows_no_card_line(client, db_path):
+    """F62 D2: only a review, a planner reply and a checkpoint name their card; a ticketless job
+    of another role on a card shows no plate, no title and no line."""
+    from runner import metrics
+
+    conn = metrics.open_db(db_path)
+    try:
+        run = conn.execute("SELECT id FROM runs WHERE run_dir = '20261002-113500'").fetchone()[0]
+        f1 = conn.execute("SELECT id FROM milestones WHERE key = 'f1'").fetchone()["id"]
+        conn.execute(
+            "UPDATE milestones SET title = 'The factory measures itself' WHERE id = ?", (f1,)
+        )
+        job_id = metrics.start_job(
+            conn,
+            run,
+            ticket_id=None,
+            milestone_id=f1,
+            role="probe",
+            agent=LOCAL,
+            attempt=1,
+            started=NOW.isoformat(),
+        )
+        metrics.update_running_job(conn, job_id, tokens_in=10_000, steps=5)
+    finally:
+        conn.close()
+    html = client.get("/").text
+    now = section(html, "now")
+    now_raw = section_raw(html, "now")
+    assert "probe" in now
+    assert "/planning/" not in now_raw
+    assert "The factory measures itself" not in now
+    assert 'class="doing"' not in now_raw
