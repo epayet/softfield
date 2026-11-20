@@ -32,3 +32,12 @@ Read `.softfield/cards/f132-the-overview-shows-the-whole-factory.md` ("What happ
 - `spend_chart` and the `spend` chart are gone; the Milestones page's charts are unchanged
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 2714
+gate_failures: []
+tokens: 4075517
+```
