@@ -30,26 +30,6 @@
 
   // One function per kind: (data, colours) -> ECharts option.
   const kinds = {
-    // Claude's dollars per milestone, oldest first: {labels: [...], dollars: [...]}.
-    spend(data, c) {
-      return {
-        grid: { left: 48, right: 12, top: 16, bottom: 24 },
-        tooltip: { trigger: "axis", valueFormatter: dollars },
-        xAxis: {
-          type: "category", data: data.labels,
-          axisLine: { lineStyle: { color: c.rule } }, axisLabel: { color: c.ink },
-        },
-        yAxis: {
-          type: "value", axisLabel: { color: c.muted, formatter: (v) => `$${v}` },
-          splitLine: { lineStyle: { color: c.grid } },
-        },
-        series: [{
-          name: "Claude", type: "bar", data: data.dollars, barMaxWidth: 36,
-          itemStyle: { color: c.series[0], borderRadius: [3, 3, 0, 0] },
-        }],
-      };
-    },
-
     // First-attempt pass rate per milestone: {labels: [...], rate: [...]}.
     "milestone-rate"(data, c) {
       return {

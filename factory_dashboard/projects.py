@@ -14,6 +14,7 @@ from pathlib import Path
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
+from factory_dashboard import queries
 from factory_dashboard.app import Db, Now, Project, render
 from factory_dashboard.overview import running_jobs
 from factory_dashboard.stacks_routes import STACK_PLANT, AppRow, plant_value, row_of, stack_of
@@ -91,6 +92,7 @@ def project_page(
         return HTMLResponse(status_code=404, content="Not found")
     milestones = milestone_summaries(conn, name)
     runs = run_summaries(conn, name)
+    savings = queries.savings(conn, name)
     return render(
         request,
         conn,
@@ -101,6 +103,7 @@ def project_page(
             "meta": meta,
             "milestones": milestones,
             "runs": runs,
+            "savings": savings,
         },
     )
 

@@ -80,8 +80,7 @@ def test_the_overview_shows_every_panel_in_order(client):
     html = client.get("/").text
     ids = re.findall(r'<section[^>]*\bid="([a-z-]+)"', html)
     assert ids == [
-        "needs-you", "now", "queue", "allowance", "line-live", "away", "savings",
-        "spend",
+        "needs-you", "now", "queue", "allowance", "line-live", "away",
     ]  # fmt: skip
     replay_html = re.search(r'<div class="panel replay" id="replay">', html)
     assert replay_html, "no #replay div"
@@ -1395,21 +1394,6 @@ def test_a_lead_row_under_the_line_says_nothing(db_path):
     assert not any("week pace" in r for r in rows)
 
 
-def test_savings_are_for_the_current_milestone(client):
-    savings = section(client.get("/").text, "savings")
-    assert "F1" in savings
-    # f1-04-live now has a job too, so the review and checkpoint ($1.80) split four ways:
-    # supporting is $3 + 3 × $0.45; doing it itself is f1-01's 100 lines at $1.50
-    assert "$1.50" in savings and "$4.35" in savings and "-$2.85" in savings
-    assert "15k" in savings  # token-equivalents underneath
-
-
-def test_savings_heading_says_so_far_on_milestone(client):
-    """The overview savings heading reads "so far on F6" for a milestone."""
-    savings = section(client.get("/").text, "savings")
-    assert "so far" in savings.lower()
-
-
 def test_floor_heading_has_no_refreshes(client):
     """The floor's heading has no "refreshes"."""
     html = client.get("/").text
@@ -1417,13 +1401,6 @@ def test_floor_heading_has_no_refreshes(client):
     assert line_live is not None
     text = unescape(re.sub(r"<[^>]+>", " ", line_live.group(1)))
     assert "refreshes" not in text.lower()
-
-
-def test_the_spend_chart_holds_each_milestones_claude_dollars(serve):
-    html = serve(live=False).get("/").text
-    assert charts(html) == {"spend": {"labels": ["M4", "F1"], "dollars": [2.0, 7.8]}}
-    # charts.js draws each kind with a function of that name
-    assert re.search(r"^\s+spend\(", CHARTS_JS.read_text(), re.M)
 
 
 def _live_part(html: str) -> list[str]:

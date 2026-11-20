@@ -50,5 +50,18 @@
   {% endif %}
 </section>
 
+<section id="savings" class="panel">
+  <h2>Savings from delegating on {{ meta.name }}, so far <span class="src">API-equivalent dollars</span></h2>
+  {% if savings and savings.tickets %}
+  <div class="stats money">
+    <div class="stat"><b>{{ savings.doing_itself | usd }}</b><span>what Claude would have spent writing the developers' {{ "{:,}".format(savings.lines) }} lines itself (≈{{ savings.doing_itself_tokens | tokens }} token-equivalents)</span></div>
+    <div class="stat"><b>{{ savings.supporting | usd }}</b><span>what it spent supporting them: tickets, directions, escalations, a share of reviews and checkpoints (≈{{ savings.supporting_tokens | tokens }})</span></div>
+    <div class="stat"><b>{{ savings.net | usd }}</b><span>net, on {{ savings.tickets }} delegated ticket{{ "s" if savings.tickets != 1 }}</span></div>
+  </div>
+  {% else %}
+  <p class="sub">No delegated tickets yet.</p>
+  {% endif %}
+</section>
+
 </div>
 {% endblock %}

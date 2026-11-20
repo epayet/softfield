@@ -753,3 +753,55 @@ def test_docker_missing_shows_its_reason_and_the_page_still_draws(
     assert "App Docker isn't available docker is not installed on this machine" in text
     assert "Run" not in text and "Stop" not in text and "starting" not in text
     assert "Plant a card" not in text
+
+
+# --- savings on the project page (f132-04) ---------------------------------------------------
+
+
+def test_project_page_shows_savings_heading_with_project_name(project_client):
+    """The heading reads "Savings from delegating on <project>, so far"."""
+    html = project_client.get("/projects/coucou").text
+    savings = section(html, "savings")
+    assert "Savings from delegating on coucou, so far" in savings
+
+
+def test_project_page_shows_savings_sums_over_all_delegated_tickets(project_client):
+    """The sums cover all of the project's delegated tickets, not just one milestone."""
+    html = project_client.get("/projects/coucou").text
+    savings = section(html, "savings")
+    # All milestones summed: 3 delegated tickets, net is negative
+    assert "3 delegated tickets" in savings
+    assert "-$4.13" in savings
+
+
+def test_project_page_no_chart_in_savings_section(project_client):
+    """The savings section has no chart, only the three figures."""
+    html = project_client.get("/projects/coucou").text
+    savings_section = re.search(r'<section[^>]*\bid="savings"[^>]*>(.*?)</section>', html, re.S)
+    assert savings_section
+    assert "data-chart" not in savings_section[1]
+
+
+def test_project_with_no_delegated_tickets_says_so(db_path):
+    """A project with no delegated tickets says the message."""
+    from datetime import UTC, datetime
+
+    from fastapi.testclient import TestClient
+
+    from factory_dashboard.app import create_app, get_now
+    from runner import metrics
+
+    path = db_path
+    conn = metrics.open_db(path)
+    try:
+        project_id = metrics.upsert_project(conn, "empty")
+        metrics.upsert_run(conn, project_id, "20261001-000000")
+    finally:
+        conn.close()
+
+    app = create_app(path, "empty")
+    app.dependency_overrides[get_now] = lambda: datetime(2026, 10, 2, 12, 0, tzinfo=UTC)
+    client = TestClient(app, base_url="http://127.0.0.1:8765")
+    html = client.get("/projects/empty").text
+    savings = section(html, "savings")
+    assert "No delegated tickets yet." in savings

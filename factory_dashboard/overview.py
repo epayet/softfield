@@ -3,7 +3,7 @@
 ``base.html``, and a chart's data for ``static/charts.js`` (D5).
 
 Top to bottom: Needs you and Now (one htmx partial at ``/live``), the Claude
-allowance, savings for the current milestone and the Claude spend chart.
+allowance, and the line on the floor.
 """
 
 import json
@@ -621,7 +621,7 @@ _OVERVIEW_TITLES = {
 }
 
 
-# --- the allowance, savings ---------------------------------------------
+# --- the allowance, current milestone ---------------------------------------------
 
 
 def current_milestone(conn: sqlite3.Connection, project: str) -> sqlite3.Row | None:
@@ -633,6 +633,9 @@ def current_milestone(conn: sqlite3.Connection, project: str) -> sqlite3.Row | N
         (project,),
     ).fetchone()
     return row
+
+
+# --- the allowance ---------------------------------------------
 
 
 @dataclass(frozen=True)
@@ -951,15 +954,6 @@ def dispatch_windows(windows: list[allowance.Window], reserves: Collection[str])
     return dispatch.Windows(windows, None, reserves)
 
 
-def spend_chart(conn: sqlite3.Connection, project: str) -> dict[str, list[str] | list[float]]:
-    """Claude's dollars per milestone, oldest first: the data of ``charts.js``'s ``spend``."""
-    points = queries.trends(conn, project)
-    return {
-        "labels": [p.results.key.upper() for p in points],
-        "dollars": [round(p.results.claude.dollars, 2) for p in points],
-    }
-
-
 def fast_lane(
     rows: Sequence[dict[str, Any]], keys: Collection[str]
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -1222,7 +1216,6 @@ def overview(request: Request, conn: Db, project: Project, now: Now) -> HTMLResp
     local = now.astimezone()
     cards = board(conn, project, now)
     line = live_line(conn, project, local, cards=cards)
-    milestone = current_milestone(conn, project)
 
     def url(path: str, since: datetime) -> str:
         from urllib.parse import urlencode
@@ -1266,9 +1259,6 @@ def overview(request: Request, conn: Db, project: Project, now: Now) -> HTMLResp
             "choices": choices,
             "now": local,
             **_live_context(conn, project, now, line=line, cards=cards),
-            "milestone": milestone,
-            "savings": queries.savings(conn, project, milestone["key"]) if milestone else None,
-            "spend": spend_chart(conn, project),
         },
     )
     if "since" not in request.query_params:  # choosing a span isn't looking again (f3-F3)
