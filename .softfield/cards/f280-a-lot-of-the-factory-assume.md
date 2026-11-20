@@ -1,4 +1,4 @@
-# Milestone F280: A lot of the factory assume things are for mum but that…
+# Milestone F280: The factory's instructions name no project: no Mum, no Coucou paths
 
 > **State:** idea · **Area:** factory
 > Planted by the owner on 2026-11-20.
