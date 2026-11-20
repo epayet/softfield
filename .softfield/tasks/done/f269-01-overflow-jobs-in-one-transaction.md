@@ -23,3 +23,12 @@ Read `write_more_jobs` in `tests/factory_dashboard/conftest.py` and `open_db` in
 - `test_more_than_200_jobs_shows_200_and_count` passes unchanged, and `pytest tests/factory_dashboard/test_jobs.py --durations=5` shows its setup under 1 s (quote the before and after times in the commit message)
 - no other fixture or test is changed
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 1012
+gate_failures: []
+tokens: 841006
+```
