@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F279 mock-up: The queue, the whole factory's line</title>
+<style>
+  /* The dashboard's own tokens (factory_dashboard/static/dashboard.css), dark theme */
+  :root {
+    --floor: #12161b; --bay: #181e25; --plate: #1f2730; --grid: #222b34; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+    --hazard: #f2b10a; --hazard-ink: #1a1405; --opus: #ff9640; --sonnet: #ffc48a; --dev: #5b9cf5;
+    --good: #5fd17a; --tick: var(--ink-2); --accent: var(--sonnet); --warn-ink: var(--hazard);
+    --display: "Chakra Petch", "Bahnschrift", "DIN Alternate", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    --stripe: repeating-linear-gradient(-45deg, var(--hazard) 0 6px, transparent 6px 12px);
+    --notch: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--floor); color: var(--fg); font: 15px/1.5 var(--body); padding: 20px; }
+  a { color: var(--accent); text-decoration: none; }
+  .intro h1 { font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 4px; }
+  .intro p { color: var(--ink-2); max-width: 820px; margin: 0 0 8px; }
+  .label { font: 600 13px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 24px 0 8px; }
+  .switch { display: inline-flex; margin: 8px 0 0; border: 1px solid var(--rule); }
+  .switch button { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 10px 18px;
+    background: var(--bay); color: var(--muted); border: 0; cursor: pointer; }
+  .switch button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+  .pair { display: grid; gap: 28px; grid-template-columns: 390px; align-items: start; }
+  .phone { width: 390px; max-width: 100%; }
+  [hidden] { display: none !important; }
+  @media (min-width: 900px) {
+    .pair { grid-template-columns: 390px 390px; }
+    .pair > [data-version][hidden] { display: block !important; }
+    .switch { display: none; }
+  }
+  .new { outline: 1px dashed var(--good); outline-offset: 2px; }
+  .note { display: block; font: 12px/1.35 var(--body); color: var(--good); margin: 4px 0 0; }
+  .legend { color: var(--ink-2); font-size: 13px; max-width: 820px; margin: 14px 0 0; }
+
+  /* ---- copied from dashboard.css: panels, plates, the belt ---- */
+  .panel { background: var(--bay); border: 1px solid var(--rule); padding: 0 14px 12px; min-width: 0; position: relative; }
+  .panel::before, .panel::after { content: ""; position: absolute; width: 10px; height: 10px; border: 0 solid var(--tick); }
+  .panel::before { top: -1px; left: -1px; border-top-width: 2px; border-left-width: 2px; }
+  .panel::after { bottom: -1px; right: -1px; border-bottom-width: 2px; border-right-width: 2px; }
+  .panel > h2 { display: flex; align-items: center; gap: 10px; margin: 0 -14px 10px; padding: 7px 14px;
+    background: var(--plate); border-bottom: 1px solid var(--rule);
+    font: 600 14px var(--display); text-transform: uppercase; letter-spacing: .1em; }
+  .panel > h2::after { content: ""; order: 1; flex: 1; height: 8px; background: var(--stripe); opacity: .5; }
+  .panel > h2 .src { order: 2; font: 11px var(--mono); text-transform: none; letter-spacing: 0; color: var(--muted); }
+  .panel > p { margin: 0 0 8px; }
+  h3 { font: 600 12px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 12px 0 6px; }
+  .mono { font-family: var(--mono); font-size: 12.5px; }
+  .held { color: var(--hazard); font-family: var(--mono); font-size: 12.5px; }
+  .count { font: 700 28px/1 var(--display); color: var(--fg); }
+  .count small { font: 600 11px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin-left: 6px; }
+  .belt { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+  .belt li { display: grid; grid-template-columns: 28px 1fr; gap: 8px; align-items: center; padding: 5px 8px 5px 0;
+    background: var(--plate); border-left: 3px solid var(--rule); font-size: 13.5px; }
+  .belt li .n { font: 600 12px var(--mono); color: var(--muted); text-align: right; }
+  .belt li.lead { border-left-color: var(--opus); } .belt li.developer { border-left-color: var(--dev); }
+  .belt li b { font: 600 12px var(--mono); }
+  .belt li:not(:has(> .n)) { grid-template-columns: 1fr; padding-left: 10px; }
+  .proj { display: inline-block; position: relative; font: 600 11px var(--mono); color: var(--ink-2); background: var(--plate);
+    border: 1px solid var(--rule); padding: 0 6px; margin-right: 4px; white-space: nowrap; }
+  .proj::before, .proj::after { content: ""; position: absolute; width: 4px; height: 4px; border: 0 solid var(--tick); }
+  .proj::before { top: -1px; left: -1px; border-top-width: 1px; border-left-width: 1px; }
+  .proj::after { bottom: -1px; right: -1px; border-bottom-width: 1px; border-right-width: 1px; }
+
+  /* ---- proposed: The queue (new rules, existing tokens only) ---- */
+  .crumbs { font-size: 13px; color: var(--muted); margin: 0 0 10px; }
+  .crumbs a { color: var(--ink-2); }
+  .q-head h1 { font: 700 22px/1.1 var(--display); letter-spacing: .06em; text-transform: uppercase; margin: 0 0 2px; }
+  .q-head .src { font: 11px var(--mono); color: var(--muted); }
+  .mode { position: relative; margin: 10px 0 12px; padding: 12px 14px 12px 22px; background: var(--plate);
+    border: 1px solid var(--rule); clip-path: var(--notch); }
+  .mode::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 8px;
+    background: repeating-linear-gradient(-45deg, var(--hazard) 0 6px, var(--hazard-ink) 6px 12px); }
+  .mode .key { font: 600 10.5px var(--display); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+  .mode .say { font: 700 19px/1.25 var(--display); letter-spacing: .02em; margin: 2px 0 6px; text-wrap: balance; }
+  .mode ul { margin: 0; padding: 0; list-style: none; font-size: 13.5px; color: var(--ink-2); }
+  .mode li::before { content: "▸ "; color: var(--muted); }
+  .readouts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--rule); border: 1px solid var(--rule); margin: 0 0 12px; }
+  .readouts div { background: var(--bay); padding: 7px 8px; }
+  .readouts b { display: block; font: 700 22px/1 var(--display); font-variant-numeric: tabular-nums; }
+  .readouts span { font: 600 10px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+  .projects { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; font-size: 12.5px; color: var(--muted); }
+  .way { border: 1px dashed var(--opus); padding: 6px 10px; font-size: 13px; margin: 0 0 12px; background: var(--bay); }
+  .way b { font: 600 11.5px var(--mono); color: var(--warn-ink); }
+  svg.conveyor { display: block; width: 100%; height: auto; margin: 0 0 6px; }
+  svg.conveyor text { font-family: var(--mono); }
+  .bay-head { display: flex; align-items: center; gap: 8px; margin: 14px 0 6px;
+    font: 700 12px var(--display); letter-spacing: .12em; text-transform: uppercase; }
+  .bay-head::after { content: ""; flex: 1; height: 1px; background: var(--rule); }
+  .bay-head small { font: 400 12px var(--body); letter-spacing: 0; text-transform: none; color: var(--muted); }
+  .rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+  .rows > li { background: var(--plate); border-left: 3px solid var(--rule); }
+  .rows > li.lead { border-left-color: var(--opus); } .rows > li.developer { border-left-color: var(--dev); }
+  .rows > li.job { border-left-color: var(--ink-2); border-left-style: double; }
+  .rows details > summary { list-style: none; display: grid; grid-template-columns: 30px 1fr; gap: 8px; padding: 6px 8px 6px 0; cursor: pointer; }
+  .rows details > summary::-webkit-details-marker { display: none; }
+  .rows .n { font: 600 12px var(--mono); color: var(--muted); text-align: right; padding-top: 1px; }
+  .rows .id { font: 600 12px var(--mono); overflow-wrap: anywhere; }
+  .rows .t { display: block; font-size: 13.5px; color: var(--fg); }
+  .rows .why { display: block; font-size: 12.5px; color: var(--muted); }
+  .rows .why .who-lead { color: var(--opus); } .rows .why .who-dev { color: var(--dev); }
+  .rows .more { padding: 0 10px 10px 38px; font-size: 13px; color: var(--ink-2); border-top: 1px solid var(--rule); }
+  .rows .more dl { display: grid; grid-template-columns: 82px 1fr; gap: 2px 8px; margin: 8px 0; }
+  .rows .more dt { font: 600 10.5px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); padding-top: 2px; }
+  .rows .more dd { margin: 0; }
+  .group > details > summary { list-style: none; display: flex; justify-content: space-between; gap: 8px; padding: 7px 10px; cursor: pointer; font-size: 13px; }
+  .group > details > summary::-webkit-details-marker { display: none; }
+  .group b { font: 600 12px var(--mono); }
+  .group .c { font: 700 15px var(--display); color: var(--fg); }
+  .wide { width: 1020px; }
+  .wide .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+  .wide .top { display: grid; grid-template-columns: 1.3fr 1fr; gap: 16px; align-items: start; }
+  .scroll-x { overflow-x: auto; padding-bottom: 6px; }
+</style>
+</head>
+<body>
+<div class="intro">
+  <h1>F279: The queue, the whole factory's line</h1>
+  <p>Real values from 19 Nov, 20:40: the metrics database and every project's ready tickets. The rows after 8 and the folded groups are counted, not all drawn. The "on its way" plate is an example: nothing was waiting at 20:40.</p>
+  <div class="switch" role="group" aria-label="Which version">
+    <button type="button" data-show="today" aria-pressed="false">Today</button>
+    <button type="button" data-show="proposed" aria-pressed="true">Proposed</button>
+  </div>
+</div>
+
+<p class="label">Phone</p>
+<div class="pair">
+
+<!-- Today: copied from factory_dashboard/templates/_partials/queue.html, as /  read at 20:40 -->
+<div data-version="today" hidden>
+  <p class="label" style="margin-top:0">Today · the Overview's Queue, the only list</p>
+  <section class="panel phone">
+    <h2>Queue</h2>
+    <p><span class="count">141 <small>tickets waiting.</small></span></p>
+    <h3>Next in line</h3>
+    <ol class="belt">
+      <li><span><b class="mono">Checkpoint: f265-the-factory-now-section-in-planning</b> · Claude re-checks f122-06-start-plate-once and f265-04-fix-tiles-refresh-tests, after a stand-in</span></li>
+      <li class="lead"><span class="n">1</span><span><b class="mono">1 <a href="#">f132-02-overview-live-every-project</a></b> The Overview's live part (Now, the Queue, Next in line and Needs you) shows every project, the same whichever project is picked, each item with its project's plate. · the lead · <span class="held">goes when nothing else can</span> · early: f199-01-the-map waits for it</span></li>
+      <li class="lead"><span class="n">2</span><span><b class="mono">2 <a href="#">f132-05-floor-every-project</a></b> The floor, on the Overview and on `/line`, is the whole factory's: the field counts every project's cards, the shared machines carry any project's crate, each crate says its project, and the stash counts every project's merges. · the lead · waits for f132-02-overview-live-every-project · <span class="held">goes when nothing else can</span> · early: f199-01-the-map waits for it</span></li>
+      <li class="lead"><span class="n">3</span><span><b class="mono">3 <a href="#">f199-01-the-map</a></b> A new page, `/floor`, shows the whole factory from above on a grid, every machine, belt and pile on one screen with no scrolling, on a phone held upright and on a wide screen alike. · the lead · waits for f132-05-floor-every-project · <span class="held">goes when nothing else can</span> · F199</span></li>
+    </ol>
+  </section>
+  <p class="legend">softfield's only: travel-companion's 3 tickets, coucou's 1 and wardrobe-teller's setup don't show. Three rows, worked out by the dashboard without Claude's windows, so they can differ from what the runner takes. The why sits at the far end of each row. The rest of the list is only in <span class="mono">softfield run --dry-run</span>, one project at a time.</p>
+</div>
+
+<!-- Proposed: /queue on a phone -->
+<div data-version="proposed">
+  <p class="label" style="margin-top:0">Proposed · a new page, /queue</p>
+  <div class="phone new">
+    <p class="crumbs"><a href="#">The whole factory</a> › The queue</p>
+    <div class="q-head">
+      <h1>The queue</h1>
+      <span class="src">worked out at 20:40, the runner's last pick · refreshes every 30 s</span>
+    </div>
+
+    <div class="mode">
+      <div class="key">What drives the order now</div>
+      <div class="say">Over pace: developers first, the lead when nothing else can.</div>
+      <ul>
+        <li>Claude's week 82% used, today's pace 42%; resets Mon 23 Nov 16:00</li>
+        <li>2 developer tickets can go now, about 35 min</li>
+        <li>Now: the lead answers you on F279 (softfield)</li>
+      </ul>
+    </div>
+
+    <div class="readouts">
+      <div><b>145</b><span>tickets · 2 jobs</span></div>
+      <div><b>77</b><span>can go</span></div>
+      <div><b>68</b><span>wait</span></div>
+    </div>
+    <div class="projects"><span class="proj">travel-companion</span>3 <span class="proj">softfield</span>141 <span class="proj">coucou</span>1 <span class="proj">wardrobe-teller</span>setting up</div>
+
+    <div class="way"><b>On its way</b> · Approve plan: F279 · applied at the next pick <span class="note">Example. Shows only when one of your requests is waiting for the runner.</span></div>
+
+    <svg class="conveyor" viewBox="0 0 360 86" role="img" aria-label="The next six on the belt">
+      <text x="0" y="10" font-size="9" fill="#8794a2" letter-spacing="1.5">NEXT ON THE BELT →</text>
+      <rect x="0" y="58" width="360" height="8" fill="#1f2730" stroke="#303b47"/>
+      <g stroke="#303b47"><line x1="20" y1="58" x2="20" y2="66"/><line x1="60" y1="58" x2="60" y2="66"/><line x1="100" y1="58" x2="100" y2="66"/><line x1="140" y1="58" x2="140" y2="66"/><line x1="180" y1="58" x2="180" y2="66"/><line x1="220" y1="58" x2="220" y2="66"/><line x1="260" y1="58" x2="260" y2="66"/><line x1="300" y1="58" x2="300" y2="66"/><line x1="340" y1="58" x2="340" y2="66"/></g>
+      <rect x="0" y="70" width="360" height="5" fill="url(#hz)" opacity=".5"/>
+      <defs><pattern id="hz" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="5" height="10" fill="#f2b10a"/></pattern></defs>
+      <!-- crates: right is first -->
+      <g font-size="11" text-anchor="middle">
+        <rect x="306" y="22" width="44" height="34" fill="#1f2730" stroke="#b4bec8" stroke-width="2" stroke-dasharray="4 2"/><text x="328" y="44" fill="#dfe4e8">1</text>
+        <rect x="252" y="22" width="44" height="34" fill="#1f2730" stroke="#b4bec8" stroke-width="2" stroke-dasharray="4 2"/><text x="274" y="44" fill="#dfe4e8">2</text>
+        <rect x="198" y="22" width="44" height="34" fill="#1f2730" stroke="#5b9cf5" stroke-width="2"/><text x="220" y="44" fill="#dfe4e8">3</text>
+        <rect x="144" y="22" width="44" height="34" fill="#1f2730" stroke="#ff9640" stroke-width="2"/><text x="166" y="44" fill="#dfe4e8">4</text>
+        <rect x="90" y="22" width="44" height="34" fill="#1f2730" stroke="#5b9cf5" stroke-width="2"/><text x="112" y="44" fill="#dfe4e8">5</text>
+        <rect x="36" y="22" width="44" height="34" fill="#1f2730" stroke="#ff9640" stroke-width="2"/><text x="58" y="44" fill="#dfe4e8">6</text>
+      </g>
+      <text x="0" y="84" font-size="8.5" fill="#8794a2">dashed: a job · blue: a developer · orange: the lead · tap a crate for its row</text>
+    </svg>
+
+    <div class="bay-head">Jobs <small>go before any ticket</small></div>
+    <ol class="rows">
+      <li class="job"><details><summary><span class="n">1</span><span><span class="proj">softfield</span><span class="id">checkpoint · F265</span><span class="t">Claude re-checks f122-06-start-plate-once and f265-04-fix-tiles-refresh-tests, after a stand-in</span><span class="why">Claude (Sonnet) · goes now</span></span></summary></details></li>
+      <li class="job"><details><summary><span class="n">2</span><span><span class="proj">wardrobe-teller</span><span class="id">setup · M1</span><span class="t">wardrobe-teller's setup, from the Projects page</span><span class="why">the lead · after softfield's job: wardrobe-teller is last in your order</span></span></summary></details></li>
+    </ol>
+
+    <div class="bay-head">Can go <small>tickets, in the order the runner takes them</small></div>
+    <ol class="rows">
+      <li class="developer"><details><summary><span class="n">3</span><span><span class="proj">travel-companion</span><span class="id">m8-08-trip-by-hand</span><span class="t">The owner adds a trip that isn't in Wanderlog from the Trips page, and fills it in on its page.</span><span class="why"><span class="who-dev">a developer</span> · M8 · travel-companion comes first in your order</span></span></summary></details></li>
+      <li class="lead new"><details><summary><span class="n">4</span><span><span class="proj">travel-companion</span><span class="id">m5-01-remove-memory-place-row</span><span class="t">Remove the memory page's old place row, which nothing has drawn since F12, Trips with their own pages.</span><span class="why"><span class="who-lead">the lead</span> · M5 · fills the gap: travel-companion has nothing else</span></span></summary></details>
+        <span class="note" style="padding:0 8px 6px">Today's runner takes this before softfield's developer ticket (5). f279-02 swaps them: over pace, the lead fills the gap only when no project has anything else.</span></li>
+      <li class="developer"><details><summary><span class="n">5</span><span><span class="proj">softfield</span><span class="id">f269-01-overflow-jobs-in-one-transaction</span><span class="t">The 200-jobs test writes its jobs in one transaction.</span><span class="why"><span class="who-dev">a developer</span> · F269 · the last developer ticket that can go</span></span></summary></details></li>
+      <li class="lead"><details open><summary><span class="n">6</span><span><span class="proj">softfield</span><span class="id">f132-02-overview-live-every-project</span><span class="t">The Overview's live part shows every project, the same whichever project is picked.</span><span class="why"><span class="who-lead">the lead</span> · F132 · goes when nothing else can</span></span></summary>
+        <div class="more new">
+          <dl>
+            <dt>Goal</dt><dd>The Overview's live part (Now, the Queue, Next in line and Needs you) shows every project, the same whichever project is picked, each item with its project's plate.</dd>
+            <dt>Why here</dt><dd>F132 is #3 on the board; it goes early because F199, #1, waits for it.</dd>
+            <dt>Waits for</dt><dd>nothing: f142-01-notify-every-project is done</dd>
+            <dt>Frees</dt><dd>10 tickets wait for it</dd>
+            <dt>Pre-flight</dt><dd>no problem</dd>
+          </dl>
+          <a href="#">The ticket ›</a> · <a href="#">F132's thread ›</a>
+          <span class="note">Tap a row: its details open under it.</span>
+        </div></details></li>
+      <li class="lead"><details><summary><span class="n">7</span><span><span class="proj">softfield</span><span class="id">f245-01-approved-card-leaves-seed-at-once</span><span class="t">An approved card shows as Seed until the runner's next round (fix).</span><span class="why"><span class="who-lead">the lead</span> · F245 · goes when nothing else can</span></span></summary></details></li>
+      <li class="lead"><details><summary><span class="n">8</span><span><span class="proj">softfield</span><span class="id">f85-07-review-lists-changed-pages</span><span class="t">Real before and after pictures: the review lists the changed pages.</span><span class="why"><span class="who-lead">the lead</span> · F85 · goes when nothing else can</span></span></summary></details></li>
+      <li class="group"><details><summary><span>71 more that can go, the lead's · last: <span class="proj">coucou</span><b>f1-01-retire-backlog</b></span><span class="c">71</span></summary></details></li>
+    </ol>
+
+    <div class="bay-head">Waits <small>68, by the ticket they wait for</small></div>
+    <ol class="rows">
+      <li class="group"><details><summary><span>for <b>f132-02-overview-live-every-project</b> (6)</span><span class="c">10</span></summary></details></li>
+      <li class="group"><details><summary><span>for <b>f199-01-the-map</b></span><span class="c">4</span></summary></details></li>
+      <li class="group"><details><summary><span>for <b>f124-01-a-project-pauses-alone</b></span><span class="c">3</span></summary></details></li>
+      <li class="group"><details><summary><span>for <b>f268-01-pictures-stored-with-the-request</b></span><span class="c">3</span></summary></details></li>
+      <li class="group"><details><summary><span>for <b>m5-01-remove-memory-place-row</b> (4) <span class="proj">travel-companion</span></span><span class="c">1</span></summary></details></li>
+      <li class="group"><details><summary><span>… and the other groups, each folded</span><span class="c"></span></summary></details></li>
+    </ol>
+  </div>
+  <p class="legend"><span class="new">Dashed green</span> marks what is new: the whole page. Every project in one list, in the runner's own order, with a sentence on why the order is what it is. The runner works the list out at each pick, so the page, the Overview and the dry run say the same thing. A number in brackets is the row that ticket has in the list.</p>
+</div>
+</div>
+
+<p class="label">Proposed · the Overview's Queue panel, after F132 (f279-04)</p>
+<section class="panel phone">
+  <h2>Queue</h2>
+  <p><span class="count">145 <small>tickets waiting: softfield 141 · travel-companion 3 · coucou 1</small></span></p>
+  <p class="new" style="font: 600 14px var(--display)">Over pace: developers first, the lead when nothing else can.</p>
+  <h3>Next in line</h3>
+  <ol class="belt">
+    <li><span><span class="proj">softfield</span><b class="mono">Checkpoint: F265</b> · Claude re-checks f122-06-start-plate-once and f265-04-fix-tiles-refresh-tests, after a stand-in</span></li>
+    <li><span><span class="proj">wardrobe-teller</span><b class="mono">Setup: M1</b> · wardrobe-teller's setup, from the Projects page</span></li>
+    <li class="developer"><span class="n">3</span><span><span class="proj">travel-companion</span><b class="mono"><a href="#">m8-08-trip-by-hand</a></b> The owner adds a trip that isn't in Wanderlog from the Trips page, and fills it in on its page. · a developer · M8</span></li>
+    <li class="lead"><span class="n">4</span><span><span class="proj">travel-companion</span><b class="mono"><a href="#">m5-01-remove-memory-place-row</a></b> Remove the memory page's old place row. · the lead · <span class="held">fills the gap</span> · M5</span></li>
+    <li class="developer"><span class="n">5</span><span><span class="proj">softfield</span><b class="mono"><a href="#">f269-01-overflow-jobs-in-one-transaction</a></b> The 200-jobs test writes its jobs in one transaction. · a developer · F269</span></li>
+  </ol>
+  <p class="new" style="margin:8px 0 0"><a href="#">The whole queue: 145 tickets, 2 jobs ›</a></p>
+</section>
+<p class="legend">Same rows as the page's first five, from the same stored plan; the count and the rows can't disagree any more.</p>
+
+<p class="label">Proposed · /queue on a wide screen</p>
+<div class="scroll-x">
+<div class="wide new">
+  <p class="crumbs"><a href="#">The whole factory</a> › The queue</p>
+  <div class="top">
+    <div>
+      <div class="q-head"><h1>The queue</h1><span class="src">worked out at 20:40, the runner's last pick · refreshes every 30 s</span></div>
+      <div class="mode">
+        <div class="key">What drives the order now</div>
+        <div class="say">Over pace: developers first, the lead when nothing else can.</div>
+        <ul>
+          <li>Claude's week 82% used, today's pace 42%; resets Mon 23 Nov 16:00</li>
+          <li>2 developer tickets can go now, about 35 min; then the lead's f132-02 frees 10</li>
+          <li>Now: the lead answers you on F279 (softfield)</li>
+        </ul>
+      </div>
+    </div>
+    <div>
+      <div class="readouts" style="margin-top:34px">
+        <div><b>145</b><span>tickets · 2 jobs</span></div>
+        <div><b>77</b><span>can go</span></div>
+        <div><b>68</b><span>wait</span></div>
+      </div>
+      <div class="projects"><span class="proj">travel-companion</span>3 <span class="proj">softfield</span>141 <span class="proj">coucou</span>1 <span class="proj">wardrobe-teller</span>setting up</div>
+    </div>
+  </div>
+  <div class="cols">
+    <div>
+      <div class="bay-head">Jobs <small>go before any ticket</small></div>
+      <ol class="rows">
+        <li class="job"><details><summary><span class="n">1</span><span><span class="proj">softfield</span><span class="id">checkpoint · F265</span><span class="why">Claude (Sonnet) · goes now</span></span></summary></details></li>
+        <li class="job"><details><summary><span class="n">2</span><span><span class="proj">wardrobe-teller</span><span class="id">setup · M1</span><span class="why">the lead · wardrobe-teller is last in your order</span></span></summary></details></li>
+      </ol>
+      <div class="bay-head">Can go <small>in the order the runner takes them</small></div>
+      <ol class="rows">
+        <li class="developer"><details><summary><span class="n">3</span><span><span class="proj">travel-companion</span><span class="id">m8-08-trip-by-hand</span><span class="why"><span class="who-dev">a developer</span> · M8</span></span></summary></details></li>
+        <li class="lead"><details><summary><span class="n">4</span><span><span class="proj">travel-companion</span><span class="id">m5-01-remove-memory-place-row</span><span class="why"><span class="who-lead">the lead</span> · M5 · fills the gap</span></span></summary></details></li>
+        <li class="developer"><details><summary><span class="n">5</span><span><span class="proj">softfield</span><span class="id">f269-01-overflow-jobs-in-one-transaction</span><span class="why"><span class="who-dev">a developer</span> · F269</span></span></summary></details></li>
+        <li class="lead"><details><summary><span class="n">6</span><span><span class="proj">softfield</span><span class="id">f132-02-overview-live-every-project</span><span class="why"><span class="who-lead">the lead</span> · F132 · goes when nothing else can · frees 10</span></span></summary></details></li>
+        <li class="lead"><details><summary><span class="n">7</span><span><span class="proj">softfield</span><span class="id">f245-01-approved-card-leaves-seed-at-once</span><span class="why"><span class="who-lead">the lead</span> · F245</span></span></summary></details></li>
+        <li class="group"><details><summary><span>72 more that can go</span><span class="c">72</span></summary></details></li>
+      </ol>
+    </div>
+    <div>
+      <div class="bay-head">Waits <small>68, by the ticket they wait for</small></div>
+      <ol class="rows">
+        <li class="group"><details><summary><span>for <b>f132-02-overview-live-every-project</b> (6)</span><span class="c">10</span></summary></details></li>
+        <li class="group"><details><summary><span>for <b>f199-01-the-map</b></span><span class="c">4</span></summary></details></li>
+        <li class="group"><details><summary><span>for <b>f124-01-a-project-pauses-alone</b></span><span class="c">3</span></summary></details></li>
+        <li class="group"><details><summary><span>for <b>f268-01-pictures-stored-with-the-request</b></span><span class="c">3</span></summary></details></li>
+        <li class="group"><details><summary><span>for <b>f65-01-review-rounds</b></span><span class="c">2</span></summary></details></li>
+        <li class="group"><details><summary><span>for <b>m5-01-remove-memory-place-row</b> (4) <span class="proj">travel-companion</span></span><span class="c">1</span></summary></details></li>
+        <li class="group"><details><summary><span>… and the other groups, each folded</span><span class="c"></span></summary></details></li>
+      </ol>
+    </div>
+  </div>
+</div>
+</div>
+<p class="legend">On a wide screen the line reads left to right: jobs and what can go on the left, what waits on the right.</p>
+
+<script>
+  function wireSwitch() {
+    document.querySelectorAll(".switch button").forEach(function (button) {
+      button.addEventListener("click", function () {
+        document.querySelectorAll(".switch button").forEach(function (b) { b.setAttribute("aria-pressed", String(b === button)); });
+        document.querySelectorAll(".pair > [data-version]").forEach(function (v) { v.hidden = v.dataset.version !== button.dataset.show; });
+      });
+    });
+  }
+  wireSwitch();
+</script>
+</body>
+</html>
