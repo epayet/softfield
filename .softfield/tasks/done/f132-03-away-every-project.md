@@ -29,3 +29,12 @@ Read `.softfield/cards/f132-the-overview-shows-the-whole-factory.md` (D2–D4) a
 - one project only: no plate, and the panel reads as today
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 3
+duration_s: 5647
+gate_failures: ['stopped', 'stopped']
+tokens: 4579231
+```
