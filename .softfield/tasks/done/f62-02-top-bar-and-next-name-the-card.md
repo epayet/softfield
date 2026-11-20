@@ -28,3 +28,12 @@ The top bar and Next in line name the card a ticketless job works on, as Now alr
 - a due review on `f68-…` with a title: Next in line shows "review F68" linked to `/planning/f68`, its title and "the lead reads what it built", and not "a batch"
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 3
+duration_s: 11840
+gate_failures: ['mypy', 'task-tests']
+tokens: 11288833
+```
