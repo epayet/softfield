@@ -50,6 +50,11 @@
     <input type="hidden" name="project" value="{{ project }}">
     <input type="hidden" name="value" value="">
     <ol class="rank">
+      {# a new project the runner hasn't taken yet, drawn from its request (F122 D6): not `.proj`,
+         which the order script reorders, and no place to change #}
+      {% for new in starting %}
+      <li class="proj-asked">{{ asked_plate(new.name, new.idea) }}</li>
+      {% endfor %}
       {% for card in cards %}
       <li class="proj" data-key="{{ card.name }}" data-name="{{ card.name }}">
         <label class="place"><input type="number" min="1" max="{{ cards | length }}" value="{{ loop.index }}" inputmode="numeric"
@@ -99,11 +104,6 @@
           {% if asked %}<span class="way">on its way · at the runner's next pick</span>{% endif %}
         </div>
       </li>
-      {% endfor %}
-      {# a new project the runner hasn't taken yet, drawn from its request (F122 D6): not `.proj`,
-         which the order script reorders, and no place to change #}
-      {% for new in starting %}
-      <li class="proj-asked">{{ asked_plate(new.name, new.idea) }}</li>
       {% endfor %}
     </ol>
     <button type="submit" class="send-order btn go" disabled>Send new order</button>
@@ -208,7 +208,7 @@
       const name = field("name").value.trim();
       if (name) plate.querySelector(".name").textContent = name;
       plate.querySelector(".idea").textContent = field("idea").value;
-      document.querySelector("#order-form .rank").append(plate);
+      document.querySelector("#order-form .rank").prepend(plate);
       for (const input of form.querySelectorAll("textarea, input:not([type=hidden]), button")) input.disabled = true;
     });
   })();

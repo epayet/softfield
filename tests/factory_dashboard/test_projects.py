@@ -321,7 +321,9 @@ def test_a_waiting_new_project_draws_its_plate_on_its_way_until_the_runner_takes
     )
     assert lit(row) == ["Asked"]
     assert "<input" not in row  # no place to change
-    assert html.index('<li class="proj-asked">') > html.rindex('<li class="proj"')  # at the end
+    assert html.index('<li class="proj-asked">') < html.index(
+        '<li class="proj"'
+    )  # before the first
     assert "bird-log" in section(html, "projects-order")
     conn = metrics.open_db(db_path)
     try:
