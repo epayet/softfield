@@ -26,3 +26,12 @@ f275-a-project-created-by-web-interface-C2611-3: The Start-it test does not chec
 - each finding above no longer holds: the tests it names check content, and would fail if the code were wrong
 - the listed `tests:` pass, with no change outside `tests/`
 - all gates pass
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 787
+gate_failures: []
+tokens: 279916
+```
