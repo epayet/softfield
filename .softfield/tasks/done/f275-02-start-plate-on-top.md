@@ -22,3 +22,12 @@ The picture to build: `.softfield/cards/f275-mockup/new-project-first.html` (Pro
 - the start script puts the plate it draws at the top of that list (`prepend`), and nothing else on the page changes
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 1202
+gate_failures: []
+tokens: 250664
+```
