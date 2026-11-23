@@ -1,4 +1,4 @@
-# Milestone F285: I think I said at some point don't do a checkpoint just…
+# Milestone F285: Copilot pre-reviews a finished milestone while Claude is out
 
 > **State:** idea · **Area:** factory
 > Planted by the owner on 2026-11-21.
