@@ -1,4 +1,4 @@
-# Milestone F286: I want code reviews to highlight refactoring and reduce…
+# Milestone F286: Reviews look for complexity and leave the code simpler (Boy Scout rule)
 
 > **State:** idea · **Area:** factory
 > Planted by the owner on 2026-11-21.
