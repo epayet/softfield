@@ -36,3 +36,12 @@ Read `.softfield/cards/f97-given-that-the-planning-board-has.md` (D1–D5) and b
 - the `data-notices` of `/live` are the same as before the change for the same data
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: max-diff)
+attempts: 3
+tokens: 1862994
+logs: .softfield/var/runs/20261120-174051/f97-01-needs-you-steps-aside
+```
