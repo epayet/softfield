@@ -1,6 +1,16 @@
 {# Now (D3, f3 mock-up): what works, in every project (F132), each job with its plate; drawn inside the /live partial, which refreshes it every 5 s. #}
 <section id="now" class="panel">
   <h2>Now <span class="src">refreshes every 5 s</span></h2>
+  {# what stops the line (F97 D2): the runner stopped, an idle queue, a check failing on main #}
+  {% for stop in line_stops %}
+  {% set pq = "?project=" ~ (stop.project | urlencode) %}
+  <div class="stop">
+    <b>Line stopped</b>
+    {% with name=stop.project %}{% include "_partials/project_plate.html" %}{% endwith %}
+    <span>{{ stop.text }}{% if stop.ticket %} (<a class="mono" href="/tickets/{{ stop.ticket }}{{ pq }}">{{ stop.ticket }}</a>){% endif %}</span>
+    {% if stop.command %}<code>{{ stop.command }}</code>{% endif %}
+  </div>
+  {% endfor %}
   {% for job in running %}
   {% set pq = "?project=" ~ (job.project | urlencode) %}
   <div class="running-card">

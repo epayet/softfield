@@ -10,7 +10,7 @@ from urllib.parse import parse_qs, urlencode, urlsplit
 import pytest
 
 from factory_dashboard.overview import queue, queued_jobs
-from runner import metrics
+from runner import loop, metrics
 from tests.factory_dashboard.conftest import (
     LOCAL,
     NOW,
@@ -106,8 +106,9 @@ def charts(html: str) -> dict[str, object]:
 def test_the_overview_shows_every_panel_in_order(client):
     html = client.get("/").text
     ids = re.findall(r'<section[^>]*\bid="([a-z-]+)"', html)
+    # F97: Now first, Needs you at the bottom
     assert ids == [
-        "needs-you", "now", "queue", "allowance", "line-live", "away",
+        "now", "queue", "allowance", "line-live", "away", "needs-you",
     ]  # fmt: skip
     replay_html = re.search(r'<div class="panel replay" id="replay">', html)
     assert replay_html, "no #replay div"
@@ -245,14 +246,31 @@ def test_a_waiting_job_shows_the_waiting_readout_plate(db_path):
     )
 
 
-def test_a_stale_heartbeat_is_a_needs_you_item_instead(serve):
+def _line_stops(html: str) -> list[str]:
+    """The words of each "Line stopped" strip at the top of Now (F97)."""
+    now = re.search(r'<section[^>]*\bid="now"[^>]*>(.*?)</section>', html, re.S)
+    assert now, "no section now"
+    strips = re.findall(r'<div class="stop">(.*?)</div>', now[1], re.S)
+    return [" ".join(re.sub(r"<[^>]+>", " ", s).split()) for s in strips]
+
+
+def test_a_stale_heartbeat_stops_the_line_in_now_instead(serve):
+    """F97 D2: what stops the line shows at the top of Now, and leaves Needs you."""
     html = serve(heartbeat_age=timedelta(minutes=3)).get("/").text
-    assert "f1-04-live" not in section(html, "now")
-    needs = section(html, "needs-you")
-    assert "heartbeat stopped 3 min ago" in needs and "f1-04-live" in needs
-    assert "softfield run" in needs  # the standing command (ADR 17), not one milestone
+    assert 'class="running-card"' not in section(html, "now")  # no job is drawn as running
+    stops = _line_stops(html)
+    heartbeat = [s for s in stops if "heartbeat stopped 3 min ago" in s]
+    assert len(heartbeat) == 1, stops
+    assert heartbeat[0].startswith("Line stopped") and "f1-04-live" in heartbeat[0]
+    assert "softfield run" in heartbeat[0]  # the standing command (ADR 17), not one milestone
     # with the runner gone, the queue waits on nobody
-    assert "2 tickets waiting and the runner is idle" in needs
+    idle = [s for s in stops if "2 tickets waiting and the runner is idle" in s]
+    assert len(idle) == 1 and idle[0].startswith("Line stopped"), stops
+    needs = section(html, "needs-you")
+    assert "heartbeat stopped" not in needs and "runner is idle" not in needs
+    # at the top of Now, above what runs
+    now = section(html, "now")
+    assert now.index("Line stopped") < now.index("Nothing is running")
 
 
 def test_a_project_the_runner_never_ran_shows_an_empty_queue(client):
@@ -307,9 +325,10 @@ def test_the_live_partial_answers_on_its_own_for_htmx(client):
 
 def test_the_queue_item_goes_from_live_once_a_run_is_live(serve):
     stopped = serve(heartbeat_age=timedelta(minutes=3)).get("/live").text
-    assert "runner is idle" in section(stopped, "needs-you")
+    assert any("runner is idle" in s for s in _line_stops(stopped))
     running = serve().get("/live").text
-    assert "runner is idle" not in section(running, "needs-you")
+    assert "runner is idle" not in section(running, "now")
+    assert "Line stopped" not in section(running, "now")
 
 
 def sign_off_all(db_path: Path) -> None:
@@ -327,6 +346,30 @@ def test_needs_you_is_absent_when_nothing_needs_the_owner(serve_between, db_path
     for html in (client.get("/").text, client.get("/live").text):
         assert "Needs you" not in html and "Nothing needs you" not in html
         assert 'id="needs-you"' not in html
+
+
+def test_a_failing_check_on_main_stops_the_line_and_still_notifies(serve_between, db_path):
+    """F97 D2: a main-red item shows as "Line stopped" at the top of Now, not in Needs you;
+    with nothing else waiting the page has no Needs you, and the phone still gets its notice."""
+    client = serve_between(activity="check-all on main")
+    sign_off_all(db_path)
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        metrics.upsert_owner_item(
+            conn, project, loop.MAIN_RED_KIND, "main", text="Main fails ruff.",
+            command="softfield check-all", created=NOW.isoformat(),
+        )  # fmt: skip
+    finally:
+        conn.close()
+    for html in (client.get("/").text, client.get("/live").text):
+        assert _line_stops(html) == ["Line stopped Main fails ruff. softfield check-all"]
+        assert 'id="needs-you"' not in html
+    facts = html.split('id="live-facts"')[1]  # /live's, which the phone reads
+    found = re.search(r"data-notices='([^']*)'", facts)
+    assert found, "no data-notices"
+    titles = [n["title"] for n in json.loads(found[1]).values()]
+    assert titles == ["A check fails on main"]
 
 
 def test_a_live_run_between_jobs_shows_its_activity(serve_between):
@@ -3618,17 +3661,24 @@ def planning_tab(html: str) -> str:
     return " ".join(match.group(1).split())
 
 
-def test_three_desk_items_show_their_count_links_and_tab(serve_between, db_path):
+def desk_plate(html: str, entry: str = "desk-entry") -> tuple[str, str]:
+    """The href and the words of the desk plate ``entry`` in Needs you (F97 D3)."""
+    match = re.search(rf'<a id="{entry}" class="desk-plate" href="([^"]*)">(.*?)</a>', html, re.S)
+    assert match, f"no desk plate {entry}"
+    return match[1], " ".join(re.sub(r"<[^>]+>", " ", match[2]).split())
+
+
+def test_three_desk_items_show_as_one_plate_with_their_count(serve_between, db_path):
+    """F97 D3: the desk is one plate, its count and a link to the Planning room; no titles."""
     client = serve_between()
     sign_off_all(db_path)
     lead_replies(db_path, "f7", "f8", "f9")
     for html in (client.get("/").text, client.get("/live").text):
+        href, words = desk_plate(html)
+        assert href == f"/planning?project={PROJECT}"
+        assert words == "3 desk ›"
         needs = section(html, "needs-you")
-        assert "3 things wait for you on your desk" in needs
-        assert "Open your desk ›" in needs
-        entry = html.split('id="desk-entry"')[1].split("</li>")[0]
-        links = re.findall(r'href="/planning/(f\d)\?', entry)
-        assert links == ["f9", "f8", "f7"]  # the lead's newest reply first (F185 D3)
+        assert "/planning/f" not in needs  # no desk item's link or title
         assert planning_tab(html) == "Planning · 3"
 
 
@@ -3638,8 +3688,8 @@ def test_a_lead_reply_shows_once_in_the_desk_entry(serve_between, db_path):
     lead_replies(db_path, "f7")
     html = client.get("/live").text
     needs = section(html, "needs-you")
-    assert "1 thing waits for you on your desk" in needs
-    assert "The lead answered" not in needs and "planning" not in needs  # the entry stands for it
+    assert desk_plate(html)[1] == "1 desk ›"
+    assert "The lead answered" not in needs and ">planning<" not in needs  # the plate stands for it
     # the lead reply is in data-notices for notify.js
     facts = html.split('id="live-facts"')[1]
     assert "The lead replied" in facts
@@ -3658,16 +3708,13 @@ def _seeds(db_path: Path, *cards: str) -> None:
 
 def test_seeds_are_not_counted_as_waiting_for_you(serve_between, db_path):
     """F103 D1: with two seeds and one answer wanted, Needs you and the tab count the answer
-    only, and the desk entry links to it alone."""
+    only (F97: the desk's plate counts it, with no titles)."""
     client = serve_between()
     sign_off_all(db_path)
     _seeds(db_path, "f8", "f9")
     lead_replies(db_path, "f7")
     for html in (client.get("/").text, client.get("/live").text):
-        needs = section(html, "needs-you")
-        assert "1 thing waits for you on your desk" in needs
-        entry = html.split('id="desk-entry"')[1].split("</li>")[0]
-        assert re.findall(r'href="/planning/(f\d)\?', entry) == ["f7"]
+        assert desk_plate(html)[1] == "1 desk ›"
         assert planning_tab(html) == "Planning · 1"
 
 
@@ -4858,9 +4905,7 @@ def test_a_card_that_turns_ripe_shows_on_the_next_refresh(serve_between, db_path
     finally:
         conn.close()
     after = client.get("/live").text
-    assert "1 thing waits for you on your desk" in section(after, "needs-you")
-    entry = after.split('id="desk-entry"')[1].split("</li>")[0]
-    assert re.findall(r'href="/planning/(f\d+)\?', entry) == ["f30"]
+    assert desk_plate(after)[1] == "1 desk ›"
     assert planning_tab(after) == "Planning · 1"
 
 
@@ -5042,21 +5087,23 @@ def test_with_no_job_anywhere_now_has_one_between_jobs_line(tmp_path):
 
 
 def test_needs_you_has_each_projects_desk_and_items_with_its_plate(tmp_path):
-    """D6: a desk line per project with something on its desk (its plate, count, top three
-    and Open › to its own /planning), none for an empty desk, and every project's items."""
+    """D6, F97 D3: a desk plate per project with something on its desk (its count, its plate,
+    desk › to its own /planning, no titles), none for an empty desk, and every project's
+    items under the plates."""
     html = _client(_factory(tmp_path)).get(f"/?project={SOFTFIELD}").text
     needs = section(html, "needs-you")
-    assert "travel-companion 2 things wait on its desk" in needs
-    assert "softfield 1 thing waits on its desk" in needs
-    assert 'id="desk-entry-coucou"' not in html
-    travel = html.split('id="desk-entry-travel-companion"')[1].split("</li>")[0]
-    assert re.findall(r'href="(/planning[^"]*)"', travel) == [
-        "/planning/f8?project=travel-companion",
-        "/planning/f7?project=travel-companion",
+    assert desk_plate(html, "desk-entry-travel-companion") == (
         "/planning?project=travel-companion",
-    ]
-    assert "Open ›" in travel
+        "2 travel-companion desk ›",
+    )
+    assert desk_plate(html, "desk-entry-softfield") == (
+        "/planning?project=softfield",
+        "1 softfield desk ›",
+    )
+    assert 'id="desk-entry-coucou"' not in html
+    assert "/planning/f" not in needs  # no desk item's link or title
     assert "coucou Coucou's decision." in needs  # another project's item, on its plate
+    assert needs.index("desk ›") < needs.index("Coucou's decision.")  # under the desks
     # the Planning tab still counts the picked project's desk
     assert planning_tab(html) == "Planning · 1"
 

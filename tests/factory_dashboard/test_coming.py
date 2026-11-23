@@ -548,8 +548,9 @@ def _count(html: str) -> int:
 
 
 def _waits_on_the_desk(html: str) -> int:
-    # one project's words, or a project's own desk line with several (F132 D6)
-    said = re.search(r"(\d+) things? waits? (?:for you on your|on its) desk", html)
+    # the project's own desk plate in Needs you, alone or among several (F132 D6, F97 D3)
+    plate = rf'<a id="desk-entry(?:-{re.escape(PROJECT)})?" class="desk-plate"[^>]*><b>(\d+)</b>'
+    said = re.search(plate, html)
     return int(said[1]) if said else 0
 
 

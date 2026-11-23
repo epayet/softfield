@@ -3214,15 +3214,16 @@ def test_a_box_stays_counted_until_every_proposal_is_on_its_way(planning, db_pat
 
 
 def test_the_overview_and_the_planning_tab_count_the_same(planning, db_path, serve):
-    """With a box holding a conversation and two proposals: the Overview's "N things wait for
-    you" is the Planning tab's number."""
+    """With a box holding a conversation and two proposals: the Overview's desk plate counts
+    the Planning tab's number."""
     _write(db_path, lambda conn: _review(conn, planning, "f30", _REVIEW_PLAN, _BOX_MOCKUP))
     client = serve()
     html = _page(client)
     tab = re.search(r'id="planning-tab">Planning · (\d+)</a>', html)
     assert tab
-    # the fixture has two projects: the desk line is the project's own (F132 D6)
-    assert f"{tab[1]} things wait on its desk" in client.get("/live").text
+    # the fixture has two projects: the desk plate is the project's own (F132 D6, F97 D3)
+    plate = rf'<a id="desk-entry-{PROJECT}" class="desk-plate"[^>]*><b>{tab[1]}</b>'
+    assert re.search(plate, client.get("/live").text)
 
 
 def test_a_ripe_cards_proposals_are_links_in_its_sign_off_row(planning, db_path, db, serve):

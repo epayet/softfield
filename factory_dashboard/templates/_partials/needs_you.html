@@ -1,25 +1,16 @@
-{# Needs you (D3, D8): what waits on the owner; absent when nothing does. Drawn on the Overview and in /live. Every project's (F132 D6): a desk line for each project with something on its desk, then every project's items, each with its plate and its project's links. #}
+{# Needs you (D3, D8): what waits on the owner; absent when nothing does. Drawn at the bottom of the Overview and in /live (F97). Every project's (F132 D6): one plate for each project with something on its desk, its count and its Planning room (no titles: the desk lists them), then every project's other items, each with its plate and its project's links. What stops the line shows in Now instead (running.html). #}
 {% if desks or needs %}
-<section id="needs-you" class="panel needs">
+<section id="needs-you" class="panel needs calm">
   <h2>Needs you <span class="src">{% if many_projects %}every project · {% endif %}each item goes when it's done</span></h2>
-  <ul class="steps">
+  {% if desks %}
+  <div class="desks">
     {% for d in desks %}
-    {% set pq = "?project=" ~ (d.project | urlencode) %}
-    <li id="{{ 'desk-entry-' ~ d.project if many_projects else 'desk-entry' }}">
-      <span class="when"><span class="pill warn">desk</span></span>
-      <span class="what">
-        {% with name=d.project %}{% include "_partials/project_plate.html" %}{% endwith %}
-        {% if many_projects %}
-        <span>{{ d.count }} {{ "things wait" if d.count != 1 else "thing waits" }} on its desk</span>
-        {% else %}
-        <span>{{ d.count }} {{ "things wait" if d.count != 1 else "thing waits" }} for you on your desk</span>
-        {% endif %}
-        {# the desk's top three and the desk itself (f6-09) #}
-        {% for item in d["items"] %}<a class="mono" href="{{ item.link }}{{ pq }}">{{ item.title }}</a> {% endfor %}
-        <a class="mono" href="/planning{{ pq }}">{{ "Open ›" if many_projects else "Open your desk ›" }}</a>
-      </span>
-    </li>
+    <a id="{{ 'desk-entry-' ~ d.project if many_projects else 'desk-entry' }}" class="desk-plate" href="/planning?project={{ d.project | urlencode }}"><b>{{ d.count }}</b>{% with name=d.project %}{% include "_partials/project_plate.html" %}{% endwith %}<span>desk ›</span></a>
     {% endfor %}
+  </div>
+  {% endif %}
+  {% if needs %}
+  <ul class="steps">
     {% for need in needs %}
     {% set pq = "?project=" ~ (need.project | urlencode) %}
     <li>
@@ -32,5 +23,6 @@
     </li>
     {% endfor %}
   </ul>
+  {% endif %}
 </section>
 {% endif %}
