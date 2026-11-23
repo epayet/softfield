@@ -1,4 +1,4 @@
-# Milestone F283: The current planning search reloads the whole page and I…
+# Milestone F283: Light up matching cards on the board as you type; the rest stay in place
 
 > **State:** idea · **Area:** factory
 > Planted by the owner on 2026-11-21.
