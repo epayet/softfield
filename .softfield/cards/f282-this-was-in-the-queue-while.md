@@ -1,4 +1,4 @@
-# Milestone F282: This was in the queue while Claude was out of memory:…
+# Milestone F282: The re-check row says Copilot already did the checkpoint while Claude was out
 
 > **State:** idea · **Area:** factory
 > Planted by the owner on 2026-11-21.
