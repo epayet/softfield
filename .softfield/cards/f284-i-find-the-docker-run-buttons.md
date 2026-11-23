@@ -1,4 +1,4 @@
-# Milestone F284: I find the docker run buttons a bit unresponsive. If I…
+# Milestone F284: Run and Stop show what the app is doing, with its logs on its plate
 
 > **State:** idea · **Area:** factory
 > Planted by the owner on 2026-11-21.
