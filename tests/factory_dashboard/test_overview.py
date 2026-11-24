@@ -6071,3 +6071,12 @@ def test_needs_you_rows_have_lines_under_them(page, db_path):
         row = rows.nth(i)
         border_bottom = row.evaluate("el => getComputedStyle(el).borderBottomStyle")
         assert border_bottom == "solid", f"row {i} should have a solid line under it"
+
+
+def test_job_card_pre_review_returns_line():
+    """F285 D5: job_card for 'pre-review' returns the line in plain words."""
+    from factory_dashboard.overview import job_card
+
+    result = job_card("pre-review", "f5-board", "Board")
+    assert result is not None
+    assert result["line"] == "Copilot reads F5 before the lead's review"

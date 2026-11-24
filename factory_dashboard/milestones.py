@@ -667,6 +667,7 @@ _ROLE_LABELS: dict[str, str] = {
     "lead-ticket": "The lead's tickets",
     "direction": "Directions for developers",
     "checkpoint": "Checkpoints",
+    "pre-review": "Copilot's pre-reviews",
 }
 
 

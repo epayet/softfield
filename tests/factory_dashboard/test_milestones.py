@@ -3175,3 +3175,22 @@ def test_the_sheet_page_has_no_sideways_scroll_on_a_phone_and_folds_open_without
     assert fold.get_attribute("open") == ""
     assert page.locator("#findings table").is_visible()
     assert page.evaluate("() => document.documentElement.scrollWidth") <= PHONE["width"]
+
+
+def test_spend_includes_pre_review_label(db_path):
+    """A milestone with a pre-review job lists it under "Copilot's pre-reviews"."""
+    from factory_dashboard.milestones import _milestone_spend
+
+    conn = metrics.open_db(db_path)
+    try:
+        pid = metrics.find_project(conn, PROJECT)
+        assert pid is not None
+        m_id = metrics.upsert_milestone(conn, pid, "f285-pre")
+        run = metrics.upsert_run(conn, pid, "20261001-130000")
+        _job(conn, run, m_id, None, "pre-review", "copilot-auto", 1, "passed", cost_usd=1.5)
+        conn.commit()
+    finally:
+        conn.close()
+    spend = _milestone_spend(metrics.open_db(db_path), m_id)
+    labels = [s.label for s in spend]
+    assert "Copilot's pre-reviews" in labels

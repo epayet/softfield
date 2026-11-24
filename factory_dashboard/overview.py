@@ -182,6 +182,7 @@ ROLE_LINES = {
     "review": "The lead reads what {key} built, before it's yours to sign off",
     "planner": "The lead answers you on {key}'s thread",
     "checkpoint": "Claude re-checks {key}'s merged tickets",
+    "pre-review": "Copilot reads {key} before the lead's review",
 }
 
 
