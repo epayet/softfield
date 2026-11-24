@@ -129,30 +129,17 @@ def _waiting_order(
     is the thread's latest and a planner job about it is open, or an open ``plan_message``
     request names the card. Cards with an open ``setup`` job are included too, whether or not
     the card has a thread or messages."""
-    planned = {
-        str(r["subject"] or "").split("#")[0]
+    jobs = [
+        (r["kind"], str(r["subject"] or "").split("#")[0])  # ``m1#1602``: an owner's message
         for r in metrics.open_jobs(conn, project_id)
         if r["kind"] in REPLIES
-    }
-    # Cards with open SETUP jobs, whether or not they have a thread
-    setup_cards = [
-        str(r["subject"] or "") for r in metrics.open_jobs(conn, project_id) if r["kind"] == SETUP
     ]
-    seen: set[str] = set()
-    result: list[str] = []
-    for r in last:
-        if r["author"] in ("owner", "runner") and r["card"] in planned and r["card"] not in seen:
-            seen.add(r["card"])
-            result.append(r["card"])
-    for card in setup_cards:
-        if card not in seen:
-            seen.add(card)
-            result.append(card)
-    for card in _asked(conn, project_id):
-        if card not in seen:
-            seen.add(card)
-            result.append(card)
-    return dict.fromkeys(result)
+    planned = {card for _, card in jobs}
+    return dict.fromkeys(
+        [r["card"] for r in last if r["author"] in ("owner", "runner") and r["card"] in planned]
+        + [card for kind, card in jobs if kind == SETUP]
+        + _asked(conn, project_id)
+    )
 
 
 def _waiting_for_lead(conn: sqlite3.Connection, project_id: int) -> set[str]:

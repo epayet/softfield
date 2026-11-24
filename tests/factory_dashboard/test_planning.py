@@ -3405,6 +3405,22 @@ def test_a_card_with_an_open_setup_job_and_an_empty_thread_stays_on_its_way(plan
     assert item.words.startswith("waiting for the lead")
 
 
+def test_a_setup_job_answering_the_owner_lists_its_card_once(planning, db_path, db):
+    """A setup job queued for the owner's message is about ``f9#<request id>``, as on live
+    (``m1#1602``): the card is still the one item, never a second one named after the subject."""
+    conn = metrics.open_db(db_path)
+    try:
+        thread = metrics.planner_thread(conn, planning, "f9", NOW.isoformat())
+        metrics.add_planner_message(conn, thread["id"], "owner", NOW.isoformat(), "Go on.")
+        metrics.queue_job(conn, planning, "setup", "f9#1602", "your message", NOW.isoformat())
+        conn.commit()
+    finally:
+        conn.close()
+    answers = _group(db, "answers")
+    assert [i.link for i in answers if i.link.startswith("/planning/f9")] == ["/planning/f9"]
+    assert answers[[i.link for i in answers].index("/planning/f9")].on_its_way
+
+
 def test_a_finished_setup_job_with_a_lead_message_makes_the_card_a_reply_item(
     planning, db_path, db
 ):
