@@ -2387,6 +2387,87 @@ def _pause_held_planner(serve, serve_between, db_path):
     return client
 
 
+def _setting_up(db_path: Path) -> None:
+    """A second project, after coucou in the projects' order, being set up (F276): its run
+    has a live ``setup`` job, with no ticket and no card, as the runner starts one."""
+    conn = metrics.open_db(db_path)
+    try:
+        metrics.upsert_project(conn, PROJECT)
+        tc = metrics.upsert_project(conn, "travel-companion")
+        metrics.set_project_paused(conn, "travel-companion", metrics.SETTING_UP)
+        tc_run = metrics.upsert_run(
+            conn,
+            tc,
+            "20261002-120000",
+            command="setup",
+            started=(NOW - timedelta(minutes=25)).isoformat(),
+            heartbeat=(NOW - timedelta(seconds=30)).isoformat(),
+        )
+        metrics.start_job(
+            conn,
+            tc_run,
+            ticket_id=None,
+            milestone_id=None,
+            role="setup",
+            agent=OPUS,
+            attempt=1,
+            started=(NOW - timedelta(minutes=12)).isoformat(),
+        )
+    finally:
+        conn.close()
+
+
+def _setup_held(serve, serve_between, db_path):
+    """Paused: coucou, first in the order, has no live job; travel-companion is set up."""
+    client = serve()
+    _pause_held(db_path)
+    _setting_up(db_path)
+    return client
+
+
+def _setup_held_planner(serve, serve_between, db_path):
+    """Paused, with a planner job on coucou and a setup job on travel-companion."""
+    client = _pause_held_planner(serve, serve_between, db_path)
+    _setting_up(db_path)
+    return client
+
+
+def _setup_running(serve, serve_between, db_path):
+    """Not paused: coucou between jobs, travel-companion being set up."""
+    client = serve_between(activity="picking the next ticket")
+    _setting_up(db_path)
+    return client
+
+
+def _planner_running(serve, serve_between, db_path):
+    """Not paused: coucou between jobs beside a planner job with no card (one project)."""
+    client = serve_between(activity="picking the next ticket")
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        run = metrics.upsert_run(
+            conn,
+            project,
+            "20261002-120000",
+            command="planning",
+            started=(NOW - timedelta(minutes=25)).isoformat(),
+            heartbeat=(NOW - timedelta(seconds=30)).isoformat(),
+        )
+        metrics.start_job(
+            conn,
+            run,
+            ticket_id=None,
+            milestone_id=None,
+            role="planner",
+            agent=OPUS,
+            attempt=1,
+            started=(NOW - timedelta(minutes=12)).isoformat(),
+        )
+    finally:
+        conn.close()
+    return client
+
+
 def _runner_running(serve, serve_between, db_path):
     return serve_between(activity="check-all · f1-04-live")
 
@@ -2461,6 +2542,22 @@ PAUSE, RESUME = {"Pause after this job": "pause"}, {"Resume": "resume"}
         # the runner's own work: green dot that breathes (f184)
         (_runner_running, "Running: check-all · f1-04-live", "runner", PAUSE),
         (_runner_paused, "Pausing after check-all · f1-04-live", "runner", RESUME),
+        # F276: the lead's setup job, paused or not; the lit paused project wins the order
+        (
+            _setup_held,
+            "Paused by you since 11:40 · the lead is setting up travel-companion",
+            "lead",
+            RESUME,
+        ),
+        # the owner's conversation wins over a setup
+        (
+            _setup_held_planner,
+            "Paused by you since 11:40 · the lead is answering you",
+            "lead",
+            RESUME,
+        ),
+        (_setup_running, "Running: the lead is setting up travel-companion", "lead", PAUSE),
+        (_planner_running, "Running: the lead is answering you", "lead", PAUSE),
     ],
     ids=[
         "running",
@@ -2475,6 +2572,10 @@ PAUSE, RESUME = {"Pause after this job": "pause"}, {"Resume": "resume"}
         "stopped",
         "runner-running",
         "runner-paused",
+        "paused-setup",
+        "paused-setup-planner",
+        "setup-running",
+        "planner-running",
     ],
 )
 def test_the_top_bar_says_what_the_factory_does_with_pause_or_resume(
@@ -2497,8 +2598,9 @@ def test_the_top_bar_says_what_the_factory_does_with_pause_or_resume(
         (_runner_running, "Pausing after check-all · f1-04-live"),  # F184
         (_idle, "Pausing after this job"),
         (_waiting, "Pausing after this job"),
+        (_setup_running, "Pausing after the setup of travel-companion"),  # F276: no " · name"
     ],
-    ids=["running", "lead-ticket", "runner-running", "idle", "waiting"],
+    ids=["running", "lead-ticket", "runner-running", "idle", "waiting", "setup"],
 )
 def test_the_pause_sign_shows_at_the_tap_what_the_server_then_says(
     serve, serve_between, db_path, setup, pausing
@@ -2509,9 +2611,14 @@ def test_the_pause_sign_shows_at_the_tap_what_the_server_then_says(
     html = client.get("/").text
     start = html.index('<div id="factory-status"')
     bar = html[start : html.index("</div>", start)]
-    sign = re.search(r'<button type="button" class="sign"[^>]*data-asked="([^"]*)">⏸', bar)
-    assert sign and sign[1] == pausing, bar
-    _ask(client, "pause")
+    sign = re.search(
+        r'<button type="button" class="sign"[^>]*"project": "([^"]+)"[^>]*data-asked="([^"]*)">⏸',
+        bar,
+    )
+    assert sign and sign[2] == pausing, bar
+    # posted as the sign posts it: to the bar's project, not the page's (F276)
+    body = f"kind=pause&project={sign[1]}"
+    assert client.post("/requests", content=body, headers=ASK).status_code == 200
     assert _status(client.get("/").text)[0] == pausing
 
 
@@ -3006,6 +3113,51 @@ def test_factory_wide_status_ranks_planner_job(db_path):
         )
         status = factory_wide_status(conn, PROJECT, NOW)
         assert status.words == "Running: softfield · planner F1"
+        assert status.dot == "lead"
+    finally:
+        conn.close()
+
+
+def test_factory_wide_status_names_a_planner_job_with_no_card_in_plain_words(db_path):
+    """F276: a planner job with no card, beside a second project between jobs, reads
+    ``Running: softfield · the lead is answering you``, never ``planner, job N``."""
+    from factory_dashboard.app import PICKING, factory_wide_status
+
+    conn = metrics.open_db(db_path)
+    try:
+        tc = metrics.upsert_project(conn, "travel-companion")
+        sf = metrics.upsert_project(conn, "softfield")
+        metrics.set_project_order(conn, ["travel-companion", "softfield"])
+        tc_run = metrics.upsert_run(
+            conn,
+            tc,
+            "20261002-110000",
+            command="milestone m1",
+            started=(NOW - timedelta(minutes=10)).isoformat(),
+            heartbeat=(NOW - timedelta(seconds=10)).isoformat(),
+        )
+        metrics.update_run_activity(conn, tc_run, PICKING, None)
+        sf_run = metrics.upsert_run(
+            conn,
+            sf,
+            "20261002-113500",
+            command="planning",
+            started=(NOW - timedelta(minutes=25)).isoformat(),
+            heartbeat=(NOW - timedelta(seconds=10)).isoformat(),
+        )
+        job = metrics.start_job(
+            conn,
+            sf_run,
+            ticket_id=None,
+            milestone_id=None,
+            role="planner",
+            agent=OPUS,
+            attempt=1,
+            started=(NOW - timedelta(minutes=12)).isoformat(),
+        )
+        status = factory_wide_status(conn, PROJECT, NOW)
+        assert status.words == "Running: softfield · the lead is answering you"
+        assert f"job {job}" not in status.words
         assert status.dot == "lead"
     finally:
         conn.close()

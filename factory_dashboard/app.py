@@ -299,22 +299,25 @@ def factory_wide_status(conn: sqlite3.Connection, project: str, now: datetime) -
     names = [p.name for p in metrics.projects_in_order(conn)] or [project]
     found = [(name, factory_status(conn, name, now)) for name in names]
 
-    def rank(status: Status) -> int:
+    def rank(status: Status) -> tuple[int, int]:
         if status.button == "resume" or "asked" in status.tone:
-            return 0
+            return 0, 0 if status.dot == "lead" else 1  # the paused project the lead works on
         if status.dot in ("lead", "developer"):
-            return 1
+            return 1, 0
         if status.words.startswith("Waiting for Claude"):
-            return 2
+            return 2, 0
         if status.words.startswith("Running: "):
-            return 3
+            return 3, 0
         if status.words.startswith("Idle: "):
-            return 4
-        return 5 if status.words == "Stopped" else 4
+            return 4, 0
+        return (5 if status.words == "Stopped" else 4), 0
 
     name, status = min(found, key=lambda pair: rank(pair[1]))
     # the pause holds every project, and any project's Resume lifts it (2026-11-18): no name
     if len(names) == 1 or status.words == "Stopped" or status.words.startswith("Paused by you"):
+        return replace(status, project=name)
+    # a setup's words name its project already, running or pausing (F276)
+    if status.words.endswith((f"setting up {name}", f"the setup of {name}")):
         return replace(status, project=name)
     words = status.words
     if words.startswith("Running: "):
@@ -336,11 +339,15 @@ def factory_status(conn: sqlite3.Connection, project: str, now: datetime) -> Sta
     paused, asked = queries.paused_since(conn), _asked(conn, project)
     if paused and asked == "resume":
         return Status("Resuming…", "asked", None)
-    if paused:  # only the planner runs while paused
+    if paused:
         words = f"Paused by you since {_clock(paused)}"
         jobs = overview.running_jobs(conn, project, now)
         if any(j.live and j.role == "planner" for j in jobs):
             return Status(f"{words} · the lead is answering you", "warn", "resume", dot="lead")
+        if any(j.live and j.role == "setup" for j in jobs):
+            return Status(
+                f"{words} · the lead is setting up {project}", "warn", "resume", dot="lead"
+            )
         return Status(words, "warn", "resume")
     # the dot is about the job the words name: the first live one
     jobs = overview.running_jobs(conn, project, now)
@@ -354,13 +361,18 @@ def factory_status(conn: sqlite3.Connection, project: str, now: datetime) -> Sta
             doing = job.ticket
         elif job.job_card:
             doing = f"{job.role} {job.job_card['key']}"
+        elif job.role == "setup":  # plain words, no role or job number (F276)
+            doing = f"the lead is setting up {project}"
+        elif job.role == "planner":
+            doing = "the lead is answering you"
         else:
             doing = f"{job.role}, job {job.job}"
     elif waiting or activity == PICKING or activity.startswith(IDLE):
         doing = "this job"
     else:
         doing = activity
-    pausing = f"Pausing after {doing}"
+    setup = job is not None and not job.ticket and not job.job_card and job.role == "setup"
+    pausing = f"Pausing after the setup of {project}" if setup else f"Pausing after {doing}"
     if asked == "pause":
         return Status(pausing, "warn asked", "resume", dot=dot)
     if waiting:
