@@ -30,3 +30,10 @@ Read `.softfield/cards/f97-given-that-the-planning-board-has.md` (D7).
 - turning a switch on or off still works as before (`test_a_reserve_request_turns_its_switch_on_for_24_hours_and_off`)
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
