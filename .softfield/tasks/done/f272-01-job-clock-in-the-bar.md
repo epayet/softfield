@@ -45,3 +45,9 @@ attempts: 3
 tokens: 6260322
 logs: .softfield/var/runs/20261124-021739/f272-01-job-clock-in-the-bar
 ```
+
+```yaml
+# --- runner ---
+result: done
+finished_by: lead
+```
