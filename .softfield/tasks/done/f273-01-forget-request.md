@@ -30,3 +30,10 @@ Read D1 to D4 of `.softfield/cards/f273-i-need-the-ability-to-forget.md`, then D
 - the dashboard's `POST /requests` takes the kind
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
