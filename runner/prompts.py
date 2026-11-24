@@ -438,7 +438,8 @@ Give checkpoint_verdicts and score every round, as they stand: the last round's 
 Also create or update .softfield/reviews/{milestone}.md: the title, the status, the owner's
 sign-off sheet and the runner's numbers, with nothing below the sheet (findings live in the
 findings above, a workflow lesson goes under 8). The sheet's headings, in this order:
-### 1. What changed (at most 4 points of 2 lines)
+### 1. What changed (at most 4 points of 2 lines; when the numbers' Code lines net is negative,
+one of them says how much code the milestone removed, ADR 52 item 4)
 ### 2. How to test it yourself (at most 5 steps)
 ### 3. Done when, as of now: one bullet per line or group of the card's Done when, starting
 **Met:**, **Not yet:** or **Your check:**

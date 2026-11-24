@@ -92,7 +92,7 @@ Per `docs/workflow.md` §Milestone review loop. Grade findings **blocking**, **s
 
 ## Sign-off sheet
 When the review loop stops, write this at the top of `.softfield/reviews/mN.md`, in plain language, without being asked, each item under its own heading, `### 1. What changed` (the runner stores the sheet from them, and the desk lists a milestone for sign-off only once it is stored):
-1. **What changed:** what the people the project is for will notice (its `.softfield/project.md` names them; the owner when it names nobody); at most 4 points of 2 lines.
+1. **What changed:** what the people the project is for will notice (its `.softfield/project.md` names them; the owner when it names nobody); at most 4 points of 2 lines. When the numbers' "Code lines" net is negative, one point says how much code went ([ADR 52](../../.softfield/adr/52-a-review-leaves-the-code-simpler.md) item 4).
 2. **How to test it yourself:** numbered steps on real devices; at most 5.
 3. **Done when, as of now:** one bullet per line or group of the card's Done when, starting `**Met:**`, `**Not yet:**` or `**Your check:**`.
 4. **Decisions waiting for you:** only a draft ADR or a question that needs the owner's answer, with your recommendation.

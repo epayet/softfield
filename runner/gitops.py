@@ -177,29 +177,32 @@ class Git:
             )
         return commits
 
+    def _numstat(self, sha: str, *flags: str, check: bool = True) -> list[tuple[int, int, str]]:
+        """One commit's added and removed lines per path; a binary file counts 0."""
+        out = self.run("show", *flags, "--numstat", "--format=", sha, check=check)
+        rows = []
+        for line in out.splitlines():
+            parts = line.split("\t", 2)
+            if len(parts) == 3:
+                added, removed, path = parts
+                rows.append(
+                    (0 if added == "-" else int(added), 0 if removed == "-" else int(removed), path)
+                )
+        return rows
+
     def commit_size(self, sha: str) -> int:
         """Added + removed lines of one commit."""
-        total = 0
-        for line in self.run("show", "--numstat", "--format=", sha).splitlines():
-            added, removed, _ = line.split("\t", 2)
-            total += (int(added) if added != "-" else 0) + (int(removed) if removed != "-" else 0)
-        return total
+        return sum(added + removed for added, removed, _ in self._numstat(sha))
 
     def commit_code_lines(self, sha: str) -> tuple[int, int]:
         """Lines one commit added and removed in code: not under ``tests/``, ``docs/`` or
         ``.softfield/``, and not ``*.md``. A commit git doesn't have counts as nothing."""
-        out = self.run("show", "--no-renames", "--numstat", "--format=", sha, check=False)
-        added = removed = 0
-        for line in out.splitlines():
-            parts = line.split("\t", 2)
-            if len(parts) != 3:
-                continue
-            path = parts[2]
-            if path.startswith(NOT_CODE_DIRS) or path.endswith(".md"):
-                continue
-            added += int(parts[0]) if parts[0] != "-" else 0
-            removed += int(parts[1]) if parts[1] != "-" else 0
-        return added, removed
+        code = [
+            (added, removed)
+            for added, removed, path in self._numstat(sha, "--no-renames", check=False)
+            if not path.startswith(NOT_CODE_DIRS) and not path.endswith(".md")
+        ]
+        return sum(a for a, _ in code), sum(r for _, r in code)
 
     def move(self, src: Path, dst: Path) -> None:
         dst.parent.mkdir(parents=True, exist_ok=True)

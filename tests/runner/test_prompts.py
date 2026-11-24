@@ -448,7 +448,7 @@ _REVIEW_FIELDS = dict(
 def test_the_review_looks_for_complexity_and_routes_it_by_the_boy_scout_rule():
     """ADR 52 items 1–3: kinds of complexity, a should-fix on its own work, two Simpler lines."""
     text = " ".join(prompts.REVIEW.split())
-    assert "ADR 52" in text or "complexity" in text
+    assert "look for complexity (ADR 52)" in text
     for kind in ("dead code", "second way", "new rule"):
         assert kind in text
     assert "milestone's own complexity is a should-fix" in text
@@ -470,6 +470,15 @@ def test_the_factorys_review_has_no_product_bullet_and_another_projects_keeps_it
     assert "Softfield is the product" in own and "no Product bullet" in own
     assert "Softfield is the product" not in other
     assert "Product or Factory bullet" not in own
+    assert "under Product for a project's own code" in other
+    assert "under Product" not in own and "under Factory (Softfield is the product)." in own
+
+
+def test_the_review_says_in_words_when_the_code_shrank():
+    """ADR 52 item 4: a negative net is said in "What changed"."""
+    for text in (prompts.REVIEW, prompts.REVIEW_FACTORY):
+        heading = " ".join(text[text.index("### 1. What changed") : text.index("### 2.")].split())
+        assert "Code lines net is negative" in heading and "removed" in heading
 
 
 def test_no_review_or_workflow_line_mentions_french():
