@@ -1,6 +1,7 @@
 # Milestone F285: Copilot pre-reviews a finished milestone while Claude is out
 
-> **State:** ready · **Area:** factory · **Fast lane:** yes
+> **State:** done · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-24. Base: git tag `f285-i-think-i-said-at-some-start`. Report: [`.softfield/reviews/f285-i-think-i-said-at-some.md`](../reviews/f285-i-think-i-said-at-some.md).
 > Planted by the owner on 2026-11-21.
 
 ## Notes
