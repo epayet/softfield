@@ -33,3 +33,10 @@ Read `.softfield/adr/52-a-review-leaves-the-code-simpler.md` and `.softfield/car
 - `lead.md` "Review" and `docs/workflow.md` "Milestone review loop" carry the rules once each, citing ADR 52
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
