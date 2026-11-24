@@ -1339,6 +1339,28 @@ body.has-order-bar main { padding-bottom: 120px; }
 .projects-page .unshelve { font: 700 12px var(--display); letter-spacing: .08em; text-transform: uppercase;
   padding: 7px 12px; background: var(--hazard); color: var(--hazard-ink); border: 1px solid var(--hazard);
   cursor: pointer; }
+/* Forget in the Archived bay, quieter than Unarchive (F273 D5) */
+.projects-page .forget { font: 600 12px var(--display); letter-spacing: .08em; text-transform: uppercase;
+  padding: 6px 10px; background: transparent; color: var(--ink-2); border: 1px solid var(--rule);
+  cursor: pointer; display: inline-flex; align-items: center; gap: 7px; }
+.projects-page .forget::before { content: ""; width: 10px; height: 10px; border: 2px solid currentColor;
+  background:linear-gradient(135deg, transparent 44%, currentColor 44% 56%, transparent 56%); }
+.projects-page .forget:disabled { color: var(--muted); border-style: dotted; cursor: default; }
+.projects-page .forget.asked { border: 1px dashed var(--opus); color: var(--opus); }
+.projects-page .archived .why { color: var(--muted); font-size: 13px; }
+.projects-page .archived .confirm { border: 1px solid var(--rule); border-left: 0; background: var(--plate);
+  position: relative; padding: 10px 12px 10px 20px; display: grid; gap: 8px; margin: 6px 0 0; }
+.projects-page .archived .confirm[hidden] { display: none; }
+.projects-page .archived .confirm::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 8px;
+  background: var(--stripe); }
+.projects-page .archived .confirm .q { font: 700 14px var(--display); letter-spacing: .03em; }
+.projects-page .archived .confirm ul { margin: 0; padding-left: 18px; color: var(--ink-2); font-size: 13px; }
+.projects-page .archived .confirm .row { display: flex; gap: 10px; flex-wrap: wrap; }
+.projects-page .archived .confirm .yes { font: 700 12px var(--display); letter-spacing: .08em; text-transform: uppercase;
+  padding: 7px 12px; background: var(--hazard); color: var(--hazard-ink); border: 1px solid var(--hazard); cursor: pointer; }
+.projects-page .archived .confirm .no { font: 600 12px var(--display); letter-spacing: .08em; text-transform: uppercase;
+  padding: 7px 12px; background: transparent; color: var(--fg); border: 1px solid var(--rule); cursor: pointer; }
+.projects-page .archived .way { font: 600 11.5px/1.35 var(--mono); color: var(--hazard); }
 .projects-page .proj.held { position: relative; padding-left: 12px; margin-left: -2px;
   border-left: 4px solid var(--warn); }
 .projects-page .held-line { color: var(--warn); font-size: 13.5px; }

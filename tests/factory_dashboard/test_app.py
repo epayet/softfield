@@ -924,6 +924,19 @@ def test_templates_use_the_tokens_never_raw_colours():
         assert [s for s in styles if raw.search(s)] == [], template.name
 
 
+def test_templates_never_listen_for_a_browser_event_as_htmx_s():
+    """`hx-on::click` is htmx 2's `htmx:click`, which never fires: a browser event takes one
+    colon (`hx-on:click`). f273-02's Forget opened nothing until a page-wide listener stood in."""
+    dom = r"click|dblclick|input|change|submit|keydown|keyup|focus|blur|mouseover|mouseout|toggle"
+    wrong = re.compile(rf"\bhx-on::({dom})=")
+    found = [
+        (template.name, match.group(0))
+        for template in (STATIC.parent / "templates").rglob("*.html")
+        for match in wrong.finditer(template.read_text())
+    ]
+    assert found == []
+
+
 def _meter_fills(client: TestClient) -> dict[str, str]:
     panel = re.search(
         r'<section[^>]*\bid="allowance"[^>]*>(.*?)</section>', client.get("/").text, re.S

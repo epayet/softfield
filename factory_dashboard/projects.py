@@ -19,7 +19,7 @@ from factory_dashboard.app import Db, Now, Project, render
 from factory_dashboard.overview import running_jobs
 from factory_dashboard.stacks_routes import STACK_PLANT, AppRow, plant_value, row_of, stack_of
 from runner import config, metrics, stacks
-from runner.requests import NEW_PROJECT, PROJECT_ORDER, home_path
+from runner.requests import FORGET_PROJECT, NEW_PROJECT, PROJECT_ORDER, home_path
 
 router = APIRouter()
 
@@ -132,6 +132,8 @@ class ProjectCard:
     stack_plant: str = ""  # the "Plant a card for a stack" value, for a project without one
     setup_job: bool = False  # an open `setup` job: "Set up by the lead" is lit (F122 D6)
     archived: bool = False  # `metrics.is_archived` says the project is archived
+    forget_on_its_way: bool = False  # a `forget_project` waits for the runner (F273 D5)
+    folder: str = ""  # its repo as `home_path` writes it, for the Forget question (F273 D5)
 
 
 # A setting-up project's line (F122 D6, .softfield/cards/f122-mockup/projects-new.html)
@@ -202,6 +204,8 @@ def project_cards(conn: sqlite3.Connection, now: datetime) -> list[ProjectCard]:
                 else plant_value(STACK_PLANT.format(name=row.name)),
                 setup_job=row.paused == metrics.SETTING_UP and _setup_job(conn, row.name),
                 archived=metrics.is_archived(row),
+                forget_on_its_way=project_id is not None and forget_on_its_way(conn, project_id),
+                folder=home_path(Path(row.repo)) if row.repo else "",
             )
         )
     return cards
@@ -227,6 +231,15 @@ def archive_on_its_way(conn: sqlite3.Connection, project_id: int) -> str | None:
         (project_id,),
     ).fetchone()
     return row["kind"] if row else None
+
+
+def forget_on_its_way(conn: sqlite3.Connection, project_id: int) -> bool:
+    """Whether a forget_project for ``project_id`` waits for the runner (F273 D5)."""
+    row = conn.execute(
+        "SELECT 1 FROM owner_requests WHERE project_id = ? AND kind = ? AND done IS NULL",
+        (project_id, FORGET_PROJECT),
+    ).fetchone()
+    return row is not None
 
 
 def _setup_job(conn: sqlite3.Connection, name: str) -> bool:

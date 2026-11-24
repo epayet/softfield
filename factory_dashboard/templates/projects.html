@@ -151,6 +151,16 @@
     {% for card in archived %}
     <div class="crate" data-key="{{ card.name }}">
       <div class="head"><span class="name">{{ card.name }}</span>
+        {# Forget beside Unarchive, quieter (F273 D5): it only opens the question under the crate;
+           an open request wins, and an app still up holds it #}
+        {% if card.forget_on_its_way %}
+        <button type="button" class="forget asked" disabled>Forgetting…</button>
+        {% elif card.app and card.app.up %}
+        <button type="button" class="forget" disabled>Forget</button>
+        {% else %}
+        <button type="button" class="forget"
+          hx-on:click="document.getElementById('confirm-{{ card.name | lower }}').hidden = false">Forget</button>
+        {% endif %}
         {% if card.archive_on_its_way == "unarchive_project" %}
         <button type="button" class="unshelve asked" disabled>Unarchiving…</button>
         {% else %}
@@ -165,8 +175,30 @@
         <a href="/planning?project={{ card.name | urlencode }}">Planning</a>
         <a href="/board?project={{ card.name | urlencode }}">Board</a>
       </div>
+      {% if card.app %}{% with row = card.app %}{% include "_partials/app_row.html" %}{% endwith %}
+      {% if card.app.up and not card.forget_on_its_way %}<div class="why">Its app is running: stop it first, then Forget.</div>{% endif %}
+      {% endif %}
       {% with id = "unarchive-way-" ~ card.name | lower, open = card.archive_on_its_way %}{% include "_partials/archive_way.html" %}{% endwith %}
       <div id="unarchive-sent-{{ card.name | lower }}" class="pause-sent"></div>
+      <div class="confirm" id="confirm-{{ card.name | lower }}" hidden>
+        <div class="q">Forget {{ card.name }}?</div>
+        <ul>
+          <li>It leaves every page: the Archived bay, Needs you, its Planning and Board.</li>
+          <li>Nothing is deleted: its cards, threads and history stay in the factory's records, and its folder stays at <span class="mono">{{ card.folder }}</span>.</li>
+          <li>To bring it back, run <span class="mono">softfield init</span> in that folder and choose Continue.</li>
+          {% if card.for_you %}
+          <li><b>{{ card.for_you }}</b> {{ "item for you goes" if card.for_you == 1 else "items for you go" }} with it.</li>
+          {% endif %}
+        </ul>
+        <div class="row">
+          <button type="button" class="yes" hx-post="/requests" hx-target="#forget-sent-{{ card.name | lower }}" hx-swap="innerHTML"
+            hx-vals='{{ {"kind": "forget_project", "project": card.name} | tojson }}'
+            hx-on::before-request="const forget = this.closest('.crate').querySelector('.forget'); forget.textContent = 'Forgetting…'; forget.classList.add('asked'); forget.disabled = true; this.closest('.confirm').hidden = true; const way = document.getElementById('forget-way-{{ card.name | lower }}'); way.textContent = way.dataset.way; way.hidden = false">Yes, forget it</button>
+          <button type="button" class="no" hx-on:click="this.closest('.confirm').hidden = true">Keep it</button>
+        </div>
+      </div>
+      {% with id = "forget-way-" ~ card.name | lower, open = card.forget_on_its_way %}{% include "_partials/archive_way.html" %}{% endwith %}
+      <div id="forget-sent-{{ card.name | lower }}" class="pause-sent"></div>
     </div>
     {% endfor %}
   </details>

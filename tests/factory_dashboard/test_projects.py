@@ -880,13 +880,13 @@ def _way_shown(row: str) -> bool:
 
 
 def _open_requests(db_path) -> list[tuple[str, str | None]]:
-    """The open pause, resume, archive and unarchive rows, as (kind, project name)."""
+    """The open pause, resume, archive, unarchive and forget rows, as (kind, project name)."""
     conn = metrics.open_db(db_path)
     try:
         rows = conn.execute(
             "SELECT r.kind, p.name FROM owner_requests r JOIN projects p ON p.id = r.project_id"
             " WHERE r.kind IN ('pause_project', 'resume_project', 'archive_project',"
-            " 'unarchive_project') AND r.done IS NULL"
+            " 'unarchive_project', 'forget_project') AND r.done IS NULL"
         ).fetchall()
     finally:
         conn.close()
@@ -1202,3 +1202,185 @@ def test_pressing_unarchive_turns_it_unarchiving_and_asks_the_runner(
     expect(way).to_have_text(WAY)
     row.locator("#unarchive-sent-softfield").get_by_text("Asked").wait_for()
     assert _open_requests(db_path) == [("unarchive_project", "softfield")]
+
+
+# --- forget a project from the Archived bay (F273 D5, f273-02) -------------------------------
+
+
+def _crate(html: str, name: str) -> str:
+    """The HTML of ``name``'s crate in the Archived bay, up to the next crate or the bay's end."""
+    match = re.search(
+        rf'<div class="crate" data-key="{re.escape(name)}">.*?(?=<div class="crate"|</details>)',
+        html,
+        re.S,
+    )
+    assert match, f"no crate for {name}"
+    return match.group(0)
+
+
+def _question(crate: str) -> str:
+    match = re.search(r'<div class="confirm"[^>]*>.*?Keep it</button>', crate, re.S)
+    assert match, "no Forget question in the crate"
+    return match.group(0)
+
+
+def test_an_archived_project_has_forget_before_unarchive_and_it_posts_nothing(
+    projects_client, db_path
+):
+    """Forget sits beside Unarchive in the crate's head; it only opens the question, so the
+    crate's one post from the head is still Unarchive's."""
+    _archive(db_path, "softfield")
+    crate = _crate(projects_client.get("/projects").text, "softfield")
+    head = re.search(r'<div class="head">.*?</div>', crate, re.S)
+    assert head
+    assert re.findall(r">(Forget|Unarchive)</button>", head.group(0)) == ["Forget", "Unarchive"]
+    forget = re.search(r'<button type="button" class="forget"[^>]*>', head.group(0))
+    assert forget and "hx-post" not in forget.group(0) and "disabled" not in forget.group(0)
+    assert re.findall(r"hx-vals='([^']*)'", head.group(0)) == [
+        json.dumps({"kind": "unarchive_project", "project": "softfield"})
+    ]
+    # no request open: the way line is drawn hidden and empty
+    assert f'<div id="forget-way-softfield" class="way" data-way="{WAY}" hidden></div>' in crate
+
+
+def test_the_forget_question_names_the_project_its_folder_and_how_to_bring_it_back(
+    projects_client, db_path, docker, app_repo
+):
+    """Drawn hidden under the crate: "Forget <name>?", what leaves, nothing deleted, the repo's
+    own folder (here "Coaster Ranker", not the name's slug), `softfield init`, and Yes / Keep it;
+    Yes posts `forget_project` for this project."""
+    docker.ps = ""  # stopped: Forget can be pressed
+    _archive(db_path, APP)
+    crate = _crate(projects_client.get("/projects").text, APP)
+    question = _question(crate)
+    assert question.startswith(f'<div class="confirm" id="confirm-{APP}" hidden>')
+    assert words(question) == (
+        f"Forget {APP}? It leaves every page: the Archived bay, Needs you, its Planning and Board."
+        " Nothing is deleted: its cards, threads and history stay in the factory's records,"
+        f" and its folder stays at {app_repo} ."  # `words` spaces the folder's span
+        " To bring it back, run softfield init in that folder and choose Continue."
+        " Yes, forget it Keep it"
+    )
+    assert f'<span class="mono">{app_repo}</span>' in question
+    posts = re.search(r"hx-vals='([^']*)'[^>]*>Yes, forget it</button>", question)
+    assert posts and json.loads(posts.group(1)) == {"kind": "forget_project", "project": APP}
+    assert crate.index('class="links"') < crate.index('class="confirm"')  # under the crate
+
+
+@pytest.mark.parametrize(
+    ("count", "line"),
+    [(0, None), (1, "1 item for you goes with it."), (2, "2 items for you go with it.")],
+)
+def test_the_forget_question_counts_the_items_for_you_when_there_are_any(
+    projects_client, db_path, monkeypatch, count, line
+):
+    from factory_dashboard import planning
+
+    _archive(db_path, "softfield")
+    monkeypatch.setattr(
+        planning, "desk", lambda conn, name, now: ["a"] * count if name == "softfield" else []
+    )
+    monkeypatch.setattr(planning, "waiting_for_you", lambda items: items)
+    text = words(_question(_crate(projects_client.get("/projects").text, "softfield")))
+    if line is None:
+        assert "for you" not in text
+    else:
+        assert text.endswith(f"and choose Continue. {line} Yes, forget it Keep it")
+
+
+def test_an_open_forget_request_shows_forgetting_after_a_reload(projects_client, db_path):
+    _archive(db_path, "softfield", "forget_project")
+    html = projects_client.get("/projects").text
+    crate = _crate(html, "softfield")
+    assert '<button type="button" class="forget asked" disabled>Forgetting…</button>' in crate
+    assert ">Forget</button>" not in crate
+    assert f'<div id="forget-way-softfield" class="way" data-way="{WAY}">{WAY}</div>' in crate
+    # only the forget line: Unarchive's stays hidden
+    assert f'<div id="unarchive-way-softfield" class="way" data-way="{WAY}" hidden>' in crate
+
+
+def test_a_forget_request_of_another_project_leaves_this_one_s_forget(projects_client, db_path):
+    _archive(db_path, "softfield")
+    _archive(db_path, PROJECT, "forget_project")
+    html = projects_client.get("/projects").text
+    assert ">Forget</button>" in _crate(html, "softfield")
+    assert "Forgetting…" in _crate(html, PROJECT)
+
+
+def test_pressing_forget_asks_on_the_page_and_keep_it_posts_nothing(page, projects_client, db_path):
+    from playwright.sync_api import expect
+
+    _archive(db_path, "softfield")
+    open_page(page, projects_client, "/projects")
+    page.on("dialog", lambda dialog: pytest.fail(f"a browser pop-up: {dialog.message}"))
+    page.locator("#projects-archived > summary").click()
+    crate = page.locator('#projects-archived .crate[data-key="softfield"]')
+    forget = crate.locator(".forget")
+    question = crate.locator(".confirm")
+    expect(question).to_be_hidden()
+    # quieter than Unarchive: no fill, where Unarchive is filled hazard yellow
+    expect(forget).to_have_css("background-color", "rgba(0, 0, 0, 0)")
+    expect(crate.locator(".unshelve")).not_to_have_css("background-color", "rgba(0, 0, 0, 0)")
+    forget.click()
+    expect(question).to_be_visible()
+    expect(question.locator(".q")).to_have_text("Forget softfield?")
+    question.get_by_role("button", name="Keep it").click()
+    expect(question).to_be_hidden()
+    expect(forget).to_have_text("Forget")
+    expect(forget).to_be_enabled()
+    expect(crate.locator("#forget-way-softfield")).to_be_hidden()
+    assert _open_requests(db_path) == []
+
+
+def test_yes_forget_it_turns_forget_forgetting_at_once_and_asks_the_runner(
+    page, projects_client, db_path
+):
+    from playwright.sync_api import expect
+
+    _archive(db_path, "softfield")
+    open_page(page, projects_client, "/projects")
+    page.locator("#projects-archived > summary").click()
+    crate = page.locator('#projects-archived .crate[data-key="softfield"]')
+    forget = crate.locator(".forget")
+    way = crate.locator("#forget-way-softfield")
+    forget.click()
+    crate.get_by_role("button", name="Yes, forget it").click()
+    expect(forget).to_have_text("Forgetting…")
+    expect(forget).to_be_disabled()
+    expect(forget).to_have_css("border-top-style", "dashed")
+    expect(forget).to_have_css("color", "rgb(255, 150, 64)")  # --opus
+    expect(crate.locator(".confirm")).to_be_hidden()
+    expect(way).to_have_text(WAY)
+    crate.locator("#forget-sent-softfield").get_by_text("Asked").wait_for()
+    assert _open_requests(db_path) == [("forget_project", "softfield")]
+    expect(crate.locator(".unshelve")).to_have_text("Unarchive")  # only Forget turned
+
+
+RUNNING_WHY = "Its app is running: stop it first, then Forget."
+
+
+def test_an_archived_project_whose_app_runs_holds_forget(
+    projects_client, db_path, docker, app_repo
+):
+    """Its app row (Running, Stop, Logs) shows in its crate; Forget is disabled, opens nothing,
+    and the crate says why."""
+    docker.ps = _running()
+    _archive(db_path, APP)
+    crate = _crate(projects_client.get("/projects").text, APP)
+    assert "App Running" in words(crate)
+    assert f'hx-post="/projects/{APP}/stop"' in crate and f'href="/projects/{APP}/logs"' in crate
+    assert '<button type="button" class="forget" disabled>Forget</button>' in crate
+    assert f'<div class="why">{RUNNING_WHY}</div>' in crate
+
+
+def test_an_archived_project_whose_app_is_stopped_can_be_forgotten(
+    projects_client, db_path, docker, app_repo
+):
+    docker.ps = ""
+    _archive(db_path, APP)
+    crate = _crate(projects_client.get("/projects").text, APP)
+    assert "App Stopped" in words(crate)
+    assert re.search(
+        r'<button type="button" class="forget"\s+hx-on:click="[^"]*">Forget</button>', crate
+    )
+    assert RUNNING_WHY not in crate
