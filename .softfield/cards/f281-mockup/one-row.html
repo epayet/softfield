@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F281 mock-up: as many pages in the row as the screen fits</title>
+<style>
+  /* The dashboard's own tokens (factory_dashboard/static/dashboard.css), dark theme */
+  :root {
+    --floor: #12161b; --bay: #181e25; --plate: #1f2730; --grid: #222b34; --rule: #303b47;
+    --fg: #dfe4e8; --ink: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+    --hazard: #f2b10a; --hazard-ink: #1a1405; --opus: #ff9640; --good: #5fd17a; --warn-ink: #f2b10a;
+    --tick: var(--ink-2);
+    --stripe: repeating-linear-gradient(-45deg, var(--hazard) 0 6px, transparent 6px 12px);
+    --display: "Chakra Petch", "Bahnschrift", "DIN Alternate", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; background: var(--floor); color: var(--fg); font: 15px/1.5 var(--body); padding: 16px; }
+  h1 { font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 4px; }
+  h3 { font: 600 13px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 20px 0 8px; }
+  p.lede { color: var(--ink-2); max-width: 760px; margin: 0 0 10px; }
+  .controls { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: end; margin-bottom: 8px; }
+  .switch, .pretend { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--rule); }
+  .switch button, .pretend button { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 10px 16px;
+    min-height: 44px; background: var(--bay); color: var(--muted); border: 0; border-right: 1px solid var(--rule); cursor: pointer; }
+  .pretend button { padding: 8px 10px; font-size: 12px; }
+  .switch button[aria-pressed="true"], .pretend button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+  .label { color: var(--ink-2); font-size: 13px; }
+  .width-plate { display: flex; align-items: center; gap: 10px; border: 1px solid var(--rule); background: var(--bay); padding: 6px 10px; min-height: 44px; }
+  .width-plate input { width: 220px; accent-color: var(--hazard); }
+  .width-plate output { font: 600 14px var(--mono); color: var(--fg); min-width: 64px; }
+
+  .versions { display: grid; gap: 22px; grid-template-columns: minmax(0, 1fr); }
+  .col-head { font: 700 15px var(--display); letter-spacing: .08em; text-transform: uppercase; margin: 4px 0 0; }
+  @media (min-width: 900px) {
+    .versions { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+    .switch { display: none; }
+    [data-version][data-off] { display: block !important; }
+  }
+  [data-version][data-off] { display: none; }
+
+  .frame { border: 1px solid var(--rule); background-color: var(--floor); position: relative; transform-origin: 0 0; height: 330px;
+    background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 32px 32px; }
+  .scaler { overflow: hidden; }
+  .new { outline: 1px dashed var(--good); outline-offset: 2px; }
+  ul.notes { list-style: none; margin: 10px 0 0; padding: 0; color: var(--ink-2); font-size: 13.5px; max-width: 620px; }
+  ul.notes li { padding: 4px 0 4px 12px; border-left: 2px solid var(--rule); margin-bottom: 6px; }
+  .legend-new { outline: 1px dashed var(--good); padding: 0 4px; }
+  table.steps { border-collapse: collapse; font: 12.5px var(--mono); color: var(--ink-2); margin-top: 6px; }
+  table.steps td, table.steps th { border: 1px solid var(--rule); padding: 4px 8px; text-align: left; }
+  table.steps th { font: 600 11px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); background: var(--bay); }
+  table.steps tr.on td { background: var(--hazard); color: var(--hazard-ink); }
+
+  /* ---- the top bar as drawn today (dashboard.css lines 90-191, base.html lines 178-213) ---- */
+  header.bar { background: var(--floor); border-bottom: 1px solid var(--rule); display: grid; gap: 10px;
+    grid-template-columns: minmax(0, 1fr); padding: 12px 16px 10px; position: relative; z-index: 5; }
+  .bar-top { display: flex; align-items: center; gap: 8px 18px; min-width: 0; }
+  .brand { font: 700 22px/1.1 var(--display); letter-spacing: .04em; display: flex; align-items: center; gap: 4px; color: var(--fg); min-height: 44px; }
+  .brand svg { flex: none; width: 28px; height: 28px; }
+  .brand-soft { color: var(--warn-ink); } .brand-field { color: var(--good); }
+  .hazard { height: 6px; background: repeating-linear-gradient(-45deg, var(--hazard) 0 10px, var(--floor) 10px 20px); opacity: .85; }
+  .factory-status { display: flex; align-items: center; gap: 4px; padding: 0 2px; min-width: 0; }
+  .dot-btn { width: 28px; height: 44px; display: grid; place-items: center; flex: none; }
+  .dot { width: 14px; height: 14px; border-radius: 50%; background: var(--opus); box-shadow: 0 0 0 4px color-mix(in srgb, var(--opus) 18%, transparent); }
+  .words { font: 600 15px/1.3 var(--display); letter-spacing: .03em; padding-right: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sign { width: 36px; height: 36px; display: grid; place-items: center; flex: none; border: 1px solid var(--hazard); background: var(--hazard); color: var(--hazard-ink); font-size: 18px; }
+  .filters { margin-left: auto; font: 500 12px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+  .select { font: 13px var(--body); padding: 3px 6px; border: 1px solid var(--rule); background: var(--plate); color: var(--fg); text-transform: none; letter-spacing: 0; }
+  .theme { width: 24px; height: 36px; flex: none; border: 1px solid var(--rule); background: var(--plate); border-radius: 4px; position: relative; }
+  .theme::after { content: ""; position: absolute; left: 2px; right: 2px; top: 2px; height: 15px; border-radius: 2px; background: var(--hazard); }
+
+  nav.tabs.slots { display: grid; grid-auto-flow: column; grid-template-columns: 120px 150px 92px; grid-auto-columns: auto;
+    justify-self: start; position: relative; border-top: 1px solid var(--rule); border-left: 1px solid var(--rule); }
+  nav.tabs.slots > a, details.more > summary { display: flex; align-items: center; justify-content: center; gap: 5px;
+    min-width: 0; min-height: 38px; height: 100%; font: 600 13px var(--display); letter-spacing: .06em;
+    text-transform: uppercase; color: var(--muted); padding: 8px 10px; border: solid var(--rule);
+    border-width: 0 1px 1px 0; white-space: nowrap; text-align: center; text-decoration: none; cursor: pointer; }
+  nav.tabs.slots > a[aria-current="page"], details.more > summary.here { background: var(--hazard); color: var(--hazard-ink); }
+  nav.tabs.slots > a:hover, details.more > summary:hover { color: var(--ink); background: var(--plate); }
+  nav.tabs.slots > a[aria-current="page"]:hover { color: var(--hazard-ink); background: var(--hazard); }
+  details.more { min-width: 0; width: 130px; }
+  details.more > summary { list-style: none; }
+  details.more > summary::-webkit-details-marker { display: none; }
+  details.more > summary .caret { font-size: 10px; }
+  details.more[open] > summary:not(.here) { color: var(--ink); background: var(--plate); }
+  .more-panel { position: absolute; top: 100%; right: 0; width: 340px; z-index: 6; margin-top: 4px;
+    background: var(--plate); border: 1px solid var(--rule); box-shadow: 0 8px 22px rgba(0, 0, 0, .55); }
+  details.more:not([open]) .more-panel { display: none; }
+  .more-panel::before { content: ""; display: block; height: 6px; background: var(--stripe); opacity: .8; }
+  .more-head { font: 600 10.5px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); padding: 6px 12px 2px; }
+  .more-panel a { display: flex; align-items: baseline; gap: 10px; padding: 11px 12px; min-height: 44px; border-top: 1px solid var(--rule); color: var(--ink); text-decoration: none; cursor: pointer; }
+  .more-panel a b { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; flex: 0 0 84px; }
+  .more-panel a span { font-size: 12.5px; color: var(--muted); line-height: 1.3; }
+  .more-panel a[aria-current="page"], .more-panel a[aria-current="page"] span { background: var(--hazard); color: var(--hazard-ink); }
+
+  /* ---- proposed: the seam, then as many of the seven as fit, each at its own fixed width ---- */
+  nav.tabs.slots > .seam { width: 14px; border: solid var(--rule); border-width: 0 1px 1px 0; background: var(--stripe); opacity: .7; }
+  nav.tabs.slots > a.also { font-size: 12.5px; }
+  a.also[data-i="1"] { width: 110px; } a.also[data-i="2"] { width: 100px; } a.also[data-i="3"] { width: 76px; }
+  a.also[data-i="4"] { width: 76px; } a.also[data-i="5"] { width: 110px; } a.also[data-i="6"] { width: 96px; } a.also[data-i="7"] { width: 86px; }
+
+  main { padding: 12px 16px; }
+  .crumbs { font-size: 13px; color: var(--ink-2); margin-bottom: 10px; }
+  .panel { background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; }
+  .panel h2 { font: 600 14px var(--display); text-transform: uppercase; letter-spacing: .08em; margin: 0 0 6px; }
+  .panel p { margin: 0; color: var(--ink-2); font-size: 13.5px; }
+</style>
+</head>
+<body>
+<h1>F281: as many pages in the row as the screen fits</h1>
+<p class="lede">The top bar on a laptop, with real values from tonight (the lead answering F281, no Planning count). Drag the width to see Today and Proposed at the same window size. Click a page in either picture to go there.</p>
+<div class="controls">
+  <div class="switch" role="group" aria-label="Which version">
+    <button type="button" data-show="today" aria-pressed="false">Today</button>
+    <button type="button" data-show="proposed" aria-pressed="true">Proposed</button>
+  </div>
+  <div><span class="label">Window width</span>
+    <div class="width-plate"><input id="width" type="range" min="640" max="1400" step="10" value="1280" aria-label="Window width"><output id="width-out">1280 px</output></div>
+  </div>
+  <div><span class="label">You are on:</span><br>
+    <div class="pretend" role="group" aria-label="Which page">
+      <button type="button" data-go="/" aria-pressed="true">Overview</button>
+      <button type="button" data-go="/board">Board</button>
+      <button type="button" data-go="/projects">Projects</button>
+      <button type="button" data-go="/timeline">Timeline</button>
+      <button type="button" data-go="/bench">Bench</button>
+    </div>
+  </div>
+</div>
+
+<div class="versions">
+  <section data-version="today" data-off>
+    <p class="col-head">Today</p>
+    <h3 class="at">At 1280 px</h3>
+    <div class="scaler"><div class="frame" style="width:1280px">
+      <header class="bar">
+        <div class="bar-top">
+          <span class="brand"><svg viewBox="0 0 28 28" aria-hidden="true"><rect x="5" y="14" width="18" height="10" fill="#f2b10a" stroke="#1a1405"/><path d="M14 14V6M14 9c-3 0-5-1-6-4M14 9c3 0 5-1 6-4" fill="none" stroke="#5fd17a" stroke-width="2"/></svg><span class="brand-soft">Soft</span><span class="brand-field">Field</span></span>
+          <div class="factory-status"><span class="dot-btn"><span class="dot"></span></span><span class="words">Running: softfield · planner F281</span><span class="sign">⏸</span></div>
+          <div class="filters">Project <span class="select">softfield ▾</span></div>
+          <span class="theme"></span>
+        </div>
+        <div class="hazard" aria-hidden="true"></div>
+        <nav class="tabs slots" aria-label="Pages"><a data-go="/" aria-current="page">Overview</a><a data-go="/planning">Planning</a><a data-go="/board">Board</a>
+          <details class="more">
+            <summary><span class="slot-name">More</span> <span class="caret">▾</span></summary>
+            <div class="more-panel"><div class="more-head">More pages</div>
+              <a data-go="/projects"><b>Projects</b><span>every project, and the order the runner works in</span></a>
+              <a data-go="/tickets"><b>Tickets</b><span>this project's tickets, latest work first</span></a>
+              <a data-go="/jobs"><b>Jobs</b><span>every job an agent ran, newest first</span></a>
+              <a data-go="/runs"><b>Runs</b><span>every runner command, newest first</span></a>
+              <a data-go="/timeline"><b>Timeline</b><span>the jobs along the day</span></a>
+              <a data-go="/agents"><b>Agents</b><span>who did what, and how well</span></a>
+              <a data-go="/bench"><b>Bench</b><span>finished tickets replayed by chosen agents</span></a>
+            </div>
+          </details>
+        </nav>
+      </header>
+      <main><div class="crumbs">softfield</div><section class="panel"><h2>Working now</h2><p>F281 · on desktop for the new menu, there's mo… · planner · claude-opus, attempt 1</p></section></main>
+    </div></div>
+    <ul class="notes">
+      <li>F194's four slots at every width: 120, 150, 92 and 130 px. The other seven are always behind More.</li>
+    </ul>
+  </section>
+
+  <section data-version="proposed">
+    <p class="col-head">Proposed</p>
+    <h3 class="at">At 1280 px</h3>
+    <div class="scaler"><div class="frame" style="width:1280px">
+      <header class="bar">
+        <div class="bar-top">
+          <span class="brand"><svg viewBox="0 0 28 28" aria-hidden="true"><rect x="5" y="14" width="18" height="10" fill="#f2b10a" stroke="#1a1405"/><path d="M14 14V6M14 9c-3 0-5-1-6-4M14 9c3 0 5-1 6-4" fill="none" stroke="#5fd17a" stroke-width="2"/></svg><span class="brand-soft">Soft</span><span class="brand-field">Field</span></span>
+          <div class="factory-status"><span class="dot-btn"><span class="dot"></span></span><span class="words">Running: softfield · planner F281</span><span class="sign">⏸</span></div>
+          <div class="filters">Project <span class="select">softfield ▾</span></div>
+          <span class="theme"></span>
+        </div>
+        <div class="hazard" aria-hidden="true"></div>
+        <nav class="tabs slots new" id="fit-nav" aria-label="Pages"><a data-go="/" aria-current="page">Overview</a><a data-go="/planning">Planning</a><a data-go="/board">Board</a><span class="seam" aria-hidden="true"></span><a class="also" data-i="1" data-go="/projects" title="every project, and the order the runner works in">Projects</a><a class="also" data-i="2" data-go="/tickets" title="this project's tickets, latest work first">Tickets</a><a class="also" data-i="3" data-go="/jobs" title="every job an agent ran, newest first">Jobs</a><a class="also" data-i="4" data-go="/runs" title="every runner command, newest first">Runs</a><a class="also" data-i="5" data-go="/timeline" title="the jobs along the day">Timeline</a><a class="also" data-i="6" data-go="/agents" title="who did what, and how well">Agents</a><a class="also" data-i="7" data-go="/bench" title="finished tickets replayed by chosen agents">Bench</a>
+          <details class="more" hidden>
+            <summary><span class="slot-name">More</span> <span class="caret">▾</span></summary>
+            <div class="more-panel"><div class="more-head">More pages</div>
+              <a data-i="1" data-go="/projects"><b>Projects</b><span>every project, and the order the runner works in</span></a>
+              <a data-i="2" data-go="/tickets"><b>Tickets</b><span>this project's tickets, latest work first</span></a>
+              <a data-i="3" data-go="/jobs"><b>Jobs</b><span>every job an agent ran, newest first</span></a>
+              <a data-i="4" data-go="/runs"><b>Runs</b><span>every runner command, newest first</span></a>
+              <a data-i="5" data-go="/timeline"><b>Timeline</b><span>the jobs along the day</span></a>
+              <a data-i="6" data-go="/agents"><b>Agents</b><span>who did what, and how well</span></a>
+              <a data-i="7" data-go="/bench"><b>Bench</b><span>finished tickets replayed by chosen agents</span></a>
+            </div>
+          </details>
+        </nav>
+      </header>
+      <main><div class="crumbs">softfield</div><section class="panel"><h2>Working now</h2><p>F281 · on desktop for the new menu, there's mo… · planner · claude-opus, attempt 1</p></section></main>
+    </div></div>
+    <ul class="notes">
+      <li><span class="legend-new">Dashed green</span> marks what changes.</li>
+      <li>Overview, Planning and Board always come first, then a narrow hazard-stripe seam, then as many of the other seven as the window fits, in F194's order. More holds the rest, and lists only the pages not already in the row. When all seven fit, More goes.</li>
+      <li>Every slot has a fixed width, so each window width has exactly one layout. Going from page to page never moves a slot; only resizing the window does.</li>
+      <li>The steps (the current one is lit):</li>
+    </ul>
+    <table class="steps" id="steps">
+      <tr><th>Window</th><th>In the row after Board</th><th>In More</th></tr>
+      <tr data-from="640"><td>640 px</td><td>none</td><td>all seven</td></tr>
+      <tr data-from="650"><td>650 px</td><td>Projects</td><td>six</td></tr>
+      <tr data-from="750"><td>750 px</td><td>+ Tickets</td><td>five</td></tr>
+      <tr data-from="830"><td>830 px</td><td>+ Jobs</td><td>four</td></tr>
+      <tr data-from="900"><td>900 px</td><td>+ Runs</td><td>three</td></tr>
+      <tr data-from="1010"><td>1010 px</td><td>+ Timeline</td><td>Agents, Bench</td></tr>
+      <tr data-from="1070" class="on"><td>1070 px</td><td>all seven</td><td>no More</td></tr>
+    </table>
+  </section>
+</div>
+
+<script>
+  // The pictures are plain HTML above (Proposed drawn at 1280 px); this resizes them to the
+  // slider, shows in the row the pages that fit and in More the rest, and moves the current page.
+  // Inside a function, so no name clashes with the browser's own (the F194 lesson).
+  (function () {
+    const steps = [[650, 1], [750, 2], [830, 3], [900, 4], [1010, 5], [1070, 7]];  // window px → pages in the row
+    let width = 1280;
+    let page = "/";
+
+    function fits(w) {
+      let k = 0;
+      steps.forEach(([from, n]) => { if (w >= from) k = n; });
+      return k;
+    }
+    function draw() {
+      const k = fits(width);
+      const nav = document.getElementById("fit-nav");
+      nav.querySelectorAll("a.also").forEach((a) => { a.hidden = Number(a.dataset.i) > k; });
+      nav.querySelectorAll(".more-panel a").forEach((a) => { a.hidden = Number(a.dataset.i) <= k; });
+      nav.querySelector("details.more").hidden = k === 7;
+      document.querySelectorAll(".frame").forEach((f) => { f.style.width = width + "px"; });
+      document.querySelectorAll(".at").forEach((h) => { h.textContent = "At " + width + " px"; });
+      document.getElementById("width-out").textContent = width + " px";
+      let lit = null;
+      document.querySelectorAll("#steps tr[data-from]").forEach((tr) => { if (width >= Number(tr.dataset.from)) lit = tr; tr.classList.remove("on"); });
+      if (lit) lit.classList.add("on");
+      document.querySelectorAll(".frame [data-go]").forEach((link) => {
+        if (link.dataset.go === page) link.setAttribute("aria-current", "page");
+        else link.removeAttribute("aria-current");
+      });
+      document.querySelectorAll(".frame details.more").forEach((more) => {
+        const current = more.querySelector(".more-panel a[aria-current]:not([hidden]) b");
+        more.querySelector("summary").classList.toggle("here", Boolean(current));
+        more.querySelector(".slot-name").textContent = current ? current.textContent : "More";
+        more.open = false;
+      });
+      document.querySelectorAll(".pretend button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.go === page)));
+      fit();
+    }
+    function fit() {
+      document.querySelectorAll(".scaler").forEach((box) => {
+        if (!box.offsetWidth) return;
+        const scale = Math.min(1, box.clientWidth / width);
+        box.querySelector(".frame").style.transform = "scale(" + scale + ")";
+        box.style.height = (330 * scale) + "px";
+      });
+    }
+    document.getElementById("width").addEventListener("input", (event) => { width = Number(event.target.value); draw(); });
+    document.addEventListener("click", (event) => {
+      if (!(event.target instanceof Element)) return;
+      const go = event.target.closest("[data-go]");
+      if (go) { event.preventDefault(); page = go.dataset.go; draw(); return; }
+      document.querySelectorAll("details.more[open]").forEach((d) => { if (!d.contains(event.target)) d.open = false; });
+    });
+    document.querySelectorAll(".switch button").forEach((button) => {
+      button.addEventListener("click", () => {
+        document.querySelectorAll(".switch button").forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
+        document.querySelectorAll("[data-version]").forEach((v) => { v.toggleAttribute("data-off", v.dataset.version !== button.dataset.show); });
+        fit();
+      });
+    });
+    addEventListener("resize", fit);
+    draw();
+  })();
+</script>
+</body>
+</html>
