@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F283 mock-up: light up cards on the board as you type</title>
+<style>
+  /* The dashboard's own tokens (factory_dashboard/static/dashboard.css), dark theme */
+  :root {
+    --floor: #12161b; --bay: #181e25; --plate: #1f2730; --grid: #222b34; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+    --hazard: #f2b10a; --hazard-ink: #1a1405; --fail: #ec5458;
+    --opus: #ff9640; --sonnet: #ffc48a; --qwen: #8ccf62; --product: #4fd1a5; --factory: #f2b10a;
+    --good: #5fd17a; --accent: var(--sonnet); --warn-ink: var(--hazard);
+    --display: "Chakra Petch", "Bahnschrift", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+    /* NEW token (F283 D3): the searchlight. Not a status, not an agent: a cold white beam.
+       The light theme gets a dark ink instead (#1b2633) */
+    --lit: #e6f4ff;
+    --lit-wash: color-mix(in srgb, var(--lit) 10%, var(--plate));
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--floor); color: var(--fg); font: 15px/1.5 var(--body); padding: 20px; }
+  h1 { font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 4px; }
+  h3.shot { font: 600 13px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 22px 0 8px; }
+  p.lede { color: var(--ink-2); max-width: 820px; margin: 0 0 8px; }
+  a { color: var(--accent); text-decoration: none; }
+  button { font: inherit; color: var(--fg); background: var(--plate); border: 1px solid var(--rule); cursor: pointer; }
+  .switch { display: inline-flex; margin: 12px 0 0; border: 1px solid var(--rule); }
+  .switch button { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 10px 18px;
+    background: var(--bay); color: var(--muted); border: 0; }
+  .switch button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+  .versions { display: grid; gap: 28px; }
+  @media (min-width: 1500px) { .versions { grid-template-columns: 1fr 1fr; } .versions > [hidden] { display: block !important; } .switch { display: none; } }
+  .phone { width: 390px; max-width: 100%; }
+  .new { outline: 1px dashed var(--good); outline-offset: 3px; }
+  .note { display: block; font: 600 11.5px/1.35 var(--mono); color: var(--good); margin: 4px 0 0; }
+  .legend { color: var(--ink-2); font-size: 13px; margin: 14px 0 0; max-width: 820px; }
+  [hidden] { display: none !important; }
+
+  /* ---- copied from dashboard.css: the plots, the filter, the field, a card ---- */
+  .plots { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px 14px; padding: 12px; margin: 10px 0;
+    background: var(--bay) repeating-linear-gradient(135deg, transparent 0 10px,
+      color-mix(in srgb, var(--hazard) 9%, transparent) 10px 12px);
+    border: 1px solid var(--rule); }
+  .phone .plots { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .plot { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 2px 6px;
+    min-height: 64px; padding: 6px 8px; background: var(--plate); border: 1px solid var(--rule); color: var(--ink-2); text-align: left; }
+  .plot b { font: 600 20px/1 var(--display); color: var(--fg); }
+  .plot span { grid-column: 1 / -1; font: 600 10.5px var(--display); letter-spacing: .06em; text-transform: uppercase; }
+  .plot::before { content: ""; position: absolute; left: -1px; top: -1px; width: 8px; height: 8px;
+    border-left: 2px solid var(--muted); border-top: 2px solid var(--muted); }
+  .plot[aria-pressed="true"] { outline: 2px solid var(--hazard); }
+  .board-filter { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; margin: 0 0 10px; }
+  .board-filter label { display: flex; align-items: center; gap: 8px; font: 500 12px var(--display);
+    letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  .board-filter input[type=search] { font: 14px var(--body); padding: 9px 12px; width: 260px; min-height: 44px;
+    background: var(--bay); color: var(--fg); border: 1px solid var(--rule); }
+  .phone .board-filter input[type=search] { width: 200px; }
+  .board-filter button { font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase;
+    color: var(--muted); padding: 0 14px; min-width: 44px; min-height: 44px; }
+  .kinds { display: flex; }
+  .kinds button { background: none; }
+  .kinds button + button { border-left: 0; }
+  .kinds button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+  .lever { font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .field { background: var(--bay); border: 1px solid var(--rule); min-width: 0; }
+  .field-head { padding: 10px 14px; border-bottom: 1px solid var(--rule); }
+  .field-head h2 { margin: 0; font: 600 15px var(--display); letter-spacing: .08em; text-transform: uppercase; }
+  .stages { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 1px; background: var(--rule); }
+  .phone .stages { grid-template-columns: 1fr; }
+  .stage { background: var(--bay); display: flex; flex-direction: column; min-width: 0; }
+  .stage-head { padding: 10px 12px; background: var(--plate); border-bottom: 1px solid var(--rule); }
+  .stage-head h3 { margin: 0; font: 600 13px var(--display); letter-spacing: .08em; text-transform: uppercase; }
+  .stage-head span { font: 12px var(--mono); color: var(--muted); }
+  .cards { display: flex; flex-direction: column; gap: 8px; padding: 10px; }
+  .gap { font: 12px var(--mono); color: var(--muted); text-align: center; padding: 2px 0; border-top: 1px dashed var(--rule); border-bottom: 1px dashed var(--rule); }
+  .empty { color: var(--muted); font-size: 12.5px; }
+  .slot { display: grid; grid-template-columns: 30px minmax(0, 1fr) 30px; }
+  .slot .grip, .slot .more { padding: 0; background: var(--plate); color: var(--muted); border: 1px solid var(--rule); font: 600 15px var(--mono); }
+  .slot .grip { border-right: 0; } .slot .more { border-left: 0; }
+  .slot.fixed { grid-template-columns: 1fr; }
+  .card { display: flex; flex-direction: column; gap: 5px; min-height: 44px; padding: 9px 10px; background: var(--plate);
+    border: 1px solid var(--rule); border-left: 4px solid var(--factory); color: var(--fg); overflow-wrap: anywhere; }
+  .card.bug { border-left: 0; padding-left: 14px;
+    background: linear-gradient(var(--plate), var(--plate)) right / calc(100% - 4px) 100% no-repeat,
+      repeating-linear-gradient(-45deg, var(--fail) 0 4px, var(--plate) 4px 8px); }
+  .card.started { border-color: var(--opus); border-left-color: var(--factory); }
+  .card-meta { font: 600 11px var(--mono); color: var(--muted); }
+  .card-meta b { color: var(--fg); }
+  .card-title { font: 600 14px/1.25 var(--body); }
+  .card-count { font: 12px var(--mono); color: var(--muted); }
+  .card-growing { margin-left: 4px; padding: 1px 6px; font: 600 10.5px var(--display); letter-spacing: .08em; text-transform: uppercase;
+    color: var(--opus); border: 1px solid var(--opus); background: var(--floor); }
+  #stage-harvested .card { border-style: dashed; border-left-style: solid; color: var(--ink-2); }
+
+  /* ---- proposed (F283): the searchlight ---- */
+  .lit-on .slot:not(.lit) { opacity: .28; transition: opacity .15s; }
+  .lit-on .slot:not(.lit):hover { opacity: .85; }
+  .slot.lit { position: relative; }
+  .slot.lit .card { background: var(--lit-wash); box-shadow: 0 0 0 2px var(--lit), 0 0 14px color-mix(in srgb, var(--lit) 35%, transparent); }
+  .slot.lit::after { content: "lit"; position: absolute; right: 34px; top: -7px; padding: 0 5px;
+    font: 700 10px/14px var(--mono); letter-spacing: .1em; text-transform: uppercase; background: var(--lit); color: var(--floor); }
+  .slot.fixed.lit::after { right: 4px; }
+  mark { background: var(--lit); color: var(--floor); padding: 0 1px; }
+  .plot .hits { grid-column: 1 / -1; justify-self: start; font: 700 10.5px/16px var(--mono); padding: 0 6px; letter-spacing: .06em;
+    background: var(--lit); color: var(--floor); }
+  .plot .hits.none { background: none; color: var(--muted); border: 1px dashed var(--rule); }
+  .found { display: inline-flex; align-items: center; gap: 0; border: 1px solid var(--lit); min-height: 44px; }
+  .found output { font: 600 12px var(--mono); padding: 0 10px; color: var(--lit); }
+  .found button { border: 0; border-left: 1px solid var(--lit); min-height: 42px; background: var(--lit); color: var(--floor) !important; }
+  .board-filter .only { color: var(--muted); }
+</style>
+</head>
+<body>
+<h1>F283: light up cards on the board as you type</h1>
+<p class="lede">The board on 23 Nov, softfield, with the owner looking for the cards about the <b>top bar</b>. Real cards, real places: Seed holds 63, Planted 75; only some rows of each are drawn, and a dashed line says how many sit between. On a wide screen the two versions sit side by side.</p>
+<div class="switch" role="group" aria-label="Which version">
+  <button type="button" data-show="today" aria-pressed="false">Today</button>
+  <button type="button" data-show="proposed" aria-pressed="true">Proposed</button>
+</div>
+
+<div class="versions">
+<!-- ===================== TODAY: board.html after "top bar" + Enter (?q=top+bar) ===================== -->
+<div data-version="today" hidden>
+  <h3 class="shot">Today · wide · after typing "top bar" and Enter: the page reloads, filtered</h3>
+  <section class="plots">
+    <div class="plot"><b>2</b><span>Seed</span></div>
+    <div class="plot"><b>0</b><span>Sprouting</span></div>
+    <div class="plot"><b>4</b><span>Planted</span></div>
+    <div class="plot"><b>0</b><span>Ripe</span></div>
+    <div class="plot"><b>0</b><span>Harvested</span></div>
+  </section>
+  <form class="board-filter" onsubmit="return false">
+    <label>Search <input type="search" value="top bar"></label>
+    <button type="button">Search</button>
+    <div class="kinds"><button type="button" aria-pressed="true">All</button><button type="button" aria-pressed="false">Bugs</button></div>
+    <span class="lever">developer's view</span>
+  </form>
+  <section class="field">
+    <div class="field-head"><h2>The field</h2></div>
+    <div class="stages">
+      <section class="stage"><div class="stage-head"><h3>Seed</h3><span>2</span></div><div class="cards">
+        <div class="slot"><button class="grip">⠿</button><a class="card bug"><span class="card-meta"><b>#17</b> bug-23-queued-jobs-say-paused-by-you bug</span><span class="card-title">While the owner pauses the factory, the Overview's queued jobs say "paused by you", as the top bar does.</span></a><button class="more">⋯</button></div>
+        <div class="slot"><button class="grip">⠿</button><a class="card bug"><span class="card-meta"><b>#43</b> bug-41-status-says-asked-not-a-tone bug</span><span class="card-title">The top bar's `Status` says whether the owner's request is on its way, and hands out no colour it no longer draws.</span></a><button class="more">⋯</button></div>
+      </div></section>
+      <section class="stage"><div class="stage-head"><h3>Sprouting</h3><span>0</span></div><div class="cards"><div class="empty">Nothing here.</div></div></section>
+      <section class="stage"><div class="stage-head"><h3>Planted</h3><span>4</span></div><div class="cards">
+        <div class="slot"><button class="grip">⠿</button><a class="card"><span class="card-meta"><b>#17</b> F272</span><span class="card-title">The top bar says how long the job has run and which attempt it is</span><span class="card-count">0 of 1 ticket</span></a><button class="more">⋯</button></div>
+        <div class="slot"><button class="grip">⠿</button><a class="card started"><span class="card-meta"><b>#57</b> F38 <span class="card-growing">growing</span></span><span class="card-title">The new-version notice becomes a tag on the top bar, so no page moves</span><span class="card-count">2 of 3 tickets</span></a><button class="more">⋯</button></div>
+        <div class="slot"><button class="grip">⠿</button><a class="card started"><span class="card-meta"><b>#74</b> F256 <span class="card-growing">growing</span></span><span class="card-title">The top bar on a wide screen: every part on one line, one height, edges matched</span><span class="card-count">0 of 1 ticket</span></a><button class="more">⋯</button></div>
+        <div class="slot"><button class="grip">⠿</button><a class="card started"><span class="card-meta"><b>#75</b> F276 <span class="card-growing">growing</span></span><span class="card-title">The top bar's dot and words see the lead's setup jobs</span><span class="card-count">0 of 1 ticket</span></a><button class="more">⋯</button></div>
+      </div></section>
+      <section class="stage"><div class="stage-head"><h3>Ripe</h3><span>0</span></div><div class="cards"><div class="empty">Nothing here.</div></div></section>
+      <section class="stage" id="stage-harvested"><div class="stage-head"><h3>Harvested</h3><span>0</span></div><div class="cards"><div class="empty">Nothing here.</div></div></section>
+    </div>
+  </section>
+  <p class="legend">F256 is found, at #74, but its neighbours are gone: dragging it "up" here can only put it above F38, and you can't see that F68 and F81 sit between them. Leaving the filter is a second reload, and the place you scrolled to is lost.</p>
+</div>
+
+<!-- ===================== PROPOSED ===================== -->
+<div data-version="proposed" id="proposed">
+  <h3 class="shot">Proposed · wide · typing "top bar": nothing reloads, nothing moves</h3>
+  <section class="plots new">
+    <div class="plot"><b>63</b><span>Seed</span><span class="hits">2 lit</span></div>
+    <div class="plot"><b>6</b><span>Sprouting</span><span class="hits none">0 lit</span></div>
+    <div class="plot"><b>75</b><span>Planted</span><span class="hits">4 lit</span></div>
+    <div class="plot"><b>0</b><span>Ripe</span><span class="hits none">0 lit</span></div>
+    <div class="plot"><b>126</b><span>Harvested</span><span class="hits none">0 lit</span></div>
+  </section>
+  <form class="board-filter" onsubmit="return false">
+    <label class="new">Find <input type="search" data-find value="top bar" placeholder="top bar, f283, duck…" aria-label="Light up cards"></label>
+    <span class="found new"><output data-count>6 lit</output><button type="button" data-next>Next ›</button></span>
+    <button type="button" class="only new">Show only these</button>
+    <div class="kinds"><button type="button" aria-pressed="true">All</button><button type="button" aria-pressed="false">Bugs</button></div>
+    <span class="lever">developer's view</span>
+  </form>
+  <span class="note">Typing lights up the cards whose number or title holds every word; Enter, Esc or × never reload. Next › scrolls to the next lit card. "Show only these" is today's filter, with its reload.</span>
+  <section class="field lit-on" data-field style="margin-top:10px">
+    <div class="field-head"><h2>The field</h2></div>
+    <div class="stages">
+      <section class="stage"><div class="stage-head"><h3>Seed</h3><span>63</span></div><div class="cards">
+        <div class="gap">#1–#15</div>
+        <div class="slot" data-key="bug-22"><button class="grip">⠿</button><a class="card bug"><span class="card-meta"><b>#16</b> bug-22-a-run-records-its-ticket bug</span><span class="card-title">A waiting run's ticket title on the Overview comes from the ticket id the runner records, not from splitting its activity text.</span></a><button class="more">⋯</button></div>
+        <div class="slot lit" data-key="bug-23"><button class="grip">⠿</button><a class="card bug"><span class="card-meta"><b>#17</b> bug-23-queued-jobs-say-paused-by-you bug</span><span class="card-title">While the owner pauses the factory, the Overview's queued jobs say "paused by you", as the <mark>top</mark> <mark>bar</mark> does.</span></a><button class="more">⋯</button></div>
+        <div class="slot" data-key="bug-50"><button class="grip">⠿</button><a class="card bug"><span class="card-meta"><b>#18</b> bug-50-checkpoint-unparked-once bug</span><span class="card-title">`note_merge` starts the parked checkpoint again only on the merge that reaches `checkpoint_every`.</span></a><button class="more">⋯</button></div>
+        <div class="gap">#19–#41</div>
+        <div class="slot" data-key="bug-40"><button class="grip">⠿</button><a class="card bug"><span class="card-meta"><b>#42</b> bug-40-notification-bar-parts-are-classes bug</span><span class="card-title">The notification bar's parts are found by class, not by `role="body"` and `role="actions"`.</span></a><button class="more">⋯</button></div>
+        <div class="slot lit" data-key="bug-41"><button class="grip">⠿</button><a class="card bug"><span class="card-meta"><b>#43</b> bug-41-status-says-asked-not-a-tone bug</span><span class="card-title">The <mark>top</mark> <mark>bar</mark>'s `Status` says whether the owner's request is on its way, and hands out no colour it no longer draws.</span></a><button class="more">⋯</button></div>
+        <div class="slot" data-key="bug-42"><button class="grip">⠿</button><a class="card bug"><span class="card-meta"><b>#44</b> bug-42-queue-count-and-next-agree bug</span><span class="card-title">The Overview's Queue panel counts the same tickets its "Next in line" lists, in one order.</span></a><button class="more">⋯</button></div>
+        <div class="gap">#45–#63</div>
+      </div></section>
+      <section class="stage"><div class="stage-head"><h3>Sprouting</h3><span>6</span></div><div class="cards">
+        <div class="slot" data-key="f281"><button class="grip">⠿</button><a class="card"><span class="card-meta"><b>#1</b> F281</span><span class="card-title">Every page in one row on a wide screen, no More</span></a><button class="more">⋯</button></div>
+        <div class="slot" data-key="f282"><button class="grip">⠿</button><a class="card"><span class="card-meta"><b>#2</b> F282</span><span class="card-title">The re-check row says Copilot already did the checkpoint while Claude was out</span></a><button class="more">⋯</button></div>
+        <div class="slot" data-key="f283"><button class="grip">⠿</button><a class="card"><span class="card-meta"><b>#3</b> F283</span><span class="card-title">Light up matching cards on the board as you type; the rest stay in place</span></a><button class="more">⋯</button></div>
+        <div class="gap">#4–#6</div>
+      </div></section>
+      <section class="stage"><div class="stage-head"><h3>Planted</h3><span>75</span></div><div class="cards">
+        <div class="gap">#1–#15</div>
+        <div class="slot" data-key="f268"><button class="grip">⠿</button><a class="card"><span class="card-meta"><b>#16</b> F268</span><span class="card-title">Add pictures to a plant or a thread message</span><span class="card-count">0 of 4 tickets</span></a><button class="more">⋯</button></div>
+        <div class="slot lit" data-key="f272"><button class="grip">⠿</button><a class="card"><span class="card-meta"><b>#17</b> F272</span><span class="card-title">The <mark>top</mark> <mark>bar</mark> says how long the job has run and which attempt it is</span><span class="card-count">0 of 1 ticket</span></a><button class="more">⋯</button></div>
+        <div class="slot" data-key="f267"><button class="grip">⠿</button><a class="card started"><span class="card-meta"><b>#18</b> F267 <span class="card-growing">growing</span></span><span class="card-title">Add notes to a thread while the lead is still writing its reply</span><span class="card-count">1 of 2 tickets</span></a><button class="more">⋯</button></div>
+        <div class="gap">#19–#55</div>
+        <div class="slot" data-key="f37"><button class="grip">⠿</button><a class="card started"><span class="card-meta"><b>#56</b> F37 <span class="card-growing">growing</span></span><span class="card-title">Every number the lead writes says what it is, and links to it</span><span class="card-count">1 of 3 tickets</span></a><button class="more">⋯</button></div>
+        <div class="slot lit" data-key="f38"><button class="grip">⠿</button><a class="card started"><span class="card-meta"><b>#57</b> F38 <span class="card-growing">growing</span></span><span class="card-title">The new-version notice becomes a tag on the <mark>top</mark> <mark>bar</mark>, so no page moves</span><span class="card-count">2 of 3 tickets</span></a><button class="more">⋯</button></div>
+        <div class="slot" data-key="f69"><button class="grip">⠿</button><a class="card started"><span class="card-meta"><b>#58</b> F69 <span class="card-growing">growing</span></span><span class="card-title">I want a button to switch from light to night theme</span><span class="card-count">10 of 13 tickets</span></a><button class="more">⋯</button></div>
+        <div class="gap">#59–#72</div>
+        <div class="slot" data-key="f112"><button class="grip">⠿</button><a class="card"><span class="card-meta"><b>#73</b> F112</span><span class="card-title">Plain words for "replan"</span><span class="card-count">0 of 1 ticket</span></a><button class="more">⋯</button></div>
+        <div class="slot lit" data-key="f256"><button class="grip">⠿</button><a class="card started"><span class="card-meta"><b>#74</b> F256 <span class="card-growing">growing</span></span><span class="card-title">The <mark>top</mark> <mark>bar</mark> on a wide screen: every part on one line, one height, edges matched</span><span class="card-count">0 of 1 ticket</span></a><button class="more">⋯</button></div>
+        <div class="slot lit" data-key="f276"><button class="grip">⠿</button><a class="card started"><span class="card-meta"><b>#75</b> F276 <span class="card-growing">growing</span></span><span class="card-title">The <mark>top</mark> <mark>bar</mark>'s dot and words see the lead's setup jobs</span><span class="card-count">0 of 1 ticket</span></a><button class="more">⋯</button></div>
+      </div></section>
+      <section class="stage"><div class="stage-head"><h3>Ripe</h3><span>0</span></div><div class="cards"><div class="empty">Nothing here.</div></div></section>
+      <section class="stage" id="stage-harvested"><div class="stage-head"><h3>Harvested</h3><span>126, latest 4</span></div><div class="cards">
+        <div class="slot fixed" data-key="f271"><a class="card"><span class="card-meta">F271</span><span class="card-title">Two refused-edit tests check the request list instead of waiting 300 ms</span></a></div>
+        <div class="slot fixed" data-key="f270"><a class="card"><span class="card-meta">F270</span><span class="card-title">test_shots.py stops waiting on real seconds</span></a></div>
+        <div class="slot fixed" data-key="f269"><a class="card"><span class="card-meta">F269</span><span class="card-title">The 200-jobs test writes its jobs in one transaction</span></a></div>
+        <div class="slot fixed" data-key="f194"><a class="card"><span class="card-meta">F194</span><span class="card-title">The menu: Overview, Planning, Board in fixed places, the rest in a sub menu</span></a></div>
+      </div></section>
+    </div>
+  </section>
+  <span class="note">Every card keeps its place and its grip: drag F256 up past F37 and you see what it jumps over. The others fade, and come back while the pointer is on them. A lit card gets the white searchlight edge, a "lit" tag and its words marked. The 10-second refresh keeps the light on.</span>
+
+  <h3 class="shot">Proposed · phone · typing "f38": one card, by its number</h3>
+  <div class="phone">
+    <section class="plots new">
+      <div class="plot"><b>63</b><span>Seed</span><span class="hits none">0 lit</span></div>
+      <div class="plot"><b>6</b><span>Sprouting</span><span class="hits none">0 lit</span></div>
+      <div class="plot" aria-pressed="true"><b>75</b><span>Planted</span><span class="hits">1 lit</span></div>
+      <div class="plot"><b>0</b><span>Ripe</span><span class="hits none">0 lit</span></div>
+      <div class="plot"><b>126</b><span>Harvested</span><span class="hits none">0 lit</span></div>
+    </section>
+    <span class="note">On a phone only one stage shows: each plot says how many of its cards are lit, so you know which to open.</span>
+    <form class="board-filter" onsubmit="return false" style="margin-top:10px">
+      <label>Find <input type="search" value="f38" aria-label="Light up cards"></label>
+      <span class="found new"><output>1 lit</output><button type="button">Next ›</button></span>
+      <button type="button" class="only">Show only these</button>
+    </form>
+    <section class="field lit-on">
+      <div class="stages">
+        <section class="stage"><div class="stage-head"><h3>Planted</h3><span>75, #1 first</span></div><div class="cards">
+          <div class="gap">#1–#55</div>
+          <div class="slot"><button class="grip">⠿</button><a class="card started"><span class="card-meta"><b>#56</b> F37 <span class="card-growing">growing</span></span><span class="card-title">Every number the lead writes says what it is, and links to it</span></a><button class="more">⋯</button></div>
+          <div class="slot lit new"><button class="grip">⠿</button><a class="card started"><span class="card-meta"><b>#57</b> <mark>F38</mark> <span class="card-growing">growing</span></span><span class="card-title">The new-version notice becomes a tag on the top bar, so no page moves</span><span class="card-count">2 of 3 tickets</span></a><button class="more">⋯</button></div>
+          <div class="slot"><button class="grip">⠿</button><a class="card started"><span class="card-meta"><b>#58</b> F69 <span class="card-growing">growing</span></span><span class="card-title">I want a button to switch from light to night theme</span></a><button class="more">⋯</button></div>
+          <div class="gap">#59–#75</div>
+        </div></section>
+      </div>
+    </section>
+    <span class="note">"f38" lights F38 only, not F380 or a title with "f38" inside a word: a card number matches the number whole.</span>
+  </div>
+  <p class="legend"><span class="new">Dashed green</span> marks what is new. Try the wide board's box: type "top bar", "theme", "f272", "272" or "bug-4", press Next ›, clear it with ×.</p>
+</div>
+</div>
+
+<script>
+function setUpSwitch() {
+  document.querySelectorAll(".switch button").forEach((button) => {
+    button.addEventListener("click", () => {
+      document.querySelectorAll(".switch button").forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
+      document.querySelectorAll("[data-version]").forEach((v) => { v.hidden = v.dataset.version !== button.dataset.show; });
+    });
+  });
+}
+
+// The proposed box, live: the rule of D2 on the cards drawn above
+function setUpFind() {
+  const box = document.querySelector("[data-find]");
+  const field = document.querySelector("[data-field]");
+  const count = document.querySelector("[data-count]");
+  const next = document.querySelector("[data-next]");
+  const plots = document.querySelectorAll("#proposed > .plots .plot");
+  if (!box || !field) return;
+  const slots = [...field.querySelectorAll(".slot")];
+  for (const s of slots) {
+    const t = s.querySelector(".card-title");
+    if (t) t.dataset.text = t.textContent;
+  }
+  const keyWord = /^(f\d+|\d+)$/i;
+  const esc = (w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const light = () => {
+    const words = box.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    let n = 0;
+    const perStage = [0, 0, 0, 0, 0];
+    field.querySelectorAll(".stage").forEach((stage, i) => {
+      stage.querySelectorAll(".slot").forEach((s) => {
+        const t = s.querySelector(".card-title");
+        const key = (s.dataset.key || "").toLowerCase();
+        const title = (t ? t.dataset.text : "").toLowerCase();
+        const hit = words.length > 0 && words.every((w) => {
+          if (keyWord.test(w)) { const k = /^\d+$/.test(w) ? "f" + w : w; return key === k; }
+          return key.includes(w) || title.includes(w);
+        });
+        s.classList.toggle("lit", hit);
+        if (t) {
+          const plain = words.filter((w) => !keyWord.test(w));
+          t.innerHTML = t.dataset.text.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+          if (hit && plain.length) t.innerHTML = t.innerHTML.replace(new RegExp("(" + plain.map(esc).join("|") + ")", "gi"), "<mark>$1</mark>");
+        }
+        if (hit) { n += 1; perStage[i] += 1; }
+      });
+    });
+    field.classList.toggle("lit-on", words.length > 0);
+    count.textContent = words.length ? n + " lit" : "type to light up";
+    next.disabled = n === 0;
+    plots.forEach((p, i) => {
+      const tag = p.querySelector(".hits");
+      if (!tag) return;
+      tag.hidden = words.length === 0;
+      tag.textContent = perStage[i] + " lit";
+      tag.classList.toggle("none", perStage[i] === 0);
+    });
+  };
+  let at = -1;
+  next.addEventListener("click", () => {
+    const lit = [...field.querySelectorAll(".slot.lit")];
+    if (!lit.length) return;
+    at = (at + 1) % lit.length;
+    lit[at].scrollIntoView({ block: "center", behavior: "smooth" });
+  });
+  box.addEventListener("input", () => { at = -1; light(); });
+  box.addEventListener("keydown", (e) => { if (e.key === "Escape") { box.value = ""; light(); } });
+}
+
+setUpSwitch();
+try { setUpFind(); } catch (e) { /* the picture stands without the live box */ }
+</script>
+</body>
+</html>
