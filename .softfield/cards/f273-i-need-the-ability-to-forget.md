@@ -1,6 +1,7 @@
 # Milestone F273: Forget a project from the Projects page
 
-> **State:** ready · **Area:** factory
+> **State:** done · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-24. Base: git tag `f273-i-need-the-ability-to-forget-start`. Report: [`.softfield/reviews/f273-i-need-the-ability-to-forget.md`](../reviews/f273-i-need-the-ability-to-forget.md).
 > Planted by the owner on 2026-11-19.
 
 ## Notes

@@ -1,5 +1,7 @@
 # Review: F273, Forget a project from the Projects page
 
+- **Status:** done, signed off by the owner on 2026-11-24.
+
 **Status:** round 1 done, ready for your sign-off. Score 8/10. One should-fix point (a test gap), fixed by the review.
 
 ### 1. What changed
