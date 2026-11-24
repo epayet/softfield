@@ -1,5 +1,7 @@
 # Review: F278, A new project's M1 waits on the desk while its setup runs, not as a seed
 
+- **Status:** done, signed off by the owner on 2026-11-24.
+
 **Status:** round 1 done, ready for your sign-off. Score 6/10. One blocking point and one should-fix point, both fixed by the review.
 
 ### 1. What changed

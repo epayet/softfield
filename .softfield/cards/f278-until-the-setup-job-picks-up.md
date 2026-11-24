@@ -1,6 +1,7 @@
 # Milestone F278: A new project's M1 waits on the desk while its setup runs, not as a seed
 
-> **State:** ready · **Area:** factory
+> **State:** done · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-24. Base: git tag `f278-until-the-setup-job-picks-up-start`. Report: [`.softfield/reviews/f278-until-the-setup-job-picks-up.md`](../reviews/f278-until-the-setup-job-picks-up.md).
 > Planted by the owner on 2026-11-19.
 
 ## Notes
