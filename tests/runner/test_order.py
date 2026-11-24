@@ -299,7 +299,8 @@ def test_an_approved_plan_readies_its_cards_row_in_the_same_apply(repo):
     docs = repo / ".softfield" / "cards"
     docs.mkdir(parents=True, exist_ok=True)
     (docs / "f7-one-queue.md").write_text(
-        "# Milestone F7: one queue\n\n> **State:** idea\n\n## Outcome\n"
+        "# Milestone F7: one queue\n\n> **State:** idea · **Area:** factory\n"
+        "> Planted by the owner on 2026-11-13.\n\n## Notes\nOne queue for every project.\n"
     )
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "the card")
