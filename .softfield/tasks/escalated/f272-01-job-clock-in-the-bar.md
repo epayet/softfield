@@ -36,3 +36,12 @@ Read `.softfield/cards/f272-i-want-to-know-from-the.md` (D1 to D5) and build the
 - `/live` carries the plate and the line, so a page's poll updates the time without a reload
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: task-tests)
+attempts: 3
+tokens: 6260322
+logs: .softfield/var/runs/20261124-021739/f272-01-job-clock-in-the-bar
+```
