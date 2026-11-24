@@ -1,4 +1,4 @@
-# Milestone F292: The "Line stopped" strip and Needs you still show terminal…
+# Milestone F292: No terminal commands on the Overview: plain words and a Start the runner button
 
 > **State:** idea · **Area:** factory
 > Planted by the owner on 2026-11-24.
