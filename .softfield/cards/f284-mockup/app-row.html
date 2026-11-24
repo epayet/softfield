@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F284 mock-up: an app row that shows what it is doing</title>
+<style>
+  /* The dashboard's own tokens (factory_dashboard/static/dashboard.css), dark theme */
+  :root {
+    --floor: #12161b; --bay: #181e25; --plate: #1f2730; --grid: #222b34; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+    --hazard: #f2b10a; --hazard-ink: #1a1405; --fail: #ec5458; --good: #5fd17a; --sonnet: #ffc48a;
+    --tick: var(--ink-2);
+    --stripe: repeating-linear-gradient(-45deg, var(--hazard) 0 6px, transparent 6px 12px);
+    --notch: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
+    --display: "Chakra Petch", "Bahnschrift", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+  body { margin: 0; background: var(--floor); color: var(--fg); font: 15px/1.5 var(--body); padding: 16px; }
+  h1.top { font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 4px; }
+  h3.cap { font: 600 13px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 18px 0 8px; }
+  p.lede { color: var(--ink-2); max-width: 860px; margin: 0 0 8px; }
+  a { color: var(--sonnet); text-decoration: none; }
+  .switch { display: inline-flex; margin: 12px 0 0; border: 1px solid var(--rule); }
+  .switch button { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 10px 18px;
+    background: var(--bay); color: var(--muted); border: 0; cursor: pointer; min-height: 44px; }
+  .switch button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+  .versions { display: grid; gap: 24px; grid-template-columns: 1fr; margin-top: 12px; }
+  @media (min-width: 900px) { .versions { grid-template-columns: 1fr 1fr; } .versions > [hidden] { display: block !important; } .switch { display: none; } }
+  .new { outline: 1px dashed var(--good); outline-offset: 3px; }
+  .note { display: block; flex-basis: 100%; font: 600 11px/1.35 var(--mono); color: var(--good); margin: 4px 0 0; }
+  .legend { color: var(--ink-2); font-size: 13px; margin: 14px 0 0; }
+  [hidden] { display: none !important; }
+
+  /* ---- copied from dashboard.css: panels, the Projects page, the app row, the logs page ---- */
+  .page { display: grid; gap: 14px; }
+  .panel { background: var(--bay); border: 1px solid var(--rule); padding: 0 14px 12px; min-width: 0; position: relative; }
+  .panel::before, .panel::after { content: ""; position: absolute; width: 10px; height: 10px; border: 0 solid var(--tick); }
+  .panel::before { top: -1px; left: -1px; border-top-width: 2px; border-left-width: 2px; }
+  .panel::after { bottom: -1px; right: -1px; border-bottom-width: 2px; border-right-width: 2px; }
+  .panel > h2 { display: flex; align-items: center; gap: 10px; margin: 0 -14px 10px; padding: 7px 14px;
+    background: var(--plate); border-bottom: 1px solid var(--rule); font: 600 14px var(--display); text-transform: uppercase; letter-spacing: .1em; }
+  .panel > h2::after { content: ""; order: 1; flex: 1; height: 8px; background: var(--stripe); opacity: .5; }
+  .panel > h2 .src { order: 2; font: 11px var(--mono); text-transform: none; letter-spacing: 0; color: var(--muted); }
+  .muted { color: var(--muted); }
+  .rank { list-style: none; margin: 0; padding: 0; }
+  .proj { display: grid; grid-template-columns: 52px 1fr; gap: 4px 12px; padding: 12px 0; border-bottom: 1px solid var(--grid); }
+  .proj:last-child { border-bottom: 0; }
+  .place { display: flex; flex-direction: column; align-items: center; }
+  .place input { width: 44px; text-align: center; font: 700 18px var(--display); background: var(--plate); color: var(--fg); border: 1px solid var(--rule); padding: 4px 0; }
+  .place small { font: 500 11px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .plate { display: grid; gap: 3px; min-width: 0; }
+  .head { display: flex; align-items: baseline; gap: 10px; }
+  .rankno { font: 700 20px var(--display); color: var(--hazard); min-width: 30px; }
+  .name { font: 700 17px var(--display); letter-spacing: .03em; }
+  .what { color: var(--ink-2); font-size: 13.5px; }
+  .facts { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13.5px; }
+  .facts b { font-family: var(--display); }
+  .links { display: flex; flex-wrap: wrap; gap: 6px 14px; font: 600 13px var(--display); letter-spacing: .04em; text-transform: uppercase; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; min-height: 44px; padding: 0 16px; border: 0; cursor: pointer; text-decoration: none; }
+  .btn.go { background: var(--hazard); color: var(--hazard-ink); clip-path: var(--notch); }
+  .btn.plain { background: transparent; color: var(--fg); border: 1px solid var(--rule); }
+
+  .app-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-top: 6px;
+    padding: 6px 8px 6px 12px; background: var(--plate); border: 1px solid var(--rule); position: relative; }
+  .app-row::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--stripe); }
+  .app-row .app-tag { font: 600 10.5px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  .app-row .app-state { display: inline-flex; align-items: center; gap: 7px; font: 700 13px var(--display); letter-spacing: .06em; text-transform: uppercase; }
+  .app-row .app-lamp { width: 10px; height: 10px; border: 1px solid var(--rule); background: var(--floor); }
+  .app-row.running .app-lamp { background: var(--good); box-shadow: 0 0 6px var(--good); }
+  .app-row .app-detail { font: 12px var(--mono); color: var(--ink-2); flex-basis: 100%; overflow-wrap: anywhere; }
+  .app-row .app-acts { display: flex; gap: 8px; margin-left: auto; flex-wrap: wrap; align-items: center; }
+  .app-row.none { background: transparent; border-style: dashed; }
+  .app-row.none::before { display: none; }
+  .app-row .app-wait { display: none; }
+  .app-row.htmx-request { border: 1px dashed var(--hazard); }
+  .app-row.htmx-request .app-wait { display: inline; }
+  .app-row.htmx-request .app-acts > button { visibility: hidden; }
+  .way { font: 12px var(--mono); color: var(--hazard); }
+  .logs-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; font-size: 13px; }
+  .logs pre { margin: 0; background: var(--floor); border: 1px solid var(--rule); padding: 10px; font: 12px/1.5 var(--mono); color: var(--ink-2); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 260px; overflow: auto; }
+  .logs select { min-height: 36px; background: var(--plate); color: var(--fg); border: 1px solid var(--rule); font: 13px var(--body); }
+  .logs .app-state { display: inline-flex; align-items: center; gap: 7px; font: 700 13px var(--display); letter-spacing: .06em; text-transform: uppercase; }
+  .logs .app-lamp { width: 10px; height: 10px; border: 1px solid var(--rule); background: var(--floor); }
+
+  /* ---- proposed: the busy row and the logs in the plate ---- */
+  .app-row.busy { border: 1px dashed var(--hazard); }
+  .app-row.busy .app-state { color: var(--hazard); }
+  .app-lamp.pulse, .app-row.busy .app-lamp { background: var(--hazard); box-shadow: 0 0 8px var(--hazard); animation: pulse 1.4s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .35; } }
+  @media (prefers-reduced-motion: reduce) { .app-lamp.pulse, .app-row.busy .app-lamp { animation: none; } }
+  .app-row .doing { font: 600 12.5px var(--display); letter-spacing: .04em; color: var(--fg); flex-basis: 100%; }
+  .app-row .doing b { font-family: var(--mono); font-weight: 600; color: var(--hazard); }
+  .app-row .lastline { font: 12px var(--mono); color: var(--muted); flex-basis: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .btn[aria-expanded="true"] { border-color: var(--hazard); color: var(--hazard); }
+  .tail { margin-top: -1px; background: var(--floor); border: 1px solid var(--rule); border-top: 0; position: relative; }
+  .tail::after { content: ""; position: absolute; right: -1px; bottom: -1px; width: 10px; height: 10px; border: 0 solid var(--tick); border-right-width: 2px; border-bottom-width: 2px; }
+  .tail .bar { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; padding: 4px 10px; background: var(--plate);
+    border-bottom: 1px solid var(--grid); font: 600 10.5px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  .tail .bar a { margin-left: auto; font: 600 12px var(--display); letter-spacing: .06em; }
+  .tail pre { margin: 0; padding: 8px 10px; font: 12px/1.5 var(--mono); color: var(--ink-2); white-space: pre-wrap; overflow-wrap: anywhere;
+    max-height: calc(12 * 1.5em + 16px); overflow: auto; }
+  .tail .part { display: block; font: 600 10.5px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--hazard); margin: 2px 0; }
+  .tail .part.app { color: var(--muted); margin-top: 8px; }
+</style>
+</head>
+<body>
+<h1 class="top">F284: an app row that shows what it is doing</h1>
+<p class="lede">The Projects page's app rows, with the real projects and counts of 2026-11-23. Today shows duck-ascii-test the moment after Run, and the same row after a refresh while its image still builds: Stopped, Run again. Proposed shows it building, with its logs open in the plate; waifu-gallery running and travel-companion updating are examples of the other states. The dashed green outlines mark what changes.</p>
+<div class="switch" role="group" aria-label="Which version">
+  <button type="button" data-show="today" aria-pressed="false">Today</button>
+  <button type="button" data-show="proposed" aria-pressed="true">Proposed</button>
+</div>
+
+<div class="versions">
+
+<!-- Today: copied from factory_dashboard/templates/projects.html, _partials/app_row.html and app_logs.html -->
+<div data-version="today" hidden>
+  <h3 class="cap">Today</h3>
+  <div class="page">
+    <section class="panel">
+      <h2>Projects <span class="src">the runner works in this order</span></h2>
+      <ol class="rank">
+        <li class="proj">
+          <label class="place"><input type="number" value="2"><small>place</small></label>
+          <div class="plate">
+            <div class="head"><span class="rankno">#2</span><span class="name">duck-ascii-test</span></div>
+            <div class="what">A web page with one button that shows an ASCII duck.</div>
+            <div class="facts"><span><b>0</b> ready</span><span><b>1</b> done</span><span class="muted">nothing for you</span></div>
+            <div class="links"><a href="#">Planning</a><a href="#">Board</a><a href="#">Overview</a></div>
+            <div class="app-row htmx-request">
+              <span class="app-tag">App</span>
+              <span class="app-state"><span class="app-lamp"></span>Stopped</span>
+              <div class="app-acts"><button type="button" class="btn go">Run</button><a class="btn plain" href="#">Logs</a></div>
+              <span class="app-wait way">starting…</span>
+            </div>
+            <span class="muted" style="font-size:12.5px">↑ just after Run: the browser waits for the whole build</span>
+          </div>
+        </li>
+        <li class="proj">
+          <label class="place"><input type="number" value="2"><small>place</small></label>
+          <div class="plate">
+            <div class="head"><span class="rankno">#2</span><span class="name">duck-ascii-test</span></div>
+            <div class="what">A web page with one button that shows an ASCII duck.</div>
+            <div class="facts"><span><b>0</b> ready</span><span><b>1</b> done</span><span class="muted">nothing for you</span></div>
+            <div class="links"><a href="#">Planning</a><a href="#">Board</a><a href="#">Overview</a></div>
+            <div class="app-row">
+              <span class="app-tag">App</span>
+              <span class="app-state"><span class="app-lamp"></span>Stopped</span>
+              <div class="app-acts"><button type="button" class="btn go">Run</button><a class="btn plain" href="#">Logs</a></div>
+            </div>
+            <span class="muted" style="font-size:12.5px">↑ the same row after a refresh, while the image still builds</span>
+          </div>
+        </li>
+        <li class="proj">
+          <label class="place"><input type="number" value="3"><small>place</small></label>
+          <div class="plate">
+            <div class="head"><span class="rankno">#3</span><span class="name">waifu-gallery</span></div>
+            <div class="what">A page that shows a random waifu image from NTE and Endfield, fetched from the internet, on every reload.</div>
+            <div class="facts"><span><b>0</b> ready</span><span><b>1</b> done</span><span class="muted">nothing for you</span></div>
+            <div class="links"><a href="#">Planning</a><a href="#">Board</a><a href="#">Overview</a></div>
+            <div class="app-row">
+              <span class="app-tag">App</span>
+              <span class="app-state"><span class="app-lamp"></span>Stopped</span>
+              <div class="app-acts"><button type="button" class="btn go">Run</button><a class="btn plain" href="#">Logs</a></div>
+            </div>
+          </div>
+        </li>
+        <li class="proj">
+          <label class="place"><input type="number" value="5"><small>place</small></label>
+          <div class="plate">
+            <div class="head"><span class="rankno">#5</span><span class="name">travel-companion</span></div>
+            <div class="what">Stampu: trip ideas from a prompt, shown visually, remembering what you like and where you've been.</div>
+            <div class="facts"><span><b>1</b> ready</span><span><b>5</b> ideas</span><span><b>14</b> done</span><span><b>2</b> for you</span></div>
+            <div class="links"><a href="#">Planning</a><a href="#">Board</a><a href="#">Overview</a></div>
+            <div class="app-row">
+              <span class="app-tag">App</span>
+              <span class="app-state"><span class="app-lamp"></span>Stopped</span>
+              <div class="app-acts"><button type="button" class="btn go">Run</button><a class="btn plain" href="#">Logs</a></div>
+            </div>
+          </div>
+        </li>
+      </ol>
+    </section>
+    <section class="panel logs">
+      <h2>duck-ascii-test · app logs <span class="src">/projects/duck-ascii-test/logs</span></h2>
+      <div class="logs-bar"><button type="button" class="btn plain">Pause</button></div>
+      <div class="logs-bar">
+        <span class="app-state"><span class="app-lamp"></span>Stopped</span>
+        <span class="muted">updated at 22:31:05 · every 5 s</span>
+      </div>
+      <pre></pre>
+      <span class="muted" style="font-size:12.5px">↑ empty while the image builds: the build's output goes nowhere</span>
+    </section>
+  </div>
+</div>
+
+<!-- Proposed -->
+<div data-version="proposed">
+  <h3 class="cap">Proposed</h3>
+  <div class="page">
+    <section class="panel">
+      <h2>Projects <span class="src">the runner works in this order</span></h2>
+      <ol class="rank">
+        <li class="proj">
+          <label class="place"><input type="number" value="2"><small>place</small></label>
+          <div class="plate">
+            <div class="head"><span class="rankno">#2</span><span class="name">duck-ascii-test</span></div>
+            <div class="what">A web page with one button that shows an ASCII duck.</div>
+            <div class="facts"><span><b>0</b> ready</span><span><b>1</b> done</span><span class="muted">nothing for you</span></div>
+            <div class="links"><a href="#">Planning</a><a href="#">Board</a><a href="#">Overview</a></div>
+            <div class="app-row busy new">
+              <span class="app-tag">App</span>
+              <span class="app-state"><span class="app-lamp"></span>Starting</span>
+              <div class="app-acts"><button type="button" class="btn plain" aria-expanded="true" data-tail="duck">Logs ▾</button></div>
+              <span class="doing">Building the image · <b>1 min 40 s</b> · main 5e1d2c7</span>
+              <span class="lastline">#7 [web 4/5] RUN pip install --no-cache-dir -r requirements.txt</span>
+              <span class="note">new: survives a refresh; no Run while it builds, so no second press; updates itself every 5 s until it settles</span>
+            </div>
+            <div class="tail new" id="tail-duck">
+              <div class="bar"><span>Logs · live every 5 s</span><a href="#">All lines →</a></div>
+<pre><span class="part">Build</span>#5 [web 2/5] WORKDIR /app
+#6 [web 3/5] COPY requirements.txt .
+#7 [web 4/5] RUN pip install --no-cache-dir -r requirements.txt
+#7 3.112 Collecting fastapi==0.115.6
+#7 5.840 Collecting uvicorn==0.32.1
+#7 9.204 Installing collected packages: sniffio, idna, h11, click…
+<span class="part app">App</span>No lines yet: the app hasn't started.</pre>
+              <span class="note" style="padding:0 10px 6px">new: Logs opens here, 12 lines tall; the build first, then the app</span>
+            </div>
+          </div>
+        </li>
+        <li class="proj">
+          <label class="place"><input type="number" value="3"><small>place</small></label>
+          <div class="plate">
+            <div class="head"><span class="rankno">#3</span><span class="name">waifu-gallery</span></div>
+            <div class="what">A page that shows a random waifu image from NTE and Endfield, fetched from the internet, on every reload.</div>
+            <div class="facts"><span><b>0</b> ready</span><span><b>1</b> done</span><span class="muted">nothing for you</span></div>
+            <div class="links"><a href="#">Planning</a><a href="#">Board</a><a href="#">Overview</a></div>
+            <div class="app-row running">
+              <span class="app-tag">App</span>
+              <span class="app-state"><span class="app-lamp"></span>Running</span>
+              <div class="app-acts"><a class="btn go" href="#">Open ↗ :8104</a><button type="button" class="btn plain">Stop</button><button type="button" class="btn plain new" aria-expanded="false">Logs ▸</button></div>
+            </div>
+          </div>
+        </li>
+        <li class="proj">
+          <label class="place"><input type="number" value="5"><small>place</small></label>
+          <div class="plate">
+            <div class="head"><span class="rankno">#5</span><span class="name">travel-companion</span></div>
+            <div class="what">Stampu: trip ideas from a prompt, shown visually, remembering what you like and where you've been.</div>
+            <div class="facts"><span><b>1</b> ready</span><span><b>5</b> ideas</span><span><b>14</b> done</span><span><b>2</b> for you</span></div>
+            <div class="links"><a href="#">Planning</a><a href="#">Board</a><a href="#">Overview</a></div>
+            <div class="app-row busy new">
+              <span class="app-tag">App</span>
+              <span class="app-state"><span class="app-lamp"></span>Updating</span>
+              <div class="app-acts"><a class="btn go" href="#">Open ↗ :8103</a><button type="button" class="btn plain" aria-expanded="false">Logs ▸</button></div>
+              <span class="doing">Updating to main a1b2c3d · <b>2 min 05 s</b> · the old app still answers</span>
+              <span class="lastline">#9 [web 5/6] RUN python manage.py collectstatic --noinput</span>
+              <span class="note">new: the runner's own rebuild after a merge shows too</span>
+            </div>
+          </div>
+        </li>
+      </ol>
+    </section>
+    <section class="panel logs new">
+      <h2>duck-ascii-test · app logs <span class="src">/projects/duck-ascii-test/logs</span></h2>
+      <div class="logs-bar"><button type="button" class="btn plain">Pause</button></div>
+      <div class="logs-bar">
+        <span class="app-state" style="color:var(--hazard)"><span class="app-lamp pulse"></span>Starting</span>
+        <span class="muted">building the image for 1 min 40 s · updated at 22:31:05 · every 5 s</span>
+      </div>
+<pre><span style="color:var(--hazard)">BUILD</span>
+#6 [web 3/5] COPY requirements.txt .
+#7 [web 4/5] RUN pip install --no-cache-dir -r requirements.txt
+#7 9.204 Installing collected packages: sniffio, idna, h11, click…
+<span class="muted">APP</span>
+No lines yet: the app hasn't started.</pre>
+      <span class="note">new: the build's lines while it builds, and words instead of an empty box</span>
+    </section>
+  </div>
+</div>
+
+</div>
+<p class="legend">The build lines, the commits and the ports are examples; every project name and count is real. Press a Logs button in Proposed to open or close its box.</p>
+
+<script>
+  function wireSwitch() {
+    const buttons = document.querySelectorAll(".switch button");
+    for (const button of buttons) {
+      button.addEventListener("click", () => {
+        for (const b of buttons) b.setAttribute("aria-pressed", String(b === button));
+        for (const v of document.querySelectorAll("[data-version]")) v.hidden = v.dataset.version !== button.dataset.show;
+      });
+    }
+  }
+  function wireTail() {
+    const button = document.querySelector("[data-tail]");
+    const box = document.getElementById("tail-" + button.dataset.tail);
+    button.addEventListener("click", () => {
+      const open = button.getAttribute("aria-expanded") !== "true";
+      button.setAttribute("aria-expanded", String(open));
+      button.textContent = open ? "Logs ▾" : "Logs ▸";
+      box.hidden = !open;
+    });
+  }
+  wireSwitch();
+  wireTail();
+</script>
+</body>
+</html>
