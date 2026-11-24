@@ -654,10 +654,11 @@ def test_check_tickets_says_what_approve_would_refuse(in_repo, capsys):
     assert git(in_repo, "status", "--porcelain") == before
 
 
-def test_the_runner_takes_a_project_being_set_up_but_not_a_paused_one(repo, tmp_path, monkeypatch):
+def test_the_runner_takes_a_project_being_set_up_or_paused_by_you(repo, tmp_path, monkeypatch):
     """ADR 48: a project started from the Projects page has its setup jobs and the owner's
-    messages, so it gets a session (`loop.setting_up` gives it nothing else); one the owner
-    paused gets none."""
+    messages, so it gets a session (`loop.setting_up` gives it nothing else). F124 D2: one the
+    owner paused keeps its session too, so its planning and its resume still go; any other
+    `paused` gets none."""
     db = tmp_path / "m.sqlite"
     machine = tmp_path / "factory.toml"
     machine.write_text(f'[metrics]\ndb = "{db}"\n')
@@ -668,7 +669,12 @@ def test_the_runner_takes_a_project_being_set_up_but_not_a_paused_one(repo, tmp_
         metrics.upsert_project(conn, repo.name, repo=str(repo))
     finally:
         conn.close()
-    for paused, taken in ((None, True), (metrics.SETTING_UP, True), ("2026-11-19T01:00", False)):
+    for paused, taken in (
+        (None, True),
+        (metrics.SETTING_UP, True),
+        ("2026-11-19T01:00", True),
+        ("moved away", False),
+    ):
         conn = metrics.open_db(db)
         try:
             metrics.set_project_paused(conn, repo.name, paused)
@@ -698,3 +704,12 @@ def test_softfield_alone_is_a_guide_not_a_run(tmp_path, monkeypatch, capsys):
     assert cli.main([]) == 0
     out = capsys.readouterr().out
     assert "Runner: not running" in out and "1. ducks  /r/ducks  (setting up)" in out
+    since = datetime(2026, 11, 19, 1, 0, tzinfo=UTC)
+    conn = metrics.open_db(db)
+    try:
+        metrics.set_project_paused(conn, "ducks", since.isoformat())
+    finally:
+        conn.close()
+    assert cli.main([]) == 0
+    out = capsys.readouterr().out
+    assert f"1. ducks  /r/ducks  (paused by you since {since.astimezone():%H:%M})" in out

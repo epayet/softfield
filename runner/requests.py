@@ -61,6 +61,9 @@ CHANGE = "change"  # (F14 D1)
 # no subject; value: a JSON list, the open cards' short keys and bug ticket ids in the board's
 REORDER = "reorder"  # order (F15 D3)
 PROJECT_ORDER = "project_order"  # value: a JSON list of project names, first first (ADR 30)
+# no subject, no value, on the project's own row: its tickets wait, its planning goes (F124 D3)
+PAUSE_PROJECT = "pause_project"
+RESUME_PROJECT = "resume_project"
 # on Softfield's own row; value: {name, idea, built_with, app} (F122 D2, ADR 48 item 1)
 NEW_PROJECT = "new_project"
 _STATE_ONLY = (RESERVE, PAUSE, RESUME)  # they change state.json alone: a wait takes them
@@ -2028,6 +2031,8 @@ def _apply(
             return _reorder(repo, conn, project_id, state, value)
         if kind == PROJECT_ORDER:
             return _project_order(conn, value)
+        if kind in (PAUSE_PROJECT, RESUME_PROJECT):
+            return _pause_project(conn, project_id, now, kind)
         if kind == NEW_PROJECT:
             return _new_project(db, now, value)
         if kind == DISMISS:
@@ -2066,6 +2071,30 @@ def _project_order(conn: sqlite3.Connection, value: str | None) -> str:
     return f"the projects' order: {names_now}" + (
         f" (no project {', '.join(unknown)})" if unknown else ""
     )
+
+
+BEING_SET_UP = "being set up: `softfield doctor` hands it over"
+
+
+def _pause_project(conn: sqlite3.Connection, project_id: int, now: datetime, kind: str) -> str:
+    """The owner pauses this project alone, or resumes it (F124 D1-D3): ``projects.paused``
+    holds the time it took, and the project's turns run no ticket, checkpoint or review, while
+    its planning and its requests go. The database only, so it never waits for a clean main.
+    A project being set up keeps its "setting up": `softfield doctor` releases it."""
+    row = conn.execute("SELECT name, paused FROM projects WHERE id = ?", (project_id,)).fetchone()
+    name, paused = row[0], row[1]
+    if paused == metrics.SETTING_UP:
+        return BEING_SET_UP
+    since = metrics.paused_by_you(paused)
+    if kind == PAUSE_PROJECT:
+        if since is not None:
+            return f"already paused, since {datetime.fromisoformat(since).astimezone():%H:%M}"
+        metrics.set_project_paused(conn, name, now.isoformat())
+        return "paused by you: its tickets wait after the job it is on"
+    if since is None:
+        return "not paused"
+    metrics.set_project_paused(conn, name, None)
+    return "resumed"
 
 
 _YES = (True, "yes", "on", "true", "1")

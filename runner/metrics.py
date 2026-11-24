@@ -463,6 +463,18 @@ SETTING_UP = "setting up"  # a project's `paused` from `softfield init` until `d
 FORGOTTEN = "forgotten"  # `softfield forget`: gone from every list, its rows kept
 
 
+def paused_by_you(paused: str | None) -> str | None:
+    """When the owner paused the project (F124 D2), from its ``paused``: the ISO time it took;
+    None for one that runs, is being set up or forgotten. Nothing else parses the column."""
+    if not paused:
+        return None
+    try:
+        datetime.fromisoformat(paused)
+    except ValueError:
+        return None
+    return paused
+
+
 def set_project_paused(conn: sqlite3.Connection, name: str, paused: str | None) -> None:
     """Pause a project (why, or when) or, with None, let the runner take it again."""
     with conn:

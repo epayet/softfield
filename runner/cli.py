@@ -113,8 +113,9 @@ _UNLOADED: set[str] = set()  # projects whose project.toml didn't load, said onc
 
 
 def _project_configs() -> list[Config]:
-    """The registered projects the runner works on, in the owner's order: not paused, or being
-    set up (ADR 48: the runner gives it its setup jobs alone, `loop.setting_up`), with a
+    """The registered projects the runner works on, in the owner's order: not paused, being
+    set up (ADR 48: the runner gives it its setup jobs alone, `loop.setting_up`) or paused by
+    the owner (F124 D2: its planning and its requests still go, `loop.project_pause`), with a
     ``.softfield/project.toml`` that loads (ADR 30 item 6). One that doesn't load is said."""
     db = machine_metrics_db()
     if not db.is_file():
@@ -127,7 +128,10 @@ def _project_configs() -> list[Config]:
     configs = []
     for row in rows:
         repo = Path(row.repo) if row.repo else None
-        held = row.paused not in (None, metrics.SETTING_UP)
+        held = (
+            row.paused not in (None, metrics.SETTING_UP)
+            and metrics.paused_by_you(row.paused) is None
+        )
         if held or repo is None or not (repo / PROJECT_TOML).is_file():
             continue
         try:
@@ -161,6 +165,13 @@ Always on
 All commands: softfield --help"""
 
 
+def _paused_words(paused: str) -> str:
+    """A project's ``paused`` in the guide: "paused by you since 09:00" for the owner's, else
+    as it is ("setting up")."""
+    since = metrics.paused_by_you(paused)
+    return paused if since is None else loop.paused_by_you_since(since)
+
+
 def _guide() -> int:
     """A bare `softfield`: whether a runner runs, the projects in order, and the commands."""
     configs = _project_configs()
@@ -182,7 +193,7 @@ def _guide() -> int:
     if rows:
         print("Projects, in order:")
         for place, row in enumerate(rows, start=1):
-            note = f"  ({row.paused})" if row.paused else ""
+            note = f"  ({_paused_words(row.paused)})" if row.paused else ""
             print(f"  {place}. {row.name}  {row.repo or ''}{note}")
     else:
         print("No project yet: set one up in its folder with `softfield init`.")

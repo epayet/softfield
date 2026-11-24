@@ -2457,6 +2457,61 @@ def test_the_pause_and_resume_requests_are_taken_during_a_wait(repo):
         conn.close()
 
 
+# --- one project paused alone (F124 D2, D3) ---------------------------------------------------
+
+
+def test_a_project_pauses_alone_and_resumes_by_request_without_a_clean_main(repo):
+    """F124 D3: the project's own pause, kept in `projects.paused` as the time it took; the
+    factory's pause (state.json, its usage event) is left alone. It changes the database only,
+    so a branch other than main doesn't hold it."""
+    git(repo, "checkout", "-q", "-b", "elsewhere")
+    head = git(repo, "rev-parse", "HEAD")
+    state = State()
+    paused = _ask(repo, "pause_project")
+    said = "paused by you: its tickets wait after the job it is on"
+    assert _apply(repo, state) == [f"pause_project: {said}"]
+    assert _request(repo, paused) == (NOW.isoformat(), said)
+    assert _projects_pause(repo) == NOW.isoformat()
+    assert state.owner_pause is None and _pauses(repo) == []
+    _ask(repo, "pause_project")
+    later = NOW + timedelta(minutes=5)
+    assert _apply(repo, state, later) == ["pause_project: already paused, since 12:00"]
+    assert _projects_pause(repo) == NOW.isoformat()
+    _ask(repo, "resume_project")
+    assert _apply(repo, state, later) == ["resume_project: resumed"]
+    assert _projects_pause(repo) is None
+    _ask(repo, "resume_project")
+    assert _apply(repo, state, later) == ["resume_project: not paused"]
+    assert git(repo, "rev-parse", "HEAD") == head
+
+
+def test_a_project_being_set_up_is_neither_paused_nor_resumed_by_request(repo):
+    """F124 D3: "setting up" is `softfield doctor`'s to release, never turned into a pause."""
+    _ask(repo, "pause_project")
+    _ask(repo, "resume_project")
+    conn = metrics.open_db(_db(repo))
+    try:
+        metrics.set_project_paused(conn, repo.name, metrics.SETTING_UP)
+    finally:
+        conn.close()
+    said = "being set up: `softfield doctor` hands it over"
+    assert _apply(repo) == [f"pause_project: {said}", f"resume_project: {said}"]
+    assert _projects_pause(repo) == metrics.SETTING_UP
+
+
+def test_paused_by_you_reads_a_time_only():
+    """F124 D2: nothing else parses the column."""
+    assert metrics.paused_by_you(NOW.isoformat()) == NOW.isoformat()
+    for other in (None, metrics.SETTING_UP, metrics.FORGOTTEN, ""):
+        assert metrics.paused_by_you(other) is None
+
+
+def test_the_dashboard_sends_a_projects_pause_and_resume():
+    from factory_dashboard.requests import KINDS
+
+    assert {requests.PAUSE_PROJECT, requests.RESUME_PROJECT} <= set(KINDS)
+
+
 # --- the owner's words a request refused, until they dismiss them (F31 D9) -------------------
 
 BAD_AREA = json.dumps({"title": "Ducks", "thoughts": "Rubber ones.", "area": "garden"})

@@ -856,6 +856,25 @@ def test_dry_run_shows_every_line_paused_by_the_owner(repo, capsys):
     assert "next: nothing" in out
 
 
+def _pause_project(repo: Path, since: str | None) -> None:
+    """The owner's ``pause_project``, as the runner applied it (F124 D2)."""
+    conn = metrics.open_db(_config(repo).metrics_db)
+    try:
+        metrics.upsert_project(conn, repo.name, repo=str(repo))
+        metrics.set_project_paused(conn, repo.name, since)
+    finally:
+        conn.close()
+
+
+def test_dry_run_says_a_project_paused_by_you_holds_its_tickets(repo, capsys):
+    """F124 D4: the project's own pause is the factory's wait, for it alone."""
+    _add_task(repo, "m1-01-thing")
+    _pause_project(repo, loop.now().isoformat())
+    out = _dry_run(repo, capsys)
+    assert "   m1-01-thing: paused by you, place 1, developer ticket" in out
+    assert "next: nothing" in out
+
+
 def test_dry_run_shows_the_planner_next_while_paused(repo, capsys):
     """f6-14: the owner's message to the lead goes while the line holds."""
     _add_task(repo, "m1-01-thing")
@@ -8633,6 +8652,40 @@ def test_a_review_due_after_a_ticket_turn_waits_for_the_round(repo, monkeypatch)
     assert s.report.review is None
     assert loop.work_queue(s, reviews=True, wait=False, take_tickets=False) is False
     assert s.report.review == "f9"
+    loop.close_session(s)
+
+
+def test_a_project_paused_by_you_runs_its_planning_and_requests_but_not_its_tickets(
+    repo, fake_clock, monkeypatch
+):
+    """F124 D1, D4: with Softfield paused by the owner, its turns in the round run its planner
+    reply and apply its requests, a resume among them; its tickets wait, and it says so as an
+    idle project does. The other projects' turns are theirs (`project_round` is unchanged)."""
+    _add_task(repo, "m1-01-thing")
+    ran: list[str] = []
+    monkeypatch.setattr(loop, "run_task", _merge_any(repo, ran))
+
+    def run_queued(s, row, escalate):
+        ran.append(row.kind)
+        metrics.finish_queued(s.db, row.id, loop.now().isoformat())
+
+    monkeypatch.setattr(loop, "run_queued", run_queued)
+    s = loop.open_session(_config(repo))
+    since = THURSDAY - timedelta(minutes=30)
+    _pause_project(repo, since.isoformat())
+    loop.enqueue(s, dispatch.PLANNER, "general", "the owner's message")
+    assert loop.work_queue(s, reviews=True, wait=False, once=True, lane_only=True) is False
+    assert loop.work_queue(s, reviews=True, wait=False, take_tickets=False) is False
+    assert ran == ["planner"]
+    assert loop.work_queue(s, reviews=True, wait=False, once=True) is False
+    assert ran == ["planner"]  # the ticket waits
+    assert s.activity == f"Idle: paused by you since {since.astimezone():%H:%M}"
+    assert s.state.owner_pause is None  # the factory's pause is not taken
+    _ask_from_the_dashboard(repo, "resume_project")
+    assert loop.work_queue(s, reviews=True, wait=False, once=True) is False
+    assert ran == ["planner", "m1-01-thing"]
+    [resumed] = [r for r in _rows(repo, "owner_requests") if r["kind"] == "resume_project"]
+    assert resumed["result"] == "resumed"
     loop.close_session(s)
 
 
