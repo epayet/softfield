@@ -1,6 +1,7 @@
 # Milestone F272: The top bar says how long the job has run and which attempt it is
 
-> **State:** ready · **Area:** factory
+> **State:** done · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-24. Base: git tag `f272-i-want-to-know-from-the-start`. Report: [`.softfield/reviews/f272-i-want-to-know-from-the.md`](../reviews/f272-i-want-to-know-from-the.md).
 > Planted by the owner on 2026-11-19.
 
 ## Notes

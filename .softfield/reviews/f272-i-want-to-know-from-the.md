@@ -1,5 +1,7 @@
 # Review: F272, The top bar says how long the job has run and which attempt it is
 
+- **Status:** done, signed off by the owner on 2026-11-24.
+
 **Status:** round 1 done, ready for your sign-off. Score 8/10. One test gap, fixed by the review.
 
 ### 1. What changed
