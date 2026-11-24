@@ -966,6 +966,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** a new request kind that carries the owner's words must join `owners_words` and `_WORKED` when it is made, or its refusals reach no desk; no ticket owned that here. The replan after three lead tickets made 05's context exact, but a page with a JS form, a template and four station states was still too wide for the local model.
 - **Decisions affected:** ADR 48 as built.
 
+### F272 (2026-11-24): the top bar says how long the job has run and which attempt it is ([review](../reviews/f272-i-want-to-know-from-the.md))
+
+- **Q1:** one developer ticket (top bar markup and its browser tests). The local model failed three times: two 20-minute stops with no edit, then a timeout after a direction, which broke 17 tests with a Jinja `{% set %}`. The lead finished it from the branch with 17 new tests. No checkpoint. Review round 1: one should-fix (the setup job's time was untested; the review added the cases), two nits reported. Score 8.
+- **Q3:** the local model spent about 1 hour and 6.3M tokens on nothing that was kept; the rest was Claude's. See the review's numbers.
+- **Q5:** see the review's numbers.
+- **Anything else:** this is the second time running (after F122's 05) that a page ticket with browser tests went to the local model and came back unusable. For the top bar's markup and its browser tests, F17's rule already gives such work to the lead; the plan didn't apply it. `.softfield/developer.md` now carries the top bar's worked example.
+- **Decisions affected:** none.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.

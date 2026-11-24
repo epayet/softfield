@@ -3645,8 +3645,18 @@ def _last_attempt(serve, serve_between, db_path):
         (_lead_ticket, "12 min", "attempt 1"),  # a lead ticket has no cap
         (_pause_held_planner, "12 min", None),  # the lead answering you, while paused
         (_planner_running, "12 min", None),
+        (_setup_held, "12 min", None),  # the lead setting up a project, while paused
+        (_setup_running, "12 min", None),
     ],
-    ids=["developer", "last-attempt", "lead-ticket", "paused-planner", "planner"],
+    ids=[
+        "developer",
+        "last-attempt",
+        "lead-ticket",
+        "paused-planner",
+        "planner",
+        "paused-setup",
+        "setup",
+    ],
 )
 def test_the_top_bar_says_how_long_the_job_has_run_and_which_attempt(
     three_tries, serve, serve_between, db_path, setup, time, attempt
