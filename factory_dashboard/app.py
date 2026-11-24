@@ -258,7 +258,8 @@ class Status:
     and its dot (f17): ``lead`` or ``developer`` while that one's job runs, ``runner`` while
     the run works between jobs (F184), ``waiting`` for Claude, ``stopped`` with no live run,
     else ``idle``. ``pausing`` is what a pause asked now would say: the ⏸ sign shows it at the
-    tap, the same words the server then says."""
+    tap, the same words the server then says. ``job_for`` and ``attempt`` carry the job's
+    elapsed time and attempt line (F272), set when the words name a live job."""
 
     words: str
     tone: str
@@ -266,6 +267,15 @@ class Status:
     project: str | None = None  # whose run it is: the button's request goes there (ADR 30)
     dot: str = "idle"
     pausing: str = "Pausing after this job"
+    job_for: str | None = None  # how long the job has run: "14 min", "1 h 5 min"
+    attempt: str | None = None  # the attempt line: "attempt 2 of 3", "attempt 2", etc.
+
+    @property
+    def job_line(self) -> str | None:
+        """The job's line in the hover title and the phone's tapped words (F272 D4)."""
+        if not self.job_for:
+            return None
+        return f"Job running {self.job_for}" + (f" · {self.attempt}" if self.attempt else "")
 
 
 PICKING = "picking the next ticket"  # runner/loop.py's PICKING: between jobs
@@ -330,8 +340,8 @@ def factory_wide_status(conn: sqlite3.Connection, project: str, now: datetime) -
 def factory_status(conn: sqlite3.Connection, project: str, now: datetime) -> Status:
     """Stopped with no live run; else the owner's pause (held, asked, or a resume asked), a
     wait for Claude, the job running, what the run does between jobs, or idle with no work."""
-    from factory_dashboard import overview, queries  # overview imports this module
-    from factory_dashboard.line import DEVELOPER_ROLES  # line imports this module
+    from factory_dashboard import machine, overview, queries  # overview imports this module
+    from factory_dashboard.line import DEVELOPER_ROLES, _config  # line imports this module
 
     runs = overview.live_runs(conn, project, now)
     if not runs:
@@ -342,12 +352,16 @@ def factory_status(conn: sqlite3.Connection, project: str, now: datetime) -> Sta
     if paused:
         words = f"Paused by you since {_clock(paused)}"
         jobs = overview.running_jobs(conn, project, now)
-        if any(j.live and j.role == "planner" for j in jobs):
-            return Status(f"{words} · the lead is answering you", "warn", "resume", dot="lead")
-        if any(j.live and j.role == "setup" for j in jobs):
-            return Status(
-                f"{words} · the lead is setting up {project}", "warn", "resume", dot="lead"
-            )
+        planner_job = next((j for j in jobs if j.live and j.role == "planner"), None)
+        if planner_job:  # a planner's attempt counts its jobs, not tries: the time alone (D2)
+            job_for = machine.on_for_delta(planner_job.elapsed)
+            words = f"{words} · the lead is answering you"
+            return Status(words, "warn", "resume", dot="lead", job_for=job_for)
+        setup_job = next((j for j in jobs if j.live and j.role == "setup"), None)
+        if setup_job:
+            job_for = machine.on_for_delta(setup_job.elapsed)
+            words = f"{words} · the lead is setting up {project}"
+            return Status(words, "warn", "resume", dot="lead", job_for=job_for)
         return Status(words, "warn", "resume")
     # the dot is about the job the words name: the first live one
     jobs = overview.running_jobs(conn, project, now)
@@ -379,7 +393,18 @@ def factory_status(conn: sqlite3.Connection, project: str, now: datetime) -> Sta
         words = f"Waiting for Claude until {_clock(waiting)}"
         return Status(words, "serious", "pause", dot="waiting", pausing=pausing)
     if job:
-        return Status(f"Running: {doing}", "good", "pause", dot=dot, pausing=pausing)
+        job_for = machine.on_for_delta(job.elapsed)
+        config = _config(conn, project) if job.role in ("developer", "last-attempt") else None
+        attempt = overview.attempt_words(job, config.max_attempts if config else None)
+        return Status(
+            f"Running: {doing}",
+            "good",
+            "pause",
+            dot=dot,
+            pausing=pausing,
+            job_for=job_for,
+            attempt=attempt,
+        )
     if activity == PICKING and not (
         jobs or overview.queue(conn, project, now) or overview.queued_jobs(conn, project, now)
     ):

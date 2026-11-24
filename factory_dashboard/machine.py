@@ -29,7 +29,14 @@ def booted_at(now: datetime) -> datetime | None:
 def on_for(booted: datetime, now: datetime) -> str:
     """The span in the top bar's words: "42 min" under an hour, "5 h 12 min" under a day,
     then "6 d 4 h"."""
-    minutes = max(0, int((now - booted).total_seconds()) // 60)
+    return on_for_delta(now - booted)
+
+
+def on_for_delta(delta: timedelta) -> str:
+    """The span for an elapsed ``timedelta``: "42 min" under an hour, "5 h 12 min" under a day,
+    then "6 d 4 h"."""
+    total_seconds = max(0, int(delta.total_seconds()))
+    minutes = total_seconds // 60
     days, minutes = divmod(minutes, 24 * 60)
     hours, minutes = divmod(minutes, 60)
     if days:

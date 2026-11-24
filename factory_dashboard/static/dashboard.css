@@ -141,6 +141,18 @@ header.bar { background: var(--floor); border-bottom: 1px solid var(--rule); dis
   font: 600 11px/1 var(--display); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); height: 100%; }
 .factory-status .uptime .key svg { width: 11px; height: 11px; color: var(--ink-2); }
 .factory-status .uptime .val { padding: 0 14px 0 8px; font-variant-numeric: tabular-nums; display: inline-flex; align-items: center; height: 100%; }
+/* F272: the Job plate, the "On" plate's twin, right after the words: a clock key, the time, the attempt */
+.factory-status .job { display: inline-flex; align-items: stretch; align-self: center; border: 1px solid var(--rule);
+  background: var(--plate); clip-path: var(--notch); font: 12px/1 var(--mono); color: var(--fg); white-space: nowrap;
+  margin-right: 8px; height: var(--control-h); flex: none; }
+.factory-status .job .key { display: inline-flex; align-items: center; gap: 5px; padding: 0 7px; border-right: 1px solid var(--rule);
+  font: 600 11px/1 var(--display); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); height: 100%; }
+.factory-status .job .key svg { width: 11px; height: 11px; color: var(--ink-2); }
+.factory-status .job .val { display: inline-flex; align-items: center; gap: 8px; padding: 0 14px 0 8px; font-variant-numeric: tabular-nums; height: 100%; }
+.factory-status .job .val b { font-weight: 600; }
+.factory-status .job .val .sep { width: 1px; align-self: stretch; margin: 8px 0; background: var(--rule); }
+.factory-status .words .jobline { display: none; margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--rule);
+  font: 12px var(--mono); color: var(--fg); }
 .factory-status .words .on { display: none; margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--rule);
   font: 12px var(--mono); color: var(--ink-2); }
 .filters { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 0 auto; }
@@ -535,7 +547,7 @@ tr.few .gauge { opacity: .35; }
     background: var(--plate); border: 1px solid var(--rule); box-shadow: 0 4px 12px rgba(0, 0, 0, .4);
     white-space: normal; overflow: visible; }  /* the tapped words wrap under the row (F256 cuts them only from 640 px) */
   .factory-status > .uptime { display: none; }  /* F251: the row has no room; the tapped words say it */
-  .factory-status .words .on { display: block; }
+  .factory-status .words .jobline, .factory-status .words .on { display: block; }  /* F272: the job above the computer */
   .bar-top .filters .key { display: none; }  /* F256: the select names the project */
   .brand { font-size: 18px; letter-spacing: .02em; white-space: nowrap; gap: 3px; }
   .brand svg { width: 24px; height: 24px; }
@@ -548,6 +560,8 @@ tr.few .gauge { opacity: .35; }
   .more-panel { left: 0; right: 0; width: auto; }
   header.bar.steps-aside { transform: translateY(-100%); }
 }
+/* F272: under 1200 px the Job plate hides; the words' hover title carries it (a phone's tapped words too) */
+@media (max-width: 1199px) { .factory-status > .job { display: none; } }
 @media (prefers-reduced-motion: no-preference) {
   header.bar.steps-aside { transition: transform 0.2s ease; }
 }

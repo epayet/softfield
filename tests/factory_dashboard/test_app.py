@@ -2255,18 +2255,20 @@ SIGNS = {"Pause after this job": "⏸", "Resume": "▶"}  # a sign's name for a 
 
 def _status(html: str) -> tuple[str, str, dict[str, str]]:
     """The top bar's status: its words, its dot, and its sign's name (``aria-label``) -> the
-    request it posts. The dot's button names the same words; the sign shows only ⏸ or ▶."""
+    request it posts. The dot's button names the same words; the sign shows only ⏸ or ▶. While
+    a job runs (F272), the dot's title and the words' add its line under them, as the same."""
     block = re.search(r'<div id="factory-status"[^>]*>(.*?)</div>', html, re.S)
     assert block, "no #factory-status"
-    words = re.search(r'<span class="words" role="status">([^<]*)</span>', block[1])
+    words = re.search(r'<span class="words" role="status"(?: title="([^"]*)")?>([^<]*)', block[1])
     assert words, block[1]
     dot = re.fullmatch(
-        r'\s*<button type="button" class="dot-btn" aria-label="([^"]*)" title="\1">'
+        r'\s*<button type="button" class="dot-btn" aria-label="([^"]*)" title="([^"]*)">'
         r'<i class="dot (\w+)"></i></button>.*',
         block[1],
         re.S,
     )
-    assert dot and dot[1] == words[1], block[1]
+    assert dot and dot[1] == words[2], block[1]
+    assert dot[2] == (words[1] or words[2]), block[1]  # the words' title, or the words alone
     buttons = {}
     for attrs, text in re.findall(
         r'<button type="button" class="sign"([^>]*)>([^<]*)</button>', block[1]
@@ -2278,7 +2280,7 @@ def _status(html: str) -> tuple[str, str, dict[str, str]]:
         assert text == SIGNS[name[1]], text
         buttons[name[1]] = kind[1]
     assert len(re.findall(r"<button", block[1])) == 1 + len(buttons), block[1]
-    return words[1], dot[2], buttons
+    return words[2], dot[3], buttons
 
 
 def _ask(client: TestClient, kind: str) -> None:
@@ -2770,7 +2772,7 @@ def test_pause_in_the_top_bar_shows_pausing_at_once_and_posts_a_pause(page, serv
     page.route(f"{ORIGIN}/**", route)
     page.goto(ORIGIN + "/tickets")
     words = page.locator("#factory-status [role=status]")
-    assert words.text_content() == "Running: coucou · f1-04-live"
+    assert words.inner_text() == "Running: coucou · f1-04-live"  # the job's line is hidden
     page.get_by_role("button", name="Pause after this job", exact=True).click()
     page.wait_for_function(
         "document.querySelector('#factory-status [role=status]').textContent"
@@ -2847,7 +2849,7 @@ def test_pause_survives_a_stale_live_poll(page, serve, db_path):
     page.clock.install()
     page.goto(ORIGIN + "/tickets")
     words = page.locator("#factory-status [role=status]")
-    assert words.text_content() == "Running: coucou · f1-04-live"
+    assert words.inner_text() == "Running: coucou · f1-04-live"  # the job's line is hidden
     _count_bar_polls(page)
     page.get_by_role("button", name="Pause after this job", exact=True).click()
     page.wait_for_function(
@@ -2962,7 +2964,7 @@ def test_refused_post_shows_error_and_restores_button(page, serve, db_path):
     page.clock.install()
     page.goto(ORIGIN + "/tickets")
     words = page.locator("#factory-status [role=status]")
-    assert words.text_content() == "Running: coucou · f1-04-live"
+    assert words.inner_text() == "Running: coucou · f1-04-live"  # the job's line is hidden
     page.get_by_role("button", name="Pause after this job", exact=True).click()
     # The error words first, with no dashed edge, then the next poll brings the Pause sign back.
     page.wait_for_function(
@@ -3372,7 +3374,8 @@ def test_on_a_phone_the_dot_and_sign_join_the_brands_row_and_a_tap_shows_the_wor
     assert not words.is_visible()
     parts["dot"].click()
     assert words.is_visible()
-    assert words.text_content() == "Running: coucou · f1-04-live"
+    # the job's line under the words (F272)
+    assert words.inner_text() == "Running: coucou · f1-04-live\nJob running 12 min · attempt 2"
     assert layout_problems(page) == []  # on screen, over nothing it shouldn't cover
     # the next poll swaps the bar in again: the words stay
     page.evaluate("() => { window.shown = document.querySelector('#factory-status .words'); }")
@@ -3577,6 +3580,195 @@ def test_on_a_phone_the_plate_hides_and_the_tapped_words_say_how_long(booted, pa
     words = page.locator("#factory-status [role=status]").bounding_box()
     box = line.bounding_box()
     assert words["y"] < box["y"] and box["y"] + box["height"] <= words["y"] + words["height"]
+    assert layout_problems(page) == []
+
+
+# --- how long the job has run, and which attempt (F272) -----------------------------------------
+
+
+@pytest.fixture
+def three_tries(tmp_path, db_path):
+    """coucou's repo, with this repo's project.toml set to ``max_attempts = 3`` (as
+    ``allowance_client_with`` in test_overview.py writes one)."""
+    repo = tmp_path / "repo"
+    (repo / ".softfield").mkdir(parents=True)
+    toml = (Path(__file__).resolve().parents[2] / ".softfield" / "project.toml").read_text()
+    toml, found = re.subn(r"^max_attempts = \d+", "max_attempts = 3", toml, flags=re.M)
+    assert found == 1
+    (repo / ".softfield" / "project.toml").write_text(toml)
+    conn = metrics.open_db(db_path)
+    try:
+        metrics.upsert_project(conn, PROJECT, repo=str(repo))
+    finally:
+        conn.close()
+
+
+def _job(html: str) -> tuple[tuple[str, str | None] | None, str | None, str | None]:
+    """The top bar's job: its plate's time and attempt (None without a plate), the words'
+    title's second line, and the tapped words' job line."""
+    block = re.search(r'<div id="factory-status"[^>]*>(.*?)\s*</div>', html, re.S)
+    assert block, "no #factory-status"
+    plate = re.search(
+        r'<span class="job" title="([^"]*)"><span class="key"><svg[^>]*>.*?</svg>Job</span>'
+        r'<span class="val"><b>([^<]*)</b>(?:<i class="sep"></i>([^<]*))?</span></span>',
+        block[1],
+        re.S,
+    )
+    title = re.search(r'<span class="words" role="status" title="[^"&]*&#10;([^"]*)"', block[1])
+    line = re.search(r'<span class="jobline" aria-hidden="true">([^<]*)</span>', block[1])
+    if plate:  # the plate's title is the same line
+        assert title and plate[1] == title[1], block[1]
+    return (
+        (plate[2], plate[3]) if plate else None,
+        title[1] if title else None,
+        line[1] if line else None,
+    )
+
+
+def _last_attempt(serve, serve_between, db_path):
+    """The fixture's developer job, become the lead's last attempt: the third."""
+    client = serve()
+    conn = metrics.open_db(db_path)
+    try:
+        conn.execute("UPDATE jobs SET role = 'last-attempt', attempt = 3 WHERE outcome = 'running'")
+        conn.commit()
+    finally:
+        conn.close()
+    return client
+
+
+@pytest.mark.parametrize(
+    ("setup", "time", "attempt"),
+    [
+        (_running, "12 min", "attempt 2 of 3"),  # write_live's: attempt 2, started 12 min ago
+        (_last_attempt, "12 min", "attempt 3 of 3, the last"),
+        (_lead_ticket, "12 min", "attempt 1"),  # a lead ticket has no cap
+        (_pause_held_planner, "12 min", None),  # the lead answering you, while paused
+        (_planner_running, "12 min", None),
+    ],
+    ids=["developer", "last-attempt", "lead-ticket", "paused-planner", "planner"],
+)
+def test_the_top_bar_says_how_long_the_job_has_run_and_which_attempt(
+    three_tries, serve, serve_between, db_path, setup, time, attempt
+):
+    """D1 to D4: a "Job" plate after the words; the same line under the words in their title
+    and the dot's, and in the phone's tapped words. A planner's attempt counts its jobs, not
+    tries: no attempt anywhere in the bar. /live carries it all, for a page's poll."""
+    client = setup(serve, serve_between, db_path)
+    line = f"Job running {time}" + (f" · {attempt}" if attempt else "")
+    for path in ("/", "/planning", "/live"):
+        html = client.get(path).text
+        assert _job(html) == ((time, attempt), line, line), path
+        _status(html)  # the dot's title is the words' (checked there)
+        if attempt is None:
+            bar = html[html.index('<div id="factory-status"') :]
+            assert "attempt" not in bar[: bar.index("</div>")], path
+
+
+def test_without_the_projects_config_the_attempt_has_no_cap(serve):
+    """D2: when the project's config can't be read (the fixture's coucou has no repo)."""
+    assert _job(serve().get("/").text)[0] == ("12 min", "attempt 2")
+
+
+@pytest.mark.parametrize(
+    "setup",
+    [_idle, _waiting, _stopped, _runner_running, _pause_held_client, _pause_asked],
+    ids=["idle", "waiting", "stopped", "between-jobs", "paused", "pause-asked"],
+)
+def test_with_no_job_named_the_bar_has_no_plate_and_no_job_line(
+    three_tries, serve, serve_between, db_path, setup
+):
+    client = setup(serve, serve_between, db_path)
+    for path in ("/", "/live"):
+        html = client.get(path).text
+        assert _job(html) == (None, None, None), path
+        assert "Job running" not in html, path
+
+
+def test_with_two_projects_the_plate_is_the_jobs_the_words_name(three_tries, serve, db_path):
+    """The other project's planner has run longer; the bar names coucou's job, and its time."""
+    client = serve()
+    conn = metrics.open_db(db_path)
+    try:
+        other = metrics.upsert_project(conn, OTHER)
+        run = metrics.upsert_run(
+            conn,
+            other,
+            "20261002-110000",
+            command="planning",
+            started=(NOW - timedelta(minutes=50)).isoformat(),
+            heartbeat=(NOW - timedelta(seconds=30)).isoformat(),
+        )
+        metrics.start_job(
+            conn,
+            run,
+            ticket_id=None,
+            milestone_id=None,
+            role="planner",
+            agent=OPUS,
+            attempt=4,
+            started=(NOW - timedelta(minutes=40)).isoformat(),
+        )
+    finally:
+        conn.close()
+    html = client.get("/").text
+    assert _status(html)[0] == "Running: coucou · f1-04-live"
+    assert _job(html)[0] == ("12 min", "attempt 2 of 3")
+
+
+def _now_pills(html: str) -> list[str]:
+    start = html.index('<section id="now"')
+    return re.findall(r'<span class="pill running pulse">([^<]*)</span>', html[start:])
+
+
+@pytest.mark.parametrize(
+    ("setup", "pills"),
+    [(_running, ["attempt 2 of 3"]), (_planner_running, [])],
+    ids=["developer", "planner"],
+)
+def test_now_says_the_attempt_in_the_bars_words_and_none_on_a_planner(
+    three_tries, serve, serve_between, db_path, setup, pills
+):
+    """D2: the Now panel's pill is ``attempt_words``; a planner's job (attempt 1) has none."""
+    html = setup(serve, serve_between, db_path).get("/live").text
+    assert html.count('<div class="running-card">') == 1
+    assert _now_pills(html) == pills
+
+
+def test_the_job_plate_shows_from_1200px_and_the_phone_taps_its_line(
+    three_tries, booted, page, serve
+):
+    """D3 and D4: at 1280 px the plate sits after the words on the one top row; at 1000 px it
+    hides (the hover title says it); at 390 px the tapped words show the job's line above the
+    computer's."""
+    client = serve()
+    _open_tickets(page, client, {"width": 1280, "height": 800})
+    plate = page.locator("#factory-status > .job")
+    assert plate.is_visible()
+    assert plate.inner_text().split() == ["JOB", "12", "min", "attempt", "2", "of", "3"]
+    words = page.locator("#factory-status .words").bounding_box()
+    sign = page.get_by_role("button", name="Pause after this job", exact=True).bounding_box()
+    box = plate.bounding_box()
+    assert words["x"] + words["width"] <= box["x"] and box["x"] + box["width"] <= sign["x"]
+    assert abs(box["y"] + box["height"] / 2 - (sign["y"] + sign["height"] / 2)) <= 3
+    row = page.locator(".bar-top").bounding_box()["height"]
+    page.evaluate("document.querySelector('#factory-status > .job').remove()")
+    assert page.locator(".bar-top").bounding_box()["height"] == row  # one line, plate or not
+    assert layout_problems(page) == []
+
+    _open_tickets(page, client, {"width": 1000, "height": 800})
+    assert not page.locator("#factory-status > .job").is_visible()
+    title = page.locator("#factory-status .words").get_attribute("title")
+    assert title == "Running: coucou · f1-04-live\nJob running 12 min · attempt 2 of 3"
+
+    _open_tickets(page, client, PHONE)
+    line = page.locator("#factory-status .words .jobline")
+    assert not line.is_visible()
+    page.locator("#factory-status .dot-btn").click()
+    on = page.locator("#factory-status .words .on").bounding_box()
+    box = line.bounding_box()
+    assert line.inner_text() == "Job running 12 min · attempt 2 of 3"
+    assert box["y"] + box["height"] <= on["y"]  # above "Computer on …"
     assert layout_problems(page) == []
 
 

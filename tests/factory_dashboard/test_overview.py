@@ -42,18 +42,20 @@ def section_raw(html: str, name: str) -> str:
 
 def _status(html: str) -> tuple[str, str, dict[str, str]]:
     """The top bar's status: its words, its dot, and its sign's name (``aria-label``) -> the
-    request it posts. The dot's button names the same words; the sign shows only ⏸ or ▶."""
+    request it posts. The dot's button names the same words; the sign shows only ⏸ or ▶. While
+    a job runs (F272), the dot's title and the words' add its line under them, as the same."""
     block = re.search(r'<div id="factory-status"[^>]*>(.*?)</div>', html, re.S)
     assert block, "no #factory-status"
-    words = re.search(r'<span class="words" role="status">([^<]*)</span>', block[1])
+    words = re.search(r'<span class="words" role="status"(?: title="([^"]*)")?>([^<]*)', block[1])
     assert words, block[1]
     dot = re.fullmatch(
-        r'\s*<button type="button" class="dot-btn" aria-label="([^"]*)" title="\1">'
+        r'\s*<button type="button" class="dot-btn" aria-label="([^"]*)" title="([^"]*)">'
         r'<i class="dot (\w+)"></i></button>.*',
         block[1],
         re.S,
     )
-    assert dot and dot[1] == words[1], block[1]
+    assert dot and dot[1] == words[2], block[1]
+    assert dot[2] == (words[1] or words[2]), block[1]  # the words' title, or the words alone
     buttons = {}
     for attrs, _text in re.findall(
         r'<button type="button" class="sign"([^>]*)>([^<]*)</button>', block[1]
@@ -64,7 +66,7 @@ def _status(html: str) -> tuple[str, str, dict[str, str]]:
         assert kind and name, attrs
         buttons[name[1]] = kind[1]
     assert len(re.findall(r"<button", block[1])) == 1 + len(buttons), block[1]
-    return words[1], dot[2], buttons
+    return words[2], dot[3], buttons
 
 
 def away_row(html: str, ticket: str) -> str:
@@ -5070,7 +5072,8 @@ def test_now_is_the_same_job_whichever_project_is_picked(tmp_path):
         for path in ("/", "/live"):
             html = client.get(f"{path}?project={name}").text
             now = section(html, "now")
-            assert now.startswith("Now refreshes every 5 s softfield attempt 1"), now
+            # a planner's job has no attempt pill (F272 D2)
+            assert now.startswith("Now refreshes every 5 s softfield F1 claude-opus planner"), now
             assert "planner" in now and "picking the next ticket" not in now
             assert re.search(r'href="/jobs/\d+\?project=softfield"', html)
             seen.append(_live_part(html))

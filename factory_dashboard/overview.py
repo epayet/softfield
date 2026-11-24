@@ -110,6 +110,20 @@ def _clock(at: str | None) -> str | None:
     return queries.local(at).strftime("%H:%M") if at else None
 
 
+def attempt_words(job: Running, max_attempts: int | None) -> str | None:
+    """The attempt line for the bar or the Now panel, or None when the role doesn't carry
+    an attempt meaning a try (planner, review, checkpoint, direction, setup…)."""
+    if job.role not in ("developer", "last-attempt", "lead-ticket"):
+        return None
+    if job.role == "lead-ticket":
+        return f"attempt {job.attempt}"
+    if max_attempts is None:
+        return f"attempt {job.attempt}"
+    if job.role == "last-attempt":
+        return f"attempt {job.attempt} of {max_attempts}, the last"
+    return f"attempt {job.attempt} of {max_attempts}"
+
+
 @dataclass(frozen=True)
 class LiveRun:
     """A live run, for what it does between jobs (f1 D3, amended)."""
@@ -1001,6 +1015,7 @@ def _live_context(
     the run order), for the whole factory (F132 D2): every project's, the same whichever
     project is picked. ``line`` and ``cards`` are the picked project's, when handed in."""
     from factory_dashboard.coming import _card_titles  # coming.py imports from overview
+    from factory_dashboard.line import _config
     from factory_dashboard.planning import _open_proposals  # planning.py imports from overview
     from runner import metrics
 
@@ -1025,6 +1040,12 @@ def _live_context(
     jobs = sorted(
         (job for p in every for job in p.jobs if job.live), key=lambda j: j.elapsed, reverse=True
     )
+    # F272 D2: each job's attempt pill, the bar's words; a project's config read only for a try
+    job_pills: dict[int, str | None] = {}
+    for job in jobs:
+        tries = job.role in ("developer", "last-attempt") and job.project
+        config = _config(conn, job.project) if tries else None
+        job_pills[job.job] = attempt_words(job, config.max_attempts if config else None)
     status = factory_wide_status(conn, project, now)
     leading = status.project or project
     runs = [] if jobs else live_runs(conn, leading, now)[:1]
@@ -1111,6 +1132,7 @@ def _live_context(
         "notices": notice_data,
         "all_done": not any(p.queued or p.jobs_queued or p.jobs for p in every),
         "running": jobs,
+        "job_pills": job_pills,
         "runs": runs,
         # the owner's pause on Now (f5-18), as the top bar words it (f28-02)
         "pause_words": pause_words(conn, leading, now),
