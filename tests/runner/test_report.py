@@ -9,6 +9,7 @@ from factory_dashboard.queries import connect
 from runner import cli, metrics
 from runner.config import read_protected
 from runner.gates import touching_protected
+from runner.gitops import Git
 from runner.report import (
     DASHBOARD_URL,
     REPORT_END,
@@ -159,7 +160,49 @@ def test_the_report_has_the_trend_across_milestones(db_path):
     text = _numbers(db_path)
     trend = text[text.index("### Trends") :]
     assert trend.index("| m4 |") < trend.index("| f1 |")
-    assert "| f1 | 3 | 1/2 (50%) | 4 | $7.80 | -$2.70 |" in trend
+    assert "| f1 | 3 | 1/2 (50%) | 4 | $7.80 | -$2.70 | +0 |" in trend
+
+
+def _commit(git: Git, files: dict[str, str], message: str) -> str:
+    for name, text in files.items():
+        path = git.repo / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+    git.run("add", "-A")
+    git.run("-c", "user.name=t", "-c", "user.email=t@t.invalid", "commit", "-m", message)
+    return git.run("rev-parse", "HEAD").strip()
+
+
+def _lines(n: int, tag: str) -> str:
+    return "".join(f"{tag}{i}\n" for i in range(n))
+
+
+def test_the_report_counts_code_lines_added_and_removed(db_path, tmp_path):
+    git = Git(tmp_path / "code")
+    git.repo.mkdir()
+    git.run("init", "-q")
+    _commit(git, {"runner/x.py": _lines(10, "old")}, "base")
+    one = _commit(
+        git,
+        {"runner/x.py": _lines(30, "new"), "tests/runner/test_x.py": _lines(50, "t")},
+        "one",
+    )
+    two = _commit(git, {"docs/x.md": _lines(5, "d"), "README.md": "r\n"}, "two")
+    conn = metrics.open_db(db_path)
+    project = metrics.upsert_project(conn, PROJECT)
+    f9 = metrics.upsert_milestone(conn, project, "f9")
+    for name, commit in [("f9-01", one), ("f9-02", two), ("f9-03", "c" * 40), ("f9-04", None)]:
+        metrics.upsert_ticket(conn, project, name, milestone_id=f9, state="done", commit=commit)
+    conn.close()
+    conn = connect(db_path)
+    try:
+        text = milestone_report(conn, PROJECT, "f9", git)
+    finally:
+        conn.close()
+    assert "| Code lines | +30 −10 (net +20) |" in text
+    trend = text[text.index("### Trends") :]
+    assert "| f9 |" in trend and trend.count("| +20 |") == 2
+    assert "| **All** |" in trend and trend.rstrip().splitlines()[-2].endswith("| +20 |")
 
 
 def test_the_report_replaces_only_the_text_between_the_markers():

@@ -16,6 +16,7 @@ from factory_dashboard.queries import (
     trends,
 )
 from runner.config import project_name
+from runner.gitops import Git
 from runner.usage import ClaudeUsage, claude_line, short
 
 # Where `softfield dashboard` serves by default (factory_dashboard.app's HOST and PORT).
@@ -227,12 +228,40 @@ def _results_lines(r: MilestoneResults) -> list[str]:
     ]
 
 
-def milestone_report(conn: sqlite3.Connection, project: str, key: str) -> str:
-    """The numbers section of ``.softfield/reviews/<key>.md``, between its markers."""
+def _signed(n: int) -> str:
+    return f"+{n}" if n >= 0 else f"−{-n}"
+
+
+def _code_lines(
+    conn: sqlite3.Connection, project: str, key: str, git: Git | None
+) -> tuple[int, int]:
+    """Code lines the milestone's merged tickets added and removed, from their commits."""
+    if git is None:
+        return 0, 0
+    rows = conn.execute(
+        'SELECT t."commit" AS sha FROM tickets t JOIN milestones m ON m.id = t.milestone_id'
+        " JOIN projects p ON p.id = m.project_id WHERE p.name = ? AND m.key = ?"
+        ' AND t."commit" IS NOT NULL AND t."commit" != \'\'',
+        (project, key),
+    ).fetchall()
+    added = removed = 0
+    for row in rows:
+        a, r = git.commit_code_lines(row["sha"])
+        added += a
+        removed += r
+    return added, removed
+
+
+def milestone_report(
+    conn: sqlite3.Connection, project: str, key: str, git: Git | None = None
+) -> str:
+    """The numbers section of ``.softfield/reviews/<key>.md``, between its markers.
+    ``git`` is the repo the tickets' commits are in, for the code lines."""
     r = milestone_results(conn, project, key)
     if r is None:
         raise ReportError(f"no milestone {key} in the metrics database")
     s = savings(conn, project, key)
+    added, removed = _code_lines(conn, project, key, git)
     lines = [
         REPORT_START,
         "## Numbers",
@@ -241,6 +270,7 @@ def milestone_report(conn: sqlite3.Connection, project: str, key: str) -> str:
         " git: a snapshot. Run it again to refresh; edit outside these markers._",
         "",
         *_results_lines(r),
+        f"| Code lines | {_signed(added)} −{removed} (net {_signed(added - removed)}) |",
         "",
         "### Savings from delegating",
         "",
@@ -268,15 +298,19 @@ def milestone_report(conn: sqlite3.Connection, project: str, key: str) -> str:
         "",
         "### Trends",
         "",
-        "| Milestone | Merged | First-attempt | Attempts | Claude | Net savings |",
-        "|---|---|---|---|---|---|",
+        "| Milestone | Merged | First-attempt | Attempts | Claude | Net savings | Net code lines |",
+        "|---|---|---|---|---|---|---|",
     ]
     points = trends(conn, project)
+    total_net = 0
     for p in points:
         t = p.results
+        plus, minus = _code_lines(conn, project, t.key, git)
+        total_net += plus - minus
         lines.append(
             f"| {t.key} | {t.merged} | {_pass_rate(t.first_attempt, t.developer_tickets)}"
-            f" | {t.attempts} | {_usd(t.claude.dollars)} | {_usd(p.savings.net)} |"
+            f" | {t.attempts} | {_usd(t.claude.dollars)} | {_usd(p.savings.net)}"
+            f" | {_signed(plus - minus)} |"
         )
     every = [p.results for p in points]
     first = sum(t.first_attempt for t in every)
@@ -284,7 +318,7 @@ def milestone_report(conn: sqlite3.Connection, project: str, key: str) -> str:
     lines.append(
         f"| **All** | {sum(t.merged for t in every)} | {_pass_rate(first, tried)}"
         f" | {sum(t.attempts for t in every)} | {_usd(sum(t.claude.dollars for t in every))}"
-        f" | {_usd(savings(conn, project).net)} |"
+        f" | {_usd(savings(conn, project).net)} | {_signed(total_net)} |"
     )
     return "\n".join([*lines, REPORT_END]) + "\n"
 
@@ -307,7 +341,7 @@ def write_milestone_report(repo: Path, db: Path, key: str) -> Path:
         raise ReportError(f"no metrics database at {db}; `softfield backfill` makes one")
     conn = connect(db)
     try:
-        block = milestone_report(conn, project_name(repo), key)
+        block = milestone_report(conn, project_name(repo), key, Git(repo))
     finally:
         conn.close()
     path = repo / ".softfield" / "reviews" / f"{key}.md"

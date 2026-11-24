@@ -11,6 +11,8 @@ LOCAL_MODEL_AGENT = "local-model"
 LOCAL_MODEL_AUTHOR = "Softfield local model <local-model@softfield.invalid>"
 RUNNER_AUTHOR = "Softfield runner <runner@softfield.invalid>"
 
+NOT_CODE_DIRS = ("tests/", "docs/", ".softfield/")
+
 _TRAILER_RE = re.compile(r"^([A-Za-z][A-Za-z-]*): (.+)$")
 _LEGACY_ATTEMPTS_RE = re.compile(r"in (\d+) attempt")
 
@@ -182,6 +184,22 @@ class Git:
             added, removed, _ = line.split("\t", 2)
             total += (int(added) if added != "-" else 0) + (int(removed) if removed != "-" else 0)
         return total
+
+    def commit_code_lines(self, sha: str) -> tuple[int, int]:
+        """Lines one commit added and removed in code: not under ``tests/``, ``docs/`` or
+        ``.softfield/``, and not ``*.md``. A commit git doesn't have counts as nothing."""
+        out = self.run("show", "--no-renames", "--numstat", "--format=", sha, check=False)
+        added = removed = 0
+        for line in out.splitlines():
+            parts = line.split("\t", 2)
+            if len(parts) != 3:
+                continue
+            path = parts[2]
+            if path.startswith(NOT_CODE_DIRS) or path.endswith(".md"):
+                continue
+            added += int(parts[0]) if parts[0] != "-" else 0
+            removed += int(parts[1]) if parts[1] != "-" else 0
+        return added, removed
 
     def move(self, src: Path, dst: Path) -> None:
         dst.parent.mkdir(parents=True, exist_ok=True)
