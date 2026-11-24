@@ -37,3 +37,9 @@ attempts: 3
 tokens: 5527141
 logs: .softfield/var/runs/20261124-131732/f124-02-pause-on-the-projects-page
 ```
+
+```yaml
+# --- runner ---
+result: done
+finished_by: lead
+```
