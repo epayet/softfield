@@ -27,6 +27,50 @@ Seven sign-off sheets in three other projects carry "Mum" (metrics database, `mi
 ## For Coucou
 Kept here until Coucou's own card moves it into its repo (D4); the ticket fills it with the exact text it removes.
 
+### From `runner/instructions/task-writing.md`
+
+The "JavaScript tasks (ADR 06)" section:
+
+```
+## JavaScript tasks (ADR 06)
+
+- **Tests:** browser tests live in `tests/browser/test_<module>.py`, one file per module in `coucou/static/coucou/js/`. Each test imports the module on a blank harness page (`harness` fixture) and stubs the network with `page.route`. Example: `tests/browser/test_outbox.py`.
+- **Which modules:** the local model gets UI modules (rendering, transitions, screen state). Crypto, auth, pairing, the outbox, the live stream, the service worker and `display.js` are protected.
+- **Layout:** UI tests call `layout_problems(page)` at `PHONE` and `DISPLAY` sizes (`tests/browser/conftest.py`).
+- **Strings:** Preact components (ADR 11) use `gettext()` in the JS, with the French in `djangojs.po`; list `djangojs.po` and `.mo` in `files:`. The display (plain modules until its port) keeps its text in the template.
+- **Components:** point at the project's own guide (Coucou's `docs/agents/preact.md`) and the worked example `name_form.js`; the ticket gives the props and the callbacks (the milestone's decisions), never the markup.
+```
+
+In "Lessons from M2":
+
+```
+- **French:** ask for "all its accents" explicitly (the model dropped them once), and give one tone example ("Réessayez un peu plus tard", not "Veuillez réessayer plus tard"). Claude still reads every `msgstr`.
+```
+
+In "Open questions":
+
+```
+- The model's French: correct grammar and `vous` when asked; stiff and word-by-word without tone examples. Does a tone example in Context close the gap?
+```
+
+The rubric's i18n row read: `| i18n (new strings with their French) | | yes | |`
+
+The path example in "Before committing a spec" read: `coucou/static/coucou/js/delivery.js`, not a bare `delivery.js`.
+
+### From `runner/instructions/lead.md`, "Review loop"
+
+```
+- Check the French in `coucou/locale/fr/` reads naturally and warmly.
+```
+
+### From `runner/instructions/task-format.md`
+
+The `.po` rule:
+
+```
+- A ticket that adds user-facing text lists `coucou/locale/fr/LC_MESSAGES/django.po` and `django.mo` (or `djangojs.*` for JS) in `files:`.
+```
+
 ## Done when
 - A new project's sign-off sheet and its "What next" never mention Mum unless its own `.softfield/project.md` does.
 - The test of D3 is red on today's main and green after the ticket.

@@ -11,8 +11,8 @@ milestone: 4                        # the key in either form: 4 (m4), f2, f3-fac
 difficulty: 5                       # 1 to 10, from the rubric in task-writing.md (ADR 14 item 5)
 depends_on: [m4-01-upload-api]      # task ids; [] if none
 files:                              # where to work (a pointer, not a limit); may be new files
-  - coucou/templates/coucou/compose.html
-  - coucou/static/coucou/css/compose.css
+  - app/templates/compose.html
+  - app/static/css/compose.css
 tests:                              # the tests that define done; the developer writes or extends them
   - tests/integration/test_compose_page.py
 finding: m4-F2                      # optional: the review finding this fixes
@@ -82,7 +82,7 @@ Only when a ticket really needs them: a pattern with no entry in `.softfield/dev
 - **Short:** Context ≤ ~30 lines. Developers drop instructions from long prompts ([ADR 01](../../.softfield/adr/01-calibration-fixes.md)); put the one crucial instruction last.
 - Backtick full repo paths only, never a bare file name.
 - Protected paths never appear in `files:`: that work is the lead's.
-- A ticket that adds user-facing text lists `coucou/locale/fr/LC_MESSAGES/django.po` and `django.mo` (or `djangojs.*` for JS) in `files:`.
+- A ticket that adds user-facing text lists the project's translation files, when it has translations, in `files:`.
 - **Security or protected work** keeps the old way: the lead writes the failing tests on main first, and lists them in `tests:`.
 
 ## Result footer (appended by the runner)

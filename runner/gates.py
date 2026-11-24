@@ -36,8 +36,8 @@ HINTS = {
     "max-diff": "Your diff is far bigger than the goal needs: you probably rewrote a file."
     " Make small, targeted edits instead.",
     "layout": "Keep one test file per module, named test_<module>.py, directly in its folder.",
-    "translations": "Add the missing French to coucou/locale/fr/LC_MESSAGES/ and compile it"
-    " with msgfmt.",
+    "translations": "Add the missing translations to the project's .po catalogues"
+    " and compile them with msgfmt.",
     "ruff": "Run `uv run ruff format` and `uv run ruff check --fix` on your files, then fix"
     " what's left.",
     "mypy": "Fix the type errors below.",

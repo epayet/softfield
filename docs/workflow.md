@@ -48,7 +48,7 @@ All coordination goes through files in the repo. Run logs go to `.softfield/var/
    3. `no-new-skips`: no added `skip`/`xfail` in tests
    4. no dependency changes (`pyproject.toml` deps, `uv.lock`, `vendor/`)
    5. `max-diff`: under the 1000-line backstop against a rewritten file
-   6. `layout`: test files match modules by name, one per module (`tests/unit` ↔ `coucou/`, `tests/runner` ↔ `runner/`, `tests/browser` ↔ `coucou/static/coucou/js/`)
+   6. `layout`: test files match modules by name, one per module (`tests/runner` ↔ `runner/`, `tests/factory_dashboard` ↔ `factory_dashboard/`, or the project's source folders)
    7. `test-patterns` (ADR 12 item 3): added lines in `tests/browser/` and `tests/e2e/` may not branch on `is_visible()`/`count()`, fire events or set `.value` from JavaScript, sleep, or give `wait_for_function` a bare expression (the real pages' CSP blocks it once it polls); no new empty module anywhere. A line ending in `# pattern-ok: <reason>` passes, and checkpoints read those.
    8. `translations`: every user-facing string has a compiled French translation
    9. `ruff check` + `ruff format --check` (Python files only; Markdown is excluded, [ADR 01](../.softfield/adr/01-calibration-fixes.md))
@@ -131,7 +131,7 @@ All coordination goes through files in the repo. Run logs go to `.softfield/var/
 | Made by | Author | Trailer |
 |---|---|---|
 | Local model (merges and task-branch WIP) | `<Project> local model` | `Agent: local-model`, plus `Task:`, `Model:`, `Attempts:` on merges |
-| Runner bookkeeping | `Coucou runner` | `Agent: runner` |
+| Runner bookkeeping | `<Project> runner` | `Agent: runner` |
 | Headless Claude (lead tickets, directions, checkpoints, escalations, reviews) | owner | `Agent: claude-headless` (plus `Task:` on a lead ticket's merge and an `implemented` escalation's commit, and `Developer:`, `Task:`, `Model:` on a finished branch's merge) |
 | Interactive Claude | owner | `Co-Authored-By: Claude …` |
 | Owner (including `runner signoff`, `accept`, `reject`) | owner | none |

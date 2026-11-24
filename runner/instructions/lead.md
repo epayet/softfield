@@ -82,7 +82,7 @@ Per `docs/workflow.md` §Milestone review loop. Grade findings **blocking**, **s
   - Fix it yourself only when it's small (about 20 lines in one file), protected or security code, or a developer already failed that fix once.
   - Fix tickets get the usual checkpoint, not another review round.
 - Read the tests as closely as the code: missing edge cases, and every existing test a developer changed (the session reports list them).
-- Check the French in `coucou/locale/fr/` reads naturally and warmly.
+- Check the project's user-facing language reads as its `.softfield/project.md` asks.
 - Read a changed factory page with `softfield look page <address>` before the tests, and check one fixture against a real record ([ADR 37](../../.softfield/adr/37-a-review-reads-the-real-page-first.md)); take screenshots of product pages when you have a browser. The layout check covers the rest.
 - A finding that recurs becomes a check where it can.
 - Respect the stop rules and the per-trigger limits in `.softfield/project.toml`.
@@ -91,12 +91,12 @@ Per `docs/workflow.md` §Milestone review loop. Grade findings **blocking**, **s
 
 ## Sign-off sheet
 When the review loop stops, write this at the top of `.softfield/reviews/mN.md`, in plain language, without being asked, each item under its own heading, `### 1. What changed` (the runner stores the sheet from them, and the desk lists a milestone for sign-off only once it is stored):
-1. **What changed:** what the owner and Mum will notice; at most 4 points of 2 lines.
+1. **What changed:** what the people the project is for will notice (its `.softfield/project.md` names them; the owner when it names nobody); at most 4 points of 2 lines.
 2. **How to test it yourself:** numbered steps on real devices; at most 5.
 3. **Done when, as of now:** one bullet per line or group of the card's Done when, starting `**Met:**`, `**Not yet:**` or `**Your check:**`.
 4. **Decisions waiting for you:** only a draft ADR or a question that needs the owner's answer, with your recommendation.
 5. **Decisions made along the way:** at most 5 bullets, each a choice the plan didn't make or changed (an addition, a departure from a card's D or a ticket, something left out on purpose), as `- **What was chosen.** Why. *Who.*` (the review, or the lead or developer on a named ticket). Not a plan's decision built as written, an ADR, or a plain bug fix. Source: the card's Decisions, Done when and mock-up against the diff and your own fixes.
-6. **What next:** your suggestions for the product (what Mum or the owner would enjoy next) and for the factory (what to change in the workflow), a few lines each. Write each suggestion that needs a card as one quoted `> ` line under its Product or Factory bullet: one self-contained sentence in the owner's plant-note voice, so the dashboard can offer to plant it. What the review already did itself is not quoted. A small fix worth a run is quoted too, under Product for a project's own code and under Factory when the project is the factory; a security finding never is.
+6. **What next:** your suggestions for the product (what the people the project is for, per its `.softfield/project.md`, would enjoy next) and for the factory (what to change in the workflow), a few lines each. Write each suggestion that needs a card as one quoted `> ` line under its Product or Factory bullet: one self-contained sentence in the owner's plant-note voice, so the dashboard can offer to plant it. What the review already did itself is not quoted. A small fix worth a run is quoted too, under Product for a project's own code and under Factory when the project is the factory; a security finding never is.
 7. **Left for later:** deferred items; a fix worth a run is a quoted line in item 6, not a ticket (ADR 43).
 8. **How the work went:** at most 3 lessons, one or two lines each, and what changed because of them; no line per session.
 9. **What clogged the factory line** (owner, 2026-10-02): only hours that weren't merging work and have a fix (waits for limits, failed attempts, stops for the owner, tickets that waited on one another), from the metrics database, at most 3 lines.

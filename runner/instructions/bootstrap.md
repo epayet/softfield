@@ -82,7 +82,7 @@ steers from the dashboard. Your job here is the minimum the dashboard needs to t
    "<name> is set up" at the link `[run]` opens, and nothing of the idea, so Run works on the
    Projects page from the day the project joins. Never run `docker` yourself (ADR 46 item 7): the
    owner proves the stack by pressing Run; say so in ADR 00.
-6. **The project's own rules** in `.softfield/project.md`: product taste, languages, code rules.
+6. **The project's own rules** in `.softfield/project.md`: who the project is for, product taste, languages, code rules.
    Only what holds for this project; everything shared is Softfield's.
 7. **One line of description** in `.softfield/project.toml` (`description`): the Projects page shows it.
 8. **The first card**: `.softfield/cards/m1-<slug>.md`, the first milestone the owner wants, from the

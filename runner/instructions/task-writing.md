@@ -47,7 +47,7 @@ Every ticket gets `difficulty:` from 1 to 10 when it's written. Ratings and rout
 | Dependencies on fresh code (another ticket's work) | none | one or two | three or more |
 | A new pattern (no worked example to follow) | | yes | |
 | UI (a screen, browser tests, the layout check) | | yes | |
-| i18n (new strings with their French) | | yes | |
+| i18n (new strings with their translations) | | yes | |
 | Offline, storage or timing (events, races, held requests) | | yes | |
 
 Steps that dictate the code take a point or two off. Then round by judgement against these anchors from M1–M4:
@@ -63,18 +63,9 @@ Steps that dictate the code take a point or two off. Then round by judgement aga
 
 A sum of 9 or more on a developer ticket means split it, or make it a lead ticket (as m4-06 shows). At review, when the estimate was clearly off, the lead sets `difficulty_corrected:` beside it and leaves `difficulty:` as it was.
 
-## JavaScript tasks (ADR 06)
-
-- **Tests:** browser tests live in `tests/browser/test_<module>.py`, one file per module in `coucou/static/coucou/js/`. Each test imports the module on a blank harness page (`harness` fixture) and stubs the network with `page.route`. Example: `tests/browser/test_outbox.py`.
-- **Which modules:** the local model gets UI modules (rendering, transitions, screen state). Crypto, auth, pairing, the outbox, the live stream, the service worker and `display.js` are protected.
-- **Layout:** UI tests call `layout_problems(page)` at `PHONE` and `DISPLAY` sizes (`tests/browser/conftest.py`).
-- **Strings:** Preact components (ADR 11) use `gettext()` in the JS, with the French in `djangojs.po`; list `djangojs.po` and `.mo` in `files:`. The display (plain modules until its port) keeps its text in the template.
-- **Components:** point at the project's own guide (Coucou's `docs/agents/preact.md`) and the worked example `name_form.js`; the ticket gives the props and the callbacks (the milestone's decisions), never the markup.
-
 ## Lessons from M2
 
 - **The model can only produce what its tools allow.** For every file in `files:`, check that the run's permissions (`runner/templates/opencode.json`, plus the project's `.softfield/opencode.json`) let the model create it. m2-01 listed `django.mo`, but `msgfmt` was denied: it cost one wasted attempt and an escalation (ADR 04).
-- **French:** ask for "all its accents" explicitly (the model dropped them once), and give one tone example ("Réessayez un peu plus tard", not "Veuillez réessayer plus tard"). Claude still reads every `msgstr`.
 - **Outcome-style specs** (what, not how) passed as reliably as dictation-style ones on small UI tasks: 2/2 against 1/1 at first attempt. ADR 07 builds on this.
 - **Never wrap a runner session in an outer `timeout`.** It killed M2's runner mid-task. OpenCode's own limit is enough.
 - **A test whose fixture someone fills in later must fail visibly,** never pass while empty (m2-F4). Developers can't add skips (the `no-new-skips` gate).
@@ -82,7 +73,7 @@ A sum of 9 or more on a developer ticket means split it, or make it a lead ticke
 ## Before committing a spec
 
 - `uv run ruff format --check .` and `softfield run --dry-run`, which prints each ticket's pre-flight problems. Before ADR 01, a mis-formatted code block in a spec failed ruff 3 times on a file the model couldn't touch.
-- Pre-flight resolves every backticked name ending in `.py`, `.js`, `.html`, `.css`, `.md`, `.toml`, `.json` or `.txt` in Context from the repo root. Write such names as full paths (`coucou/static/coucou/js/delivery.js`, not a bare `delivery.js`), and put import specifiers like "./outbox.js" in quotes. m4-06 lost two runs to this. Headless escalations can't run `--dry-run`, so grep your Context for backticked bare filenames before requeueing.
+- Pre-flight resolves every backticked name ending in `.py`, `.js`, `.html`, `.css`, `.md`, `.toml`, `.json` or `.txt` in Context from the repo root. Write such names as full paths (`runner/loop.py`, not a bare `loop.py`), and put import specifiers like "./outbox.js" in quotes. m4-06 lost two runs to this. Headless escalations can't run `--dry-run`, so grep your Context for backticked bare filenames before requeueing.
 - Before a ticket swaps an element away (an htmx re-fetch, `outerHTML`), grep the template for listeners bound to it and name them in Context, and re-read the file on main before a requeue says "what is left is small". f13-01 was written before F48 bound two listeners to `#plant`; the developer's re-drawn form lost both, and it removed the assertions that showed it.
 - Before a ticket adds a second form to a page, grep the page's tests for matches over the whole HTML of the fields it will repeat (`<textarea name="text"`), and say in Context which test must be scoped to its own form, and that scoping it loses no assertion. f14-03's editor repeated the reply box's `name="text"`; `test_try_again_fills_the_box_only_with_a_refused_message_of_ours` asserted the page held none, the ticket said "no existing test loses an assertion", and the developer's third attempt ended on that one failure.
 - Before a ticket reverses or moves an order, grep the tests for every assertion of the old one: the item order inside a group and what is computed from it (Previous and Next), not only the list of groups. Put each test in `tests:` and say how it changes. f185-01 named the group lists and missed `test_answers_wanted_keeps_the_order_of_the_leads_replies` (in `test_proposal.py`, not listed) and the trail test, so correct code would still have failed the gates.
@@ -117,10 +108,9 @@ A sum of 9 or more on a developer ticket means split it, or make it a lead ticke
 
 ## Lessons from F94
 
-- **A Jinja template ticket with a mock-up points at the mock-up's exact markup** ("write each row as the Proposed `<li>` of `f94-mockup/away-rows.html`"), so the first step is an edit. f94-01 (30 lines) lost its first two attempts, a timeout and a no-edit stop, before a direction (2026-10-16). Preact components still get props, not markup (JavaScript tasks above).
+- **A Jinja template ticket with a mock-up points at the mock-up's exact markup** ("write each row as the Proposed `<li>` of `f94-mockup/away-rows.html`"), so the first step is an edit. f94-01 (30 lines) lost its first two attempts, a timeout and a no-edit stop, before a direction (2026-10-16). Components still get props, not markup.
 - **A "Done when" about one row names that row:** "in away-x's own row, 'Opus' appears once", not "'Opus' appears once". f94-01's tests checked the whole panel, where the fixture's other tickets made them pass without the change (f94-F1, F4).
 
 ## Open questions
 
 - Outcome vs dictation: no visible difference in M2 (4 tasks). Keep sampling both.
-- The model's French: correct grammar and `vous` when asked; stiff and word-by-word without tone examples. Does a tone example in Context close the gap?

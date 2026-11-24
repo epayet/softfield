@@ -294,7 +294,7 @@ reports: the format (`tests:` is never empty), pre-flight, and that every path i
 
 Write {out}: 2-5 lines on what you found and did. Also write {findings}, one entry per
 problem you found (an empty list if none; the final review judges them):
-{{"findings": [{{"severity": "blocking" | "should-fix" | "nit", "file": "coucou/x.py",
+{{"findings": [{{"severity": "blocking" | "should-fix" | "nit", "file": "app/x.py",
   "line": 12 | null, "summary": "one line", "detail": "what is wrong and why",
   "route": "local" | "report", "ticket": "<the merged ticket at fault>"}}]}}
 route: "local" if you wrote a fix ticket for it, "report" otherwise.
@@ -310,7 +310,7 @@ it changed and their tests.
 Look for bugs, tests that check presence instead of content, and anything masked instead of
 fixed. Change nothing. Answer with only this JSON, one entry per problem (an empty list if
 none):
-{{"findings": [{{"severity": "blocking" | "should-fix" | "nit", "file": "coucou/x.py",
+{{"findings": [{{"severity": "blocking" | "should-fix" | "nit", "file": "app/x.py",
   "line": 12 | null, "summary": "one line", "detail": "what is wrong and why",
   "route": "report", "ticket": "<the merged ticket at fault>"}}]}}
 """
@@ -417,7 +417,7 @@ in the diffs it read. Score the milestone from 1 to 10.
 
 Write {out} as:
 {{"findings": [{{"id": "{milestone}-F1", "severity": "...", "route": "...",
-  "summary": "one line", "file": "coucou/x.py", "line": 12 | null,
+  "summary": "one line", "file": "app/x.py", "line": 12 | null,
   "detail": "what is wrong and why", "ticket": "<the ticket at fault>" | null,
   "resolved": false, "security": false}}],
   "checkpoint_verdicts": {{"<checkpoint finding key or your finding id>": "confirmed" |

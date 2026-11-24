@@ -89,6 +89,19 @@ LEAD_PROMPTS = {
 }
 
 
+def test_the_factorys_own_instructions_name_no_project_and_no_mum():
+    files = sorted((ROOT / "runner" / "instructions").rglob("*.md"))
+    files += [ROOT / "runner" / "prompts.py", ROOT / "runner" / "gates.py"]
+    files.append(ROOT / "docs" / "workflow.md")
+    leaks = [
+        f"{path.relative_to(ROOT)}:{n}: {line.strip()[:80]}"
+        for path in files
+        for n, line in enumerate(path.read_text().splitlines(), 1)
+        if re.search(r"coucou|\bmum\b", line, re.IGNORECASE)
+    ]
+    assert not leaks, "\n".join(leaks)
+
+
 def _lead_doc(repo: Path, headings: tuple[str, ...]) -> None:
     (repo / prompts.OWNER_DOC).parent.mkdir(parents=True, exist_ok=True)
     (repo / prompts.OWNER_DOC).write_text("# The owner\n\n- Low ceremony.\n")
