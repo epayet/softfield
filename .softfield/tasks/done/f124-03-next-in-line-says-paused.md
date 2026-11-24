@@ -24,3 +24,12 @@ Read D1 and D4 of `.softfield/cards/f124-pause-one-project-from-the-projects.md`
 - with no project paused, Next in line is as before
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 2
+duration_s: 3957
+gate_failures: ['task-tests']
+tokens: 5068059
+```
