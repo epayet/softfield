@@ -1,6 +1,6 @@
 <section id="queue" class="panel">
   <h2>Queue</h2>
-  {% if queue or queued_jobs or lane or next %}
+  {% if queue or queued_jobs or lane or next or paused %}
     {# the tickets' count first, as before F227; the jobs' only when no ticket waits; each project's share with several (F132 D5) #}
     {% if queue %}
     <p><span class="count">{{ queue | length }} <small>{{ "ticket" if queue | length == 1 else "tickets" }} waiting{{ ":" if many_projects else "." }}</small></span>{% if many_projects %} {% for owner, n in queue_counts %}{% with name=owner %}{% include "_partials/project_plate.html" %}{% endwith %} {{ n }}{% if not loop.last %} · {% endif %}{% endfor %}{% endif %}</p>
@@ -39,7 +39,7 @@
       {% endfor %}
       {# a project paused by you: one line, its tickets wait (F124-03) #}
       {% for p in paused %}
-      <li class="passed sub"><span>Paused by you since {{ p.paused_since | local("%H:%M") }}: its tickets wait.</span></li>
+      <li class="passed sub"><span>{% if many_projects %}{% with name=p.project %}{% include "_partials/project_plate.html" %}{% endwith %} · {% endif %}Paused by you since {{ p.paused_since | local("%H:%M") }}: its tickets wait.</span></li>
       {% endfor %}
       {% for t in next %}
       {% set plate %}{% with name=t.project %}{% if many_projects %} · {% endif %}{% include "_partials/project_plate.html" %}{% endwith %}{% endset %}

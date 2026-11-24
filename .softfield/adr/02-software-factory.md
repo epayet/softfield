@@ -990,6 +990,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** the same day, f124-02, f262-02 and f273-02 (Projects-page buttons with Playwright tests) all escalated. This is the fourth such case, after F122's 05 and F272. F17's rule already sends this work to the lead, but the plans keep routing it to the developer. The escalation turned the `hx-on::` mistake into a test. Routing still needs a check, which the review offers as a Factory idea.
 - **Decisions affected:** none.
 
+### F124 (2026-11-24): pause one project from the Projects page ([review](../reviews/f124-pause-one-project-from-the-projects.md))
+
+- **Q1:** one lead ticket on Opus (01, the request kinds and the runner's hold) passed on attempt 1 in 10 minutes. 02 (the Projects page button, browser tests) failed three local attempts, one after a direction, and the lead finished it in 8 minutes. 03 (Next in line) passed on the local model's second attempt but missed its goal. No checkpoint. Review round 1: one blocking (a paused project's tickets still listed as next), one should-fix test and one nit, all fixed by the review; one should-fix sent to a developer ticket (f124-04, the plate redraws when done); one nit reported. Score 6.
+- **Q3:** the local model spent about 3 h on 02 and 03 together; 02's work was mostly replaced. See the review's numbers.
+- **Q5:** see the review's numbers.
+- **Anything else:** 03 passed with green gates because its tests' paused project had no tickets: a "leaves X out" test needs X in its fixture. The fifth Projects-page button ticket to escalate this month (see F273): 02 kept changing the protected `ask` response; `.softfield/developer.md` now names the pattern.
+- **Decisions affected:** none.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.

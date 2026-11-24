@@ -1065,38 +1065,36 @@ def _live_context(
     leading = status.project or project
     runs = [] if jobs else live_runs(conn, leading, now)[:1]
 
+    # F124-03: a project paused by you gets one line; its tickets and reviews wait, so none of
+    # them is next (its planning replies, in `jobs_queued`, still go)
+    paused = [{"project": p.name, "paused_since": p.paused} for p in every if p.paused]
+    running = [p for p in every if not p.paused]
+
     # Next in line, in the runner's order (D5): every project's lane, its queued jobs, then the
     # tickets that can run project by project, then the waiting ones
-    lane = [r for p in every for r in p.lane][:3]
+    lane = [r for p in running for r in p.lane][:3]
     # each project's own run order kept (live_line's): up to its last row that can run, the rest
     ends = {
         p.name: max(
             (n for n, r in enumerate(p.rest, start=1) if not _held(r, p.waits, pace.row)),
             default=0,
         )
-        for p in every
+        for p in running
     }
-    free = [r for p in every for r in p.rest[: ends[p.name]]]
-    held = [r for p in every for r in p.rest[ends[p.name] :]]
+    free = [r for p in running for r in p.rest[: ends[p.name]]]
+    held = [r for p in running for r in p.rest[ends[p.name] :]]
     upcoming = [{**r, "number": n} for n, r in enumerate([*lane, *free, *held][:3], start=1)]
     passed = []
     if free:  # a project ahead of the first that can run is passed over, with why
-        for p in every:
+        for p in running:
             if ends[p.name]:
                 break
             first = next((r for r in p.rest if r.get("ticket")), None)
             if first is not None:
                 why = _held(first, p.waits, pace.row)
                 passed.append({"project": p.name, "ticket": first["ticket"], "waits": why})
-    # F124-03: paused projects don't contribute tickets to Next in line
-    paused = []
-    paused_names: set[str] = set()
-    for p in every:
-        if p.paused:
-            paused_names.add(p.name)
-            paused.append({"project": p.name, "paused_since": p.paused})
-    tickets = [q for p in every for q in p.queued if p.name not in paused_names]
-    counts = [(p.name, len(p.queued)) for p in every if p.queued and p.name not in paused_names]
+    tickets = [q for p in running for q in p.queued]
+    counts = [(p.name, len(p.queued)) for p in running if p.queued]
 
     # Needs you (D6, F97 D2): one desk plate a project with something on it (its count, no
     # titles), then every project's other items
