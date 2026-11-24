@@ -35,3 +35,10 @@ Read `.softfield/cards/f124-pause-one-project-from-the-projects.md` ("What happe
 - the dashboard's `POST /requests` takes both kinds
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
