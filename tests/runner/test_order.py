@@ -284,6 +284,49 @@ def test_each_projects_first_apply_of_requests_moves_it_and_the_table_follows(
     assert _table(repo) == ["f8", "f7"] and _table(other) == ["f2", "f1"]
 
 
+def _milestone_state(repo: Path, key: str) -> object:
+    conn = metrics.open_db(repo / "var" / "factory-metrics.sqlite")
+    try:
+        row = conn.execute("SELECT state FROM milestones WHERE key LIKE ?", (f"{key}%",)).fetchone()
+        return None if row is None else row["state"]
+    finally:
+        conn.close()
+
+
+def test_an_approved_plan_readies_its_cards_row_in_the_same_apply(repo):
+    from tests.runner.test_requests import _ask, _plan, _ticket
+
+    docs = repo / ".softfield" / "cards"
+    docs.mkdir(parents=True, exist_ok=True)
+    (docs / "f7-one-queue.md").write_text(
+        "# Milestone F7: one queue\n\n> **State:** idea\n\n## Outcome\n"
+    )
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "the card")
+    _plan(repo, {".softfield/tasks/later/f7-01-a.md": _ticket("f7-01-a")})
+    s = open_session(_config(repo))  # its start syncs the card as an idea
+    try:
+        assert _milestone_state(repo, "f7") == "idea"
+        _ask(repo, "approve_plan", "f7-one-queue")
+        loop.apply_owner_requests(s)
+        assert _milestone_state(repo, "f7") == "ready"
+    finally:
+        close_session(s)
+
+
+def test_an_apply_with_no_request_does_not_read_the_cards_again(repo, monkeypatch):
+    _board(repo, {"f7": "idea"})
+    s = open_session(_config(repo))
+    try:
+        loop.apply_owner_requests(s)  # the first apply moves the list: it may read
+        read: list[object] = []
+        monkeypatch.setattr(loop, "sync_cards", lambda session: read.append(session))
+        loop.apply_owner_requests(s)
+        assert read == []
+    finally:
+        close_session(s)
+
+
 # --- a drag and the table (D5) ------------------------------------------------------------
 
 

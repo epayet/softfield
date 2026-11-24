@@ -7227,8 +7227,8 @@ def test_a_pre_review_files_developer_fixes_and_records_its_findings(repo, fake_
     assert ".softfield/cards/m1.md" in spec.prompt
     assert "merges changed: coucou/built.py\n" in spec.prompt  # its own merge's files only
     [fix] = sorted((repo / ".softfield" / "tasks" / "ready").glob("m1-*.md"))
-    ticket = parse_task(fix, 150)
-    assert ticket.agent == "developer" and ticket.files == ("coucou/thing.py",)
+    drafted = parse_task(fix, 150)
+    assert drafted.agent == "developer" and drafted.files == ("coucou/thing.py",)
     [job] = [j for j in _rows(repo, "jobs") if j["role"] == "pre-review"]
     found = {f["key"]: f for f in _rows(repo, "findings")}
     assert set(found) == {f"m1-P{job['id']}-{n}" for n in (1, 2, 3)}

@@ -5983,6 +5983,8 @@ def apply_owner_requests(s: Session) -> None:
     if sync_pause(s) or lines:
         save_state(s.state, s.state_path)
         sync_tickets(s)  # a queued ticket shows in the queue at once
+    if lines:
+        sync_cards(s)  # an approved card shows Planted at once, not Seed (F245)
     if switch_on(s.state, WEEK, at) and not was_on[WEEK]:
         _week_switched_on(s)
     if switch_on(s.state, FIVE_HOUR, at) and not was_on[FIVE_HOUR]:
