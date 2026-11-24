@@ -1,6 +1,7 @@
 # Milestone F245: An approved card shows as Seed until the runner's next round
 
-> **State:** ready · **Area:** factory · **Fast lane:** yes
+> **State:** done · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-24. Base: git tag `f245-i-accpedfed-a-plan-as-go-start`. Report: [`.softfield/reviews/f245-i-accpedfed-a-plan-as-go.md`](../reviews/f245-i-accpedfed-a-plan-as-go.md).
 > Planted by the owner on 2026-11-13.
 
 ## Notes

@@ -1,5 +1,7 @@
 # Review: F245, an approved card shows as Seed until the runner's next round
 
+- **Status:** done, signed off by the owner on 2026-11-24.
+
 **Status:** reviewed, waiting for your sign-off.
 
 ### 1. What changed
