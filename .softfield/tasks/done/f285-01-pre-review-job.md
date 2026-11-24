@@ -33,3 +33,10 @@ Read ADR 51 (`.softfield/adr/51-copilot-pre-reviews-while-claude-is-out.md`) and
 - `state.recheck` is unchanged after a pre-review
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
