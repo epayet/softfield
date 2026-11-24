@@ -6080,3 +6080,119 @@ def test_job_card_pre_review_returns_line():
     result = job_card("pre-review", "f5-board", "Board")
     assert result is not None
     assert result["line"] == "Copilot reads F5 before the lead's review"
+
+
+def test_next_in_line_says_paused_when_project_paused_by_you(db_path):
+    """F124-03: a project paused by you shows one line "Paused by you since HH:MM: its tickets
+    wait" in Next in line, and its tickets are excluded from the queue."""
+    conn = metrics.open_db(db_path)
+    try:
+        # Set up OTHER project and queue tickets
+        metrics.upsert_project(conn, OTHER)
+        f1 = metrics.upsert_milestone(conn, metrics.upsert_project(conn, PROJECT), "f1")
+        for ticket, goal in (("f1-06-second", "Queued second."), ("f1-05-first", "Queued first.")):
+            metrics.upsert_ticket(
+                conn,
+                metrics.upsert_project(conn, PROJECT),
+                ticket,
+                milestone_id=f1,
+                kind="developer",
+                state="ready",
+                title=goal,
+            )
+        metrics.set_project_paused(conn, OTHER, "2026-10-02T21:40:00")
+    finally:
+        conn.close()
+    from fastapi.testclient import TestClient as _TestClient
+
+    from factory_dashboard.app import create_app, get_now
+
+    app = create_app(db_path, PROJECT)
+    app.dependency_overrides[get_now] = lambda: NOW
+    client = _TestClient(app, base_url="http://127.0.0.1:8765")
+    html = client.get("/").text
+    queue_section = section(html, "queue")
+    # The paused line shows with the time
+    assert "Paused by you since 21:40: its tickets wait" in queue_section
+    # The paused project's tickets are excluded from the queue count
+    # coucou's tickets should still be listed
+    assert "f1-05-first" in queue_section
+
+
+def test_next_in_line_keeps_paused_project_queued_jobs(db_path):
+    """F124-03: a paused project's queued planning replies are still listed in Next in line."""
+    conn = metrics.open_db(db_path)
+    try:
+        # Set up OTHER project and queue tickets
+        metrics.upsert_project(conn, OTHER)
+        f1 = metrics.upsert_milestone(conn, metrics.upsert_project(conn, PROJECT), "f1")
+        for ticket, goal in (("f1-06-second", "Queued second."), ("f1-05-first", "Queued first.")):
+            metrics.upsert_ticket(
+                conn,
+                metrics.upsert_project(conn, PROJECT),
+                ticket,
+                milestone_id=f1,
+                kind="developer",
+                state="ready",
+                title=goal,
+            )
+        metrics.set_project_paused(conn, OTHER, "2026-10-02T21:40:00")
+        # Add a queued planning job for the paused project
+        proj = conn.execute("SELECT id FROM projects WHERE name = ?", (OTHER,)).fetchone()
+        assert proj is not None
+        metrics.queue_job(
+            conn,
+            proj["id"],
+            "planner",
+            "f1",
+            "A planning reply",
+            NOW.isoformat(),
+        )
+    finally:
+        conn.close()
+    from fastapi.testclient import TestClient as _TestClient
+
+    from factory_dashboard.app import create_app, get_now
+
+    app = create_app(db_path, PROJECT)
+    app.dependency_overrides[get_now] = lambda: NOW
+    client = _TestClient(app, base_url="http://127.0.0.1:8765")
+    html = client.get("/").text
+    queue_section = section(html, "queue")
+    # The paused line shows
+    assert "Paused by you since 21:40: its tickets wait" in queue_section
+    # The paused project's queued job is still listed
+    assert "Planning" in queue_section
+
+
+def test_next_in_line_as_before_when_no_project_paused(db_path):
+    """F124-03: with no project paused, Next in line is as before."""
+    conn = metrics.open_db(db_path)
+    try:
+        # Set up queue tickets
+        f1 = metrics.upsert_milestone(conn, metrics.upsert_project(conn, PROJECT), "f1")
+        for ticket, goal in (("f1-06-second", "Queued second."), ("f1-05-first", "Queued first.")):
+            metrics.upsert_ticket(
+                conn,
+                metrics.upsert_project(conn, PROJECT),
+                ticket,
+                milestone_id=f1,
+                kind="developer",
+                state="ready",
+                title=goal,
+            )
+    finally:
+        conn.close()
+    from fastapi.testclient import TestClient as _TestClient
+
+    from factory_dashboard.app import create_app, get_now
+
+    app = create_app(db_path, PROJECT)
+    app.dependency_overrides[get_now] = lambda: NOW
+    client = _TestClient(app, base_url="http://127.0.0.1:8765")
+    html = client.get("/").text
+    queue_section = section(html, "queue")
+    # No paused line
+    assert "Paused by you" not in queue_section
+    # The normal queue items are still there
+    assert "f1-05-first" in queue_section

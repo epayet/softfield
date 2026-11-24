@@ -1088,8 +1088,15 @@ def _live_context(
             if first is not None:
                 why = _held(first, p.waits, pace.row)
                 passed.append({"project": p.name, "ticket": first["ticket"], "waits": why})
-    tickets = [q for p in every for q in p.queued]
-    counts = [(p.name, len(p.queued)) for p in every if p.queued]
+    # F124-03: paused projects don't contribute tickets to Next in line
+    paused = []
+    paused_names: set[str] = set()
+    for p in every:
+        if p.paused:
+            paused_names.add(p.name)
+            paused.append({"project": p.name, "paused_since": p.paused})
+    tickets = [q for p in every for q in p.queued if p.name not in paused_names]
+    counts = [(p.name, len(p.queued)) for p in every if p.queued and p.name not in paused_names]
 
     # Needs you (D6, F97 D2): one desk plate a project with something on it (its count, no
     # titles), then every project's other items
@@ -1156,6 +1163,7 @@ def _live_context(
         "lane": upcoming[: len(lane)],
         "next": upcoming[len(lane) :],
         "passed": passed,
+        "paused": paused,
         "queued_jobs": [j for p in every for j in p.jobs_queued],
         # Claude's allowance and its reserve switches, below Now (f8-06)
         "allowance": agent_allowances(conn, now),
@@ -1183,6 +1191,7 @@ class _ProjectLive:
     needs: list[Need]  # what Needs you lists: the desk's line stands for the rest
     items: list["DeskItem"]  # the desk's items waiting for the owner
     reserve_cards: list[Any]
+    paused: str | None = None  # ISO time paused by you, None otherwise
 
 
 def _project_live(
@@ -1234,6 +1243,9 @@ def _project_live(
     # lead reply (f6-09), no stored sign-off row (f95-01) and no blocked row shows on its own
     needs = [n for n in open_needs if n.kind not in ("planning", "signoff", "blocked")]
     items = waiting_for_you(desk(conn, project, now, line=line))  # acted on waits on no one
+    # F124-03: whether the project is paused by you
+    paused_row = conn.execute("SELECT paused FROM projects WHERE name = ?", (project,)).fetchone()
+    paused = metrics.paused_by_you(paused_row["paused"]) if paused_row else None
     return _ProjectLive(
         project,
         jobs,
@@ -1246,6 +1258,7 @@ def _project_live(
         needs,
         items,
         reserve_cards,
+        paused,
     )
 
 

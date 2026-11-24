@@ -363,6 +363,23 @@ def write_live(conn: sqlite3.Connection, heartbeat_age: timedelta) -> None:
     metrics.finish_job(conn, claude, ended=_at(timedelta(minutes=50)), outcome="passed", **tokens)
 
 
+def write_other(conn: sqlite3.Connection) -> None:
+    """On top of ``write_fixture``: the ``OTHER`` project with a milestone and one queued
+    ticket, plus two queue tickets for ``PROJECT``. Used by the overview's factory-wide
+    tests that need more than one project."""
+    project = metrics.upsert_project(conn, PROJECT)
+    f1 = metrics.upsert_milestone(conn, project, "f1")
+    for ticket, goal in (("f1-06-second", "Queued second."), ("f1-05-first", "Queued first.")):
+        metrics.upsert_ticket(
+            conn, project, ticket, milestone_id=f1, kind="developer", state="ready", title=goal
+        )
+    other = metrics.upsert_project(conn, OTHER)
+    m1 = metrics.upsert_milestone(conn, other, "m1", started=_at(timedelta(days=1)))
+    metrics.upsert_ticket(
+        conn, other, "m1-01-elsewhere", milestone_id=m1, kind="developer", state="ready"
+    )
+
+
 def write_queue(conn: sqlite3.Connection, waiting_claude: bool = False) -> None:
     """Tickets with various dependency states for queue tests.
 

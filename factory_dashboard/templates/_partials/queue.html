@@ -37,6 +37,10 @@
       {% for p in passed %}
       <li class="passed sub"><span>Passed over: {% with name=p.project %}{% include "_partials/project_plate.html" %}{% endwith %} goes first in your order, but its <a class="mono" href="/tickets/{{ p.ticket }}?project={{ p.project | urlencode }}">{{ p.ticket }}</a> {{ p.waits }}.</span></li>
       {% endfor %}
+      {# a project paused by you: one line, its tickets wait (F124-03) #}
+      {% for p in paused %}
+      <li class="passed sub"><span>Paused by you since {{ p.paused_since | local("%H:%M") }}: its tickets wait.</span></li>
+      {% endfor %}
       {% for t in next %}
       {% set plate %}{% with name=t.project %}{% if many_projects %} · {% endif %}{% include "_partials/project_plate.html" %}{% endwith %}{% endset %}
       {% if t.ticket %}
