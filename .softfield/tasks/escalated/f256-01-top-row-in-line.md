@@ -28,3 +28,12 @@ Read `.softfield/cards/f256-the-alignments-of-the-top-bar.md` (D1 to D4) and bui
 - choosing a project in the picker reloads the page with it, as today
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: task-tests)
+attempts: 3
+tokens: 1948085
+logs: .softfield/var/runs/20261120-174051/f256-01-top-row-in-line
+```
