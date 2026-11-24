@@ -37,3 +37,9 @@ attempts: 3
 tokens: 1948085
 logs: .softfield/var/runs/20261120-174051/f256-01-top-row-in-line
 ```
+
+```yaml
+# --- runner ---
+result: done
+finished_by: lead
+```
