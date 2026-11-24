@@ -27,3 +27,10 @@ Read `.softfield/adr/52-a-review-leaves-the-code-simpler.md` (item 4) and `.soft
 - a ticket whose commit is missing from the repo, or that has no commit, adds nothing and raises nothing
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
