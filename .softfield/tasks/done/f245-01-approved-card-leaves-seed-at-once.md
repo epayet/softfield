@@ -21,3 +21,10 @@ Read "What happened" and D1 in `.softfield/cards/f245-i-accpedfed-a-plan-as-go.m
 - a request that changes nothing (no request waiting) does not read the cards again
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
