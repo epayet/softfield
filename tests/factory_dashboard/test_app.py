@@ -3268,6 +3268,76 @@ def test_factory_wide_status_pause_before_running(db_path):
         conn.close()
 
 
+def test_factory_wide_status_ignores_an_archived_project(db_path):
+    """F262 D4: two projects between jobs, the first in the order archived: the second is
+    named, as if the archived one weren't there."""
+    from factory_dashboard.app import PICKING, factory_wide_status
+
+    conn = metrics.open_db(db_path)
+    try:
+        cc = metrics.upsert_project(conn, "coucou")
+        tc = metrics.upsert_project(conn, "travel-companion")
+        metrics.set_project_order(conn, ["coucou", "travel-companion"])
+        metrics.set_project_paused(conn, "coucou", metrics.ARCHIVED)
+        for project, run in ((cc, "20261002-100000"), (tc, "20261002-110000")):
+            run_id = metrics.upsert_run(
+                conn,
+                project,
+                run,
+                command="milestone m1",
+                started=(NOW - timedelta(minutes=10)).isoformat(),
+                heartbeat=(NOW - timedelta(seconds=10)).isoformat(),
+            )
+            metrics.update_run_activity(conn, run_id, PICKING, None)
+        status = factory_wide_status(conn, PROJECT, NOW)
+        assert status.project == "travel-companion"
+        assert "coucou" not in status.words
+    finally:
+        conn.close()
+
+
+def _picker(html: str) -> list[tuple[str, bool]]:
+    """The top bar's picker: each option's project and whether it is selected."""
+    select = re.search(r'<select[^>]*name="project"[^>]*>(.*?)</select>', html, re.S)
+    assert select
+    return [
+        (name, bool(sel))
+        for name, sel in re.findall(r'<option value="([^"]+)"( selected)?', select[1])
+    ]
+
+
+def _archive_coucou(db_path) -> None:
+    """coucou archived, first in the order, with travel-companion after it."""
+    conn = metrics.open_db(db_path)
+    try:
+        metrics.upsert_project(conn, "travel-companion")
+        metrics.set_project_order(conn, ["coucou", "travel-companion"])
+        metrics.set_project_paused(conn, "coucou", metrics.ARCHIVED)
+    finally:
+        conn.close()
+
+
+def test_an_archived_project_leaves_the_picker(db_path):
+    """F262 D4: on another project's page, the archived project isn't an option."""
+    _archive_coucou(db_path)
+    app = create_app(db_path, PROJECT)
+    app.dependency_overrides[get_now] = lambda: NOW
+    client = TestClient(app, base_url="http://127.0.0.1:8765")
+    assert _picker(client.get("/?project=travel-companion").text) == [("travel-companion", True)]
+
+
+def test_an_archived_project_s_own_page_keeps_it_last_and_selected(db_path):
+    """F262 D4: on its own page, the archived project is in the picker, last and selected."""
+    _archive_coucou(db_path)
+    app = create_app(db_path, PROJECT)
+    app.dependency_overrides[get_now] = lambda: NOW
+    client = TestClient(app, base_url="http://127.0.0.1:8765")
+    assert _picker(client.get("/?project=coucou").text) == [
+        ("travel-companion", False),
+        ("coucou", True),
+    ]
+
+
 def test_factory_wide_status_waiting_for_claude_before_between_jobs(db_path):
     """D1: ``Waiting for Claude until …`` comes before a between-jobs line."""
     from factory_dashboard.app import PICKING, factory_status, factory_wide_status

@@ -306,7 +306,9 @@ def factory_wide_status(conn: sqlite3.Connection, project: str, now: datetime) -
     when there is more than one, and its button posts there."""
     from runner import metrics
 
-    names = [p.name for p in metrics.projects_in_order(conn)] or [project]
+    # F262 D4: an archived project is off the picker, so off the status too
+    listed = [p.name for p in metrics.projects_in_order(conn) if not metrics.is_archived(p)]
+    names = listed or [project]
     found = [(name, factory_status(conn, name, now)) for name in names]
 
     def rank(status: Status) -> tuple[int, int]:
@@ -454,7 +456,8 @@ def render(
     from factory_dashboard.projects import setup_strip  # projects imports app
     from runner import metrics
 
-    names = [p.name for p in metrics.projects_in_order(conn)]
+    # F262 D4: an archived project leaves the picker, unless the page is its own (then last)
+    names = [p.name for p in metrics.projects_in_order(conn) if not metrics.is_archived(p)]
     # the clock a test pinned, as the routes' ``Now`` reads it
     now = request.app.dependency_overrides.get(get_now, get_now)()
     # bug-67: a project being set up says so on its pages; the Projects page has it on the plate

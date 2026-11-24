@@ -53,6 +53,8 @@
   --tick: var(--ink-2);
   --shot-frame: #0b0e12;      /* the frame a picture sits in (F85) */
   --stripe: repeating-linear-gradient(-45deg, var(--hazard) 0 6px, transparent 6px 12px);
+  /* the same stripe in the rules' ink, for what is set aside (the Archived bay, F262) */
+  --stripe-dim: repeating-linear-gradient(135deg, var(--rule) 0 6px, transparent 6px 12px);
   --notch: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
   /* one height for every control in the bar's top row (F256) */
   --control-h: 36px;
@@ -1309,6 +1311,34 @@ body.has-order-bar main { padding-bottom: 120px; }
 .projects-page .hold.resume { background: var(--hazard); color: var(--hazard-ink); border-color: var(--hazard); }
 .projects-page .hold.asked { border: 1px dashed var(--opus); color: var(--opus); background: transparent;
   cursor: default; }
+/* Archive at the plate's foot, quieter than Pause, and the folded Archived bay under the list
+   (F262 D5, .softfield/cards/f262-mockup/projects.html): rules and ink only */
+.projects-page .shelve { margin-left: auto; font: 600 12px var(--display); letter-spacing: .08em;
+  text-transform: uppercase; padding: 5px 10px; background: transparent; color: var(--muted);
+  border: 1px solid var(--rule); cursor: pointer; display: inline-flex; align-items: center; gap: 7px; }
+.projects-page .shelve::before { content: ""; width: 11px; height: 8px; border: 2px solid currentColor;
+  border-top-width: 4px; }
+.projects-page .shelve.asked, .projects-page .unshelve.asked { border: 1px dashed var(--opus);
+  color: var(--opus); background: transparent; cursor: default; }
+.projects-page .archived { margin-top: 14px; border: 1px solid var(--rule); background: var(--floor); }
+.projects-page .archived > summary { list-style: none; cursor: pointer; display: flex; align-items: center;
+  gap: 10px; font: 700 13px var(--display); letter-spacing: .1em; text-transform: uppercase;
+  color: var(--ink-2); padding: 8px 12px; background: var(--plate); border-bottom: 1px solid var(--rule); }
+.projects-page .archived > summary::-webkit-details-marker { display: none; }
+.projects-page .archived > summary::before { content: ""; width: 18px; height: 10px;
+  background: var(--stripe-dim); border: 1px solid var(--rule); }
+.projects-page .archived > summary .count { font: 500 12px var(--mono); color: var(--muted); letter-spacing: 0; }
+.projects-page .archived > summary .src { margin-left: auto; font: 400 12px var(--body); text-transform: none;
+  letter-spacing: 0; color: var(--muted); }
+.projects-page .archived .crate { display: grid; gap: 4px; padding: 10px 12px; border-bottom: 1px solid var(--grid); }
+.projects-page .archived .crate:last-child { border-bottom: 0; }
+.projects-page .archived .crate .head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.projects-page .archived .crate .name { font: 700 15px var(--display); letter-spacing: .03em; color: var(--ink-2);
+  flex: 1; }
+.projects-page .archived .shelf-line { color: var(--muted); font-size: 13px; }
+.projects-page .unshelve { font: 700 12px var(--display); letter-spacing: .08em; text-transform: uppercase;
+  padding: 7px 12px; background: var(--hazard); color: var(--hazard-ink); border: 1px solid var(--hazard);
+  cursor: pointer; }
 .projects-page .proj.held { position: relative; padding-left: 12px; margin-left: -2px;
   border-left: 4px solid var(--warn); }
 .projects-page .held-line { color: var(--warn); font-size: 13.5px; }

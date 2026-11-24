@@ -108,8 +108,20 @@
             {% else %}
             <a href="/board?project={{ card.name | urlencode }}">Board</a>
             <a href="/?project={{ card.name | urlencode }}">Overview</a>
+            {# Archive at the plate's foot, quieter than Pause (F262 D5); an open request wins #}
+            {% if card.archive_on_its_way == "archive_project" %}
+            <button type="button" class="shelve asked" disabled>Archiving…</button>
+            {% else %}
+            <button type="button" class="shelve" hx-post="/requests" hx-target="#archive-sent-{{ card.name | lower }}" hx-swap="innerHTML"
+              hx-vals='{{ {"kind": "archive_project", "project": card.name} | tojson }}'
+              hx-on::before-request="this.textContent = 'Archiving…'; this.classList.add('asked'); this.disabled = true; const way = document.getElementById('archive-way-{{ card.name | lower }}'); way.textContent = way.dataset.way; way.hidden = false">Archive</button>
+            {% endif %}
             {% endif %}
           </div>
+          {% if not setting_up %}
+          {% with id = "archive-way-" ~ card.name | lower, open = card.archive_on_its_way %}{% include "_partials/archive_way.html" %}{% endwith %}
+          <div id="archive-sent-{{ card.name | lower }}" class="pause-sent"></div>
+          {% endif %}
           {% if card.app %}{% with row = card.app %}{% include "_partials/app_row.html" %}{% endwith %}
           {% elif card.stack_plant %}
           <div class="app-row none">
@@ -130,6 +142,35 @@
     <button type="submit" class="send-order btn go" disabled>Send new order</button>
     <span id="order-sent" class="on-its-way">{% if asked %}On its way: the runner takes it at its next pick{% endif %}</span>
   </form>
+
+  {# the Archived bay (F262 D5): folded, under the list and outside the order form, whose script
+     reorders every `li.proj`; it shows only when a project is archived #}
+  {% if archived %}
+  <details id="projects-archived" class="archived">
+    <summary>Archived <span class="count">· {{ archived | length }}</span><span class="src">off the picker · their tickets wait</span></summary>
+    {% for card in archived %}
+    <div class="crate" data-key="{{ card.name }}">
+      <div class="head"><span class="name">{{ card.name }}</span>
+        {% if card.archive_on_its_way == "unarchive_project" %}
+        <button type="button" class="unshelve asked" disabled>Unarchiving…</button>
+        {% else %}
+        <button type="button" class="unshelve" hx-post="/requests" hx-target="#unarchive-sent-{{ card.name | lower }}" hx-swap="innerHTML"
+          hx-vals='{{ {"kind": "unarchive_project", "project": card.name} | tojson }}'
+          hx-on::before-request="this.textContent = 'Unarchiving…'; this.classList.add('asked'); this.disabled = true; const way = document.getElementById('unarchive-way-{{ card.name | lower }}'); way.textContent = way.dataset.way; way.hidden = false">Unarchive</button>
+        {% endif %}
+      </div>
+      {% if card.description %}<div class="what muted">{{ card.description }}</div>{% endif %}
+      <div class="shelf-line">Archived by you. {{ card.ready }} ready · {{ card.done }} done, kept as they are.</div>
+      <div class="links">
+        <a href="/planning?project={{ card.name | urlencode }}">Planning</a>
+        <a href="/board?project={{ card.name | urlencode }}">Board</a>
+      </div>
+      {% with id = "unarchive-way-" ~ card.name | lower, open = card.archive_on_its_way %}{% include "_partials/archive_way.html" %}{% endwith %}
+      <div id="unarchive-sent-{{ card.name | lower }}" class="pause-sent"></div>
+    </div>
+    {% endfor %}
+  </details>
+  {% endif %}
 </section>
 
 <section id="projects-start" class="panel">

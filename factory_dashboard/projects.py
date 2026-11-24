@@ -126,10 +126,12 @@ class ProjectCard:
     paused: str | None = None  # `metrics.SETTING_UP` while `softfield init`'s setup runs
     paused_by_you: str | None = None  # ISO time the owner paused it, None otherwise
     paused_on_its_way: str | None = None  # "pause_project" or "resume_project" while waiting
+    archive_on_its_way: str | None = None  # "archive_project" or "unarchive_project" while waiting
     app: AppRow | None = None  # its app (F239 D6); None without `[run]`, and for Softfield
     softfield: bool = False  # Softfield's own repo: it runs from `live`, with no app row
     stack_plant: str = ""  # the "Plant a card for a stack" value, for a project without one
     setup_job: bool = False  # an open `setup` job: "Set up by the lead" is lit (F122 D6)
+    archived: bool = False  # `metrics.is_archived` says the project is archived
 
 
 # A setting-up project's line (F122 D6, .softfield/cards/f122-mockup/projects-new.html)
@@ -192,12 +194,14 @@ def project_cards(conn: sqlite3.Connection, now: datetime) -> list[ProjectCard]:
                 paused=row.paused,
                 paused_by_you=paused_by_you,
                 paused_on_its_way=paused_its_way,
+                archive_on_its_way=archive_on_its_way(conn, project_id) if project_id else None,
                 app=row_of(row.name, stack) if stack else None,
                 softfield=softfield,
                 stack_plant=""
                 if stack or softfield or not row.repo
                 else plant_value(STACK_PLANT.format(name=row.name)),
                 setup_job=row.paused == metrics.SETTING_UP and _setup_job(conn, row.name),
+                archived=metrics.is_archived(row),
             )
         )
     return cards
@@ -208,6 +212,17 @@ def paused_on_its_way(conn: sqlite3.Connection, project_id: int) -> str | None:
     row = conn.execute(
         "SELECT kind FROM owner_requests WHERE project_id = ?"
         " AND kind IN ('pause_project', 'resume_project') AND done IS NULL"
+        " ORDER BY id DESC LIMIT 1",
+        (project_id,),
+    ).fetchone()
+    return row["kind"] if row else None
+
+
+def archive_on_its_way(conn: sqlite3.Connection, project_id: int) -> str | None:
+    """The latest archive_project or unarchive_project the runner hasn't taken (F262 D5)."""
+    row = conn.execute(
+        "SELECT kind FROM owner_requests WHERE project_id = ?"
+        " AND kind IN ('archive_project', 'unarchive_project') AND done IS NULL"
         " ORDER BY id DESC LIMIT 1",
         (project_id,),
     ).fetchone()
@@ -333,6 +348,9 @@ def projects_page(request: Request, conn: Db, project: Project, now: Now) -> HTM
     for_you = [c for c in cards if c.for_you]
     needs_you = broken + [c for c in for_you if c not in broken]
     needs_you_count = len(broken) + sum(c.for_you for c in for_you)
+    # split: listed cards (not archived) and archived cards for the bay
+    listed = [c for c in cards if not c.archived]
+    archived = [c for c in cards if c.archived]
     root = config.projects_root(request.app.state.db)
     return render(
         request,
@@ -341,7 +359,8 @@ def projects_page(request: Request, conn: Db, project: Project, now: Now) -> HTM
         "projects.html",
         {
             "active": "/projects",
-            "cards": cards,
+            "cards": listed,
+            "archived": archived,
             "now_jobs": running_now(conn, now),
             "for_you": for_you,
             "needs_you": needs_you,

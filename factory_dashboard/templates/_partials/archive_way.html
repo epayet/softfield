@@ -1,0 +1,4 @@
+{# A project's archive or unarchive on its way (F262 D5), as `pause_request.html` draws a pause:
+   drawn while its request (`open`) waits; otherwise hidden, and the button fills it once pressed. #}
+{% set way = "On its way: the runner takes it at its next pick, after the job it is on" %}
+<div id="{{ id }}" class="way" data-way="{{ way }}"{% if not open %} hidden>{% else %}>{{ way }}{% endif %}</div>

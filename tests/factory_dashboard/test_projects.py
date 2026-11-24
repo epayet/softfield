@@ -880,12 +880,13 @@ def _way_shown(row: str) -> bool:
 
 
 def _open_requests(db_path) -> list[tuple[str, str | None]]:
-    """The open pause_project / resume_project rows, as (kind, project name)."""
+    """The open pause, resume, archive and unarchive rows, as (kind, project name)."""
     conn = metrics.open_db(db_path)
     try:
         rows = conn.execute(
             "SELECT r.kind, p.name FROM owner_requests r JOIN projects p ON p.id = r.project_id"
-            " WHERE r.kind IN ('pause_project', 'resume_project') AND r.done IS NULL"
+            " WHERE r.kind IN ('pause_project', 'resume_project', 'archive_project',"
+            " 'unarchive_project') AND r.done IS NULL"
         ).fetchall()
     finally:
         conn.close()
@@ -1035,3 +1036,169 @@ def test_a_project_being_set_up_keeps_its_line_and_has_no_button(
     assert ">Pause</button>" not in row
     assert ">Resume</button>" not in row
     assert "hold" not in row
+
+
+# --- archive a project (F262 D5, .softfield/cards/f262-mockup/projects.html) -------------------
+
+
+def _archive(db_path, name: str, kind: str | None = None) -> None:
+    """Archive ``name`` (as the runner does on `archive_project`), and open a request ``kind``."""
+    conn = metrics.open_db(db_path)
+    try:
+        metrics.set_project_paused(conn, name, metrics.ARCHIVED)
+        if kind:
+            project = metrics.find_project(conn, name)
+            assert project is not None
+            metrics.add_request(conn, project, kind, None, None, NOW.isoformat())
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _bay(html: str) -> str | None:
+    """The HTML of the Archived bay's ``<details>``, or None when there is none."""
+    match = re.search(r'<details id="projects-archived"[^>]*>(.*?)</details>', html, re.S)
+    return match.group(0) if match else None
+
+
+def _order_form(html: str) -> str:
+    match = re.search(r'<form id="order-form".*?</form>', html, re.S)
+    assert match
+    return match.group(0)
+
+
+def test_with_none_archived_there_is_no_bay(projects_client):
+    html = projects_client.get("/projects").text
+    assert _bay(html) is None
+    assert "projects-archived" not in html
+
+
+def test_an_archived_project_leaves_the_list_for_the_folded_bay(projects_client, db_path):
+    """softfield archived: off the ordered list and its order form, in a closed bay under it
+    with its description, "Archived by you", its counts, Planning, Board and Unarchive."""
+    _archive(db_path, "softfield")
+    html = projects_client.get("/projects").text
+    form = _order_form(html)
+    assert 'data-key="softfield"' not in form and "The factory." not in form
+    listed = re.findall(r'<li class="proj[^"]*" data-key="([^"]+)"', form)
+    assert listed == [PROJECT, "other"]
+    assert re.findall(r'max="(\d+)"', form) == ["2", "2"]  # the places count the listed only
+    bay = _bay(html)
+    assert bay is not None
+    assert html.index("</form>") < html.index('<details id="projects-archived"')
+    assert re.match(r'<details id="projects-archived" class="archived">', bay)  # closed
+    summary = re.search(r"<summary>.*?</summary>", bay, re.S)
+    assert summary and words(summary.group(0)).startswith("Archived · 1")
+    assert re.findall(r'class="crate" data-key="([^"]+)"', bay) == ["softfield"]
+    assert "proj" not in re.findall(r'class="([^"]*)"', bay)  # the order script reads `.proj`
+    text = words(bay)
+    assert "The factory." in text
+    assert "Archived by you. 2 ready · 0 done, kept as they are." in text
+    assert 'href="/planning?project=softfield"' in bay and 'href="/board?project=softfield"' in bay
+    assert ">Unarchive</button>" in bay and ">Archive</button>" not in bay
+    posts = re.search(r"hx-vals='([^']*)'", bay)
+    assert posts and json.loads(posts.group(1)) == {
+        "kind": "unarchive_project",
+        "project": "softfield",
+    }
+
+
+def test_needs_you_still_lists_an_archived_project_s_items(projects_client, db_path, monkeypatch):
+    from factory_dashboard import planning
+
+    _archive(db_path, "softfield")
+    monkeypatch.setattr(
+        planning, "desk", lambda conn, name, now: ["a"] if name == "softfield" else []
+    )
+    monkeypatch.setattr(planning, "waiting_for_you", lambda items: items)
+    needs_you = section(projects_client.get("/projects").text, "projects-needs-you")
+    assert "softfield · 1 item on the Planning desk" in needs_you
+
+
+def test_each_listed_project_has_archive_at_the_foot_of_its_plate(projects_client):
+    html = projects_client.get("/projects").text
+    for name in ("softfield", PROJECT):
+        row = plate(html, name)
+        links = re.search(r'<div class="links">(.*?)</div>', row, re.S)
+        assert links and '<button type="button" class="shelve"' in links.group(1)
+        posts = re.search(r"hx-vals='([^']*)'[^>]*>Archive</button>", links.group(1))
+        assert posts and json.loads(posts.group(1)) == {"kind": "archive_project", "project": name}
+        assert f'id="archive-way-{name}" class="way" data-way="{WAY}" hidden></div>' in row
+
+
+def test_a_project_being_set_up_has_no_archive(projects_client, db_path, tmp_path):
+    _setting_up(db_path, tmp_path)
+    row = plate(projects_client.get("/projects").text, "ducks")
+    assert "Archive" not in row and "archive-way" not in row
+
+
+def test_an_open_archive_request_shows_archiving_after_a_reload(projects_client, db_path):
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.find_project(conn, PROJECT)
+        assert project is not None
+        metrics.add_request(conn, project, "archive_project", None, None, NOW.isoformat())
+        conn.commit()
+    finally:
+        conn.close()
+    html = projects_client.get("/projects").text
+    row = plate(html, PROJECT)
+    assert '<button type="button" class="shelve asked" disabled>Archiving…</button>' in row
+    assert f'id="archive-way-{PROJECT}" class="way" data-way="{WAY}">{WAY}</div>' in row
+    assert ">Archive</button>" in plate(html, "softfield")  # only the asked project's
+
+
+def test_an_open_unarchive_request_shows_unarchiving_after_a_reload(projects_client, db_path):
+    _archive(db_path, "softfield", "unarchive_project")
+    bay = _bay(projects_client.get("/projects").text)
+    assert bay is not None
+    assert '<button type="button" class="unshelve asked" disabled>Unarchiving…</button>' in bay
+    assert f'id="unarchive-way-softfield" class="way" data-way="{WAY}">{WAY}</div>' in bay
+
+
+def test_pressing_archive_turns_it_archiving_dashed_at_once(page, projects_client, db_path):
+    """Archive: "Archiving…", dashed orange and disabled, with the way line, before the answer."""
+    from playwright.sync_api import expect
+
+    open_page(page, projects_client, "/projects")
+    row = page.locator(f'.proj[data-key="{PROJECT}"]')
+    button = row.locator(".shelve")
+    way = row.locator(f"#archive-way-{PROJECT}")
+    expect(way).to_be_hidden()
+    page.route("**/requests", lambda route: None)  # the answer never comes
+    button.click()
+    expect(button).to_have_text("Archiving…")
+    expect(button).to_be_disabled()
+    expect(button).to_have_css("border-top-style", "dashed")
+    expect(button).to_have_css("color", "rgb(255, 150, 64)")  # --opus
+    expect(way).to_have_text(WAY)
+    page.unroute("**/requests")
+
+
+def test_pressing_archive_asks_the_runner(page, projects_client, db_path):
+    open_page(page, projects_client, "/projects")
+    row = page.locator(f'.proj[data-key="{PROJECT}"]')
+    row.locator(".shelve").click()
+    row.locator(f"#archive-sent-{PROJECT}").get_by_text("Asked").wait_for()
+    assert _open_requests(db_path) == [("archive_project", PROJECT)]
+
+
+def test_pressing_unarchive_turns_it_unarchiving_and_asks_the_runner(
+    page, projects_client, db_path
+):
+    from playwright.sync_api import expect
+
+    _archive(db_path, "softfield")
+    open_page(page, projects_client, "/projects")
+    page.locator("#projects-archived > summary").click()
+    row = page.locator('#projects-archived .crate[data-key="softfield"]')
+    button = row.locator(".unshelve")
+    way = row.locator("#unarchive-way-softfield")
+    expect(way).to_be_hidden()
+    button.click()
+    expect(button).to_have_text("Unarchiving…")
+    expect(button).to_be_disabled()
+    expect(button).to_have_css("border-top-style", "dashed")
+    expect(way).to_have_text(WAY)
+    row.locator("#unarchive-sent-softfield").get_by_text("Asked").wait_for()
+    assert _open_requests(db_path) == [("unarchive_project", "softfield")]
