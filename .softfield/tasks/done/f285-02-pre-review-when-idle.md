@@ -29,3 +29,10 @@ Read ADR 51 (`.softfield/adr/51-copilot-pre-reviews-while-claude-is-out.md`) and
 - a milestone with three passed pre-reviews, or with no merge since its last one, gets none; the next eligible milestone in `due_reviews` order does
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
