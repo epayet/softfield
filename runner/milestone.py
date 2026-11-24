@@ -12,7 +12,7 @@ from pathlib import Path
 
 import yaml
 
-from runner import console, dispatch, look, metrics, prompts, router, shots
+from runner import console, dispatch, look, metrics, prompts, router, shots, stacks
 from runner.agents import ANY, CHECK_COMMANDS, GIT_READ_COMMANDS, JobSpec
 from runner.config import Config, project_checks, read_protected
 from runner.gates import GateResult
@@ -800,7 +800,9 @@ def review_milestone(cfg: Config, milestone: str, base: str, *, park: bool = Fal
         )
         job = JobSpec(
             role="review",
-            prompt=prompts.REVIEW.format(
+            prompt=(
+                prompts.REVIEW_FACTORY if stacks._is_softfield(s.repo) else prompts.REVIEW
+            ).format(  # ADR 52 item 7: on Softfield the factory is the product
                 milestone=milestone,
                 round=round_no,
                 max_rounds=cfg.review_rounds,

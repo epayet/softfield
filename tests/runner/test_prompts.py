@@ -439,6 +439,64 @@ def test_the_later_route_is_a_quoted_line_and_never_for_security():
     assert ".softfield/tasks/later/" not in later
 
 
+_REVIEW_FIELDS = dict(
+    milestone="f1", round=1, max_rounds=3, scope="", tests="tests", recurring="none",
+    checkpoints="none", out="x.json", pictures="none",
+)  # fmt: skip
+
+
+def test_the_review_looks_for_complexity_and_routes_it_by_the_boy_scout_rule():
+    """ADR 52 items 1–3: kinds of complexity, a should-fix on its own work, two Simpler lines."""
+    text = " ".join(prompts.REVIEW.split())
+    assert "ADR 52" in text or "complexity" in text
+    for kind in ("dead code", "second way", "new rule"):
+        assert kind in text
+    assert "milestone's own complexity is a should-fix" in text
+    assert "at most two quoted `> Simpler: …` lines" in text
+    assert "files the milestone touched" in text
+    assert text.index("Grade each finding") < text.index("Simpler:")
+
+
+def test_the_review_suggests_at_most_two_features_that_follow():
+    text = " ".join(prompts.REVIEW.split())
+    assert "at most two quoted feature ideas" in text
+
+
+def test_the_factorys_review_has_no_product_bullet_and_another_projects_keeps_it():
+    """ADR 52 item 7: on Softfield, Softfield is the product."""
+    other = " ".join(prompts.REVIEW.format(**_REVIEW_FIELDS).split())
+    own = " ".join(prompts.REVIEW_FACTORY.format(**_REVIEW_FIELDS).split())
+    assert "Product or Factory bullet" in other
+    assert "Softfield is the product" in own and "no Product bullet" in own
+    assert "Softfield is the product" not in other
+    assert "Product or Factory bullet" not in own
+
+
+def test_no_review_or_workflow_line_mentions_french():
+    assert "French" not in prompts.REVIEW and "French" not in prompts.REVIEW_FACTORY
+    flow = (ROOT / "docs/workflow.md").read_text(encoding="utf-8")
+    loop = flow[flow.index("## Milestone review loop") :]
+    loop = loop[: loop.index("**Stop rules**")]
+    assert "French" not in loop
+
+
+def test_the_planner_asks_a_new_mechanism_to_name_what_it_reuses_and_retires():
+    for text in (prompts.PLANNER, prompts.PLANNER_GENERAL):
+        flat = " ".join(text.split())
+        assert "adds a mechanism" in flat and "what it builds on" in flat
+        assert "what it makes removable" in flat
+
+
+def test_lead_md_and_workflow_carry_the_complexity_rules_once_citing_adr_52():
+    lead = (ROOT / "runner/instructions/lead.md").read_text(encoding="utf-8")
+    review = lead[lead.index("## Review") : lead.index("## Sign-off sheet")]
+    flow = (ROOT / "docs/workflow.md").read_text(encoding="utf-8")
+    loop = flow[flow.index("## Milestone review loop") : flow.index("**Stop rules**")]
+    for part in (review, loop):
+        assert part.count("ADR 52") == 1 or part.count("adr/52") == 1
+        assert "Simpler:" in part
+
+
 def test_the_planner_prompts_still_fill_in():
     """The new rules add no stray brace: both prompts format with the same fields."""
     for template in (prompts.PLANNER, prompts.PLANNER_GENERAL):

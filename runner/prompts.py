@@ -380,7 +380,7 @@ the real thing is a should-fix finding on the test. If the live database lacks t
 milestone added, say so and rely on the tests: don't invent data.
 
 Read the tests as closely as the code: missing edge cases, and every existing test a
-developer edited (the session reports in .softfield/sessions/ list them). Check the French.
+developer edited (the session reports in .softfield/sessions/ list them).
 
 The card's after pictures and its mock-up (ADR 40 item 6): {pictures}
 With pictures, open them with Read and end "What changed" in the review report with one line:
@@ -404,10 +404,19 @@ Grade each finding blocking / should-fix / nit and route it:
 - later: a nit or a should-fix point about untouched code, worth a run (ADR 43): write no
   ticket. Write one quoted `> ` line under the right bullet of "6. What next": one sentence
   naming the file, the problem and the fix, under Product for a project's own code, or under
-  Factory when the project is the factory. The owner plants it from its plate. A security
+  Factory for what Softfield should learn. The owner plants it from its plate. A security
   finding never takes this route: it goes local, claude or adr.
 - report: not worth a run: say it once, in the review report, and nowhere else.
 Recurring findings (fix these yourself): {recurring}
+
+After correctness, look for complexity (ADR 52) in the milestone's diff and the files it touched:
+code that repeats a helper that already exists, dead code, settings or branches left behind, a
+second way of doing what one way already does, a function or file grown past one job, a new rule
+where changing an old one would have done. The milestone's own complexity is a should-fix, routed
+like any other. Older complexity in the files the milestone touched is no finding and no ticket:
+write at most two quoted `> Simpler: …` lines under "6. What next", the ones that save the most,
+each one sentence naming the file, what to remove or merge into what, and about how many lines it
+saves. Files the milestone didn't touch are left out.
 
 The checkpoints' findings so far, by key (ADR 14 item 13):
 {checkpoints}
@@ -444,7 +453,9 @@ Decisions, Done when and mock-up compared with the diff and the review's own fix
 ### 6. What next: your product and factory suggestions. Write each suggestion that needs a
 card as one quoted `> ` line under its Product or Factory bullet: one self-contained sentence
 in the owner's plant-note voice, so the dashboard can offer to plant it. What this review
-already did itself is not quoted.
+already did itself is not quoted. Also at most two quoted feature ideas that follow from this
+milestone's work, in the owner's voice, each building on what it built (not a fix); none when
+nothing follows naturally.
 ### 7. Left for later
 ### 8. How the work went: at most 3 lessons, one or two lines each, no line per session
 ### 9. What clogged the factory line: only hours with a fix, at most 3 lines
@@ -453,6 +464,17 @@ from `softfield report {milestone}`, between the `<!-- runner report -->` marker
 block as it is and don't recount them.
 Read-only git (diff, log, show) is fine; don't commit: the runner does.
 """
+
+# ADR 52 item 7: on Softfield's own project the factory is the product, so its review writes no
+# Product bullet; everything goes under Factory.
+REVIEW_FACTORY = REVIEW.replace(
+    "under its Product or Factory bullet",
+    "under its Factory bullet (Softfield is the product: write no Product bullet, and put every "
+    'suggestion, "Simpler:" line and feature idea under Factory)',
+).replace(
+    "under Product for a project's own code, or under\n  Factory for what Softfield should learn.",
+    "under Factory (Softfield is the product).",
+)
 
 # ADR 20 items 3–7, f6 D2 and D4: the planner plans as the lead did with the owner on
 # 2026-10-02/03. A card's thread drafts on its plan branch; the general thread only talks.
@@ -493,6 +515,9 @@ ask (a pause, a choice) is a point, in plain words, each with a title, an answer
 suggested action (a ticket, an ADR item, the roadmap, nothing). Don't write them out in the \
 text too: before the block, at most two short lines on what this reply does, or nothing. \
 Every point of yours they didn't comment on counts as agreed.
+- A plan that adds a mechanism (a module, a table, a setting, a job kind, a page) names in its \
+Decisions what it builds on and what it makes removable; a removal is a ticket in the same \
+plan (ADR 52 item 5).
 - Name a card with its title, every time ("F22, Archive at the bottom"), never a bare number.
 - When their message is a bare "agreed" or "go" with nothing new, don't answer it point by \
 point again: one point, saying the plan waits for their Approve, and nothing else.

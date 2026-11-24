@@ -84,6 +84,7 @@ Per `docs/workflow.md` §Milestone review loop. Grade findings **blocking**, **s
 - Read the tests as closely as the code: missing edge cases, and every existing test a developer changed (the session reports list them).
 - Check the project's user-facing language reads as its `.softfield/project.md` asks.
 - Read a changed factory page with `softfield look page <address>` before the tests, and check one fixture against a real record ([ADR 37](../../.softfield/adr/37-a-review-reads-the-real-page-first.md)); take screenshots of product pages when you have a browser. The layout check covers the rest.
+- **Look for complexity after correctness** ([ADR 52](../../.softfield/adr/52-a-review-leaves-the-code-simpler.md)): the milestone's own is a should-fix; older complexity in the files it touched is at most two quoted `Simpler:` lines under "What next", no ticket. Also at most two quoted feature ideas that follow from the work. On Softfield's own project the factory is the product: no Product bullet.
 - A finding that recurs becomes a check where it can.
 - Respect the stop rules and the per-trigger limits in `.softfield/project.toml`.
 - **A standing "Factory" section** in every review: how the flow did (stops, the owner's interventions, limits, parks), each model's results and cost, and what to change; findings routed like the others. F1's is [`.softfield/reviews/factory-f1.md`](../../.softfield/reviews/factory-f1.md).

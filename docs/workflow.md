@@ -83,9 +83,10 @@ All coordination goes through files in the repo. Run logs go to `.softfield/var/
 
 **Trigger:** every task in the milestone is `done/` **and** `pytest -m e2e` passes on staging.
 
-1. **Review round:** the headless lead reviews `git diff <milestone-base>..main`, tests as closely as code (missing edges, every existing test a developer changed), and the French. It writes the findings to `.softfield/var/runs/review-mN-rK.json`, each with its file, line, detail and the ticket at fault. Each round also marks the checkpoints' findings `confirmed` or `rejected`, its own findings a checkpoint should have caught `missed`, and scores the milestone 1–10; the last round's verdicts and score are kept (ADR 14 item 13).
+1. **Review round:** the headless lead reviews `git diff <milestone-base>..main`, tests as closely as code (missing edges, every existing test a developer changed). It writes the findings to `.softfield/var/runs/review-mN-rK.json`, each with its file, line, detail and the ticket at fault. Each round also marks the checkpoints' findings `confirmed` or `rejected`, its own findings a checkpoint should have caught `missed`, and scores the milestone 1–10; the last round's verdicts and score are kept (ADR 14 item 13).
    - **Blocking:** bugs, security issues, AGENTS.md or ADR violations.
    - **Should-fix:** design drift, missing edge cases, weak tests.
+   - **Complexity** (ADR 52, after correctness): what the milestone added (a repeated helper, dead code, a second way of doing one thing, a new rule where changing an old one would do) is a should-fix. Older complexity in the files it touched is at most two quoted `Simpler:` lines under "6. What next", no ticket. The review also suggests at most two features that follow from the work, and on Softfield's own project writes no Product bullet: the factory is the product.
    - **Nit** → a quoted line under "6. What next" for the owner to plant, if it's worth a run (route `later`, ADR 43; never for a security finding), else said in the review report only (route `report`). Nits never loop.
 2. **Routing each blocking or should-fix finding:**
    - by default → a developer fix ticket (`finding: mN-F3`), checked by the usual checkpoint, not another round (ADR 17 item 5); a merge the next round is about to read has no checkpoint (ADR 38)
