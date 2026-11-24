@@ -24,3 +24,12 @@ Read `.softfield/cards/f97-given-that-the-planning-board-has.md` (D6).
 - the card steps strip on a thread and on a proposal's page looks as before: `tests/factory_dashboard/test_thread.py` and `tests/factory_dashboard/test_proposal.py` pass unchanged
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 3
+duration_s: 7430
+gate_failures: ['task-tests', 'stopped']
+tokens: 5132038
+```
