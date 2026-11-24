@@ -37,3 +37,9 @@ attempts: 3
 tokens: 14708475
 logs: .softfield/var/runs/20261124-131732/f273-02-forget-on-the-projects-page
 ```
+
+```yaml
+# --- runner ---
+result: done
+finished_by: lead
+```
