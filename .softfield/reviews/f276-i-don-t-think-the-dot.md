@@ -1,5 +1,7 @@
 # Review: F276, The top bar's dot and words see the lead's setup jobs
 
+- **Status:** done, signed off by the owner on 2026-11-24.
+
 **Status:** round 1 done, ready for your sign-off. Score 7/10. Two should-fix points, both fixed by the review.
 
 ### 1. What changed

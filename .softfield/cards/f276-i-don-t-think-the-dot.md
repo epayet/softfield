@@ -1,6 +1,7 @@
 # Milestone F276: The top bar's dot and words see the lead's setup jobs
 
-> **State:** ready · **Area:** factory
+> **State:** done · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-24. Base: git tag `f276-i-don-t-think-the-dot-start`. Report: [`.softfield/reviews/f276-i-don-t-think-the-dot.md`](../reviews/f276-i-don-t-think-the-dot.md).
 > Planted by the owner on 2026-11-19.
 
 ## Notes
