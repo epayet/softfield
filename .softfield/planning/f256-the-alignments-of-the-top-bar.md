@@ -26,3 +26,28 @@ The planning thread behind F256's plan, oldest first, as it was when the owner a
 > Proposals:
 > - F256: the top bar on a wide screen, in line (plan)
 > - F256 mock-up: the top bar, in line (mockup)
+
+## The lead, 2026-11-17 20:28
+
+> Approved by the owner on 2026-11-17: approved plan/f256: queued f256-01-top-row-in-line; F256 goes last on the board
+
+## The owner, 2026-11-24 08:06
+
+> the components are algined but text is still not really. job xx min on hour + project and the projection selection box text, are all over the place on desktop
+
+## The lead, 2026-11-24 08:32
+
+> I found why the words still sit at different heights, and drafted one more small developer ticket. The mock-up is `.softfield/cards/f256-mockup/text-line.html`; its plates are also drawn at twice the size so the difference is easy to see.
+>
+> 1. **Why the words are still off**: You're right. f256-01 lined up the boxes, but a box centres its text by the text's line height, which includes room for accents above and tails below. The labels (JOB, ON, PROJECT), the status words and the logo use the display font. The times use the mono font. The two fonts leave different room, so inside the same plate "JOB" and "0 min", or "ON" and "10 h 25 min", sit at different heights. The project's name is worse: the browser draws it inside the dropdown, with its own padding and arrow and a 13 px font no other plate uses. The host 127.0.0.1 is placed a third way.
+>    Action: Fixed by f256-02 below.
+> 2. **The fix: centre each word by its capitals**: Every word in the top row is trimmed to its capitals and its baseline before it is centred, with the CSS rule `text-box: trim-both cap alphabetic`. That covers the logo's name, the host, the status words and each plate's label and value. The middle of every word's capitals then sits on the same line, whatever the font. The Job, On and Project plates also become one shared style, where today each is its own copy. The mock-up draws Today and Proposed side by side, with the row's centre line drawn in.
+>    Action: One developer ticket, f256-02-words-on-one-line. Its test measures each word's capitals on the real page, in both themes.
+> 3. **The project's name becomes the plate's own text**: We can't place the text the browser draws inside a dropdown. So the plate shows the project's name itself, with a drawn ▾, and the real dropdown lies unseen over the whole plate. A click anywhere on it still opens the browser's own list, and the keyboard and screen readers work as before. The cost is one more layer in the picker to keep in mind. The plate shows the focus ring itself, and the test checks the click and the reload.
+>    Action: Part of f256-02.
+> 4. **Which browser do you use on the desktop?**: Chrome, Edge and Safari support the capital-trimming rule. Firefox doesn't yet, and there the row stays as it is now, no worse. If you use Firefox, the other option is to set a small pixel nudge for each font by hand. I'd avoid that: it breaks whenever a font or size changes. If the mock-up opens with a yellow note saying your browser can't trim, you're on one that doesn't.
+>    Action: Recommended: f256-02 as drafted. If you're on Firefox, tell me and I'll add the per-font nudge for it.
+>
+> Proposals:
+> - F256 round 2: the top bar's words on one line (plan)
+> - F256 mock-up: the top bar's words on one line (mockup)
