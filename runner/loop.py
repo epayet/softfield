@@ -574,11 +574,10 @@ def _start_run(s: Session, command: str, cut_off_job: int | None = None) -> None
 
 def _resolve_reserve_parks(conn: sqlite3.Connection, project_id: int, at: str) -> None:
     """The desk items of tickets an older run parked at the week's reserve (ADR 44 item 6) or at
-    the 5-hour mark (ADR 50 item 3); a lapsed switch's own item stays."""
+    the 5-hour mark (ADR 50 item 3), and the items of earlier lapsed switches (F97 D7: a lapse
+    now asks nothing), all answered."""
     for row in metrics.open_owner_items(conn, project_id):
-        if row["kind"] == FIVE_HOUR_KIND or (
-            row["kind"] == RESERVE_KIND and row["subject"] not in SWITCHES
-        ):
+        if row["kind"] in (FIVE_HOUR_KIND, RESERVE_KIND):
             metrics.resolve_owner_item(conn, row["id"], at)
 
 
@@ -4351,7 +4350,7 @@ USE_RESERVE_HOURS = 24  # on lasts this long, then turns itself off (owner, 2026
 SWITCH_POLL_S = 60.0  # how often a wait for the owner's 25% checks for the switch (f5 D2)
 HOLD_POLL_S = 5.0  # how often the hold for the owner applies their requests (f6-22)
 FIVE_HOUR_KIND = "five-hour"  # a lead ticket parked for the owner's 25%, and its owner item
-RESERVE_KIND = "reserve"  # a lapsed switch's item; an older run's park at the week's reserve
+RESERVE_KIND = "reserve"  # an older run's park at the week's reserve; a run's start answers them
 RETRY = "retry"  # a parked entry's flag: a restart tries it again before its reset
 CLAUDE = "claude"
 # Where Claude's week stands now decides the park: a lead ticket's share of the week

@@ -87,6 +87,7 @@ The order between them is spread across `work_queue`, `_resume_support`, `lead_w
 - **⚑ Planning runs during a pause** (owner, 2026-10-07, after acceptance; item 5): the first pause from the dashboard held the owner's own message to the lead until Resume, which defeats pausing to replan.
 
 - **⚑ A switch turned on lasts 24 hours** (owner, 2026-10-04, after acceptance): then it turns itself off, and the runner asks again (a Needs-you item and a notification: "Claude's reserve: turn it on again for 24 h?"). `uv run runner run --use-reserve` starts the command with both switches on for 24 hours (`--use-reserve week` or `five-hour` for one). The dashboard shows "on until <day> HH:MM" beside a switch that's on.
+  No longer asks (owner, 2026-11-24, F97 D7): the lever turns off quietly.
 
 ## Open questions
 1. **F5's order:** f5-06 (priority pick) and f5-18 (pause) still make sense as written and are kept: they become parts of the picker. Only f5-10 changes.

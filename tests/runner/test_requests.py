@@ -349,8 +349,8 @@ def test_a_request_the_runner_cant_read_is_finished_with_why(repo, kind, subject
     assert state.switches == {}
 
 
-def test_a_switch_on_for_24_hours_reads_off_and_asks_to_be_turned_on_again(repo):
-    """The owner, 2026-10-04: on lasts 24 hours, then a Needs-you item asks again."""
+def test_a_switch_on_for_24_hours_reads_off_and_asks_nothing(repo):
+    """F97 D7: on lasts 24 hours, then it turns off quietly: no item, no notification."""
     _ask(repo, "queue", "m4-12-none")  # the project, and a request that isn't a switch
     state = State(
         switches={"week": (NOW - timedelta(hours=24)).isoformat(), "five_hour": NOW.isoformat()}
@@ -359,12 +359,9 @@ def test_a_switch_on_for_24_hours_reads_off_and_asks_to_be_turned_on_again(repo)
     lines = _apply(repo, state)
     assert "Claude's reserve: the week's switch went off after 24 hours" in lines[0]
     assert state.switches == {"five_hour": NOW.isoformat()}  # the other one stays on
-    assert _items(repo) == [("reserve", "week", "softfield reserve week on", True)]
+    assert _items(repo) == []
     _apply(repo, state)
-    assert len(_items(repo)) == 1  # raised once
-    _ask(repo, "reserve", "week", "on")
-    _apply(repo, state)
-    assert _items(repo) == [("reserve", "week", "softfield reserve week on", False)]
+    assert _items(repo) == []
 
 
 @pytest.mark.parametrize(

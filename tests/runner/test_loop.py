@@ -4100,10 +4100,10 @@ def test_past_the_mark_lead_tickets_with_nothing_else_to_run_all_go_with_no_swit
     assert [run["reserve"] for run in _rows(repo, "runs")] == [0]
 
 
-def test_a_switch_turned_on_24_hours_ago_reads_off_and_asks_again(
+def test_a_switch_turned_on_24_hours_ago_reads_off_and_asks_nothing(
     repo, fake_model, fake_lead, fake_clock, at_the_keyboard, monkeypatch
 ):
-    """The owner, 2026-10-04: on lasts 24 hours; then it is off and a Needs-you item asks. The
+    """The owner, 2026-10-04: on lasts 24 hours; then it is off, quietly (F97 D7). The
     lead ticket goes as a gap filler all the same (ADR 50)."""
     _readings_at(repo, 0.79)
     _switch_on(repo, "week", at=THURSDAY - timedelta(hours=24))
@@ -4113,10 +4113,7 @@ def test_a_switch_turned_on_24_hours_ago_reads_off_and_asks_again(
     _passes(monkeypatch)
     _run(repo)
     assert _state(repo).switches == {}
-    items = {(i["kind"], i["subject"]): i for i in _rows(repo, "owner_items")}
-    assert set(items) == {("reserve", "week")}
-    assert items["reserve", "week"]["resolved"] is None
-    assert items["reserve", "week"]["command"] == "softfield reserve week on"
+    assert [i for i in _rows(repo, "owner_items") if i["kind"] == "reserve"] == []
 
 
 @pytest.mark.parametrize("week_used", [0.1, 0.38])
@@ -4355,7 +4352,7 @@ def test_a_five_hour_park_is_dropped_at_the_start_of_a_run(repo, fake_clock):
 
 
 def test_an_old_reserve_park_and_its_desk_item_are_cleared_at_the_start_of_a_run(repo, fake_clock):
-    """ADR 44's last line. A lapsed switch's own item stays: the owner may turn it on again."""
+    """ADR 44's last line. A lapsed switch's old item is answered too (F97 D7)."""
     _readings_at(repo, 0.5)
     _lead_task(repo, "m1-01-lead")
     path = _config(repo).runs_dir / "state.json"
@@ -4378,7 +4375,7 @@ def test_an_old_reserve_park_and_its_desk_item_are_cleared_at_the_start_of_a_run
     s = loop.open_session(_config(repo))
     assert s.state.parked == {} and _state(repo).parked == {}
     items = {i["subject"]: i["resolved"] for i in _rows(repo, "owner_items")}
-    assert items["m1-01-lead"] is not None and items["week"] is None
+    assert items["m1-01-lead"] is not None and items["week"] is not None
     loop.close_session(s)
 
 

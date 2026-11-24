@@ -245,22 +245,12 @@ def test_a_verdicts_notification_that_failed_is_a_line_of_the_verdict(repo, sent
 # --- the reserve switch going off (runner/requests.py) -------------------------------------
 
 
-def test_the_reserve_switch_going_off_sends_once(repo, sent):
+def test_the_reserve_switch_going_off_sends_nothing(repo, sent):
+    """F97 D7: a lever that lapses turns off quietly."""
     _ask(repo, "queue", "m4-12-none")  # the project
     state = State(switches={"week": (NOW - timedelta(hours=24)).isoformat()})
     _apply(repo, state)
-    [one] = sent
-    assert one["body"] == f"{repo.name} · Claude's reserve: your choice"
-    assert one["Click"] == f"{HOME}/?project={repo.name}"
-    _apply(repo, state)
-    assert len(sent) == 1
-
-
-def test_the_reserve_switchs_failed_notification_is_a_line(repo, sent):
-    sent.fail = OSError("down")
-    _ask(repo, "queue", "m4-12-none")
-    lines = _apply(repo, State(switches={"week": (NOW - timedelta(hours=24)).isoformat()}))
-    assert f"{notify.NOT_SENT} (OSError: down)." in lines
+    assert sent == []
 
 
 # --- what a notification never says, and when it isn't sent --------------------------------

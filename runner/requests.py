@@ -26,7 +26,6 @@ from runner import (
     loop,
     metrics,
     milestone,
-    notify,
     order,
     owner,
     planner,
@@ -2218,32 +2217,14 @@ def _new_project(db: Path, now: datetime, value: str | None) -> str:
 def _lapse(
     repo: Path, conn: sqlite3.Connection, project_id: int, state: State, now: datetime
 ) -> list[str]:
-    """The switches on for 24 hours turned off, each with a Needs-you item that asks to turn
-    it on again (the owner, 2026-10-04), and a notification to the phone when it opens (ADR 31
-    item 3): one that wasn't sent is a line too, starting ``notify.NOT_SENT``."""
-    lines = []
-    for switch in loop.lapse_switches(state, now):
-        which = "the week's switch" if switch == loop.WEEK else "the 5-hour switch"
-        text = (
-            f"Claude's reserve: {which} went off after 24 hours."
-            f" Turn “{loop.SWITCHES[switch]}” on again for 24 h?"
-        )
-        was_open = (loop.RESERVE_KIND, switch) in notify.open_items(conn, project_id)
-        metrics.upsert_owner_item(
-            conn,
-            project_id,
-            loop.RESERVE_KIND,
-            switch,
-            text=text,
-            command=loop.switch_command(switch),
-            created=now.isoformat(),
-        )
-        lines.append(text)
-        if not was_open:
-            message = notify.item_message(loop.RESERVE_KIND, switch)
-            if (note := notify.to_owner(project_name(repo), *message)) is not None:
-                lines.append(note)
-    return lines
+    """The switches on for 24 hours turned off, quietly (F97 D7, 2026-11-24): a lever that is
+    off only sends lead tickets after the developers' (ADR 50 item 6), so nothing asks the
+    owner and nothing goes to the phone. One line each, for the console."""
+    which = {loop.WEEK: "the week's switch"}
+    return [
+        f"Claude's reserve: {which.get(switch, 'the 5-hour switch')} went off after 24 hours."
+        for switch in loop.lapse_switches(state, now)
+    ]
 
 
 def _answered_block(conn: sqlite3.Connection, project_id: int, now: datetime, ticket: str) -> None:
