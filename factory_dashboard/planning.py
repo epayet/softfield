@@ -53,6 +53,7 @@ from factory_dashboard.overview import (
 )
 from factory_dashboard.queries import local
 from runner import metrics
+from runner.dispatch import SETUP
 from runner.planner import (
     APPLIED,
     APPROVED,
@@ -126,16 +127,32 @@ def _waiting_order(
 ) -> dict[str, None]:
     """The cards the lead owes a reply, in order: the owner's (or the runner's, ADR 29) message
     is the thread's latest and a planner job about it is open, or an open ``plan_message``
-    request names the card."""
+    request names the card. Cards with an open ``setup`` job are included too, whether or not
+    the card has a thread or messages."""
     planned = {
         str(r["subject"] or "").split("#")[0]
         for r in metrics.open_jobs(conn, project_id)
         if r["kind"] in REPLIES
     }
-    return dict.fromkeys(
-        [r["card"] for r in last if r["author"] in ("owner", "runner") and r["card"] in planned]
-        + _asked(conn, project_id)
-    )
+    # Cards with open SETUP jobs, whether or not they have a thread
+    setup_cards = [
+        str(r["subject"] or "") for r in metrics.open_jobs(conn, project_id) if r["kind"] == SETUP
+    ]
+    seen: set[str] = set()
+    result: list[str] = []
+    for r in last:
+        if r["author"] in ("owner", "runner") and r["card"] in planned and r["card"] not in seen:
+            seen.add(r["card"])
+            result.append(r["card"])
+    for card in setup_cards:
+        if card not in seen:
+            seen.add(card)
+            result.append(card)
+    for card in _asked(conn, project_id):
+        if card not in seen:
+            seen.add(card)
+            result.append(card)
+    return dict.fromkeys(result)
 
 
 def _waiting_for_lead(conn: sqlite3.Connection, project_id: int) -> set[str]:
@@ -180,13 +197,15 @@ def _answers_wanted(
     project: str,
     titles: dict[str, str],
     now: datetime,
+    waiting: dict[str, None] | None = None,
 ) -> list[DeskItem]:
     """One box per conversation (F74): threads whose last message is the lead's, a reply the
     owner hasn't answered (an archived thread waits for nothing), then the threads the lead owes
     a reply (``_waiting_order``), dashed and on their way. Those are listed whatever is stored:
     archived, or no thread yet. The lead's replies come newest first (F185 D3)."""
     last = _last_messages(conn, project_id)
-    waiting = _waiting_order(conn, project_id, last)
+    if waiting is None:
+        waiting = _waiting_order(conn, project_id, last)
     items = [
         DeskItem(
             "answers",
@@ -497,8 +516,12 @@ def _ripe(
     return items
 
 
-def _seeds(conn: sqlite3.Connection, project_id: int) -> list[DeskItem]:
-    """Idea cards no thread is about yet, and no message on its way (F74 D4)."""
+def _seeds(
+    conn: sqlite3.Connection,
+    project_id: int,
+    waiting: Collection[str] = (),
+) -> list[DeskItem]:
+    """Idea cards no thread is about yet, and no message on the way (F74 D4)."""
     threads = {
         r["card"]
         for r in conn.execute(
@@ -512,7 +535,7 @@ def _seeds(conn: sqlite3.Connection, project_id: int) -> list[DeskItem]:
     return [
         DeskItem("seeds", r["title"] or r["key"], "an idea, not asked about yet", f"/planning/{k}")
         for r in rows
-        if (k := short_key(r["key"])) not in threads
+        if (k := short_key(r["key"])) not in threads and k not in waiting
     ]
 
 
@@ -819,7 +842,9 @@ def desk(
         known = _known_cards(repo)
         revising = _revising(conn, project_id, project, now)
         ripe = _ripe(conn, project, now, line=line)
-        answers = _answers_wanted(conn, project_id, project, titles, now)
+        last = _last_messages(conn, project_id)
+        waiting = _waiting_order(conn, project_id, last)
+        answers = _answers_wanted(conn, project_id, project, titles, now, waiting)
         ripe, answers = _ripe_takes_its_thread(ripe, answers, revising)
         closing = {
             a.link.removeprefix("/planning/")
@@ -831,7 +856,7 @@ def desk(
         ripe, answers = _with_proposals(ripe, answers, listed, repo, now, revising)
         ripe = _acted_on(conn, project_id, ripe)
         answers = _acted_on(conn, project_id, answers, closing)
-        seeds = _acted_on(conn, project_id, _seeds(conn, project_id))
+        seeds = _acted_on(conn, project_id, _seeds(conn, project_id, waiting))
         blocked = _acted_on(conn, project_id, _blocked(conn, project_id))
     return [
         DeskGroup("refused", "Didn't go through", "--hazard", refusals),

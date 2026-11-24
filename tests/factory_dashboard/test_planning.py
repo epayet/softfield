@@ -3361,3 +3361,93 @@ def test_with_the_weeks_lever_on_planning_draws_neither_post_nor_plate(db_path, 
     _, week, text = _lead_window(_page(client))
     assert 'class="pace"' not in week
     assert "Over pace" not in text and "Last hours" not in text and "on pace" not in text
+
+
+# --- a setup job puts its card on the desk (F278 D1) ----------------------------------------
+
+
+def test_a_card_with_no_thread_and_an_open_setup_job_is_not_a_seed(planning, db_path, db):
+    """An idea card with no thread and an open setup job is not among the seeds, and is one item
+    under "Your answers wanted", on_its_way, its words starting "waiting for the lead"."""
+    conn = metrics.open_db(db_path)
+    try:
+        metrics.queue_job(conn, planning, "setup", "f9", "the lead's setup", NOW.isoformat())
+        conn.commit()
+    finally:
+        conn.close()
+    seeds = _group(db, "seeds")
+    assert [s.title for s in seeds] == []
+    answers = _group(db, "answers")
+    [item] = [i for i in answers if i.link == "/planning/f9"]
+    assert item.on_its_way
+    assert item.words.startswith("waiting for the lead")
+
+
+def test_a_card_with_an_open_setup_job_and_an_empty_thread_stays_on_its_way(planning, db_path, db):
+    """The same with the card's thread made but holding no message: still that one item."""
+    conn = metrics.open_db(db_path)
+    try:
+        metrics.planner_thread(conn, planning, "f9", NOW.isoformat())
+        conn.commit()
+    finally:
+        conn.close()
+    conn = metrics.open_db(db_path)
+    try:
+        metrics.queue_job(conn, planning, "setup", "f9", "the lead's setup", NOW.isoformat())
+        conn.commit()
+    finally:
+        conn.close()
+    seeds = _group(db, "seeds")
+    assert [s.title for s in seeds] == []
+    answers = _group(db, "answers")
+    [item] = [i for i in answers if i.link == "/planning/f9"]
+    assert item.on_its_way
+    assert item.words.startswith("waiting for the lead")
+
+
+def test_a_finished_setup_job_with_a_lead_message_makes_the_card_a_reply_item(
+    planning, db_path, db
+):
+    """Once the setup job is finished and the lead's message is the last, the card is the usual
+    "the lead replied …" item, not on its way."""
+    conn = metrics.open_db(db_path)
+    try:
+        thread = metrics.planner_thread(conn, planning, "f9", NOW.isoformat())
+        conn.commit()
+    finally:
+        conn.close()
+    conn = metrics.open_db(db_path)
+    try:
+        queue_id = metrics.queue_job(
+            conn, planning, "setup", "f9", "the lead's setup", NOW.isoformat()
+        )
+        metrics.finish_queued(conn, queue_id, NOW.isoformat())
+        metrics.add_planner_message(
+            conn, thread["id"], "lead", _at(timedelta(minutes=1)), "Here is my answer."
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    seeds = _group(db, "seeds")
+    assert [s.title for s in seeds] == []
+    answers = _group(db, "answers")
+    [item] = [i for i in answers if i.link == "/planning/f9"]
+    assert not item.on_its_way
+    assert item.words.startswith("the lead replied")
+
+
+def test_a_finished_setup_job_with_no_thread_makes_the_card_a_seed_again(planning, db_path, db):
+    """With the job finished and no thread, the card is a seed again."""
+    conn = metrics.open_db(db_path)
+    try:
+        queue_id = metrics.queue_job(
+            conn, planning, "setup", "f9", "the lead's setup", NOW.isoformat()
+        )
+        metrics.finish_queued(conn, queue_id, NOW.isoformat())
+        conn.commit()
+    finally:
+        conn.close()
+    seeds = _group(db, "seeds")
+    assert [s.title for s in seeds] == ["Parallel developers"]
+    answers = _group(db, "answers")
+    assert not any(i.link == "/planning/f9" for i in answers)
