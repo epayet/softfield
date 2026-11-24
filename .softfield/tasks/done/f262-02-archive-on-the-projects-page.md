@@ -39,3 +39,9 @@ attempts: 3
 tokens: 5354993
 logs: .softfield/var/runs/20261124-131732/f262-02-archive-on-the-projects-page
 ```
+
+```yaml
+# --- runner ---
+result: done
+finished_by: lead
+```
