@@ -1,6 +1,6 @@
 # Review: F97, Needs you steps aside: Now first, a box of desk counts at the bottom
 
-- **Status:** review round 1 done, waiting for the owner's sign-off.
+- **Status:** done, signed off by the owner on 2026-11-24.
 
 ## Sign-off sheet
 

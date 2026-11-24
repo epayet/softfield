@@ -1,6 +1,7 @@
 # Milestone F97: Needs you steps aside: Now first, a box of desk counts at the bottom
 
-> **State:** ready · **Area:** factory · **Fast lane:** yes
+> **State:** done · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-24. Base: git tag `f97-given-that-the-planning-board-has-start`. Report: [`.softfield/reviews/f97-given-that-the-planning-board-has.md`](../reviews/f97-given-that-the-planning-board-has.md).
 > Planted by the owner on 2026-10-10.
 
 ## Notes
