@@ -24,3 +24,12 @@ Read D1 and "What happens today" in `.softfield/cards/f278-until-the-setup-job-p
 - once the setup job is finished and the lead's message is the last, M1 is the usual "the lead replied …" item, not on its way; with the job finished and no thread, M1 is a seed again
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 3
+duration_s: 2066
+gate_failures: ['stopped', 'ruff']
+tokens: 2403763
+```
