@@ -26,3 +26,12 @@ The top bar's status sees the lead's setup job (a project started from the Proje
 - Every existing case of the test keeps its words and dot.
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: stopped)
+attempts: 3
+tokens: 122019
+logs: .softfield/var/runs/20261121-011446/f276-01-the-bar-sees-setup-jobs
+```
