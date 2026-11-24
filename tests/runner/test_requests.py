@@ -2620,9 +2620,11 @@ def test_a_project_whose_app_runs_is_not_forgotten(repo, monkeypatch):
     monkeypatch.setattr(stacks, "state", lambda s: stacks.StackState(word["w"]))
     _ask(repo, "archive_project")
     _apply(repo)
-    _ask(repo, "forget_project")
-    assert _apply(repo) == ["forget_project: its app is running: stop it first"]
-    assert _projects_pause(repo) == metrics.ARCHIVED
+    for up in (stacks.RUNNING, stacks.STARTING, stacks.UPDATE_FAILED):  # the page's "up" ones
+        word["w"] = up
+        _ask(repo, "forget_project")
+        assert _apply(repo) == ["forget_project: its app is running: stop it first"], up
+        assert _projects_pause(repo) == metrics.ARCHIVED
     word["w"] = stacks.STOPPED
     _ask(repo, "forget_project")
     assert _apply(repo)[0].startswith("forget_project: forgotten")

@@ -982,6 +982,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** a milestone's "files changed since its start" is wrong whenever the board interleaves cards, which is now the norm; any new job that reads one milestone should take its tickets' own merges, as `_merge_files` does. A test that passes the expected value in its input (`route="report"`) can't show that the code sets it. No live pre-review has run yet: Copilot's first ones are the evidence for ADR 51's three-round limit.
 - **Decisions affected:** ADR 51 as built, with the file list from the tickets' merges (D1's tag-then-merges named the tag first).
 
+### F273 (2026-11-24): forget an archived project from the Projects page ([review](../reviews/f273-i-need-the-ability-to-forget.md))
+
+- **Q1:** one lead ticket (01, the request kind, runner side) passed on Sonnet's first attempt in 11 minutes ($0.25). One developer ticket at difficulty 2 (02: the button, the question, the browser tests) failed three times on the local model, a timeout and then two ruff failures, one of them after an Opus direction ($0.69). The lead finished it from the branch in 19 minutes ($2.25). No checkpoint. Review round 1: one should-fix (the runner's "app is up" refusal was tested for Running only), fixed by the review; one nit left for later and one only reported. Score 8.
+- **Q3:** the local model spent about 2 h 30 min on 02 for markup the lead mostly kept, but its opener never fired (`hx-on::click`) and it had patched around that with a page-wide listener. See the review's numbers.
+- **Q5:** see the review's numbers.
+- **Anything else:** the same day, f124-02, f262-02 and f273-02 (Projects-page buttons with Playwright tests) all escalated. This is the fourth such case, after F122's 05 and F272. F17's rule already sends this work to the lead, but the plans keep routing it to the developer. The escalation turned the `hx-on::` mistake into a test. Routing still needs a check, which the review offers as a Factory idea.
+- **Decisions affected:** none.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.
