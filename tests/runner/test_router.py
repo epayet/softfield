@@ -259,6 +259,16 @@ def test_copilot_stands_in_for_claude_past_its_pace_line_up_to_its_capacity():
     assert stand_in((COPILOT,), {COPILOT.id: resting}, THURSDAY, [LOCAL], "") is None
 
 
+def test_a_paced_stand_in_keeps_to_copilots_pace_line():
+    """ADR 51 item 5: a pre-review stays under the month's pace line (half-way: 50%)."""
+    over = {COPILOT.id: copilot_month(0.8)}
+    assert stand_in((COPILOT,), over, THURSDAY, [LOCAL], "idle", paced=True) is None
+    assert stand_in((COPILOT,), over, THURSDAY, [LOCAL], "idle") is not None
+    under = {COPILOT.id: copilot_month(0.1)}
+    picked = stand_in((COPILOT,), under, THURSDAY, [LOCAL], "idle", paced=True)
+    assert picked is not None and picked.agent == COPILOT
+
+
 def test_copilot_never_stands_in_on_a_copilot_developers_merges():
     """Its model is unknown (`auto`), so it may be the author's (ADR 16 item 9)."""
     windows = {COPILOT.id: copilot_month(0.1)}

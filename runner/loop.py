@@ -3841,6 +3841,82 @@ def stand_in_checkpoint(s: Session, milestone: str, merged: list[str], hold: "Ho
     return True
 
 
+# --- a pre-review of a finished milestone while Claude is out (ADR 51) -----------------------
+
+PRE_REVIEW = "pre-review"
+
+
+def pre_review(s: Session, milestone: str) -> bool:
+    """Copilot (the first agent `[roles] checkpoint-stand-in` lists that its month's pace line
+    permits) reads ``milestone``, finished, against its card, read-only. Each finding that isn't a
+    nit goes in a developer's fix ticket (`fix_tickets`); one that would need the lead (an
+    `agent: lead` ticket, or a file under a protected path) files nothing and stays `report`.
+    Its findings are recorded for the review to judge. Claude's re-check isn't asked
+    (`state.recheck` is untouched). Choosing the milestone and when to run are the caller's.
+    False when none may run or its job failed: nothing is written."""
+    from runner.milestone import _done_tickets, _plan_commit  # it imports this module
+
+    agents = [s.cfg.agents[agent_id] for agent_id in s.cfg.roles.get(STAND_IN, ())]
+    if not agents:
+        return False
+    at = now()
+    windows = agent_windows(s, agents, at)
+    # No authors: a read-only agent never wrote a merge, so its model can't be an author's
+    routed = router.stand_in(agents, windows, at, (), "no other work can start", paced=True)
+    if routed is None:
+        s.report.notes.append(f"No pre-review of {milestone} may run now.")
+        return False
+    agent = routed.agent
+    tickets = sorted(_done_tickets(s.repo, milestone))
+    start = _plan_commit(s.git, s.repo, milestone)
+    changed = [
+        f
+        for f in s.git.run("diff", "--name-only", start, "HEAD").splitlines()
+        if f and not f.startswith(".softfield/")
+    ]
+    card = milestone_file(s.repo, "cards", milestone).relative_to(s.repo).as_posix()
+    s.log("")
+    s.log(console.ticket_header(f"{milestone} pre-review", agent.id, None))
+    job = JobSpec(
+        role=PRE_REVIEW,
+        prompt=prompts.PRE_REVIEW.format(
+            card=card,
+            tickets="\n".join(f"- {t} (.softfield/tasks/done/{t}.md)" for t in tickets),
+            files=", ".join(changed) or "none",
+        ),
+        timeout=s.cfg.claude_timeout,
+        title=f"{milestone} pre-review",
+    )
+    number = len(list(s.run_dir.glob("pre-review-*.json"))) + 1
+    base = s.run_dir / f"pre-review-{number}-{agent.id}"
+    result, findings, job_id = _read_only_review(
+        s, agent, job, milestone, base, routed.reason, "the pre-review"
+    )
+    if not result.ok:
+        return False
+    prefix = f"{milestone}-P{job_id}-"
+    filed = fix_tickets(s.repo, milestone, {prefix + f.id: f for f in findings}, agent.id)
+    protected = tuple(read_protected(s.repo))
+    for path in dict.fromkeys(filed.values()):
+        task = parse_task(path, s.cfg.default_max_diff)  # the lead's work is not Copilot's to file
+        if router.lead_only(task.agent, (*task.files, *task.tests), protected):
+            path.unlink()
+            filed = {k: p for k, p in filed.items() if p != path}
+    written = list(dict.fromkeys(filed.values()))
+    acted = [replace(f, route="local") if prefix + f.id in filed else f for f in findings]
+    if job_id is not None:
+        record_findings(s, milestone, acted, agent.id, prefix, by_ticket=True)
+    tickets_text = ", ".join(p.stem for p in written) or "none"
+    s.report.notes.append(
+        f"Pre-review of {milestone} by {agent.id}: {len(findings)} findings;"
+        f" fix tickets: {tickets_text}."
+    )
+    runner_commit(s, f"pre-review of {milestone} (by {agent.id}, while Claude is out)")
+    for path in written:
+        record_ticket(s, path)
+    return True
+
+
 _FIX_PATH_RE = re.compile(r"[\w-][\w.-]*(?:/[\w-][\w.-]*)*")  # repo-relative, never `..`
 _TICKET_ID_RE = re.compile(r"[\w-]+")
 

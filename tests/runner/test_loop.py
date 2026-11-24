@@ -7176,6 +7176,98 @@ def test_with_claude_at_its_limit_copilot_does_the_checkpoint_and_its_findings_a
     assert git(repo, "status", "--porcelain") == ""
 
 
+def _pre_review_session(repo: Path):
+    roles = {**ROLES, "checkpoint-stand-in": (COPILOT.id,)}
+    agents = {**_config(repo).agents, COPILOT.id: COPILOT}
+    s = loop.open_session(replace(_config(repo), agents=agents, roles=roles))
+    (repo / "coucou" / "secret.py").write_text("SECRET = 1\n")
+    done = repo / ".softfield" / "tasks" / "done"
+    write_task(done, "m1-01-thing")
+    # a fix of a fix: its own fix would be the lead's
+    write_task(done, "m1-02-fix-thing")
+    text = (
+        (done / "m1-02-fix-thing.md")
+        .read_text()
+        .replace("depends_on:", "finding: m1-C1-1\ndepends_on:")
+    )
+    (done / "m1-02-fix-thing.md").write_text(text)
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "done tickets")
+    return s
+
+
+def _pre_finding(summary: str, **over: object) -> dict[str, object]:
+    return {
+        **SHADOW_FINDING,
+        "severity": "should-fix",
+        "file": "coucou/thing.py",
+        "summary": summary,
+        "ticket": "m1-01-thing",
+        **over,
+    }
+
+
+def test_a_pre_review_files_developer_fixes_and_records_its_findings(repo, fake_clock, monkeypatch):
+    """ADR 51: Copilot reads a finished milestone; each finding that isn't a nit is a fix."""
+    s = _pre_review_session(repo)
+    findings = [
+        _pre_finding("Thing is a stub"),
+        _pre_finding("Thing has no test of 42"),
+        _pre_finding("A nit", severity="nit"),
+    ]
+    answer = json.dumps({"findings": findings})
+    specs = _fake_copilot(monkeypatch, JobResult(ok=True, text=answer, duration_s=1.0))
+    before = (list(s.state.recheck), list(s.state.recheck_filed))
+    assert loop.pre_review(s, "m1") is True
+    [spec] = specs
+    assert spec.role == "pre-review" and spec.read_only
+    assert "m1-01-thing (.softfield/tasks/done/m1-01-thing.md)" in spec.prompt
+    assert ".softfield/cards/m1.md" in spec.prompt
+    [fix] = sorted((repo / ".softfield" / "tasks" / "ready").glob("m1-*.md"))
+    ticket = parse_task(fix, 150)
+    assert ticket.agent == "developer" and ticket.files == ("coucou/thing.py",)
+    [job] = [j for j in _rows(repo, "jobs") if j["role"] == "pre-review"]
+    found = {f["key"]: f for f in _rows(repo, "findings")}
+    assert set(found) == {f"m1-P{job['id']}-{n}" for n in (1, 2, 3)}
+    assert [found[f"m1-P{job['id']}-{n}"]["route"] for n in (1, 2, 3)] == [
+        "local",
+        "local",
+        "backlog",
+    ]
+    assert git(repo, "log", "-1", "--format=%s").startswith("pre-review of m1")
+    assert git(repo, "status", "--porcelain") == ""
+    assert (s.state.recheck, s.state.recheck_filed) == before
+
+
+def test_a_pre_review_never_files_the_leads_work(repo, fake_clock, monkeypatch):
+    """ADR 51 item 3: a protected file, or a fix of a fix, files nothing: recorded as a report."""
+    s = _pre_review_session(repo)
+    answer = json.dumps(
+        {
+            "findings": [
+                _pre_finding("Secret leaks", file="coucou/secret.py", route="report"),
+                _pre_finding("Fix is wrong", ticket="m1-02-fix-thing", route="report"),
+            ]
+        }
+    )
+    _fake_copilot(monkeypatch, JobResult(ok=True, text=answer, duration_s=1.0))
+    assert loop.pre_review(s, "m1") is True
+    assert list((repo / ".softfield" / "tasks" / "ready").glob("m1-*.md")) == []
+    assert {f["route"] for f in _rows(repo, "findings")} == {"report"}
+    assert len(_rows(repo, "findings")) == 2
+    assert git(repo, "status", "--porcelain") == ""
+
+
+def test_a_failed_pre_review_writes_nothing(repo, fake_clock, monkeypatch):
+    s = _pre_review_session(repo)
+    _fake_copilot(monkeypatch, JobResult(ok=False, text="boom", duration_s=1.0))
+    head = git(repo, "rev-parse", "HEAD")
+    assert loop.pre_review(s, "m1") is False
+    assert list((repo / ".softfield" / "tasks" / "ready").glob("m1-*.md")) == []
+    assert _rows(repo, "findings") == []
+    assert git(repo, "rev-parse", "HEAD") == head
+
+
 def test_a_checkpoints_finding_belongs_to_the_milestone_of_the_ticket_at_fault(repo):
     """f8 review: a checkpoint run under F9's key filed F8's findings there, so F8's review
     saw none. A finding on a ticket with no row stays the checkpoint's; a review's always do."""

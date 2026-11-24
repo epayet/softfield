@@ -338,6 +338,33 @@ empty list if none):
   "ticket": "<the merged ticket at fault>"}}]}}
 """
 
+# ADR 51: while Claude is out, a read-only agent reads a finished milestone against its card; the
+# runner turns each finding that isn't a nit into a fix ticket for a developer.
+PRE_REVIEW = """\
+You are reading a finished milestone of this repo for its lead, read-only, before the lead's
+review. Read the card first: its Expected outcome, Done when and Decisions. Then each done
+ticket, then the files they changed and their tests.
+Card: {card}
+Done tickets:
+{tickets}
+Files changed since the milestone started: {files}
+
+Check the code against the card: what it asks that the code doesn't do, bugs, tests that check
+presence instead of content, and anything masked instead of fixed. Change nothing. Skip nits: a
+local developer fixes each finding, from what you write. Give each its kind of fix:
+- "code": the code is wrong. Name the code file at fault, and quote in "detail" the line of
+  the card or ticket (its Goal or Done when) that the code breaks.
+- "test": the code is right, but a test is weak. Name the test file, and say what the test
+  must check that it doesn't.
+Write one entry per done ticket and kind, every problem of that kind in its "detail". "ticket"
+is a done ticket's id from the list above. "file" is a path from the repo's root, as in this
+example. Answer with only this JSON (an empty list if none):
+{{"findings": [{{"severity": "blocking" | "should-fix", "kind": "code" | "test",
+  "file": "factory_dashboard/queries.py", "line": 12 | null, "summary": "one line",
+  "detail": "what is wrong and why", "route": "report",
+  "ticket": "<the done ticket at fault>"}}]}}
+"""
+
 REVIEW = """\
 You are the lead, reviewing milestone {milestone} of this project. Follow "Review" above and
 docs/workflow.md (Milestone review loop).

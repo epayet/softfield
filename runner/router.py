@@ -194,14 +194,18 @@ def stand_in(
     now: datetime,
     authors: Collection[Agent],
     because: str,
+    *,
+    paced: bool = False,
 ) -> Route | None:
     """Who does a checkpoint Claude can't take (ADR 16 item 9; ``because`` says why): the first
     agent listed that its allowance permits, its month a cap at its capacity rather than a pace
-    (emergency use). Its model is unknown, so never one whose harness wrote a merge."""
+    (emergency use). Its model is unknown, so never one whose harness wrote a merge. With
+    ``paced`` (a pre-review, ADR 51 item 5) its month's pace line is the limit instead, so the
+    room a checkpoint stand-in needs stays."""
     for agent in candidates:
         if any(author.harness == agent.harness for author in authors):
             continue
-        fit = allowance.answer(agent.id, windows.get(agent.id, ()), 0.0, now, use_reserve=True)
+        fit = allowance.answer(agent.id, windows.get(agent.id, ()), 0.0, now, use_reserve=not paced)
         if fit.ok:
             return Route(agent, f"{agent.id} stands in for Claude ({because}): {fit.reason}")
     return None
