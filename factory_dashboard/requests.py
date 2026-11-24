@@ -23,6 +23,7 @@ from runner.requests import (
     ACCEPT_ADR,
     APPROVE_PLAN,
     ARCHIVE,
+    ARCHIVE_PROJECT,
     CHANGE,
     DISMISS,
     DROP_SEED,
@@ -41,6 +42,7 @@ from runner.requests import (
     SEND_BACK,
     SET_ASIDE,
     SIGNOFF,
+    UNARCHIVE_PROJECT,
 )
 
 router = APIRouter()
@@ -73,6 +75,8 @@ KINDS = (
     PROJECT_ORDER,
     PAUSE_PROJECT,
     RESUME_PROJECT,
+    ARCHIVE_PROJECT,
+    UNARCHIVE_PROJECT,
     NEW_PROJECT,
 )
 

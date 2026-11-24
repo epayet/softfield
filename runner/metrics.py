@@ -461,6 +461,13 @@ def board_order(conn: sqlite3.Connection, project_id: int) -> list[str]:
 
 SETTING_UP = "setting up"  # a project's `paused` from `softfield init` until `doctor` passes
 FORGOTTEN = "forgotten"  # `softfield forget`: gone from every list, its rows kept
+ARCHIVED = "archived"  # the owner's archive (F262): held as a pause holds, off the picker
+
+
+def is_archived(project: "ProjectRow | str | None") -> bool:
+    """Whether a project, or its ``paused``, says "archived" (F262 D1)."""
+    paused = project.paused if isinstance(project, ProjectRow) else project
+    return paused == ARCHIVED
 
 
 def paused_by_you(paused: str | None) -> str | None:

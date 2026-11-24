@@ -673,6 +673,7 @@ def test_the_runner_takes_a_project_being_set_up_or_paused_by_you(repo, tmp_path
         (None, True),
         (metrics.SETTING_UP, True),
         ("2026-11-19T01:00", True),
+        (metrics.ARCHIVED, True),
         ("moved away", False),
     ):
         conn = metrics.open_db(db)

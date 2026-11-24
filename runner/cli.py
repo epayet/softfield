@@ -131,6 +131,7 @@ def _project_configs() -> list[Config]:
         held = (
             row.paused not in (None, metrics.SETTING_UP)
             and metrics.paused_by_you(row.paused) is None
+            and not metrics.is_archived(row)
         )
         if held or repo is None or not (repo / PROJECT_TOML).is_file():
             continue
@@ -169,7 +170,7 @@ def _paused_words(paused: str) -> str:
     """A project's ``paused`` in the guide: "paused by you since 09:00" for the owner's, else
     as it is ("setting up")."""
     since = metrics.paused_by_you(paused)
-    return paused if since is None else loop.paused_by_you_since(since)
+    return paused if since is None else loop.paused_by_you_since(since)  # "archived" as it is
 
 
 def _guide() -> int:

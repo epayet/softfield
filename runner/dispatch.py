@@ -59,6 +59,7 @@ GOES_WITH = (ESCALATION, DIRECTION)  # a ticket's own work: it joins the lane wi
 LANE_KINDS = (ESCALATION, DIRECTION, REVIEW)  # the queued rows the lane takes (F242 D1)
 UNKNOWN_KIND = "unknown kind of job"
 PAUSED = "paused by you"  # the owner paused the factory (f5-18): every line but planning waits
+ARCHIVED = "archived"  # the owner archived the project (F262 D3): held the same way
 
 
 @dataclass(frozen=True)
@@ -129,9 +130,10 @@ def pick(
     *,
     paused: bool = False,
     first: Collection[str] = frozenset(),
+    hold: str = PAUSED,
 ) -> Pick | None:
     """The job that runs next, or None when every one waits."""
-    lines = plan(queued, tickets, windows, now, paused=paused, first=first)
+    lines = plan(queued, tickets, windows, now, paused=paused, first=first, hold=hold)
     return next((line.pick for line in lines if not line.waits), None)
 
 
@@ -143,6 +145,7 @@ def plan(
     *,
     paused: bool = False,
     first: Collection[str] = frozenset(),
+    hold: str = PAUSED,
 ) -> list[Line]:
     """Every job in the order it would run, each with what it waits for, the fast lane's
     (``first``'s ticket ids) on top. While the owner pauses the factory (ADR 22 item 5), every
@@ -165,7 +168,7 @@ def plan(
     lines += [Line(Pick(q.kind, q.subject, q.reason), UNKNOWN_KIND) for q in unknown]
     if not paused:
         return lines
-    return [line if line.pick.kind in PLANNING else Line(line.pick, PAUSED) for line in lines]
+    return [line if line.pick.kind in PLANNING else Line(line.pick, hold) for line in lines]
 
 
 def _rank(kind: str) -> int:

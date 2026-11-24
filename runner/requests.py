@@ -64,6 +64,9 @@ PROJECT_ORDER = "project_order"  # value: a JSON list of project names, first fi
 # no subject, no value, on the project's own row: its tickets wait, its planning goes (F124 D3)
 PAUSE_PROJECT = "pause_project"
 RESUME_PROJECT = "resume_project"
+# the same, held as a pause holds and off the picker (F262 D1)
+ARCHIVE_PROJECT = "archive_project"
+UNARCHIVE_PROJECT = "unarchive_project"
 # on Softfield's own row; value: {name, idea, built_with, app} (F122 D2, ADR 48 item 1)
 NEW_PROJECT = "new_project"
 _STATE_ONLY = (RESERVE, PAUSE, RESUME)  # they change state.json alone: a wait takes them
@@ -2033,6 +2036,8 @@ def _apply(
             return _project_order(conn, value)
         if kind in (PAUSE_PROJECT, RESUME_PROJECT):
             return _pause_project(conn, project_id, now, kind)
+        if kind in (ARCHIVE_PROJECT, UNARCHIVE_PROJECT):
+            return _archive_project(conn, project_id, kind)
         if kind == NEW_PROJECT:
             return _new_project(db, now, value)
         if kind == DISMISS:
@@ -2095,6 +2100,26 @@ def _pause_project(conn: sqlite3.Connection, project_id: int, now: datetime, kin
         return "not paused"
     metrics.set_project_paused(conn, name, None)
     return "resumed"
+
+
+def _archive_project(conn: sqlite3.Connection, project_id: int, kind: str) -> str:
+    """The owner archives this project, or brings it back (F262 D1-D3): ``projects.paused`` says
+    "archived", which holds its tickets as a pause does while its planning and its requests
+    go. The database only. A project being set up keeps its "setting up"."""
+    row = conn.execute("SELECT name, paused FROM projects WHERE id = ?", (project_id,)).fetchone()
+    name, paused = row[0], row[1]
+    if paused == metrics.SETTING_UP:
+        return BEING_SET_UP
+    archived = metrics.is_archived(paused)
+    if kind == ARCHIVE_PROJECT:
+        if archived:
+            return "already archived"
+        metrics.set_project_paused(conn, name, metrics.ARCHIVED)
+        return "archived: off the picker, its tickets wait"
+    if not archived:
+        return "not archived"
+    metrics.set_project_paused(conn, name, None)
+    return "unarchived: back in the list, last"
 
 
 _YES = (True, "yes", "on", "true", "1")

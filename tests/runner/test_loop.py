@@ -8689,6 +8689,45 @@ def test_a_project_paused_by_you_runs_its_planning_and_requests_but_not_its_tick
     loop.close_session(s)
 
 
+def test_dry_run_says_an_archived_projects_tickets_are_archived(repo, capsys):
+    """F262 D3: the archive holds as the pause does, and says its own word."""
+    _add_task(repo, "m1-01-thing")
+    _pause_project(repo, metrics.ARCHIVED)
+    out = _dry_run(repo, capsys)
+    assert "   m1-01-thing: archived, place 1, developer ticket" in out
+    assert "next: nothing" in out
+
+
+def test_an_archived_project_runs_its_planning_and_requests_but_not_its_tickets(
+    repo, fake_clock, monkeypatch
+):
+    """F262 D1, D3: archived, its turns run its planner job and apply its requests, an
+    unarchive among them; its tickets wait, and its activity says "Idle: archived"."""
+    _add_task(repo, "m1-01-thing")
+    ran: list[str] = []
+    monkeypatch.setattr(loop, "run_task", _merge_any(repo, ran))
+
+    def run_queued(s, row, escalate):
+        ran.append(row.kind)
+        metrics.finish_queued(s.db, row.id, loop.now().isoformat())
+
+    monkeypatch.setattr(loop, "run_queued", run_queued)
+    s = loop.open_session(_config(repo))
+    _pause_project(repo, metrics.ARCHIVED)
+    loop.enqueue(s, dispatch.PLANNER, "general", "the owner's message")
+    assert loop.work_queue(s, reviews=True, wait=False, take_tickets=False) is False
+    assert ran == ["planner"]
+    assert loop.work_queue(s, reviews=True, wait=False, once=True) is False
+    assert ran == ["planner"]  # the ticket waits
+    assert s.activity == "Idle: archived"
+    _ask_from_the_dashboard(repo, "unarchive_project")
+    assert loop.work_queue(s, reviews=True, wait=False, once=True) is False
+    assert ran == ["planner", "m1-01-thing"]
+    [done] = [r for r in _rows(repo, "owner_requests") if r["kind"] == "unarchive_project"]
+    assert done["result"] == "unarchived: back in the list, last"
+    loop.close_session(s)
+
+
 def test_every_projects_queued_jobs_go_before_any_ticket():
     """ADR 30 item 6: the owner's planning reply in the second project doesn't wait behind the
     first project's ticket."""

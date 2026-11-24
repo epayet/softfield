@@ -2512,6 +2512,58 @@ def test_the_dashboard_sends_a_projects_pause_and_resume():
     assert {requests.PAUSE_PROJECT, requests.RESUME_PROJECT} <= set(KINDS)
 
 
+# --- a project archived (F262 D1-D3) ----------------------------------------------------------
+
+
+def test_a_project_is_archived_and_unarchived_by_request(repo):
+    """F262 D1, D2: `projects.paused` says "archived"; a paused project is archived too."""
+    _ask(repo, "pause_project")
+    _apply(repo)
+    _ask(repo, "archive_project")
+    assert _apply(repo) == ["archive_project: archived: off the picker, its tickets wait"]
+    assert _projects_pause(repo) == "archived"
+    _ask(repo, "archive_project")
+    assert _apply(repo) == ["archive_project: already archived"]
+    _ask(repo, "unarchive_project")
+    assert _apply(repo) == ["unarchive_project: unarchived: back in the list, last"]
+    assert _projects_pause(repo) is None
+    _ask(repo, "unarchive_project")
+    assert _apply(repo) == ["unarchive_project: not archived"]
+
+
+def test_a_project_being_set_up_is_not_archived_by_request(repo):
+    _ask(repo, "archive_project")
+    conn = metrics.open_db(_db(repo))
+    try:
+        metrics.set_project_paused(conn, repo.name, metrics.SETTING_UP)
+    finally:
+        conn.close()
+    assert _apply(repo) == ["archive_project: being set up: `softfield doctor` hands it over"]
+    assert _projects_pause(repo) == metrics.SETTING_UP
+
+
+def test_is_archived_is_true_for_archived_only():
+    rows = [metrics.ProjectRow("a", None, None, 1, p) for p in (None, "archived", "x")]
+    assert [metrics.is_archived(r) for r in rows] == [False, True, False]
+    assert metrics.paused_by_you(metrics.ARCHIVED) is None
+
+
+def test_projects_in_order_still_returns_an_archived_project(repo):
+    _ask(repo, "archive_project")
+    _apply(repo)
+    conn = metrics.open_db(_db(repo))
+    try:
+        assert [p.name for p in metrics.projects_in_order(conn)] == [repo.name]
+    finally:
+        conn.close()
+
+
+def test_the_dashboard_sends_an_archive_and_unarchive():
+    from factory_dashboard.requests import KINDS
+
+    assert {requests.ARCHIVE_PROJECT, requests.UNARCHIVE_PROJECT} <= set(KINDS)
+
+
 # --- the owner's words a request refused, until they dismiss them (F31 D9) -------------------
 
 BAD_AREA = json.dumps({"title": "Ducks", "thoughts": "Rubber ones.", "area": "garden"})

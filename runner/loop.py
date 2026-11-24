@@ -5047,6 +5047,12 @@ def project_pause(s: Session) -> str | None:
     return None if found is None else metrics.paused_by_you(found[1])
 
 
+def project_archived(s: Session) -> bool:
+    """Whether the owner archived the session's project (F262 D1): held as its pause holds it."""
+    found = _record(s, metrics.project_state, s.cfg.project_name)
+    return found is not None and metrics.is_archived(found[1])
+
+
 def paused_by_you_since(since: str) -> str:
     """A project's own pause in the run's words (F124 D4)."""
     return f"{dispatch.PAUSED} since {datetime.fromisoformat(since).astimezone():%H:%M}"
@@ -5915,13 +5921,15 @@ def work_queue(
         paused_by_owner = s.state.owner_pause is not None
         # F124 D1: the project's own pause holds what the factory's does, for it alone
         own_pause = None if being_set_up else project_pause(s)
+        archived = not being_set_up and project_archived(s)  # F262 D3: held the same way
         job = dispatch.pick(
             rows,
             tickets,
             dispatch.Windows(),
             now(),
-            paused=paused_by_owner or own_pause is not None,
+            paused=paused_by_owner or own_pause is not None or archived,
             first=lane,
+            hold=dispatch.ARCHIVED if archived and not paused_by_owner else dispatch.PAUSED,
         )
         if once and ran is not None and not _about(job, ran):
             return False  # the round goes on: the lane, then the queue in project order
@@ -5930,8 +5938,10 @@ def work_queue(
                 if wait and _hold_for_the_owner(s):
                     continue
                 return False
-            if own_pause is not None:  # an idle project, as the top bar ranks it (F124 D4)
-                line = IDLE + paused_by_you_since(own_pause)
+            if own_pause is not None or archived:  # an idle project, as the top bar ranks it
+                line = IDLE + (
+                    paused_by_you_since(own_pause) if own_pause is not None else dispatch.ARCHIVED
+                )
                 if line != idle:
                     idle = line
                     if wait:  # `run_projects` says it as its activity alone, each round
@@ -6423,12 +6433,16 @@ def dry_run_plan(cfg: Config) -> None:
     lane = lane_with_escalated(cfg.repo, ready, load_dir(tasks / "escalated", cfg.default_max_diff))
     lane |= set(lane_reviews(cfg.repo, state))  # a lane card's review (F242 D1)
     # the factory's pause, or the project's own (F124 D4): its tickets are "paused by you"
-    by_the_owner = state.owner_pause is not None or _stored_pause(cfg) is not None
+    stored = _stored_paused(cfg)  # its own pause (F124 D4) or its archive (F262 D3)
+    own = metrics.paused_by_you(stored)
+    by_the_owner = state.owner_pause is not None or own is not None or metrics.is_archived(stored)
+    hold = dispatch.ARCHIVED if metrics.is_archived(stored) and state.owner_pause is None else None
     # A parked row says its own wait in the list: only a parked ticket limits the other rows. A
     # ticket's line goes by what `choose_ticket` goes by, a parked row's limit included.
     listed = _pick_windows(state, claude, [], at)
-    rows = dispatch.plan(queued, tickets, listed, at, paused=by_the_owner, first=lane)
-    held = dispatch.plan(queued, tickets, windows, at, paused=by_the_owner, first=lane)
+    why = hold or dispatch.PAUSED
+    rows = dispatch.plan(queued, tickets, listed, at, paused=by_the_owner, first=lane, hold=why)
+    held = dispatch.plan(queued, tickets, windows, at, paused=by_the_owner, first=lane, hold=why)
     lines = [h if h.pick.kind == dispatch.TICKET else r for r, h in zip(rows, held, strict=True)]
     chosen = choose_ticket(
         ready,
@@ -6450,8 +6464,9 @@ def dry_run_plan(cfg: Config) -> None:
     _print_plan(lines, ready, done, paused, cfg.repo, next_id)
 
 
-def _stored_pause(cfg: Config) -> str | None:
-    """`project_pause` for the dry run, which has no session; a read makes no database."""
+def _stored_paused(cfg: Config) -> str | None:
+    """The project's ``paused`` for the dry run, which has no session; a read makes no
+    database."""
     if not cfg.metrics_db.is_file():
         return None
     conn = metrics.open_db(cfg.metrics_db)
@@ -6459,7 +6474,7 @@ def _stored_pause(cfg: Config) -> str | None:
         found = metrics.project_state(conn, cfg.project_name)
     finally:
         conn.close()
-    return None if found is None else metrics.paused_by_you(found[1])
+    return None if found is None else found[1]
 
 
 def _stored_queue(
