@@ -4345,6 +4345,52 @@ def test_an_open_review_stop_item_says_the_review_stopped(serve_between, db_path
     assert review_notices[0]["link"] == "/planning/f8?project=coucou"
 
 
+def _needs_item(html: str, kind: str) -> str:
+    """The Needs you row of ``kind``: its ``<li>`` and what it holds."""
+    needs = html.split('id="needs-you"', 1)[1].split("</section>", 1)[0]
+    [item] = [li for li in needs.split("<li")[1:] if f">{kind}</span>" in li]
+    return item.split("</li>", 1)[0]
+
+
+def test_a_stopped_review_has_a_review_again_button_and_shows_on_its_way(serve_between, db_path):
+    """F97 (2026-11-24): a stopped review is started again from Needs you, with no terminal
+    command on the page. The button asks for ``review_again`` on the item's milestone; once
+    asked, the row is drawn on its way (dashed orange) with its note, until the runner's pick."""
+    client = serve_between()
+    sign_off_all(db_path)
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        metrics.upsert_owner_item(
+            conn, project, "review-stop", "f8-the-card", text="Output unusable.",
+            command="softfield milestone f8-the-card", created=NOW.isoformat(),
+        )  # fmt: skip
+    finally:
+        conn.close()
+    item = _needs_item(client.get("/").text, "review-stop")
+    assert "<code>" not in item and "softfield milestone" not in item
+    assert item.startswith(">")  # not on its way yet: no class on the row
+    assert ">Review again</button>" in item
+    found = re.search(r"hx-vals='([^']*)'", item)
+    assert found
+    vals = json.loads(unescape(found[1]))
+    assert vals == {"kind": "review_again", "project": PROJECT, "subject": "f8-the-card"}
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        metrics.add_request(conn, project, "review_again", "f8-the-card", None, NOW.isoformat())
+        metrics.upsert_owner_item(conn, project, "review-stop", "f9-other", text="Stopped too.")
+    finally:
+        conn.close()
+    for html in (client.get("/").text, client.get("/live").text):
+        rows = html.split('id="needs-you"', 1)[1].split("</section>", 1)[0].split("<li")[1:]
+        mine = [r for r in rows if "f8-the-card" in r]
+        other = [r for r in rows if "f9-other" in r]
+        assert len(mine) == 1 and mine[0].startswith(' class="on-its-way">')
+        assert "Reviewing again at the runner's next pick" in unescape(mine[0])
+        assert len(other) == 1 and other[0].startswith(">")  # only the one asked
+
+
 def test_other_kinds_say_what_and_where(db_path):
     """Items of kind ``adr``, ``blocked``, ``escalated``, ``reserve`` and ``five-hour``,
     the stopped runner and the idle queue: the title D1's table gives, the item's text as

@@ -40,6 +40,7 @@ from runner.requests import (
     RESERVE,
     RESUME,
     RESUME_PROJECT,
+    REVIEW_AGAIN,
     SEND_BACK,
     SET_ASIDE,
     SIGNOFF,
@@ -53,8 +54,8 @@ router = APIRouter()
 # words that didn't go through (F31 D9), rejecting a proposal (F31 D2), and editing or
 # cancelling a waiting plant or message (F14 D1), the board's order sent whole (F15 D3), and
 # the Projects page's order (ADR 30 item 6), a project started there (F122 D2) and one paused or
-# resumed alone (F124 D3), and a blocked ticket set aside (F106 D3); the runner checks each
-# value, as for the first three
+# resumed alone (F124 D3), a blocked ticket set aside (F106 D3), and a stopped review started
+# again (F97); the runner checks each value, as for the first three
 KINDS = (
     SIGNOFF,
     RESERVE,
@@ -80,6 +81,7 @@ KINDS = (
     UNARCHIVE_PROJECT,
     FORGET_PROJECT,
     NEW_PROJECT,
+    REVIEW_AGAIN,
 )
 
 

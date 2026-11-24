@@ -507,6 +507,9 @@ def queued_jobs(
 # --- Needs you (D8) -----------------------------------------------------------------------
 
 
+REVIEW_STOP = "review-stop"  # the runner's owner item when a review stopped
+
+
 @dataclass(frozen=True)
 class Need:
     id: str  # stable while the need is open, so notify.js tells a new one (f5-12)
@@ -516,6 +519,7 @@ class Need:
     ticket: str | None = None
     subject: str | None = None
     project: str = ""
+    on_its_way: bool = False  # the owner answered it; the runner takes it at its next pick
 
 
 def needs_you(
@@ -533,15 +537,25 @@ def needs_you(
         " ORDER BY o.created DESC, o.id DESC",
         (project,),
     ).fetchall()
+    asked = {
+        r["subject"]
+        for r in conn.execute(
+            "SELECT r.subject FROM owner_requests r JOIN projects p ON p.id = r.project_id"
+            " WHERE p.name = ? AND r.kind = 'review_again' AND r.done IS NULL",
+            (project,),
+        )
+    }
     found = [
         Need(
             f"{project}/owner-{i['id']}",
             i["kind"],
             i["text"] or i["subject"],
-            i["command"],
+            # a stopped review is started again with its button, never a command (F97)
+            None if i["kind"] == REVIEW_STOP else i["command"],
             None,
             i["subject"],
             project,
+            on_its_way=i["kind"] == REVIEW_STOP and i["subject"] in asked,
         )
         for i in items
     ]
@@ -631,7 +645,7 @@ def notices(
                 "body": "Reviewed, waits for you",
                 "link": f"/planning/{key}?project={quote(project)}",
             }
-        elif need.kind == "review-stop":
+        elif need.kind == REVIEW_STOP:
             key = short_key(need.subject or need.id)
             title = card_titles.get(key, key)
             found[need.id] = {

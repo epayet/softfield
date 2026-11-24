@@ -13,12 +13,19 @@
   <ul class="steps">
     {% for need in needs %}
     {% set pq = "?project=" ~ (need.project | urlencode) %}
-    <li>
+    <li{% if need.on_its_way %} class="on-its-way"{% endif %}>
       <span class="when"><span class="pill warn">{{ need.kind }}</span></span>
       <span class="what">
         {% with name=need.project %}{% include "_partials/project_plate.html" %}{% endwith %}
         <span>{{ need.text }}{% if need.ticket %} (<a class="mono" href="/tickets/{{ need.ticket }}{{ pq }}">{{ need.ticket }}</a>){% endif %}</span>
         {% if need.command %}<code>{{ need.command }}</code>{% endif %}
+        {# F97: a stopped review starts again from here; on its way (dashed orange, its note instead of the button) until the runner's next pick #}
+        {% if need.kind == "review-stop" %}
+        <span class="review-again"><button type="button" class="btn go" hx-post="/requests" hx-swap="none"
+          hx-vals='{"kind": "review_again", "project": {{ need.project | tojson }}, "subject": {{ need.subject | tojson }}}'
+          hx-on::before-request="this.closest('li').classList.add('on-its-way')">Review again</button>
+        <span class="way-note">Reviewing again at the runner's next pick</span></span>
+        {% endif %}
       </span>
     </li>
     {% endfor %}

@@ -436,6 +436,11 @@ span.proj::after, a.proj::after { bottom: -1px; right: -1px; border-width: 0 1px
 #away .how { color: var(--ink-2); font-size: 13.5px; }
 #away .title { flex-basis: 100%; }
 .steps li:not(:has(.when)) { grid-template-columns: 1fr; }  /* no "when": the "what" takes the row (f3-F7) */
+.needs .steps li.on-its-way { outline: 1px dashed var(--hazard); outline-offset: 2px; }  /* F97: answered, on its way to the runner */
+.review-again { display: block; margin-top: 6px; }
+.review-again .way-note { display: none; color: var(--hazard); font-size: 12.5px; }
+.on-its-way .review-again button { display: none; }
+.on-its-way .review-again .way-note { display: inline; }
 .sev { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
 .sev.blocking { color: var(--critical-ink); } .sev.should-fix { color: var(--serious-ink); } .sev.nit { color: var(--muted); }
 .empty { display: flex; align-items: center; gap: 12px; padding: 10px 4px; color: var(--ink-2); }

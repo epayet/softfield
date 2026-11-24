@@ -3,6 +3,7 @@ import re
 import sqlite3
 import sys
 from datetime import date, datetime, timedelta
+from pathlib import Path
 
 import pytest
 
@@ -1388,6 +1389,61 @@ def test_a_review_stopped_mid_round_parks_its_row_and_goes_on_from_that_round(
     state = load_state(cfg.runs_dir / "state.json")
     assert state.review_counts["m1"] == [0] and state.interrupted == {}
     assert all(row["done"] is not None for row in _rows(repo, "work_queue"))
+
+
+def test_a_resumed_review_is_told_its_runs_folder_and_its_findings_are_found_in_the_old_one(
+    repo, monkeypatch, clock, capsys
+):
+    """F97 (2026-11-24): parked by a limit, the review resumed in a new run and wrote its
+    findings where its first prompt said, the earlier run's folder; the round stopped as
+    "output unusable". Now the resume names this run's folder, and a file left in the old one
+    is brought over."""
+    _milestone_repo(repo)
+    cfg = _config(repo)
+    calls: list[tuple[str, Path]] = []
+
+    def run_claude(job, repo_, timeout, log_path, now, resume=None):
+        calls.append((job.prompt, log_path.parent))
+        if len(calls) == 1:
+            return NO_TIME
+        first_run = calls[0][1]
+        (first_run / "review-m1-r1.json").write_text(json.dumps({"findings": [], "stop": None}))
+        (repo / "reviewed.txt").write_text("the round's own edit\n")
+        return JobResult(ok=True, text="", duration_s=1.0)
+
+    monkeypatch.setattr(claude, "run_claude", run_claude)
+    monkeypatch.setattr(milestone, "run_e2e", lambda *a: GateResult("e2e", True, ""))
+    assert milestone.review_milestone(cfg, "m1", "m1-start", park=True) == milestone.PARKED
+    clock[0] += timedelta(seconds=2)
+    assert milestone.review_milestone(cfg, "m1", "m1-start", park=True) == "clean"
+    (_, first_run), (prompt, second_run) = calls
+    assert first_run != second_run
+    shown = second_run.relative_to(repo).as_posix()
+    assert prompt.endswith(loop.RUN_FOLDER_NOTE.format(run=shown))
+    assert (second_run / "review-m1-r1.json").is_file()
+    assert not (first_run / "review-m1-r1.json").exists()
+    assert "findings were in an earlier run's folder: moved" in capsys.readouterr().out
+    state = load_state(cfg.runs_dir / "state.json")
+    assert state.review_counts["m1"] == [0] and state.review_stop == {"m1": "clean"}
+    assert "review m1 round 1 (by Claude)" in git(repo, "log", "--format=%s")
+
+
+def test_a_review_round_with_no_findings_commits_its_edits_as_its_own(repo, monkeypatch, clock):
+    """F97: a round whose findings can't be read stops, and its edits are committed as the
+    review's, not left for the session report's commit to sweep up."""
+    _milestone_repo(repo)
+    cfg = _config(repo)
+
+    def run_claude(job, repo_, timeout, log_path, now, resume=None):
+        (repo / "reviewed.txt").write_text("the round's own edit\n")
+        return JobResult(ok=True, text="", duration_s=1.0)
+
+    monkeypatch.setattr(claude, "run_claude", run_claude)
+    monkeypatch.setattr(milestone, "run_e2e", lambda *a: GateResult("e2e", True, ""))
+    stop = milestone.review_milestone(cfg, "m1", "m1-start", park=True)
+    assert stop.startswith("review output unusable: cannot read")
+    edit = git(repo, "log", "--format=%s", "--", "reviewed.txt").strip()
+    assert edit == "review m1 round 1 (by Claude, its findings unread)"
 
 
 def test_a_named_milestones_review_refused_mid_round_still_waits(repo, monkeypatch, clock):

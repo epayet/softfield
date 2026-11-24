@@ -3,6 +3,7 @@
 import re
 import sqlite3
 import textwrap
+import time
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -609,6 +610,22 @@ def run_due_review(cfg: Config, milestone: str) -> str:
     return review_milestone(cfg, milestone, base, park=True)
 
 
+def _bring_findings(s: Session, out: Path, since: float) -> None:
+    """A round's findings file it wrote, this round, under an earlier run's folder, moved to
+    ``out``: a session resumed after a limit still reads its first prompt's paths (F97's
+    review, 2026-11-24). Nothing when ``out`` is there or no such file is."""
+    if out.is_file():
+        return
+    found = [
+        p
+        for p in out.parent.parent.glob(f"*/{out.name}")
+        if p != out and p.stat().st_mtime >= since
+    ]
+    if found:
+        max(found, key=lambda p: p.stat().st_mtime).replace(out)
+        s.log(f"The review's findings were in an earlier run's folder: moved to {out.name}.")
+
+
 def _last_round(git: Git, milestone: str, rounds: int, base: str) -> str:
     """Where a review that goes on (parked, restarted) left off: the commit before its last
     round's, as a round under way keeps it; ``base`` with no round yet or no such commit."""
@@ -803,16 +820,25 @@ def review_milestone(cfg: Config, milestone: str, base: str, *, park: bool = Fal
         # under way: off the line's queue (f4-20); one signed off meanwhile stays done (F186 D1)
         if s.project_id is not None and not signed_off(s.repo, milestone):
             _record(s, metrics.upsert_milestone, s.project_id, milestone, status="review")
+        started = time.time()
         try:  # a limit or a lost login inside the round parks it too (F191 D4)
             call_claude(s, job, milestone, f"{milestone}-review-r{round_no}", park=park)
         except Parked:
             s.running_row = None
             close_session(s)
             return PARKED
+        _bring_findings(s, out, started)
         try:
             round_ = parse_review(out)
         except ReviewFileError as exc:
             stop = f"review output unusable: {exc}"
+            # its edits are the review's, not the session report's (F97's went in db8dcf40)
+            s.git.commit_all(
+                with_trailers(
+                    f"review {milestone} round {round_no} (by Claude, its findings unread)",
+                    agent=CLAUDE_HEADLESS_AGENT,
+                )
+            )
             break
         record_findings(s, milestone, round_.findings, cfg.agent_for(job.role).id)
         _record_judging(s, milestone, round_)

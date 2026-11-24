@@ -82,6 +82,8 @@ UNARCHIVE_PROJECT = "unarchive_project"
 FORGET_PROJECT = "forget_project"  # an archived project leaves every list; nothing is deleted
 # on Softfield's own row; value: {name, idea, built_with, app} (F122 D2, ADR 48 item 1)
 NEW_PROJECT = "new_project"
+# subject: a milestone whose review stopped; no value: it runs again from round 1 (F97, 2026-11-24)
+REVIEW_AGAIN = "review_again"
 _STATE_ONLY = (RESERVE, PAUSE, RESUME)  # they change state.json alone: a wait takes them
 _APPROVALS = (ACCEPT_ADR, APPROVE_PLAN)  # they commit on main: the only way drafts reach it
 _COMMITS = (SIGNOFF, QUEUE, SET_ASIDE, PLANT, DROP_SEED, REORDER, REJECT, *_APPROVALS)
@@ -2055,6 +2057,8 @@ def _apply(
             return _forget_project(conn, project_id)
         if kind == NEW_PROJECT:
             return _new_project(db, now, value)
+        if kind == REVIEW_AGAIN:
+            return _review_again(repo, conn, project_id, state, now, subject)
         if kind == DISMISS:
             return _dismiss(conn, project_id, now, subject)
         if kind == REJECT:
@@ -2247,6 +2251,32 @@ def _answered_block(conn: sqlite3.Connection, project_id: int, now: datetime, ti
     for row in metrics.open_owner_items(conn, project_id):
         if row["kind"] == loop.BLOCKED_KIND and row["subject"] == ticket:
             metrics.resolve_owner_item(conn, row["id"], now.isoformat())
+
+
+REVIEW_NOT_STOPPED = "its review has not stopped: nothing to start again"
+
+
+def _review_again(
+    repo: Path,
+    conn: sqlite3.Connection,
+    project_id: int,
+    state: State,
+    now: datetime,
+    subject: object,
+) -> str:
+    """A stopped review started again (F97, 2026-11-24): its stop and its rounds forgotten, so
+    the next pick finds it due and reads the whole milestone from round 1; its desk item goes.
+    The caller saves ``state``."""
+    if not subject:
+        return "a review_again request names its milestone"
+    key = milestone_arg(repo, subject)
+    if state.review_stop.pop(key, None) is None:
+        return f"{key}: {REVIEW_NOT_STOPPED}"
+    state.review_counts[key] = []  # no rounds: due again (`milestone.due_reviews`)
+    for row in metrics.open_owner_items(conn, project_id):
+        if row["kind"] == "review-stop" and row["subject"] == key:
+            metrics.resolve_owner_item(conn, row["id"], now.isoformat())
+    return f"{key}'s review runs again from round 1 at the next pick"
 
 
 def _settle_waits(conn: sqlite3.Connection, project_id: int, state: State, now: datetime) -> None:

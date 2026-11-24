@@ -4254,3 +4254,39 @@ def test_the_projects_page_order_is_applied_at_the_next_pick_without_a_commit(re
     assert _request(repo, asked)[1] == f"the projects' order: coucou, {repo.name} (no project nope)"
     assert _request(repo, bad)[0] is not None
     assert git(repo, "rev-parse", "HEAD") == head
+
+
+def test_a_review_again_request_forgets_a_stopped_review_so_it_is_due_from_round_1(repo):
+    """F97 (2026-11-24): the owner starts a stopped review again from Needs you. Its stop and
+    its rounds are forgotten, so the next pick finds it due; its item leaves the page."""
+    from tests.runner.test_milestone import milestone_ticket
+
+    milestone_ticket(repo, "done", "f9-01-a", "f9")
+    state = State(review_counts={"f9": [2]}, review_stop={"f9": "review output unusable: x"})
+    _item(repo, "review-stop", "f9")
+    _item(repo, "review-stop", "f8")
+    head = git(repo, "rev-parse", "HEAD")
+    asked = _ask(repo, "review_again", "f9")
+    assert _apply(repo, state) == [
+        "review_again f9: f9's review runs again from round 1 at the next pick"
+    ]
+    assert state.review_stop == {} and state.review_counts == {"f9": []}
+    assert milestone.due_reviews(repo, state) == ["f9"]
+    assert _items(repo) == [("review-stop", "f9", "x", False), ("review-stop", "f8", "x", True)]
+    assert _request(repo, asked)[0] == NOW.isoformat()
+    assert git(repo, "rev-parse", "HEAD") == head  # nothing in git changes
+
+
+@pytest.mark.parametrize(
+    ("subject", "said"),
+    [
+        ("f9", "f9: its review has not stopped"),
+        (None, "a review_again request names its milestone"),
+    ],
+)
+def test_a_review_again_request_for_no_stopped_review_changes_nothing(repo, subject, said):
+    state = State(review_counts={"f9": [1]})
+    _ask(repo, "review_again", subject)
+    [line] = _apply(repo, state)
+    assert said in line
+    assert state.review_counts == {"f9": [1]} and state.review_stop == {}

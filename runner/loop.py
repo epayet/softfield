@@ -528,6 +528,11 @@ def _rel(s: Session, path: Path) -> str:
     return path.relative_to(s.repo).as_posix()
 
 
+def _shown(s: Session, path: Path) -> str:
+    """``path`` as a prompt names it: from the repo when it is inside, else whole."""
+    return _rel(s, path) if path.is_relative_to(s.repo) else path.as_posix()
+
+
 def _start_run(s: Session, command: str, cut_off_job: int | None = None) -> None:
     try:
         s.db = metrics.open_db(s.cfg.metrics_db)
@@ -1241,6 +1246,12 @@ PARKED_PROMPT = (
     " from where you stopped."
 )
 PARKED_NOTE = "\n\nAn earlier run of this job was stopped part-way by a Claude usage limit."
+# A resumed session still reads its first prompt's paths: the F97 review (2026-11-24), parked
+# by a limit, wrote its findings to the earlier run's folder and the round stopped unread.
+RUN_FOLDER_NOTE = (
+    " This run's files go in `{run}`: a file your first instructions put in another run's"
+    " folder goes in this one instead, with the same name."
+)
 
 
 class Parked(Exception):
@@ -1649,6 +1660,7 @@ def call_claude(
             resume_prompt, partial_note = PARKED_PROMPT + where, PARKED_NOTE + where
         else:
             resume_prompt, partial_note = INTERRUPTED_PROMPT + where, INTERRUPTED_NOTE + where
+        resume_prompt += RUN_FOLDER_NOTE.format(run=_shown(s, s.run_dir))
         resume = earlier["session_id"] or None
         interrupted = True
     elif process_note is not None:
