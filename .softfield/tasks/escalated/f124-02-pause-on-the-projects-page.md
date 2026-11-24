@@ -28,3 +28,12 @@ The picture to build: the Proposed side of `.softfield/cards/f124-mockup/project
 - a project being set up keeps its line and has no button
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: protected-paths)
+attempts: 3
+tokens: 5527141
+logs: .softfield/var/runs/20261124-131732/f124-02-pause-on-the-projects-page
+```
