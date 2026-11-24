@@ -1,4 +1,4 @@
-# Milestone F290: runner/loop.py is 6,500 lines and grows three lines for…
+# Milestone F290: Split runner/loop.py into one module per job kind, with no change in behaviour
 
 > **State:** idea · **Area:** factory
 > Planted by the owner on 2026-11-24.
