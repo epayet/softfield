@@ -311,7 +311,10 @@ def factory_wide_status(conn: sqlite3.Connection, project: str, now: datetime) -
 
     def rank(status: Status) -> tuple[int, int]:
         if status.button == "resume" or "asked" in status.tone:
-            return 0, 0 if status.dot == "lead" else 1  # the paused project the lead works on
+            # the paused project the lead works on, the owner's conversation first (F276 D1)
+            if status.dot != "lead":
+                return 0, 2
+            return 0, 0 if status.words.endswith("the lead is answering you") else 1
         if status.dot in ("lead", "developer"):
             return 1, 0
         if status.words.startswith("Waiting for Claude"):

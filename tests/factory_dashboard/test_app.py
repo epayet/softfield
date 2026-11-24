@@ -2391,17 +2391,21 @@ def _pause_held_planner(serve, serve_between, db_path):
 
 def _setting_up(db_path: Path) -> None:
     """A second project, after coucou in the projects' order, being set up (F276): its run
-    has a live ``setup`` job, with no ticket and no card, as the runner starts one."""
+    has a live ``setup`` job, with no ticket, on its first milestone in a ``run`` command, as
+    the runner starts one (job 2525, wardrobe-teller's ``m1-first-version``)."""
     conn = metrics.open_db(db_path)
     try:
         metrics.upsert_project(conn, PROJECT)
         tc = metrics.upsert_project(conn, "travel-companion")
         metrics.set_project_paused(conn, "travel-companion", metrics.SETTING_UP)
+        m1 = metrics.upsert_milestone(
+            conn, tc, "m1-first-version", title="Today's weather and an outfit for it"
+        )
         tc_run = metrics.upsert_run(
             conn,
             tc,
             "20261002-120000",
-            command="setup",
+            command="run",
             started=(NOW - timedelta(minutes=25)).isoformat(),
             heartbeat=(NOW - timedelta(seconds=30)).isoformat(),
         )
@@ -2409,7 +2413,7 @@ def _setting_up(db_path: Path) -> None:
             conn,
             tc_run,
             ticket_id=None,
-            milestone_id=None,
+            milestone_id=m1,
             role="setup",
             agent=OPUS,
             attempt=1,
@@ -2431,6 +2435,18 @@ def _setup_held_planner(serve, serve_between, db_path):
     """Paused, with a planner job on coucou and a setup job on travel-companion."""
     client = _pause_held_planner(serve, serve_between, db_path)
     _setting_up(db_path)
+    return client
+
+
+def _setup_first_held_planner(serve, serve_between, db_path):
+    """As ``_setup_held_planner``, with the project being set up first in the order: the
+    owner's conversation still wins (F276 D1), whatever the order."""
+    client = _setup_held_planner(serve, serve_between, db_path)
+    conn = metrics.open_db(db_path)
+    try:
+        metrics.set_project_order(conn, ["travel-companion", PROJECT])
+    finally:
+        conn.close()
     return client
 
 
@@ -2558,6 +2574,12 @@ PAUSE, RESUME = {"Pause after this job": "pause"}, {"Resume": "resume"}
             "lead",
             RESUME,
         ),
+        (
+            _setup_first_held_planner,
+            "Paused by you since 11:40 · the lead is answering you",
+            "lead",
+            RESUME,
+        ),
         (_setup_running, "Running: the lead is setting up travel-companion", "lead", PAUSE),
         (_planner_running, "Running: the lead is answering you", "lead", PAUSE),
     ],
@@ -2576,6 +2598,7 @@ PAUSE, RESUME = {"Pause after this job": "pause"}, {"Resume": "resume"}
         "runner-paused",
         "paused-setup",
         "paused-setup-planner",
+        "paused-setup-first-planner",
         "setup-running",
         "planner-running",
     ],
