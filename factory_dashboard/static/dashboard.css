@@ -54,6 +54,8 @@
   --shot-frame: #0b0e12;      /* the frame a picture sits in (F85) */
   --stripe: repeating-linear-gradient(-45deg, var(--hazard) 0 6px, transparent 6px 12px);
   --notch: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
+  /* one height for every control in the bar's top row (F256) */
+  --control-h: 36px;
 }
 /* Light when the owner chooses (:root[data-theme="light"]): a pale floor, the same hazard yellow
    and orange, ink at 4.5:1 or better on every plate; the other agent colours darkened to show */
@@ -89,15 +91,15 @@ code { background: var(--bg); padding: 1px 5px; }
 header.bar { background: var(--floor); border-bottom: 1px solid var(--rule); display: grid; gap: 10px;
   grid-template-columns: minmax(0, 1fr);
   padding: 12px 16px 10px; position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; }
-.bar-top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 18px; }
+.bar-top { display: flex; flex-wrap: nowrap; align-items: center; gap: 8px 18px; min-height: 44px; }
 .brand { font: 700 22px/1.1 var(--display); letter-spacing: .04em; display: flex; align-items: center; gap: 4px;
-  text-decoration: none; color: var(--ink); min-height: 44px; }
+  text-decoration: none; color: var(--ink); min-height: 44px; margin-left: -2px; flex: none; }
 .brand:hover { text-decoration: underline; }
 .brand svg { flex: none; width: 28px; height: 28px; }
 .brand-soft { color: var(--warn-ink); }
 .brand-field { color: var(--good); }
 .brand small { font: 400 12px var(--mono); letter-spacing: 0; text-transform: none; color: var(--muted);
-  margin-left: 8px; }
+  margin-left: 10px; height: 22px; line-height: 20px; padding: 0 6px; border: 1px solid var(--rule); }
 /* Logo parts use theme tokens so they follow the light/dark switch */
 .brand svg .sprout { stroke: var(--good); }
 .brand svg .crate { fill: var(--hazard); stroke: var(--hazard-ink); }
@@ -107,8 +109,8 @@ header.bar { background: var(--floor); border-bottom: 1px solid var(--rule); dis
    a developer, green the runner's own work, grey none; a ring for waiting or stopped), its
    words, and Pause or Resume as a sign; what the owner asked shows on its way, a dashed orange
    edge */
-.factory-status { display: flex; align-items: center; gap: 4px; align-self: center; position: relative;
-  border: 1px solid transparent; padding: 0 2px; }
+.factory-status { display: flex; align-items: center; gap: 6px; align-self: center; position: relative;
+  border: 1px solid transparent; padding: 0 2px; flex: 0 1 auto; min-width: 0; }
 #factory-status.asked { border: 1px dashed var(--opus); }
 .factory-status .dot-btn { width: 28px; height: 44px; display: grid; place-items: center; flex: none;
   background: none; border: 0; padding: 0; cursor: pointer; }
@@ -126,27 +128,35 @@ header.bar { background: var(--floor); border-bottom: 1px solid var(--rule); dis
   .factory-status .dot.lead, .factory-status .dot.developer, .factory-status .dot.runner { animation: breathe 2.6s ease-in-out infinite; }
 }
 @keyframes breathe { 50% { box-shadow: 0 0 0 7px transparent; } }
-.factory-status .words { font: 600 15px/1.3 var(--display); letter-spacing: .03em; padding-right: 6px; }
+.factory-status .words { font: 600 15px/1.3 var(--display); letter-spacing: .03em; padding-right: 6px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .factory-status .words.fail { color: var(--critical-ink); }
-.factory-status .sign { width: 36px; height: 36px; display: grid; place-items: center; flex: none;
+.factory-status .sign { width: var(--control-h); height: var(--control-h); display: grid; place-items: center; flex: none;
   border: 1px solid var(--hazard); background: var(--hazard); color: var(--hazard-ink); font-size: 18px;
   cursor: pointer; padding: 0; }
 .factory-status .uptime { display: inline-flex; align-items: stretch; align-self: center; border: 1px solid var(--rule);
   background: var(--plate); clip-path: var(--notch); font: 12px/1 var(--mono); color: var(--fg); white-space: nowrap;
-  margin-left: 14px; }
-.factory-status .uptime .key { display: inline-flex; align-items: center; gap: 5px; padding: 5px 7px; border-right: 1px solid var(--rule);
-  font: 600 11px/1 var(--display); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+  margin-left: 8px; height: var(--control-h); flex: none; }
+.factory-status .uptime .key { display: inline-flex; align-items: center; gap: 5px; padding: 0 7px; border-right: 1px solid var(--rule);
+  font: 600 11px/1 var(--display); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); height: 100%; }
 .factory-status .uptime .key svg { width: 11px; height: 11px; color: var(--ink-2); }
-.factory-status .uptime .val { padding: 5px 14px 5px 8px; font-variant-numeric: tabular-nums; }
+.factory-status .uptime .val { padding: 0 14px 0 8px; font-variant-numeric: tabular-nums; display: inline-flex; align-items: center; height: 100%; }
 .factory-status .words .on { display: none; margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--rule);
   font: 12px var(--mono); color: var(--ink-2); }
 .filters { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 0 auto; }
 .filters label { font: 500 12px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+/* the top bar's picker is a plate like the "On" one: its key, then the project (F256) */
+.bar-top .filters { flex-wrap: nowrap; gap: 0; flex: none; }
+.bar-top .filters label { display: inline-flex; align-items: stretch; height: var(--control-h); border: 1px solid var(--rule);
+  background: var(--plate); clip-path: var(--notch); }
+.bar-top .filters .key { display: inline-flex; align-items: center; padding: 0 8px; border-right: 1px solid var(--rule);
+  font: 600 11px/1 var(--display); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.bar-top .filters select { border: 0; height: 100%; padding: 0 18px 0 8px; font: 600 13px var(--display); letter-spacing: .03em; background: transparent; }
 select, input[type=search], button { font: inherit; font-size: 13px; padding: 3px 6px; text-transform: none;
   letter-spacing: 0; border: 1px solid var(--rule); border-radius: 0; background: var(--plate); color: var(--ink); }
 button, summary, select { cursor: pointer; }
 button:disabled { cursor: default; }
-.theme-switch { flex: none; width: 36px; height: 36px; padding: 0; cursor: pointer; background: none; border: 0;
+.theme-switch { flex: none; width: auto; height: var(--control-h); padding: 0; cursor: pointer; background: none; border: 0;
     display: grid; place-items: center; }
 .theme-switch .plate { position: relative; width: 24px; height: 36px;
     background: var(--plate); border: 1px solid var(--rule); border-radius: 4px;
@@ -522,9 +532,11 @@ tr.few .gauge { opacity: .35; }
   .factory-status .words { display: none; }
   .bar-top.show-words .factory-status .words, .factory-status .words.fail { display: block; position: absolute; top: 100%; left: 4px; right: auto;
     z-index: 6; max-width: calc(100% - 8px); padding: 6px 10px; font: 500 13px var(--body);
-    background: var(--plate); border: 1px solid var(--rule); box-shadow: 0 4px 12px rgba(0, 0, 0, .4); }
+    background: var(--plate); border: 1px solid var(--rule); box-shadow: 0 4px 12px rgba(0, 0, 0, .4);
+    white-space: normal; overflow: visible; }  /* the tapped words wrap under the row (F256 cuts them only from 640 px) */
   .factory-status > .uptime { display: none; }  /* F251: the row has no room; the tapped words say it */
   .factory-status .words .on { display: block; }
+  .bar-top .filters .key { display: none; }  /* F256: the select names the project */
   .brand { font-size: 18px; letter-spacing: .02em; white-space: nowrap; gap: 3px; }
   .brand svg { width: 24px; height: 24px; }
   .brand small { display: none; }

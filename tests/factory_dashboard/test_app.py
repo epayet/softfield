@@ -3662,6 +3662,202 @@ def test_at_390px_the_top_bar_is_no_taller(page, client):
     assert page.locator("#theme-btn").evaluate("el => el.getAttribute('aria-checked')") == "true"
 
 
+@pytest.mark.parametrize("scheme", ["dark", "light"])
+@pytest.mark.parametrize("width", [1440, 1000])
+def test_at_1440px_and_1000px_the_top_row_is_one_line(page, client, booted, scheme, width):
+    """f256-01: at 1440px and 1000px in both themes the vertical centres of brand, dot, sign,
+    the "On" plate, the picker and the theme switch are within 1px of each other, and the sign,
+    the "On" plate, the picker and the switch are the same height."""
+    page.set_viewport_size({"width": width, "height": 844})
+    page.emulate_media(color_scheme=scheme)
+
+    def route(r):
+        url = r.request.url.removeprefix(ORIGIN)
+        path = url.split("?", 1)[0]
+        if path.startswith("/static/"):
+            r.fulfill(path=str(STATIC / path.removeprefix("/static/")))
+        else:
+            r.fulfill(body=client.get(url).text, content_type="text/html; charset=utf-8")
+
+    page.route(f"{ORIGIN}/**", route)
+    page.goto(ORIGIN + "/")
+    page.evaluate("() => document.fonts.ready")
+    assert page.evaluate("document.documentElement.getAttribute('data-theme')") == scheme
+
+    # Measure vertical centres
+    brand = page.locator(".brand")
+    dot = page.locator(".factory-status .dot")
+    sign = page.locator(".factory-status .sign")
+    uptime = page.locator(".factory-status .uptime")
+    switch = page.locator(".theme-switch")
+    picker = page.locator(".filters label")
+
+    def get_centre(el):
+        return el.evaluate(
+            "el => el.getBoundingClientRect().top + el.getBoundingClientRect().height / 2"
+        )
+
+    brand_c = get_centre(brand)
+    dot_c = get_centre(dot)
+    sign_c = get_centre(sign)
+    uptime_c = get_centre(uptime)
+    switch_c = get_centre(switch)
+    picker_c = get_centre(picker)
+
+    # All vertical centres within 1px of each other
+    for name, c in [
+        ("brand", brand_c),
+        ("dot", dot_c),
+        ("sign", sign_c),
+        ("uptime", uptime_c),
+        ("switch", switch_c),
+        ("picker", picker_c),
+    ]:
+        assert abs(c - brand_c) <= 1, f"{name} centre {c} not within 1px of brand centre {brand_c}"
+
+    # Sign, uptime (the "On" plate), picker, and switch are the same height
+    sign_h = sign.evaluate("el => el.getBoundingClientRect().height")
+    uptime_h = uptime.evaluate("el => el.getBoundingClientRect().height")
+    switch_h = switch.evaluate("el => el.getBoundingClientRect().height")
+    picker_h = picker.evaluate("el => el.getBoundingClientRect().height")
+    assert abs(sign_h - uptime_h) <= 1, f"sign height {sign_h} != uptime height {uptime_h}"
+    assert abs(sign_h - switch_h) <= 1, f"sign height {sign_h} != switch height {switch_h}"
+    assert abs(sign_h - picker_h) <= 1, f"sign height {sign_h} != picker height {picker_h}"
+
+
+def test_at_1440px_the_edges_match_the_stripe(page, client):
+    """f256-01: at 1440px the logo's crate's left edge is within 1px of the hazard stripe's
+    left edge, and the switch's right edge within 1px of the stripe's right edge."""
+    page.set_viewport_size({"width": 1440, "height": 844})
+
+    def route(r):
+        url = r.request.url.removeprefix(ORIGIN)
+        path = url.split("?", 1)[0]
+        if path.startswith("/static/"):
+            r.fulfill(path=str(STATIC / path.removeprefix("/static/")))
+        else:
+            r.fulfill(body=client.get(url).text, content_type="text/html; charset=utf-8")
+
+    page.route(f"{ORIGIN}/**", route)
+    page.goto(ORIGIN + "/")
+    page.evaluate("() => document.fonts.ready")
+
+    stripe = page.locator(".hazard")
+    crate = page.locator(".brand svg .crate")
+    switch = page.locator(".theme-switch")
+
+    stripe_left = stripe.evaluate("el => el.getBoundingClientRect().left")
+    stripe_right = stripe.evaluate("el => el.getBoundingClientRect().right")
+    crate_left = crate.evaluate("el => el.getBoundingClientRect().left")
+    switch_right = switch.evaluate("el => el.getBoundingClientRect().right")
+
+    assert abs(crate_left - stripe_left) <= 1, (
+        f"crate left {crate_left} not within 1px of stripe left {stripe_left}"
+    )
+    assert abs(switch_right - stripe_right) <= 1, (
+        f"switch right {switch_right} not within 1px of stripe right {stripe_right}"
+    )
+
+
+def test_at_760px_the_top_row_is_one_line_with_ellipsis(page, client, booted):
+    """f256-01: at 760px the top row is one line (its height is what it is at 1440px) and the
+    status words end in "…", the dot's title still holding the whole sentence."""
+    page.set_viewport_size({"width": 760, "height": 844})
+
+    def route(r):
+        url = r.request.url.removeprefix(ORIGIN)
+        path = url.split("?", 1)[0]
+        if path.startswith("/static/"):
+            r.fulfill(path=str(STATIC / path.removeprefix("/static/")))
+        else:
+            r.fulfill(body=client.get(url).text, content_type="text/html; charset=utf-8")
+
+    page.clock.install()  # no /live poll redraws the status while it is measured
+    page.route(f"{ORIGIN}/**", route)
+    page.goto(ORIGIN + "/")
+    page.evaluate("() => document.fonts.ready")
+    # A sentence as long as a real one gets (the mock-up's), as the server writes it: the words
+    # and the dot's title hold the same text
+    sentence = "Running: travel-companion · planner, job 2308, the replan of F256"
+    page.evaluate(
+        """s => {
+            const words = document.querySelector('#factory-status .words');
+            words.firstChild.textContent = s;
+            document.querySelector('#factory-status .dot-btn').title = s;
+        }""",
+        sentence,
+    )
+    bar_top = page.locator(".bar-top")
+    words = page.locator("#factory-status .words")
+    height = "el => el.getBoundingClientRect().height"
+    height_760 = bar_top.evaluate(height)
+    cut = words.evaluate(
+        "el => [el.scrollWidth > el.clientWidth, getComputedStyle(el).textOverflow]"
+    )
+    assert cut == [True, "ellipsis"], cut  # the words end in "…"
+    assert page.locator("#factory-status .dot-btn").get_attribute("title") == sentence
+
+    page.set_viewport_size({"width": 1440, "height": 844})
+    height_1440 = bar_top.evaluate(height)
+    assert height_760 == height_1440, (height_760, height_1440)  # one line, not two
+
+
+def test_at_390px_the_picker_shows_only_project_name(page, client):
+    """f256-01: at 390px the picker shows only the project's name (the .key is hidden)."""
+    page.set_viewport_size({"width": 390, "height": 844})
+
+    def route(r):
+        url = r.request.url.removeprefix(ORIGIN)
+        path = url.split("?", 1)[0]
+        if path.startswith("/static/"):
+            r.fulfill(path=str(STATIC / path.removeprefix("/static/")))
+        else:
+            r.fulfill(body=client.get(url).text, content_type="text/html; charset=utf-8")
+
+    page.route(f"{ORIGIN}/**", route)
+    page.goto(ORIGIN + "/")
+    page.evaluate("() => document.fonts.ready")
+
+    assert page.locator(".bar-top .filters .key").count() == 1
+    assert not page.locator(".bar-top .filters .key").is_visible()
+    assert page.locator(".bar-top .filters select").is_visible()
+
+
+def test_changing_the_project_reloads_with_it(page, client):
+    """f256-01: choosing a project in the picker reloads the page with it, as today."""
+    page.set_viewport_size(DISPLAY)
+
+    def route(r):
+        url = r.request.url.removeprefix(ORIGIN)
+        path = url.split("?", 1)[0]
+        if path.startswith("/static/"):
+            r.fulfill(path=str(STATIC / path.removeprefix("/static/")))
+        else:
+            r.fulfill(body=client.get(url).text, content_type="text/html; charset=utf-8")
+
+    page.route(f"{ORIGIN}/**", route)
+    page.goto(ORIGIN + "/")
+    page.wait_for_selector("#theme-btn", state="visible", timeout=REFRESH)
+
+    # Find a project option that isn't currently selected
+    current = page.evaluate("() => document.querySelector('select[name=project]').value")
+    options = page.locator("select[name=project] option")
+    other = None
+    for i in range(options.count()):
+        val = options.nth(i).evaluate("el => el.value")
+        if val != current:
+            other = val
+            break
+    assert other, "need at least two projects to test selection"
+
+    # Choosing the other project loads the page again, with it in the address and selected
+    with page.expect_navigation():
+        page.locator("select[name=project]").select_option(other)
+    assert parse_qs(page.url.split("?", 1)[1])["project"] == [other]
+    new_project = page.evaluate("() => document.querySelector('select[name=project]').value")
+    assert new_project == other, f"project changed to {new_project}, expected {other}"
+
+
 def test_a_system_change_leaves_a_stored_choice_alone(page, client):
     """f69 review: once the button was pressed, a later system change on the same page doesn't
     undo the owner's choice."""
