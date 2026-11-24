@@ -347,7 +347,7 @@ ticket, then the files they changed and their tests.
 Card: {card}
 Done tickets:
 {tickets}
-Files changed since the milestone started: {files}
+Files their merges changed: {files}
 
 Check the code against the card: what it asks that the code doesn't do, bugs, tests that check
 presence instead of content, and anything masked instead of fixed. Change nothing. Skip nits: a

@@ -3854,7 +3854,7 @@ def pre_review(s: Session, milestone: str) -> bool:
     Its findings are recorded for the review to judge. Claude's re-check isn't asked
     (`state.recheck` is untouched). Choosing the milestone and when to run are the caller's.
     False when none may run or its job failed: nothing is written."""
-    from runner.milestone import _done_tickets, _plan_commit  # it imports this module
+    from runner.milestone import _done_tickets  # it imports this module
 
     agents = [s.cfg.agents[agent_id] for agent_id in s.cfg.roles.get(STAND_IN, ())]
     if not agents:
@@ -3868,12 +3868,7 @@ def pre_review(s: Session, milestone: str) -> bool:
         return False
     agent = routed.agent
     tickets = sorted(_done_tickets(s.repo, milestone))
-    start = _plan_commit(s.git, s.repo, milestone)
-    changed = [
-        f
-        for f in s.git.run("diff", "--name-only", start, "HEAD").splitlines()
-        if f and not f.startswith(".softfield/")
-    ]
+    changed = _ticket_files(s, tickets)
     card = milestone_file(s.repo, "cards", milestone).relative_to(s.repo).as_posix()
     s.log("")
     s.log(console.ticket_header(f"{milestone} pre-review", agent.id, None))
@@ -3903,7 +3898,11 @@ def pre_review(s: Session, milestone: str) -> bool:
             path.unlink()
             filed = {k: p for k, p in filed.items() if p != path}
     written = list(dict.fromkeys(filed.values()))
-    acted = [replace(f, route="local") if prefix + f.id in filed else f for f in findings]
+    # D4: a finding that filed nothing is the review's to read, whatever route Copilot gave
+    acted = [
+        replace(f, route="local" if prefix + f.id in filed else "report") if f.actionable else f
+        for f in findings
+    ]
     if job_id is not None:
         record_findings(s, milestone, acted, agent.id, prefix, by_ticket=True)
     tickets_text = ", ".join(p.stem for p in written) or "none"
@@ -3915,6 +3914,21 @@ def pre_review(s: Session, milestone: str) -> bool:
     for path in written:
         record_ticket(s, path)
     return True
+
+
+def _ticket_files(s: Session, tickets: Sequence[str]) -> list[str]:
+    """The files the merges of ``tickets`` (a `Task:` trailer) changed, outside .softfield/.
+    Not a diff from the milestone's start: other milestones' work merged in between isn't its
+    own (F285's start-to-HEAD diff named F97's files)."""
+    if not tickets:
+        return []
+    trailer = "^Task: (" + "|".join(re.escape(t) for t in tickets) + ")$"
+    files: dict[str, None] = {}
+    for sha in reversed(s.git.run("log", "-E", f"--grep={trailer}", "--format=%H").split()):
+        for f in s.git.run("show", "--name-only", "--format=", sha).splitlines():
+            if f and not f.startswith(".softfield/"):
+                files[f] = None
+    return list(files)
 
 
 PRE_REVIEWS_MAX = 3  # per milestone (ADR 51 item 4)

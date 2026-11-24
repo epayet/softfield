@@ -974,6 +974,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** this is the second time running (after F122's 05) that a page ticket with browser tests went to the local model and came back unusable. For the top bar's markup and its browser tests, F17's rule already gives such work to the lead; the plan didn't apply it. `.softfield/developer.md` now carries the top bar's worked example.
 - **Decisions affected:** none.
 
+### F285 (2026-11-24): Copilot pre-reviews a finished milestone while Claude is out ([review](../reviews/f285-i-think-i-said-at-some.md))
+
+- **Q1:** two lead tickets on Sonnet (the job, then when it runs), each passed on attempt 1 in 7 and 12 minutes; one developer ticket (two dashboard labels) passed on the local model's first attempt in 37 minutes. No checkpoint. Review round 1: two should-fix in protected `runner/` code, both fixed by the review (the pre-review was given every file merged since the milestone began, F97's included; a finding that filed no ticket kept Copilot's own route instead of `report`), two nits reported. Score 8.
+- **Q3:** the runner side Claude's (about $1.25 for the two lead tickets); the local model's 2.4M tokens built the labels. See the review's numbers.
+- **Q5:** see the review's numbers.
+- **Anything else:** a milestone's "files changed since its start" is wrong whenever the board interleaves cards, which is now the norm; any new job that reads one milestone should take its tickets' own merges, as `_merge_files` does. A test that passes the expected value in its input (`route="report"`) can't show that the code sets it. No live pre-review has run yet: Copilot's first ones are the evidence for ADR 51's three-round limit.
+- **Decisions affected:** ADR 51 as built, with the file list from the tickets' merges (D1's tag-then-merges named the tag first).
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.

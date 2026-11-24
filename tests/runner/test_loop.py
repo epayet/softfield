@@ -7212,6 +7212,11 @@ def test_a_pre_review_files_developer_fixes_and_records_its_findings(repo, fake_
         _pre_finding("Thing has no test of 42"),
         _pre_finding("A nit", severity="nit"),
     ]
+    # its ticket's merge, then another milestone's merged in between (f285 review)
+    for path, ticket in (("coucou/built.py", "m1-01-thing"), ("coucou/other.py", "m2-01-other")):
+        (repo / path).write_text("X = 1\n")
+        git(repo, "add", "-A")
+        git(repo, "commit", "-q", "-m", f"{ticket}: built\n\nTask: {ticket}")
     answer = json.dumps({"findings": findings})
     specs = _fake_copilot(monkeypatch, JobResult(ok=True, text=answer, duration_s=1.0))
     before = (list(s.state.recheck), list(s.state.recheck_filed))
@@ -7220,6 +7225,7 @@ def test_a_pre_review_files_developer_fixes_and_records_its_findings(repo, fake_
     assert spec.role == "pre-review" and spec.read_only
     assert "m1-01-thing (.softfield/tasks/done/m1-01-thing.md)" in spec.prompt
     assert ".softfield/cards/m1.md" in spec.prompt
+    assert "merges changed: coucou/built.py\n" in spec.prompt  # its own merge's files only
     [fix] = sorted((repo / ".softfield" / "tasks" / "ready").glob("m1-*.md"))
     ticket = parse_task(fix, 150)
     assert ticket.agent == "developer" and ticket.files == ("coucou/thing.py",)
@@ -7242,8 +7248,9 @@ def test_a_pre_review_never_files_the_leads_work(repo, fake_clock, monkeypatch):
     answer = json.dumps(
         {
             "findings": [
-                _pre_finding("Secret leaks", file="coucou/secret.py", route="report"),
-                _pre_finding("Fix is wrong", ticket="m1-02-fix-thing", route="report"),
+                # Copilot's own route is overruled: nothing was filed (D4)
+                _pre_finding("Secret leaks", file="coucou/secret.py", route="local"),
+                _pre_finding("Fix is wrong", ticket="m1-02-fix-thing"),
             ]
         }
     )
