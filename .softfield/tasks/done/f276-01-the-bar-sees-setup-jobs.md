@@ -35,3 +35,9 @@ attempts: 3
 tokens: 122019
 logs: .softfield/var/runs/20261121-011446/f276-01-the-bar-sees-setup-jobs
 ```
+
+```yaml
+# --- runner ---
+result: done
+finished_by: lead
+```
