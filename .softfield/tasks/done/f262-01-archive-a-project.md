@@ -34,3 +34,10 @@ Read `.softfield/cards/f262-i-want-ability-to-archive-a.md` ("What happens today
 - the dashboard's `POST /requests` takes both kinds
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
