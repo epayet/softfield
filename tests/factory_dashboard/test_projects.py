@@ -524,7 +524,7 @@ def test_the_start_form_htmx_listeners_guard_on_their_own_target(projects_client
 def plate(html: str, name: str) -> str:
     """The HTML of project ``name``'s plate on the Projects page."""
     key = re.escape(name)
-    match = re.search(rf'<li class="proj"[^>]*data-key="{key}"[^>]*>(.*?)</li>', html, re.S)
+    match = re.search(rf'<li class="proj[^"]*"[^>]*data-key="{key}"[^>]*>(.*?)</li>', html, re.S)
     assert match, f"no plate for {name}"
     return match.group(1)
 
@@ -860,3 +860,178 @@ def test_a_running_ticketless_review_names_the_card_on_projects_page(serve, db_p
     assert 'href="/planning/f158?project=' in html
     # The role "review" does not appear as bare text where the card name should be
     assert "review F158" in now_section
+
+
+# --- pause / resume on the Projects page (F124 D5, f124-02) -------------------------------------
+
+
+WAY = "On its way: the runner takes it at its next pick, after the job it is on"
+
+
+def _way_shown(row: str) -> bool:
+    """Whether the plate's on-its-way line is drawn (its ``div`` without ``hidden``)."""
+    match = re.search(
+        rf'<div id="pause-way-[^"]*" class="way" data-way="{WAY}"( hidden)?>([^<]*)</div>', row
+    )
+    assert match, "no on-its-way line on the plate"
+    shown = match.group(1) is None
+    assert match.group(2) == (WAY if shown else "")
+    return shown
+
+
+def _open_requests(db_path) -> list[tuple[str, str | None]]:
+    """The open pause_project / resume_project rows, as (kind, project name)."""
+    conn = metrics.open_db(db_path)
+    try:
+        rows = conn.execute(
+            "SELECT r.kind, p.name FROM owner_requests r JOIN projects p ON p.id = r.project_id"
+            " WHERE r.kind IN ('pause_project', 'resume_project') AND r.done IS NULL"
+        ).fetchall()
+    finally:
+        conn.close()
+    return [(kind, name) for kind, name in rows]
+
+
+def test_a_running_project_shows_a_pause_button(projects_client):
+    """A running project shows a Pause button, not paused by you, and no way line drawn."""
+    row = plate(projects_client.get("/projects").text, "coucou")
+    assert '<button type="button" class="hold"' in row
+    assert ">Pause</button>" in row
+    assert "hold resume" not in row
+    assert "hold asked" not in row
+    assert "Paused by you" not in row
+    assert not _way_shown(row)
+    posts = re.search(r"hx-vals='([^']*)'", row)
+    assert posts and json.loads(posts.group(1)) == {"kind": "pause_project", "project": "coucou"}
+
+
+def test_a_project_paused_by_you_shows_hazard_edge_and_resume(projects_client, db_path):
+    """A project paused by you shows a hazard left edge, the pause line, and Resume."""
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.find_project(conn, PROJECT)
+        assert project is not None
+        metrics.set_project_paused(conn, PROJECT, NOW.isoformat())
+        conn.commit()
+    finally:
+        conn.close()
+    html = projects_client.get("/projects").text
+    row = plate(html, PROJECT)
+    assert "proj held" in html
+    assert "Paused by you since" in row
+    assert "Its tickets wait; its planning still answers you." in row
+    assert ">Resume</button>" in row
+    assert 'class="hold resume"' in row
+    assert "Paused: the runner leaves it alone." not in row
+    posts = re.search(r"hx-vals='([^']*)'", row)
+    assert posts and json.loads(posts.group(1)) == {"kind": "resume_project", "project": PROJECT}
+
+
+def test_a_project_paused_by_you_says_the_time_local(projects_client, db_path):
+    """The pause time is shown local (HH:MM), not the raw ISO string."""
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.find_project(conn, PROJECT)
+        assert project is not None
+        metrics.set_project_paused(conn, PROJECT, "2026-10-02T21:40:00")
+        conn.commit()
+    finally:
+        conn.close()
+    html = projects_client.get("/projects").text
+    assert "Paused by you since 21:40." in html
+
+
+def test_pressing_pause_turns_button_to_pausing_and_dashed(page, projects_client, db_path):
+    """Pressing Pause turns the button to 'Pausing…', dashed orange, disabled, with the way line."""
+    from playwright.sync_api import expect
+
+    open_page(page, projects_client, "/projects")
+    row = page.locator(f'.proj[data-key="{PROJECT}"]')
+    button = row.locator(".hold")
+    way = row.locator("#pause-way-coucou")
+    expect(way).to_be_hidden()
+    button.click()
+    expect(way).to_be_visible()
+    expect(way).to_have_text(WAY)
+    expect(button).to_have_text("Pausing…")
+    expect(button).to_be_disabled()
+    expect(button).to_have_css("border-top-style", "dashed")
+    row.locator("#pause-sent-coucou").get_by_text("Asked").wait_for()
+    assert _open_requests(db_path) == [("pause_project", PROJECT)]
+
+
+def test_a_pause_on_its_way_shows_the_way_line(projects_client, db_path):
+    """A pause_project request on its way shows the way line on the project."""
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.find_project(conn, PROJECT)
+        assert project is not None
+        metrics.add_request(conn, project, "pause_project", None, None, NOW.isoformat())
+        conn.commit()
+    finally:
+        conn.close()
+    row = plate(projects_client.get("/projects").text, PROJECT)
+    assert _way_shown(row)
+    assert '<button type="button" class="hold asked" disabled>Pausing…</button>' in row
+    assert "hx-post" not in row.split("</div>")[0]  # the head's button posts nothing again
+
+
+def test_a_resume_on_its_way_shows_the_way_line(projects_client, db_path):
+    """A resume_project request on its way shows the way line on the project."""
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.find_project(conn, PROJECT)
+        assert project is not None
+        metrics.set_project_paused(conn, PROJECT, "2026-10-02T10:00:00+00:00")
+        metrics.add_request(conn, project, "resume_project", None, None, NOW.isoformat())
+        conn.commit()
+    finally:
+        conn.close()
+    row = plate(projects_client.get("/projects").text, PROJECT)
+    assert _way_shown(row)
+    assert '<button type="button" class="hold asked" disabled>Resuming…</button>' in row
+    assert ">Resume</button>" not in row
+
+
+def test_pressing_resume_turns_button_to_resuming_and_dashed(page, projects_client, db_path):
+    """Pressing Resume turns the button to 'Resuming…', dashed orange, disabled, with
+    the way line."""
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.find_project(conn, PROJECT)
+        assert project is not None
+        metrics.set_project_paused(conn, PROJECT, "2026-10-02T10:00:00+00:00")
+        conn.commit()
+    finally:
+        conn.close()
+    from playwright.sync_api import expect
+
+    open_page(page, projects_client, "/projects")
+    row = page.locator(f'.proj.held[data-key="{PROJECT}"]')
+    button = row.locator(".hold")
+    way = row.locator("#pause-way-coucou")
+    expect(way).to_be_hidden()
+    button.click()
+    expect(way).to_be_visible()
+    expect(button).to_have_text("Resuming…")
+    expect(button).to_be_disabled()
+    row.locator("#pause-sent-coucou").get_by_text("Asked").wait_for()
+    assert _open_requests(db_path) == [("resume_project", PROJECT)]
+
+
+def test_a_project_being_set_up_keeps_its_line_and_has_no_button(
+    projects_client, db_path, tmp_path
+):
+    """A project being set up keeps its stations line and has no Pause/Resume button."""
+    project_id = _setting_up(db_path, tmp_path)
+    conn = metrics.open_db(db_path)
+    try:
+        metrics.queue_job(conn, project_id, "setup", "m1", "new project", NOW.isoformat())
+        conn.commit()
+    finally:
+        conn.close()
+    row = plate(projects_client.get("/projects").text, "ducks")
+    assert "stations" in row
+    assert ">Pause</button>" not in row
+    assert ">Resume</button>" not in row
+    assert "hold" not in row

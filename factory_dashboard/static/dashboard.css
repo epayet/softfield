@@ -1298,6 +1298,21 @@ body.has-order-bar main { padding-bottom: 120px; }
   border: 0; padding: 10px 16px; margin-top: 10px; }
 .projects-page .send-order:disabled { background: var(--plate); color: var(--muted); }
 .projects-page .on-its-way { color: var(--hazard); font-size: 13px; margin-left: 10px; }
+/* The hold switch on each project (F124 D5): Pause / Resume, on its way, and the held state */
+.projects-page .hold { font: 700 12px var(--display); letter-spacing: .08em; text-transform: uppercase;
+  padding: 7px 12px; background: var(--plate); color: var(--fg); border: 1px solid var(--rule);
+  cursor: pointer; display: inline-flex; align-items: center; gap: 8px; flex: none; }
+.projects-page .hold::before { content: ""; width: 10px; height: 10px; border: 2px solid currentColor;
+  border-width: 0 3px; }
+.projects-page .hold.resume::before { border-width: 5px 0 5px 9px; border-color: transparent transparent transparent currentColor;
+  width: 0; height: 0; }
+.projects-page .hold.resume { background: var(--hazard); color: var(--hazard-ink); border-color: var(--hazard); }
+.projects-page .hold.asked { border: 1px dashed var(--opus); color: var(--opus); background: transparent;
+  cursor: default; }
+.projects-page .proj.held { position: relative; padding-left: 12px; margin-left: -2px;
+  border-left: 4px solid var(--warn); }
+.projects-page .held-line { color: var(--warn); font-size: 13.5px; }
+.projects-page .held-line b { font-family: var(--display); letter-spacing: .03em; }
 /* Start a project (F122 D6, .softfield/cards/f122-mockup/projects-new.html): the intake bay, a
    machine plate with a hopper for the idea; a new project's plate waits dashed orange, on its way */
 .projects-page .proj-asked { display: grid; grid-template-columns: 52px 1fr; gap: 4px 12px; padding: 12px 0; }

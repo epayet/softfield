@@ -1,0 +1,4 @@
+{# A project's pause or resume on its way (F124 D5): drawn while its request is open; otherwise
+   empty and hidden, and the Pause or Resume button fills it from `data-way` once pressed. #}
+{% set way = "On its way: the runner takes it at its next pick, after the job it is on" %}
+<div id="pause-way-{{ card.name | lower }}" class="way" data-way="{{ way }}"{% if not card.paused_on_its_way %} hidden>{% else %}>{{ way }}{% endif %}</div>

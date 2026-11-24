@@ -56,23 +56,44 @@
       <li class="proj-asked">{{ asked_plate(new.name, new.idea) }}</li>
       {% endfor %}
       {% for card in cards %}
-      <li class="proj" data-key="{{ card.name }}" data-name="{{ card.name }}">
+      <li class="proj{% if card.paused_by_you %} held{% endif %}" data-key="{{ card.name }}" data-name="{{ card.name }}">
         <label class="place"><input type="number" min="1" max="{{ cards | length }}" value="{{ loop.index }}" inputmode="numeric"
           aria-label="{{ card.name }}'s place" class="asked"><small>place</small></label>
         <div class="plate">
           <div class="head">
             <span class="rankno">#{{ loop.index }}</span>
             <span class="name">{{ card.name }}</span>
+            {% set setting_up = card.paused == "setting up" %}
+            {% if not setting_up %}
+            {# an open request wins over the state it will change, so a reload keeps "Pausing…" #}
+            {% if card.paused_on_its_way == "pause_project" %}
+            <button type="button" class="hold asked" disabled>Pausing…</button>
+            {% elif card.paused_on_its_way == "resume_project" %}
+            <button type="button" class="hold asked" disabled>Resuming…</button>
+            {% else %}
+            {% set resume = card.paused_by_you is not none %}
+            <button type="button" class="hold{% if resume %} resume{% endif %}" hx-post="/requests" hx-target="#pause-sent-{{ card.name | lower }}" hx-swap="innerHTML"
+              hx-vals='{{ {"kind": "resume_project" if resume else "pause_project", "project": card.name} | tojson }}'
+              data-asked="{{ 'Resuming…' if resume else 'Pausing…' }}"
+              hx-on::before-request="this.textContent = this.dataset.asked; this.classList.add('asked'); this.disabled = true; const way = document.getElementById('pause-way-{{ card.name | lower }}'); way.textContent = way.dataset.way; way.hidden = false">{{ 'Resume' if resume else 'Pause' }}</button>
+            {% endif %}
+            {% endif %}
           </div>
           {% if card.description %}<div class="what">{{ card.description }}</div>{% endif %}
-          {% set setting_up = card.paused == "setting up" %}
+          {% if card.paused_by_you %}
+          <div class="held-line"><b>Paused by you since {{ card.paused_by_you | local("%H:%M") }}.</b> Its tickets wait; its planning still answers you.</div>
+          {% endif %}
+          {% if not setting_up %}
+          {% include "_partials/pause_request.html" %}
+          <div id="pause-sent-{{ card.name | lower }}" class="pause-sent"></div>
+          {% endif %}
           {% if setting_up %}
           {# where its setup is (F122 D6): the lead's job while it waits or runs, then ADR 00 on the desk #}
           {% set here = 1 if card.setup_job else (2 if card.for_you else 0) %}
           <div class="stations" aria-label="Its setup: step {{ here + 1 }} of {{ stations | length }}">
             {% for station in stations %}<span class="st{% if loop.index0 == here %} here{% elif loop.index0 < here %} past{% endif %}">{{ station }}</span>{% endfor %}
           </div>
-          {% elif card.paused %}<div class="muted">Paused: the runner leaves it alone.</div>{% endif %}
+          {% elif card.paused and not card.paused_by_you %}<div class="muted">Paused: the runner leaves it alone.</div>{% endif %}
           <div class="facts">
             <span><b>{{ card.ready }}</b> ready</span>
             {% if card.building %}<span><b>{{ card.building }}</b> building</span>{% endif %}

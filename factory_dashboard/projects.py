@@ -124,6 +124,8 @@ class ProjectCard:
     done: int
     for_you: int  # its Planning desk's items waiting for the owner
     paused: str | None = None  # `metrics.SETTING_UP` while `softfield init`'s setup runs
+    paused_by_you: str | None = None  # ISO time the owner paused it, None otherwise
+    paused_on_its_way: str | None = None  # "pause_project" or "resume_project" while waiting
     app: AppRow | None = None  # its app (F239 D6); None without `[run]`, and for Softfield
     softfield: bool = False  # Softfield's own repo: it runs from `live`, with no app row
     stack_plant: str = ""  # the "Plant a card for a stack" value, for a project without one
@@ -174,6 +176,9 @@ def project_cards(conn: sqlite3.Connection, now: datetime) -> list[ProjectCard]:
         stack = stack_of(conn, row.name)
         # `stack_for` is None for Softfield as for a project without `[run]`: ask the repo
         softfield = stack is None and row.repo is not None and stacks._is_softfield(Path(row.repo))
+        project_id = metrics.find_project(conn, row.name)
+        paused_by_you = metrics.paused_by_you(row.paused)
+        paused_its_way = paused_on_its_way(conn, project_id) if project_id else None
         cards.append(
             ProjectCard(
                 name=row.name,
@@ -185,6 +190,8 @@ def project_cards(conn: sqlite3.Connection, now: datetime) -> list[ProjectCard]:
                 done=states.get("done", 0),
                 for_you=len(waiting_for_you(desk(conn, row.name, now))),
                 paused=row.paused,
+                paused_by_you=paused_by_you,
+                paused_on_its_way=paused_its_way,
                 app=row_of(row.name, stack) if stack else None,
                 softfield=softfield,
                 stack_plant=""
@@ -194,6 +201,17 @@ def project_cards(conn: sqlite3.Connection, now: datetime) -> list[ProjectCard]:
             )
         )
     return cards
+
+
+def paused_on_its_way(conn: sqlite3.Connection, project_id: int) -> str | None:
+    """The latest pause_project or resume_project the runner hasn't taken for ``project_id``."""
+    row = conn.execute(
+        "SELECT kind FROM owner_requests WHERE project_id = ?"
+        " AND kind IN ('pause_project', 'resume_project') AND done IS NULL"
+        " ORDER BY id DESC LIMIT 1",
+        (project_id,),
+    ).fetchone()
+    return row["kind"] if row else None
 
 
 def _setup_job(conn: sqlite3.Connection, name: str) -> bool:
