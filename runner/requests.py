@@ -20,7 +20,19 @@ from typing import NamedTuple
 
 import yaml
 
-from runner import config, dispatch, loop, metrics, milestone, notify, order, owner, planner, setup
+from runner import (
+    config,
+    dispatch,
+    loop,
+    metrics,
+    milestone,
+    notify,
+    order,
+    owner,
+    planner,
+    setup,
+    stacks,
+)
 from runner.config import project_name
 from runner.gitops import RUNNER_AUTHOR, Git, GitError, with_trailers
 from runner.state import State
@@ -67,6 +79,7 @@ RESUME_PROJECT = "resume_project"
 # the same, held as a pause holds and off the picker (F262 D1)
 ARCHIVE_PROJECT = "archive_project"
 UNARCHIVE_PROJECT = "unarchive_project"
+FORGET_PROJECT = "forget_project"  # an archived project leaves every list; nothing is deleted
 # on Softfield's own row; value: {name, idea, built_with, app} (F122 D2, ADR 48 item 1)
 NEW_PROJECT = "new_project"
 _STATE_ONLY = (RESERVE, PAUSE, RESUME)  # they change state.json alone: a wait takes them
@@ -2038,6 +2051,8 @@ def _apply(
             return _pause_project(conn, project_id, now, kind)
         if kind in (ARCHIVE_PROJECT, UNARCHIVE_PROJECT):
             return _archive_project(conn, project_id, kind)
+        if kind == FORGET_PROJECT:
+            return _forget_project(conn, project_id)
         if kind == NEW_PROJECT:
             return _new_project(db, now, value)
         if kind == DISMISS:
@@ -2120,6 +2135,29 @@ def _archive_project(conn: sqlite3.Connection, project_id: int, kind: str) -> st
         return "not archived"
     metrics.set_project_paused(conn, name, None)
     return "unarchived: back in the list, last"
+
+
+def _forget_project(conn: sqlite3.Connection, project_id: int) -> str:
+    """The owner forgets an archived project (F273 D1-D3), as `softfield forget` does:
+    ``projects.paused`` says "forgotten" and no row is deleted. Refused unless it is archived,
+    and while its app runs. The database only."""
+    row = conn.execute(
+        "SELECT name, repo, paused FROM projects WHERE id = ?", (project_id,)
+    ).fetchone()
+    name, repo, paused = row[0], row[1], row[2]
+    if paused == metrics.FORGOTTEN:
+        return "already forgotten"
+    if not metrics.is_archived(paused):
+        return "archive it first"
+    stack = stacks.stack_for(Path(repo)) if repo else None
+    if stack is not None and stacks.state(stack).word in (
+        stacks.RUNNING,
+        stacks.STARTING,
+        stacks.UPDATE_FAILED,
+    ):
+        return "its app is running: stop it first"
+    metrics.set_project_paused(conn, name, metrics.FORGOTTEN)
+    return "forgotten: off every page; `softfield init` in its folder brings it back"
 
 
 _YES = (True, "yes", "on", "true", "1")

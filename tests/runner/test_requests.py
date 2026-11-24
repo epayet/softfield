@@ -2564,6 +2564,80 @@ def test_the_dashboard_sends_an_archive_and_unarchive():
     assert {requests.ARCHIVE_PROJECT, requests.UNARCHIVE_PROJECT} <= set(KINDS)
 
 
+# --- a project forgotten (F273 D1-D4) ----------------------------------------------------------
+
+
+def _count_rows(repo: Path) -> dict[str, int]:
+    conn = metrics.open_db(_db(repo))
+    try:
+        tables = [r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")]
+        counts = "SELECT COUNT(*) FROM "  # the names come from sqlite_master
+        return {t: conn.execute(counts + f'"{t}"').fetchone()[0] for t in tables}
+    finally:
+        conn.close()
+
+
+def test_an_archived_project_is_forgotten_by_request(repo):
+    _ask(repo, "archive_project")
+    _apply(repo)
+    before = _count_rows(repo)
+    _ask(repo, "forget_project")
+    [said] = _apply(repo)
+    assert said == (
+        "forget_project: forgotten: off every page; `softfield init` in its folder brings it back"
+    )
+    assert _projects_pause(repo) == metrics.FORGOTTEN
+    after = _count_rows(repo)
+    assert after.pop("owner_requests") >= before.pop("owner_requests")
+    assert {t: n for t, n in after.items() if t in before and n < before[t]} == {}
+    _ask(repo, "forget_project")
+    assert _apply(repo) == ["forget_project: already forgotten"]
+
+
+def test_a_project_not_archived_is_not_forgotten_by_request(repo):
+    _ask(repo, "forget_project")
+    assert _apply(repo) == ["forget_project: archive it first"]
+    assert _projects_pause(repo) is None
+    _ask(repo, "pause_project")
+    _apply(repo)
+    paused = _projects_pause(repo)
+    _ask(repo, "forget_project")
+    assert _apply(repo) == ["forget_project: archive it first"]
+    assert _projects_pause(repo) == paused
+    conn = metrics.open_db(_db(repo))
+    try:
+        metrics.set_project_paused(conn, repo.name, metrics.SETTING_UP)
+    finally:
+        conn.close()
+    _ask(repo, "forget_project")
+    assert _apply(repo) == ["forget_project: archive it first"]
+    assert _projects_pause(repo) == metrics.SETTING_UP
+
+
+def test_a_project_whose_app_runs_is_not_forgotten(repo, monkeypatch):
+    from runner import stacks
+
+    stack = stacks.Stack(project="p", repo=repo, service="web")
+    monkeypatch.setattr(stacks, "stack_for", lambda r: stack)
+    word = {"w": stacks.RUNNING}
+    monkeypatch.setattr(stacks, "state", lambda s: stacks.StackState(word["w"]))
+    _ask(repo, "archive_project")
+    _apply(repo)
+    _ask(repo, "forget_project")
+    assert _apply(repo) == ["forget_project: its app is running: stop it first"]
+    assert _projects_pause(repo) == metrics.ARCHIVED
+    word["w"] = stacks.STOPPED
+    _ask(repo, "forget_project")
+    assert _apply(repo)[0].startswith("forget_project: forgotten")
+    assert _projects_pause(repo) == metrics.FORGOTTEN
+
+
+def test_the_dashboard_sends_a_forget():
+    from factory_dashboard.requests import KINDS
+
+    assert requests.FORGET_PROJECT in KINDS
+
+
 # --- the owner's words a request refused, until they dismiss them (F31 D9) -------------------
 
 BAD_AREA = json.dumps({"title": "Ducks", "thoughts": "Rubber ones.", "area": "garden"})

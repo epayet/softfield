@@ -27,6 +27,7 @@ from runner.requests import (
     CHANGE,
     DISMISS,
     DROP_SEED,
+    FORGET_PROJECT,
     NEW_PROJECT,
     PAUSE,
     PAUSE_PROJECT,
@@ -77,6 +78,7 @@ KINDS = (
     RESUME_PROJECT,
     ARCHIVE_PROJECT,
     UNARCHIVE_PROJECT,
+    FORGET_PROJECT,
     NEW_PROJECT,
 )
 
