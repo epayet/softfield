@@ -30,3 +30,12 @@ The picture to build: the Proposed side of `.softfield/cards/f262-mockup/project
 - Needs you on the Projects page still lists an archived project's items
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: ruff)
+attempts: 3
+tokens: 5354993
+logs: .softfield/var/runs/20261124-131732/f262-02-archive-on-the-projects-page
+```
