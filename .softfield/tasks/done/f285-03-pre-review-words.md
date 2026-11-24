@@ -27,3 +27,12 @@ Read D5 in `.softfield/cards/f285-i-think-i-said-at-some.md`. In `factory_dashbo
 - a milestone page with a `pre-review` job lists it under "Copilot's pre-reviews"
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 2554
+gate_failures: []
+tokens: 2408507
+```
