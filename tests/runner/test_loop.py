@@ -7265,6 +7265,82 @@ def test_a_failed_pre_review_writes_nothing(repo, fake_clock, monkeypatch):
     assert git(repo, "rev-parse", "HEAD") == head
 
 
+def _merge_of(repo: Path, ticket: str) -> None:
+    git(repo, "commit", "-q", "--allow-empty", "-m", f"{ticket}: built\n\nTask: {ticket}")
+
+
+def _pick(s, passed, *, limited: bool = True, monkeypatch=None):
+    monkeypatch.setattr(loop, "_held_at_the_limit", lambda w, at: "out" if limited else None)
+    return loop.pre_review_pick(s.repo, s.state, dispatch.Windows(), loop.now(), passed)
+
+
+def test_a_pre_review_goes_to_the_first_due_milestone_when_claude_is_at_its_limit(
+    repo, fake_clock, monkeypatch
+):
+    """ADR 51 items 2 and 4: only at Claude's real limit, and never with no database."""
+    s = _pre_review_session(repo)
+    assert _pick(s, {}, monkeypatch=monkeypatch) == "m1"
+    assert _pick(s, {}, limited=False, monkeypatch=monkeypatch) is None
+    assert _pick(s, None, monkeypatch=monkeypatch) is None
+    loop.close_session(s)
+
+
+def test_a_milestone_with_three_pre_reviews_or_no_merge_since_gets_none(
+    repo, fake_clock, monkeypatch
+):
+    s = _pre_review_session(repo)
+    _merge_of(repo, "m1-01-thing")
+    long_ago = datetime(2000, 1, 1, tzinfo=UTC).isoformat()
+    later = datetime(2999, 1, 1, tzinfo=UTC).isoformat()
+    assert _pick(s, {"m1": [long_ago]}, monkeypatch=monkeypatch) == "m1"  # a merge since
+    assert _pick(s, {"m1": [later]}, monkeypatch=monkeypatch) is None  # no merge since
+    assert _pick(s, {"m1": [long_ago] * 3}, monkeypatch=monkeypatch) is None  # three already
+    loop.close_session(s)
+
+
+def test_the_passed_pre_reviews_are_counted_from_the_jobs(repo, fake_clock):
+    s = _pre_review_session(repo)
+    assert s.db is not None and s.project_id is not None
+    for attempt, outcome in enumerate(("passed", "failed", "passed"), start=1):
+        job = loop.record_start(s, None, "m1", "pre-review", "copilot-auto", attempt=attempt)
+        assert job is not None
+        metrics.finish_job(s.db, job, ended=loop.now().isoformat(), outcome=outcome)
+    other = loop.record_start(s, None, "m1", "checkpoint", "copilot-auto")
+    assert other is not None
+    metrics.finish_job(s.db, other, ended=loop.now().isoformat(), outcome="passed")
+    found = metrics.passed_pre_reviews(s.db, s.project_id)
+    assert len(found) == 1 and len(next(iter(found.values()))) == 2
+    loop.close_session(s)
+
+
+def test_the_dry_run_names_a_pre_review_as_next_when_nothing_else_runs(capsys):
+    loop._print_plan([], [], set(), set(), Path("."), None, lambda: "f285-i-think")
+    assert "next: Copilot's pre-review of F285" in capsys.readouterr().out
+    loop._print_plan([], [], set(), set(), Path("."), None)
+    assert "next: nothing" in capsys.readouterr().out
+
+
+def test_the_idle_turn_runs_the_pre_review_the_pick_names(repo, fake_clock, monkeypatch):
+    s = _pre_review_session(repo)
+    monkeypatch.setattr(loop, "_held_at_the_limit", lambda w, at: "out")
+    ran: list[str] = []
+
+    def fake(answer: bool) -> Callable[[loop.Session, str], bool]:
+        def run(s: loop.Session, key: str) -> bool:
+            ran.append(key)
+            return answer
+
+        return run
+
+    monkeypatch.setattr(loop, "pre_review", fake(True))
+    assert loop._pre_review_turn(s) is True and ran == ["m1"]
+    monkeypatch.setattr(loop, "pre_review", fake(False))
+    assert loop._pre_review_turn(s) is False and ran == ["m1", "m1"]
+    assert loop._pre_review_turn(s) is False  # a failed one waits an hour before another
+    assert ran == ["m1", "m1"]
+    loop.close_session(s)
+
+
 def test_a_checkpoints_finding_belongs_to_the_milestone_of_the_ticket_at_fault(repo):
     """f8 review: a checkpoint run under F9's key filed F8's findings there, so F8's review
     saw none. A finding on a ticket with no row stays the checkpoint's; a review's always do."""

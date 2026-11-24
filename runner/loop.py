@@ -239,6 +239,7 @@ class Session:
     # What the run says it does outside a job, and until when it waits (`set_activity`).
     activity: str | None = None
     waiting_until: datetime | None = None
+    pre_review_failed: dict[str, datetime] = field(default_factory=dict)  # when one didn't run
     probed: bool = False  # a fresh reading of Claude's windows was taken (f4-07)
     login_checked: datetime | None = None  # when Claude's login last answered (`check_login`)
     # Queue rows the metrics database couldn't take (f8 D1): this session runs them still.
@@ -3916,6 +3917,66 @@ def pre_review(s: Session, milestone: str) -> bool:
     return True
 
 
+PRE_REVIEWS_MAX = 3  # per milestone (ADR 51 item 4)
+PRE_REVIEW_RETRY = timedelta(hours=1)  # after one that couldn't run or failed
+
+
+def _merged_since(repo: Path, milestone: str, since: datetime) -> bool:
+    """Whether a done ticket of ``milestone`` merged after ``since``."""
+    from runner.milestone import _done_tickets  # it imports this module
+
+    tickets = _done_tickets(repo, milestone)
+    if not tickets:
+        return False
+    trailer = "^Task: (" + "|".join(re.escape(t) for t in tickets) + ")$"
+    log = Git(repo).run("log", "-E", f"--grep={trailer}", "--format=%cI")
+    return any(datetime.fromisoformat(line) > since for line in log.split())
+
+
+def pre_review_pick(
+    repo: Path,
+    state: State,
+    windows: dispatch.Windows,
+    at: datetime,
+    passed: Mapping[str, Sequence[str]] | None,
+) -> str | None:
+    """The milestone to pre-review when nothing else can start (ADR 51 items 2 and 4), for the
+    runner and the dry run alike (ADR 44 item 9): Claude at its real limit, and the first
+    milestone in `due_reviews` order with fewer than three passed pre-reviews (``passed``: their
+    start times by key) and a merge since the last. None with no ``passed`` (no database)."""
+    from runner.milestone import due_reviews  # it imports this module
+
+    if passed is None or _held_at_the_limit(windows, at) is None:
+        return None
+    for key in due_reviews(repo, state):
+        starts = passed.get(key, ())
+        if len(starts) >= PRE_REVIEWS_MAX:
+            continue
+        if starts and not _merged_since(repo, key, max(map(datetime.fromisoformat, starts))):
+            continue
+        return key
+    return None
+
+
+def _pre_review_turn(s: Session) -> bool:
+    """With nothing else to start, the pre-review `pre_review_pick` names, if any. Whether
+    one ran: the turn then picks again."""
+    if s.project_id is None:
+        return False
+    at = now()
+    passed = _record(s, metrics.passed_pre_reviews, s.project_id)
+    key = pre_review_pick(s.repo, s.state, _windows_now(s, at), at, passed)
+    if (
+        key is None
+        or at - s.pre_review_failed.get(key, at - 2 * PRE_REVIEW_RETRY) < PRE_REVIEW_RETRY
+    ):
+        return False
+    if pre_review(s, key):
+        return True
+    s.pre_review_failed[key] = at
+    return False
+
+
 _FIX_PATH_RE = re.compile(r"[\w-][\w.-]*(?:/[\w-][\w.-]*)*")  # repo-relative, never `..`
 _TICKET_ID_RE = re.compile(r"[\w-]+")
 
@@ -6037,6 +6098,16 @@ def work_queue(
                 if wait and reviews and not once and _idle_holds(s):
                     continue
                 return False
+            # ADR 51: nothing else can start and Claude is out: Copilot reads a finished milestone
+            if (
+                reviews
+                and not once
+                and take_tickets
+                and not lane_only
+                and not being_set_up
+                and _pre_review_turn(s)
+            ):
+                continue
             if wait and _wait_for_reset(s, ready, rows):
                 continue
             if reviews and not once and wait:  # the standing command holds (F101 D1)
@@ -6548,7 +6619,19 @@ def dry_run_plan(cfg: Config) -> None:
         reviewing=under_review(state),
     )
     next_id = None if chosen is None or by_the_owner else chosen.id
-    _print_plan(lines, ready, done, paused, cfg.repo, next_id)
+
+    def pre_review_next() -> str | None:  # nothing else can start (ADR 51), as the runner asks
+        if by_the_owner or not cfg.metrics_db.is_file() or not cfg.roles.get(STAND_IN):
+            return None
+        conn = metrics.open_db(cfg.metrics_db)
+        try:
+            project = metrics.find_project(conn, cfg.project_name)
+            passed = None if project is None else metrics.passed_pre_reviews(conn, project)
+        finally:
+            conn.close()
+        return pre_review_pick(cfg.repo, state, windows, at, passed)
+
+    _print_plan(lines, ready, done, paused, cfg.repo, next_id, pre_review_next)
 
 
 def _stored_paused(cfg: Config) -> str | None:
@@ -6668,9 +6751,11 @@ def _print_plan(
     paused: set[str],
     repo: Path,
     next_ticket: str | None,
+    pre_review: Callable[[], str | None] = lambda: None,
 ) -> None:
     """Each job in the order it would run, the next one marked, and each ticket's pre-flight
-    problems. Of the tickets only ``next_ticket`` can be next (`choose_ticket`)."""
+    problems. Of the tickets only ``next_ticket`` can be next (`choose_ticket`); with nothing
+    else to run, ``pre_review`` names the milestone Copilot would pre-review (ADR 51)."""
     print(f"ready: {len(ready)}  done: {len(done)}  paused: {len(paused)}")
     tasks = {t.id: t for t in ready}
 
@@ -6686,6 +6771,9 @@ def _print_plan(
         if line.pick.kind == dispatch.TICKET:
             for problem in preflight(tasks[line.pick.subject], repo):
                 print(f"     pre-flight: {problem}")
+    if picked is None and (milestone := pre_review()) is not None:
+        print(f"next: Copilot's pre-review of {short_key(milestone).upper()}")
+        return
     print(f"next: {_job_name(picked.pick) if picked else 'nothing'}")
 
 

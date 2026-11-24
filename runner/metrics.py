@@ -1171,6 +1171,21 @@ def queue_job(
     return int(row[0])
 
 
+def passed_pre_reviews(conn: sqlite3.Connection, project_id: int) -> dict[str, list[str]]:
+    """When each milestone's passed pre-reviews started (ADR 51 item 4), by the milestone's
+    key, oldest first."""
+    rows = conn.execute(
+        "SELECT m.key, j.started FROM jobs j JOIN milestones m ON m.id = j.milestone_id"
+        " WHERE m.project_id = ? AND j.role = 'pre-review' AND j.outcome = 'passed'"
+        " AND j.started IS NOT NULL ORDER BY j.started, j.id",
+        (project_id,),
+    )
+    found: dict[str, list[str]] = {}
+    for key, started in rows:
+        found.setdefault(key, []).append(started)
+    return found
+
+
 def open_jobs(conn: sqlite3.Connection, project_id: int) -> list[sqlite3.Row]:
     """The project's queued jobs not yet done, oldest first (the order queued on a tie)."""
     return conn.execute(
