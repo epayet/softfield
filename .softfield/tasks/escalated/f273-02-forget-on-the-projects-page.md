@@ -28,3 +28,12 @@ The picture to build: the Proposed side of `.softfield/cards/f273-mockup/project
 - an archived project whose app runs shows its app row in its crate, and Forget is disabled with "Its app is running: stop it first, then Forget."
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: ruff)
+attempts: 3
+tokens: 14708475
+logs: .softfield/var/runs/20261124-131732/f273-02-forget-on-the-projects-page
+```
