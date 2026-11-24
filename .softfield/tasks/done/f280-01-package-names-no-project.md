@@ -39,3 +39,10 @@ Read "What happens today" and D1 to D5 in `.softfield/cards/f280-a-lot-of-the-fa
 - every removed block is under "For Coucou" in `.softfield/cards/f280-a-lot-of-the-factory-assume.md`, word for word
 - `tests/runner/test_prompts.py` passes as a whole (its tests read the real `runner/instructions/lead.md` headings: rename none)
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
