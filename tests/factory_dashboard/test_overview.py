@@ -5796,3 +5796,278 @@ def test_a_due_review_in_next_shows_card_title_not_batch(queue_client, db_path):
     assert "The factory is softfield" in next_section
     assert "the lead reads what it built" in next_section
     assert "a batch" not in next_section
+
+
+# --- f97-02: card steps styles stay in the strip ------------------------------------------------
+
+
+def test_the_overview_does_not_scroll_sideways_at_phone(page, db_path):
+    """f97-02: at 390 px the Overview with While you were away listing a merged ticket named
+    ``f262-02-archive-on-the-projects-page``, and Needs you holding a desk and a ``reserve``
+    item, has no ``layout_problems``, and the page's ``scrollWidth`` is at most 390."""
+
+    from tests.factory_dashboard.conftest import write_fixture
+    from tests.layout import PHONE, layout_problems
+
+    conn = metrics.open_db(db_path)
+    try:
+        # Ensure the fixture's data is present
+        write_fixture(conn)
+        write_allowance(conn)
+
+        # Add a merged ticket with a long name for "While you were away"
+        project_id = conn.execute("SELECT id FROM projects WHERE name = ?", (PROJECT,)).fetchone()[
+            "id"
+        ]
+        m1 = conn.execute("SELECT id FROM milestones WHERE key = 'f1'").fetchone()["id"]
+        long_ticket = metrics.upsert_ticket(
+            conn,
+            project_id,
+            "f262-02-archive-on-the-projects-page",
+            milestone_id=m1,
+            kind="developer",
+            state="done",
+            merged_by=OPUS,
+            commit="a" * 40,
+            lines_changed=100,
+        )
+        # Write a job so the ticket counts as merged in the "away" span
+        run_id = conn.execute(
+            "SELECT id FROM runs WHERE project_id = ? ORDER BY started DESC LIMIT 1",
+            (project_id,),
+        ).fetchone()["id"]
+        metrics.start_job(
+            conn,
+            run_id,
+            ticket_id=long_ticket,
+            milestone_id=m1,
+            role="developer",
+            agent=OPUS,
+            attempt=1,
+            started=(NOW - timedelta(hours=2)).isoformat(),
+        )
+        metrics.finish_job(
+            conn,
+            conn.execute("SELECT id FROM jobs ORDER BY id DESC LIMIT 1").fetchone()["id"],
+            ended=(NOW - timedelta(hours=1)).isoformat(),
+            outcome="passed",
+        )
+
+        # Add a reserve owner_item for "Needs you"
+        metrics.upsert_owner_item(
+            conn,
+            project_id,
+            "reserve",
+            "f1",
+            text="Use the reserve for f1",
+            created=(NOW - timedelta(minutes=30)).isoformat(),
+        )
+    finally:
+        conn.close()
+
+    from fastapi.testclient import TestClient
+
+    from factory_dashboard.app import create_app, get_now
+
+    app = create_app(db_path, PROJECT)
+    app.dependency_overrides[get_now] = lambda: NOW
+    client = TestClient(app, base_url="http://127.0.0.1:8765")
+
+    ORIGIN = "http://127.0.0.1:8765"
+
+    def serve(route) -> None:
+        url = route.request.url.removeprefix(ORIGIN)
+        path = url.split("?", 1)[0]
+        if path.startswith("/static/"):
+            route.fulfill(path=str(STATIC / path.removeprefix("/static/")))
+        elif path in ("/", "/live"):
+            body = client.get(url).text
+            route.fulfill(body=body, content_type="text/html; charset=utf-8")
+        else:
+            route.fulfill(status=404, body="")
+
+    page.route(f"{ORIGIN}/**", serve)
+    page.set_viewport_size(PHONE)
+    page.goto(ORIGIN + "/")
+    page.wait_for_selector("#away")
+    page.wait_for_selector("#needs-you")
+
+    # scrollWidth should not exceed viewport width
+    scroll_width = page.evaluate("document.documentElement.scrollWidth")
+    assert scroll_width <= 390, f"scrollWidth {scroll_width} exceeds 390"
+
+    # No layout problems
+    problems = layout_problems(page)
+    assert problems == [], f"layout problems: {problems}"
+
+
+def test_while_you_were_away_ticket_link_is_ordinary_inline_link(page, db_path):
+    """f97-02: in While you were away, a ticket's link is an ordinary inline link
+    (not 44 px tall, not uppercase), and each row has its line under it again."""
+    from playwright.sync_api import expect
+
+    from tests.factory_dashboard.conftest import write_fixture
+    from tests.layout import PHONE
+
+    conn = metrics.open_db(db_path)
+    try:
+        write_fixture(conn)
+        write_allowance(conn)
+
+        project_id = conn.execute("SELECT id FROM projects WHERE name = ?", (PROJECT,)).fetchone()[
+            "id"
+        ]
+        m1 = conn.execute("SELECT id FROM milestones WHERE key = 'f1'").fetchone()["id"]
+        # Add two merged tickets so the first row is not the last-child
+        for key in ("f262-02-archive-on-the-projects-page", "f263-01-second-ticket"):
+            ticket = metrics.upsert_ticket(
+                conn,
+                project_id,
+                key,
+                milestone_id=m1,
+                kind="developer",
+                state="done",
+                merged_by=OPUS,
+                commit="a" * 40,
+                lines_changed=100,
+            )
+            run_id = conn.execute(
+                "SELECT id FROM runs WHERE project_id = ? ORDER BY started DESC LIMIT 1",
+                (project_id,),
+            ).fetchone()["id"]
+            job_id = metrics.start_job(
+                conn,
+                run_id,
+                ticket_id=ticket,
+                milestone_id=m1,
+                role="developer",
+                agent=OPUS,
+                attempt=1,
+                started=(NOW - timedelta(hours=2)).isoformat(),
+            )
+            metrics.finish_job(
+                conn,
+                job_id,
+                ended=(NOW - timedelta(hours=1)).isoformat(),
+                outcome="passed",
+            )
+    finally:
+        conn.close()
+
+    from fastapi.testclient import TestClient
+
+    from factory_dashboard.app import create_app, get_now
+
+    app = create_app(db_path, PROJECT)
+    app.dependency_overrides[get_now] = lambda: NOW
+    client = TestClient(app, base_url="http://127.0.0.1:8765")
+
+    ORIGIN = "http://127.0.0.1:8765"
+
+    def serve(route) -> None:
+        url = route.request.url.removeprefix(ORIGIN)
+        path = url.split("?", 1)[0]
+        if path.startswith("/static/"):
+            route.fulfill(path=str(STATIC / path.removeprefix("/static/")))
+        elif path in ("/", "/live"):
+            body = client.get(url).text
+            route.fulfill(body=body, content_type="text/html; charset=utf-8")
+        else:
+            route.fulfill(status=404, body="")
+
+    page.route(f"{ORIGIN}/**", serve)
+    page.set_viewport_size(PHONE)
+    page.goto(ORIGIN + "/")
+    page.wait_for_selector("#away")
+
+    # The ticket link in "While you were away" should be an ordinary inline link
+    away_steps = page.locator("#away .steps li").first
+    ticket_link = away_steps.locator("a.mono")
+    expect(ticket_link).to_be_visible()
+
+    # It should not be 44px tall (the card-steps plate height)
+    bbox = ticket_link.bounding_box()
+    assert bbox is not None
+    assert bbox["height"] < 44, f"ticket link height {bbox['height']}px should be < 44px"
+
+    # The link text should not be uppercase (the card-steps style)
+    link_text = ticket_link.inner_text()
+    assert link_text == link_text.lower() or link_text.islower(), (
+        f"ticket link text '{link_text}' should not be uppercase"
+    )
+
+    # Each non-last row should have its line under it (border-bottom)
+    rows = page.locator("#away .steps li")
+    count = rows.count()
+    assert count >= 2, f"expected at least 2 rows, got {count}"
+    first_row = rows.nth(0)
+    border_bottom = first_row.evaluate("el => getComputedStyle(el).borderBottomStyle")
+    assert border_bottom == "solid", "first row should have a solid line under it"
+
+
+def test_needs_you_rows_have_lines_under_them(page, db_path):
+    """f97-02: each row in Needs you has its line under it again."""
+    from tests.factory_dashboard.conftest import write_fixture
+    from tests.layout import PHONE
+
+    conn = metrics.open_db(db_path)
+    try:
+        write_fixture(conn)
+        write_allowance(conn)
+
+        project_id = conn.execute("SELECT id FROM projects WHERE name = ?", (PROJECT,)).fetchone()[
+            "id"
+        ]
+        metrics.upsert_owner_item(
+            conn,
+            project_id,
+            "reserve",
+            "f1",
+            text="Use the reserve for f1",
+            created=(NOW - timedelta(minutes=30)).isoformat(),
+        )
+        metrics.upsert_owner_item(
+            conn,
+            project_id,
+            "reserve",
+            "f2",
+            text="Use the reserve for f2",
+            created=(NOW - timedelta(minutes=20)).isoformat(),
+        )
+    finally:
+        conn.close()
+
+    from fastapi.testclient import TestClient
+
+    from factory_dashboard.app import create_app, get_now
+
+    app = create_app(db_path, PROJECT)
+    app.dependency_overrides[get_now] = lambda: NOW
+    client = TestClient(app, base_url="http://127.0.0.1:8765")
+
+    ORIGIN = "http://127.0.0.1:8765"
+
+    def serve(route) -> None:
+        url = route.request.url.removeprefix(ORIGIN)
+        path = url.split("?", 1)[0]
+        if path.startswith("/static/"):
+            route.fulfill(path=str(STATIC / path.removeprefix("/static/")))
+        elif path in ("/", "/live"):
+            body = client.get(url).text
+            route.fulfill(body=body, content_type="text/html; charset=utf-8")
+        else:
+            route.fulfill(status=404, body="")
+
+    page.route(f"{ORIGIN}/**", serve)
+    page.set_viewport_size(PHONE)
+    page.goto(ORIGIN + "/")
+    page.wait_for_selector("#needs-you")
+
+    # Each row except the last in Needs you should have its line under it
+    rows = page.locator("#needs-you .steps li")
+    count = rows.count()
+    assert count >= 2, f"Needs you should have at least 2 rows, got {count}"
+    for i in range(count - 1):
+        row = rows.nth(i)
+        border_bottom = row.evaluate("el => getComputedStyle(el).borderBottomStyle")
+        assert border_bottom == "solid", f"row {i} should have a solid line under it"

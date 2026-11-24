@@ -433,8 +433,8 @@ span.proj::after, a.proj::after { bottom: -1px; right: -1px; border-width: 0 1px
 .steps li:last-child { border-bottom: 0; }
 .steps .when { color: var(--muted); font-family: var(--mono); font-size: 12px; }
 .steps .what { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: baseline; min-width: 0; }
-#away .how { color: var(--ink-2); font-size: 13.5px; }
-#away .title { flex-basis: 100%; }
+.how { color: var(--ink-2); font-size: 13.5px; }
+.title { flex-basis: 100%; }
 .steps li:not(:has(.when)) { grid-template-columns: 1fr; }  /* no "when": the "what" takes the row (f3-F7) */
 .needs .steps li.on-its-way { outline: 1px dashed var(--hazard); outline-offset: 2px; }  /* F97: answered, on its way to the runner */
 .review-again { display: block; margin-top: 6px; }
@@ -728,18 +728,18 @@ tr.few .gauge { opacity: .35; }
 /* F210 D3: a card's steps, the same strip on its thread and its proposals' pages; the top
    stripe is ornament, the current step in hazard, a step that waits (on its way, F100's being
    revised) dashed */
-.steps { background: var(--bay); border: 1px solid var(--rule); max-width: 100%; box-sizing: border-box; }
-.steps::before { content: ""; display: block; height: 5px; background: repeating-linear-gradient(135deg, var(--hazard) 0 5px, var(--hazard-ink) 5px 10px); }
-.steps h3 { margin: 0; padding: 7px 10px 0; font: 600 11px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-2); }
-.steps ol { list-style: none; margin: 0; padding: 6px 10px 10px; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
-.steps li { display: contents; }
-.steps a { display: inline-flex; flex-direction: column; justify-content: center; min-height: 44px; padding: 2px 10px; box-sizing: border-box; font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--fg); background: var(--plate); border: 1px solid var(--rule); text-decoration: none; }
-.steps a small { font: 400 10.5px var(--mono); letter-spacing: 0; text-transform: none; color: var(--muted); }
-.steps a.waits { border: 1px dashed var(--hazard); }
-.steps a small.not-sent { color: var(--hazard); } /* F210 D5: comments typed there, not sent */
-.steps a[aria-current="page"] { background: var(--hazard); color: var(--hazard-ink); border-color: var(--hazard); }
-.steps a[aria-current="page"] small { color: var(--hazard-ink); }
-.steps i { font-style: normal; color: var(--muted); }
+#card-steps { background: var(--bay); border: 1px solid var(--rule); max-width: 100%; box-sizing: border-box; }
+#card-steps::before { content: ""; display: block; height: 5px; background: repeating-linear-gradient(135deg, var(--hazard) 0 5px, var(--hazard-ink) 5px 10px); }
+#card-steps h3 { margin: 0; padding: 7px 10px 0; font: 600 11px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-2); }
+#card-steps ol { list-style: none; margin: 0; padding: 6px 10px 10px; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+#card-steps li { display: contents; }
+#card-steps a { display: inline-flex; flex-direction: column; justify-content: center; min-height: 44px; padding: 2px 10px; box-sizing: border-box; font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--fg); background: var(--plate); border: 1px solid var(--rule); text-decoration: none; }
+#card-steps a small { font: 400 10.5px var(--mono); letter-spacing: 0; text-transform: none; color: var(--muted); }
+#card-steps a.waits { border: 1px dashed var(--hazard); }
+#card-steps a small.not-sent { color: var(--hazard); } /* F210 D5: comments typed there, not sent */
+#card-steps a[aria-current="page"] { background: var(--hazard); color: var(--hazard-ink); border-color: var(--hazard); }
+#card-steps a[aria-current="page"] small { color: var(--hazard-ink); }
+#card-steps i { font-style: normal; color: var(--muted); }
 .thread-page #steps-note { margin: -6px 0 0; }
 .thread-page .card-head-note { margin-top: -4px; }
 .proposal-page .revising { margin: 0; padding: 8px 10px; border: 1px dashed var(--hazard); font-size: 13.5px; color: var(--ink-2); }
