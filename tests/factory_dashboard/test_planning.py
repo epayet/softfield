@@ -3221,7 +3221,7 @@ def test_the_overview_and_the_planning_tab_count_the_same(planning, db_path, ser
     html = _page(client)
     tab = re.search(r'id="planning-tab">Planning · (\d+)</a>', html)
     assert tab
-    # the fixture has two projects: the desk plate is the project's own (F132 D6, F97 D3)
+    # the fixture has two projects: the desk plate is the project's own (F132 D6, F97 D2)
     plate = rf'<a id="desk-entry-{PROJECT}" class="desk-plate"[^>]*><b>{tab[1]}</b>'
     assert re.search(plate, client.get("/live").text)
 

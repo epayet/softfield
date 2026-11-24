@@ -253,11 +253,11 @@ def _line_stops(html: str) -> list[str]:
     now = re.search(r'<section[^>]*\bid="now"[^>]*>(.*?)</section>', html, re.S)
     assert now, "no section now"
     strips = re.findall(r'<div class="stop">(.*?)</div>', now[1], re.S)
-    return [" ".join(re.sub(r"<[^>]+>", " ", s).split()) for s in strips]
+    return [unescape(" ".join(re.sub(r"<[^>]+>", " ", s).split())) for s in strips]
 
 
 def test_a_stale_heartbeat_stops_the_line_in_now_instead(serve):
-    """F97 D2: what stops the line shows at the top of Now, and leaves Needs you."""
+    """F97 D3: what stops the line shows at the top of Now, and leaves Needs you."""
     html = serve(heartbeat_age=timedelta(minutes=3)).get("/").text
     assert 'class="running-card"' not in section(html, "now")  # no job is drawn as running
     stops = _line_stops(html)
@@ -351,21 +351,29 @@ def test_needs_you_is_absent_when_nothing_needs_the_owner(serve_between, db_path
 
 
 def test_a_failing_check_on_main_stops_the_line_and_still_notifies(serve_between, db_path):
-    """F97 D2: a main-red item shows as "Line stopped" at the top of Now, not in Needs you;
+    """F97 D3: a main-red item shows as "Line stopped" at the top of Now, not in Needs you;
     with nothing else waiting the page has no Needs you, and the phone still gets its notice."""
     client = serve_between(activity="check-all on main")
     sign_off_all(db_path)
     conn = metrics.open_db(db_path)
+    # as the runner writes it (red_main_text in runner/loop.py): the check as its subject, the
+    # failing lines, the waiting ticket and its branch, and no command
+    text = (
+        "main fails ruff: runner/loop.py:12:1: F401 `os` imported but unused / Found 1 error."
+        " · f9-02-the-pond's work waits on task/f9-02-the-pond;"
+        " no other lead ticket runs until main passes"
+    )
     try:
         project = metrics.upsert_project(conn, PROJECT)
         metrics.upsert_owner_item(
-            conn, project, loop.MAIN_RED_KIND, "main", text="Main fails ruff.",
-            command="softfield check-all", created=NOW.isoformat(),
+            conn, project, loop.MAIN_RED_KIND, "ruff", text=text,
+            command="", created=NOW.isoformat(),
         )  # fmt: skip
     finally:
         conn.close()
     for html in (client.get("/").text, client.get("/live").text):
-        assert _line_stops(html) == ["Line stopped Main fails ruff. softfield check-all"]
+        assert _line_stops(html) == [f"Line stopped {text}"]
+        assert "<code>" not in section(html, "now")  # no command to show
         assert 'id="needs-you"' not in html
     facts = html.split('id="live-facts"')[1]  # /live's, which the phone reads
     found = re.search(r"data-notices='([^']*)'", facts)
@@ -3664,14 +3672,14 @@ def planning_tab(html: str) -> str:
 
 
 def desk_plate(html: str, entry: str = "desk-entry") -> tuple[str, str]:
-    """The href and the words of the desk plate ``entry`` in Needs you (F97 D3)."""
+    """The href and the words of the desk plate ``entry`` in Needs you (F97 D2)."""
     match = re.search(rf'<a id="{entry}" class="desk-plate" href="([^"]*)">(.*?)</a>', html, re.S)
     assert match, f"no desk plate {entry}"
     return match[1], " ".join(re.sub(r"<[^>]+>", " ", match[2]).split())
 
 
 def test_three_desk_items_show_as_one_plate_with_their_count(serve_between, db_path):
-    """F97 D3: the desk is one plate, its count and a link to the Planning room; no titles."""
+    """F97 D2: the desk is one plate, its count and a link to the Planning room; no titles."""
     client = serve_between()
     sign_off_all(db_path)
     lead_replies(db_path, "f7", "f8", "f9")
@@ -5090,7 +5098,7 @@ def test_with_no_job_anywhere_now_has_one_between_jobs_line(tmp_path):
 
 
 def test_needs_you_has_each_projects_desk_and_items_with_its_plate(tmp_path):
-    """D6, F97 D3: a desk plate per project with something on its desk (its count, its plate,
+    """D6, F97 D2: a desk plate per project with something on its desk (its count, its plate,
     desk › to its own /planning, no titles), none for an empty desk, and every project's
     items under the plates."""
     html = _client(_factory(tmp_path)).get(f"/?project={SOFTFIELD}").text

@@ -2720,7 +2720,7 @@ def test_a_cards_conversation_and_proposals_count_once_everywhere(serve, db_path
     client = serve()
     for path in ("/", "/planning", "/tickets", "/jobs", "/live"):
         assert _tab(client.get(path).text) == "Planning · 2", path
-    # two projects in the fixture: the desk plate is the project's (F132 D6, F97 D3)
+    # two projects in the fixture: the desk plate is the project's (F132 D6, F97 D2)
     plate = rf'<a id="desk-entry-{PROJECT}" class="desk-plate"[^>]*><b>2</b>'
     assert re.search(plate, client.get("/live").text)
     assert "Proposals to review" not in client.get("/planning").text

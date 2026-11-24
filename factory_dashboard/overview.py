@@ -1076,10 +1076,10 @@ def _live_context(
     tickets = [q for p in every for q in p.queued]
     counts = [(p.name, len(p.queued)) for p in every if p.queued]
 
-    # Needs you (D6, F97 D3): one desk plate a project with something on it (its count, no
+    # Needs you (D6, F97 D2): one desk plate a project with something on it (its count, no
     # titles), then every project's other items
     desks = [{"project": p.name, "count": len(p.items)} for p in every if p.items]
-    # F97 D2: what stops the line shows in Now, not in Needs you
+    # F97 D3: what stops the line shows in Now, not in Needs you
     stops = ("runner", "queue", loop.MAIN_RED_KIND)
     line_stops = [n for p in every for n in p.needs if n.kind in stops]
     needs = [n for p in every for n in p.needs if n.kind not in stops]
