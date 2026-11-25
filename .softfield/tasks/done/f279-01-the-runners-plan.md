@@ -38,3 +38,10 @@ Read `.softfield/cards/f279-i-would-like-to-be-able.md` (D1–D4) and the Propos
 - with Claude at its limit and a checkpoint due, its line says it would park or go to a stand-in (bug-21)
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
