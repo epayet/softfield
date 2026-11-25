@@ -27,3 +27,12 @@ Read D1–D3 in `.softfield/cards/f297-the-plant-a-card-for-a.md`. `plant_value`
 - `test_the_projects_page_lays_out_at_phone_and_display_sizes` still passes at both sizes
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 1103
+gate_failures: []
+tokens: 593367
+```
