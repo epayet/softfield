@@ -1741,6 +1741,30 @@ def test_empty_queue_shows_message_once(serve):
     assert count == 1, f"expected 1, got {count}"
 
 
+def test_the_queue_panel_has_the_whole_queue_link_text(serve, db_path):
+    """f279-06: the whole-queue link reads "The whole queue ›", not counts (C2757-1)."""
+    from runner.dispatch import FactoryPlan, PlanLine
+
+    conn = metrics.open_db(db_path)
+    try:
+        metrics.store_queue_plan(
+            conn,
+            FactoryPlan(
+                NOW,
+                0,
+                "Over pace.",
+                ("fact 1",),
+                (PlanLine(PROJECT, "ticket", "f1", "Title", None, "go", None, "", "f1"),),
+            ),
+        )
+    finally:
+        conn.close()
+    html = serve().get("/").text
+    queue_section = section(html, "queue")
+    assert "The whole queue ›" in queue_section
+    assert "tickets" not in queue_section.split("The whole queue")[1].split("</a>")[0]
+
+
 def test_tickets_and_a_queued_job_count_the_tickets(queue_client, db_path):
     """F227 review: with tickets waiting, a queued job doesn't take over the count."""
     conn = metrics.open_db(db_path)

@@ -19,7 +19,7 @@
       {% endif %}
       {% endfor %}
     </ol>
-    <p style="margin:8px 0 0"><a href="/queue">The whole queue: {{ plan.tickets }} tickets, {{ plan.job_count }} job{{ "" if plan.job_count == 1 else "s" }} ›</a></p>
+    <p style="margin:8px 0 0"><a href="/queue">The whole queue ›</a></p>
   {% elif queue or queued_jobs or lane or next or paused %}
     {# Before the plan (today's behaviour) #}
     {% if queue %}
