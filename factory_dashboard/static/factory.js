@@ -77,6 +77,13 @@
     const project = new URLSearchParams(window.location.search).get("project");
     return project ? `?${new URLSearchParams({ project })}` : "";
   };
+  // A link from a crate carries the crate's own project (F132 D2), else the page's.
+  const own_query = (project) => (project ? `?${new URLSearchParams({ project })}` : project_query());
+  // F132 D9: with several projects on the floor a crate's label starts with its project's name.
+  let manyProjects = false;  // the document drawn last says (`many_projects`)
+  const plate = (crate) => (manyProjects && crate && crate.project ? `${crate.project} · ` : "");
+  // A crate's name among its siblings: one ticket id can be in two projects
+  const crateKey = (crate) => `${crate.project || ""}/${crate.ticket || crate.role}`;
 
   // `words` on lines of at most `n` characters, broken at its spaces.
   function wrap(words, n) {
@@ -187,9 +194,8 @@
     const bar = w - 64;
     doc.field.rows.slice(0, 4).forEach((row, n) => {
       const top = y + 54 + n * step, sx = x + 20, left = x + 40;
-      const query = project_query();
-      const link = make_link(g, `/milestones/${row.key}${query}`);
-      add(link, "title", {}, `Go to ${row.key.toUpperCase()} milestone`);
+      const link = make_link(g, `/milestones/${row.key}${own_query(row.project)}`);
+      add(link, "title", {}, `Go to ${plate(row)}${row.key.toUpperCase()} milestone`);
       const r = add(link, "g", { "data-row": row.key });
       add(r, "path", { class: "sprout", d: `M${sx} ${top + 14} v-22 M${sx} ${top + 2} c-8 0-11-4-11-9 8 0 11 4 11 9 M${sx} ${top - 2} c0-7 3-10 10-10 0 7-3 10-10 10 ` });
       text(r, left, top - 2, cut(row.title ? `${row.key.toUpperCase()} · ${row.title}` : row.key.toUpperCase(), Math.floor((w - 50) / 7.2)), "name");
@@ -233,10 +239,10 @@
       const cx = left + col * fit.pitch, cy = y + h - fit.bottom - row * fit.rise;
       // A due review (f4-20) is a batch crate: no ticket, its role names it
       const key = crate.ticket || crate.role;
-      const c = add(g, "g", { "data-queue-crate": key, "data-crate": key,
-        tabindex: "0", role: "button" });
+      const c = add(g, "g", { "data-key": crateKey(crate), "data-queue-crate": key, "data-crate": key,
+        "data-project": crate.project, tabindex: "0", role: "button" });
       const what = crate.ticket ? `${crate.ticket}: ${crate.title || ""}` : crate.title;
-      add(c, "title", {}, `${crate.number} ${what}${crate.waits.length ? ` (after ${crate.waits.join(", ")})` : ""}`);
+      add(c, "title", {}, `${plate(crate)}${crate.number} ${what}${crate.waits.length ? ` (after ${crate.waits.join(", ")})` : ""}`);
       add(c, "rect", { x: cx, y: cy, width: fit.width, height: 20, class: `crate ${crate.kind}${crate.waits.length ? " waits" : ""}` });
       text(c, cx + fit.width / 2, cy + 14, String(crate.number), "on", { "text-anchor": "middle" });
     });
@@ -295,19 +301,24 @@
       clog(g, wait, left, line, w - 20);
     } else if (working && m.crate) {
       const c = m.crate;
-      const crate = add(g, "g", { "data-crate": c.ticket || c.role,
+      const crate = add(g, "g", { "data-crate": c.ticket || c.role, "data-project": c.project,
         tabindex: "0", role: "button" });
-      add(crate, "title", {}, `${c.ticket || c.role}: ${c.title || ""}`);
+      add(crate, "title", {}, `${plate(c)}${c.ticket || c.role}: ${c.title || ""}`);
       add(crate, "rect", { x: left, y: line - 14, width: 44, height: 22, class: `crate ${c.kind}` });
       text(crate, left + 22, line + 1, c.ticket ? short(c.ticket) : "batch", "on", { "text-anchor": "middle" });
-      text(g, left + 50, line + 1, `${c.minutes} min`, "name");
-      text(g, left, line + 26, `attempt ${c.attempt}`, "dim");
+      if (plate(c)) {  // its project beside it, the minutes on the attempt's line
+        text(g, left + 50, line + 1, cut(c.project, Math.floor((w - 70) / 6.5)), "name", { "data-plate": c.project });
+        text(g, left, line + 26, `attempt ${c.attempt} · ${c.minutes} min`, "dim");
+      } else {
+        text(g, left + 50, line + 1, `${c.minutes} min`, "name");
+        text(g, left, line + 26, `attempt ${c.attempt}`, "dim");
+      }
     } else if (m.state === "waiting") {
       text(g, left, line, "limit reached", "name");
       text(g, left, line + 16, `resets ${m.reset}`, "dim");
     } else if (m.state === "idle") {
       if (m.station === "lead" && m.next_ticket) {
-        const link = make_link(g, `/tickets/${m.next_ticket}${project_query()}`);
+        const link = make_link(g, `/tickets/${m.next_ticket}${own_query(m.next_project)}`);
         text(link, left, line, `next: ${short(m.next_ticket)}`, "dim");
         if (m.merged_today && m.merged_today > 0) {
           text(g, left, line + 16, `${m.merged_today} merged today`, "dim");
@@ -360,16 +371,15 @@
     text(g, x + 14, y + 22, `MERGED TODAY · ${count.merged}`, "head");
     doc.merged.slice(-6).forEach((crate, i) => {
       const cx = x + 14 + (i % cols) * 56, cy = y + 34 + Math.floor(i / cols) * 28;
-      const c = add(g, "g", { "data-merged": crate.ticket, "data-crate": crate.ticket,
-        tabindex: "0", role: "button" });
-      add(c, "title", {}, `${crate.ticket}: ${crate.title || ""}`);
+      const c = add(g, "g", { "data-key": crateKey(crate), "data-merged": crate.ticket, "data-crate": crate.ticket,
+        "data-project": crate.project, tabindex: "0", role: "button" });
+      add(c, "title", {}, `${plate(crate)}${crate.ticket}: ${crate.title || ""}`);
       add(c, "rect", { x: cx, y: cy, width: 50, height: 22, class: `crate ${crate.kind}` });
       text(c, cx + 25, cy + 15, short(crate.ticket), "on", { "text-anchor": "middle" });
     });
   }
 
   function ripe(svg, doc, count, x, y, w, h) {
-    const query = project_query();
     const g = station(svg, "ripe");
     add(g, "rect", { x, y, width: w, height: h, class: "unit" });
     add(g, "circle", { cx: x + 26, cy: y + 30, r: 12, class: "unit" });
@@ -377,22 +387,21 @@
     text(g, x + 46, y + 44, "needs your sign-off", "");
     doc.field.ripe.slice(0, 3).forEach((m, i) => {
       const wrapper = add(g, "g", { "data-ripe": m.key });
-      const link = make_link(wrapper, `/milestones/${m.key}${query}`);
+      const link = make_link(wrapper, `/milestones/${m.key}${own_query(m.project)}`);
       text(link, x + 14, y + 72 + i * 18, cut(`${m.key.toUpperCase()} · ${m.title || ""}`, Math.floor((w - 28) / 7.2)), "name");
     });
   }
 
   // The harvest stash, latest first: `cols` tiles a row, as many rows as `h` holds.
   function stash(svg, doc, count, x, y, w, h, cols) {
-    const query = project_query();
     const g = station(svg, "stash");
     add(g, "rect", { x, y, width: w, height: h, class: "unit" });
     text(g, x + 14, y + 22, `HARVEST STASH · ${count.stash}`, "head");
     doc.field.stash.slice(0, cols * Math.floor((h - 60) / 30)).forEach((m, i) => {
       const tx = x + 14 + (i % cols) * 56, ty = y + 36 + Math.floor(i / cols) * 30;
       const tile = add(g, "g", { "data-stash": m.key });
-      add(tile, "title", {}, `${m.key.toUpperCase()}`);
-      const link = make_link(tile, `/milestones/${m.key}${query}`);
+      add(tile, "title", {}, `${plate(m)}${m.key.toUpperCase()}`);
+      const link = make_link(tile, `/milestones/${m.key}${own_query(m.project)}`);
       add(link, "rect", { x: tx, y: ty, width: 52, height: 26, class: "tile" });
       text(link, tx + 26, ty + 17, m.key.split("-")[0].toUpperCase(), "name", { "text-anchor": "middle" });
     });
@@ -468,11 +477,10 @@
     const g = station(svg, "rows");
     add(g, "rect", { x, y, width: w, height: h, class: "soil" });
     text(g, x + 10, y + 22, "PLANTED ROWS", "head");
-    const query = project_query();
     list.forEach((row, n) => {
       const top = y + 40 + n * PHONE_ROWS.step;
-      const link = make_link(g, `/milestones/${row.key}${query}`);
-      add(link, "title", {}, `Go to ${row.key.toUpperCase()} milestone`);
+      const link = make_link(g, `/milestones/${row.key}${own_query(row.project)}`);
+      add(link, "title", {}, `Go to ${plate(row)}${row.key.toUpperCase()} milestone`);
       const r = add(link, "g", { "data-row": row.key });
       text(r, x + 10, top, cut(row.key.toUpperCase() + (row.title ? ` · ${row.title}` : ""), 16), "name");
       add(r, "rect", { x: x + 130, y: top - 8, width: 150, height: 7, class: "bar-bg" });
@@ -529,11 +537,12 @@
     const phone = document.getElementById("floor-phone");
     svg.style.display = narrow() ? "none" : "block";
     phone.style.display = narrow() ? "block" : "none";
+    manyProjects = Boolean(doc.many_projects);
     if (narrow()) drawPhone(phone, doc);
     else draw(svg, doc);
     shownDoc = doc;
     if (cardCrate === SEEDS) showSeeds();
-    else if (cardCrate) showCard(cardCrate);
+    else if (cardCrate) showCard(cardCrate.key, cardCrate.project);
   }
 
   let drawn = null;  // the live document last drawn, and on which floor; null: draw it again
@@ -573,7 +582,8 @@
   let playing = null;  // Play's timer
 
   // One event applied to the document `doc` (a copy of replaying.line), as live_line would
-  // have it after the event. `crates` remembers each crate's {ticket, title, kind} and attempts.
+  // have it after the event. `crates` remembers each crate's {ticket, project, title, kind} and
+  // attempts, by `crateKey`: a ticket id is unique only inside its project (F132 D9).
   function apply(doc, event, crates) {
     if (event.at.slice(0, 10) !== doc.at.slice(0, 10)) {  // past midnight: today's counts restart
       doc.belts.forEach((b) => { if (b.today !== null) b.today = 0; });
@@ -581,10 +591,11 @@
     }
     doc.at = event.at;
     if (event.kind === "trip") {
-      const crate = crates[event.crate] || { ticket: event.crate, title: null, kind: "developer" };
-      doc.queue = doc.queue.filter((c) => c.ticket !== event.crate);
+      const moved = { ticket: event.crate, project: event.project };
+      const crate = crates[crateKey(moved)] || { ...moved, title: null, kind: "developer" };
+      doc.queue = doc.queue.filter((c) => crateKey(c) !== crateKey(moved));
       if (event.to === "queue") doc.queue.unshift({ ...crate, milestone: null, waits: [] });
-      if (event.to === "merged") doc.merged.push({ ticket: crate.ticket, title: crate.title, kind: crate.kind });
+      if (event.to === "merged") doc.merged.push({ ticket: crate.ticket, project: crate.project, title: crate.title, kind: crate.kind });
       doc.queue.forEach((c, n) => { c.number = n + 1; });
       doc.belts.forEach((b) => {
         b.carrying = event.belts.includes(b.id);
@@ -595,13 +606,14 @@
       if (!m) return;
       m.state = event.state;
       m.reset = event.reset;
+      const on = { ticket: event.ticket, project: event.project };
       if (!event.ticket) {
         m.crate = null;
-      } else if (m.crate?.ticket !== event.ticket) {
-        const crate = crates[event.ticket] || { ticket: event.ticket, title: null, kind: "developer" };
+      } else if (!m.crate || crateKey(m.crate) !== crateKey(on)) {
+        const crate = crates[crateKey(on)] || { ...on, title: null, kind: "developer" };
         crate.attempt = (crate.attempt || 0) + 1;
-        crates[event.ticket] = crate;
-        m.crate = { ticket: crate.ticket, title: crate.title, kind: crate.kind, role: null, attempt: crate.attempt, minutes: 0 };
+        crates[crateKey(on)] = crate;
+        m.crate = { ticket: crate.ticket, project: crate.project, title: crate.title, kind: crate.kind, role: null, attempt: crate.attempt, minutes: 0 };
         m.started = Date.parse(event.at);
       }
     }
@@ -617,13 +629,13 @@
     const clock = event.at.slice(11, 16);
     if (event.kind === "trip") {
       const to = event.to === null ? "leaves the line" : event.to === "queue" ? "goes back to the queue" : `goes to ${event.to}`;
-      return `${clock} ${event.crate} ${to}`;
+      return `${clock} ${plate(event)}${event.crate} ${to}`;
     }
     if (event.kind === "check") {
-      return `${clock} ${event.crate} ${event.passed ? "passed checks" : `failed checks${event.gate ? `: ${event.gate}` : ""}`}`;
+      return `${clock} ${plate(event)}${event.crate} ${event.passed ? "passed checks" : `failed checks${event.gate ? `: ${event.gate}` : ""}`}`;
     }
     if (event.kind === "machine") {
-      if (event.state === "working") return `${clock} ${event.machine} works on ${event.ticket}`;
+      if (event.state === "working") return `${clock} ${event.machine} works on ${plate(event)}${event.ticket}`;
       if (event.state === "waiting") return `${clock} ${event.machine} waits for its limit, resets ${event.reset}`;
       return `${clock} ${event.machine} is ${event.state}`;
     }
@@ -641,10 +653,10 @@
     step = Math.max(0, Math.min(n, replaying.events.length));
     const doc = structuredClone(replaying.line);  // replaying.line stays as it came, for ◀
     const crates = {};
-    for (const c of [...doc.queue, ...doc.merged]) crates[c.ticket] = { ticket: c.ticket, title: c.title, kind: c.kind };
+    for (const c of [...doc.queue, ...doc.merged]) crates[crateKey(c)] = { ticket: c.ticket, project: c.project, title: c.title, kind: c.kind };
     for (const m of doc.machines) {
       if (!m.crate) continue;
-      if (m.crate.ticket) crates[m.crate.ticket] = { ...m.crate };
+      if (m.crate.ticket) crates[crateKey(m.crate)] = { ...m.crate };
       m.started = Date.parse(doc.at) - m.crate.minutes * 60000;
     }
     replaying.events.slice(0, step).forEach((event) => apply(doc, event, crates));
@@ -745,8 +757,9 @@
   // Built from nodes and text, never HTML: a title, an id or the page's ?project= could hold
   // markup (f3 review, f3-F1). It reads the document the floor last drew, live or replayed.
 
-  function crateInfo(doc, key) {
-    const own = (c) => c.ticket === key || (!c.ticket && c.role === key);  // a batch: its role
+  function crateInfo(doc, key, project) {
+    // a batch: its role; the same id in another project is another crate
+    const own = (c) => (c.ticket === key || (!c.ticket && c.role === key)) && (!project || c.project === project);
     for (const c of doc.queue) if (own(c)) return { ...c, _source: "queue" };
     for (const m of doc.machines) if (m.crate && own(m.crate)) return { ...m.crate, _source: "machine", _agent: m.name };
     for (const c of doc.merged) if (own(c)) return { ...c, _source: "merged" };
@@ -766,18 +779,17 @@
     return dl;
   }
 
-  function showCard(key) {
+  function showCard(key, project = null) {
     const card = document.getElementById("crate-card");
     if (!card || !key || !shownDoc) return;
-    const info = crateInfo(shownDoc, key);
+    const info = crateInfo(shownDoc, key, project);
     if (!info) return;
-    cardCrate = key;
+    cardCrate = { key, project };
     const parts = [];
+    if (plate(info)) parts.push(el("span", "proj", info.project));  // whose crate (F132 D3)
     if (info.ticket) {
-      const project = new URLSearchParams(window.location.search).get("project");
       const link = el("a", "card-ticket", info.ticket);
-      const query = project ? `?${new URLSearchParams({ project })}` : "";
-      link.setAttribute("href", `/tickets/${encodeURIComponent(info.ticket)}${query}`);
+      link.setAttribute("href", `/tickets/${encodeURIComponent(info.ticket)}${own_query(info.project)}`);
       parts.push(link);
       if (info.title) parts.push(el("div", "card-title", info.title));
       if (info.kind === "lead" || info.kind === "developer") parts.push(meta([["role", info.kind]]));
@@ -812,8 +824,9 @@
     const list = el("ul", "card-list");
     for (const seed of shownDoc.field.later || []) {
       const item = el("li");
+      if (plate(seed)) item.append(el("span", "proj", seed.project));
       const link = el("a", "card-ticket", seed.ticket);
-      link.setAttribute("href", `/tickets/${encodeURIComponent(seed.ticket)}${query}`);
+      link.setAttribute("href", `/tickets/${encodeURIComponent(seed.ticket)}${own_query(seed.project)}`);
       item.append(link);
       if (seed.title) item.append(el("span", "card-title", seed.title));
       list.append(item);
@@ -832,7 +845,7 @@
   // One listener on the floor wrapper finds the [data-crate] (merged crates included) clicked
   document.addEventListener("click", (e) => {
     const crate = e.target.closest("[data-crate]");
-    if (crate) { showCard(crate.dataset.crate); return; }  // a merged crate is a [data-crate] too
+    if (crate) { showCard(crate.dataset.crate, crate.dataset.project); return; }  // a merged crate is a [data-crate] too
     if (e.target.closest("[data-seeds]")) { showSeeds(); return; }
     if (e.target.closest("[data-rows-toggle]")) { toggleRows(); return; }
     const card = document.getElementById("crate-card");
@@ -845,7 +858,7 @@
     if (e.key === "Escape" && card && !card.hidden) { hideCard(); return; }
     if (e.key !== "Enter") return;
     const crate = e.target.closest("[data-crate]");
-    if (crate) { e.preventDefault(); showCard(crate.dataset.crate); }
+    if (crate) { e.preventDefault(); showCard(crate.dataset.crate, crate.dataset.project); }
     if (e.target.closest("[data-seeds]")) { e.preventDefault(); showSeeds(); }
     if (e.target.closest("[data-rows-toggle]")) { e.preventDefault(); toggleRows(); }
   });

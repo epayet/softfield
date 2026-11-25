@@ -23,13 +23,18 @@ draws it (and lays it out), so its tests are on this document, plus one browser 
   times cover ``t`` (an unfinished one until its run's last heartbeat) and to each ticket's
   state then, rebuilt from its trips. ``replay`` is the document at ``since`` and every event
   up to ``until``; ``static/factory.js`` only steps through it.
+- **Every project** (F132 D9): one floor, as the factory has one set of machines. Given
+  ``projects`` (the factory-wide views pass ``every_project``), the field, the queue, the
+  machines' crates, merged and the belts are every project's; a ticket id is unique only inside
+  its project, so crates, tickets and states are keyed by (project, ticket), and every crate
+  says its project.
 """
 
 import json
 import re
 import sqlite3
-from collections.abc import Iterable, Sequence
-from dataclasses import dataclass
+from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -40,7 +45,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from factory_dashboard import queries
 from factory_dashboard.app import Db, Now, Project, render
 from factory_dashboard.jobs import _failed_gate
-from factory_dashboard.overview import LIVE, live_runs
+from factory_dashboard.overview import LIVE, every_project, live_runs
 from runner import dispatch, loop, metrics, session
 from runner.config import Config, load_config
 from runner.tasks import BUGS, milestone_order, short_key
@@ -92,6 +97,18 @@ IDLE = timedelta(minutes=40)  # D10: a longer stretch with nothing working is on
 REPLAY_LIMIT = timedelta(days=7)  # the longest stretch ``/line/replay`` serves
 SEEN = "line_seen"  # the cookie: when the owner last opened the line
 
+type Projects = str | Sequence[str]  # one project's name, or several
+type Key = tuple[str, str]  # (project, ticket): a ticket id is unique only inside its project
+
+
+def _listed(projects: Projects) -> list[str]:
+    return [projects] if isinstance(projects, str) else list(projects)
+
+
+def _among(names: Sequence[str]) -> str:
+    """The SQL test that ``p.name`` is one of ``names``, for ``names`` as its parameters."""
+    return f"p.name IN ({', '.join('?' * len(names))})"
+
 
 def _station(roles: Iterable[str]) -> str | None:
     """The station a set of roles puts an agent on: the lead's roles first, then reviewing."""
@@ -122,6 +139,7 @@ class Job:
     ended: datetime | None
     outcome: str
     note: str | None
+    project: str = ""
 
     @property
     def station(self) -> str:
@@ -139,6 +157,7 @@ class Trip:
     belts: tuple[str, ...]
     to: str | None  # a station; None: off the floor
     job: int | None = None  # the job whose start or end moved it
+    project: str = ""  # whose crate: with ``crate``, its key
 
 
 def _on_belts(*belts: str) -> tuple[str, ...]:
@@ -178,35 +197,37 @@ def _ticket_trips(jobs: Sequence[Job]) -> list[Trip]:
     for n, job in enumerate(jobs):
         if job.station != here:  # from wherever it waits to the job's machine
             belts = _on_belts(f"{here}→{job.station}")
-            trips.append(Trip(job.started, job.crate, belts, job.station, job.id))
+            trips.append(Trip(job.started, job.crate, belts, job.station, job.id, job.project))
             here = job.station
         if job.ended is None:
             break
         there, belts = _after(job, jobs[n + 1] if n + 1 < len(jobs) else None)
         if there != here:
-            trips.append(Trip(job.ended, job.crate, belts, there, job.id))
+            trips.append(Trip(job.ended, job.crate, belts, there, job.id, job.project))
             here = there
     return trips
 
 
 def _batch_trips(job: Job) -> list[Trip]:
     belts = _on_belts(f"merged→{job.station}")
-    trips = [Trip(job.started, job.crate, belts, job.station, job.id)]
+    trips = [Trip(job.started, job.crate, belts, job.station, job.id, job.project)]
     if job.ended is not None:
-        trips.append(Trip(job.ended, job.crate, (), None, job.id))
+        trips.append(Trip(job.ended, job.crate, (), None, job.id, job.project))
     return trips
 
 
 # --- the data -------------------------------------------------------------------------------
 
 
-def _jobs(conn: sqlite3.Connection, project: str) -> list[Job]:
-    """The project's jobs that move a crate, in the order they started."""
+def _jobs(conn: sqlite3.Connection, projects: Projects) -> list[Job]:
+    """The projects' jobs that move a crate, in the order they started."""
+    names = _listed(projects)
     rows = conn.execute(
-        "SELECT j.*, t.ticket, t.state FROM jobs j JOIN runs r ON r.id = j.run_id"
-        " JOIN projects p ON p.id = r.project_id LEFT JOIN tickets t ON t.id = j.ticket_id"
-        " WHERE p.name = ? AND j.started IS NOT NULL",
-        (project,),
+        "SELECT j.*, t.ticket, t.state, p.name AS project_name FROM jobs j"  # noqa: S608
+        " JOIN runs r ON r.id = j.run_id JOIN projects p ON p.id = r.project_id"
+        f" LEFT JOIN tickets t ON t.id = j.ticket_id WHERE {_among(names)}"
+        " AND j.started IS NOT NULL",
+        names,
     ).fetchall()
     found = [
         Job(
@@ -219,6 +240,7 @@ def _jobs(conn: sqlite3.Connection, project: str) -> list[Job]:
             ended=_when(r["ended"]) if r["ended"] else None,
             outcome=r["outcome"],
             note=r["note"],
+            project=r["project_name"],
         )
         for r in rows
         if (r["ticket"] and r["role"] in TICKET_ROLES)
@@ -227,14 +249,14 @@ def _jobs(conn: sqlite3.Connection, project: str) -> list[Job]:
     return sorted(found, key=lambda j: (j.started, j.id))
 
 
-def trips(conn: sqlite3.Connection, project: str) -> list[Trip]:
-    """Every crate's trips in the project, in time order."""
-    jobs = _jobs(conn, project)
-    by_ticket: dict[str, list[Job]] = {}
+def trips(conn: sqlite3.Connection, projects: Projects) -> list[Trip]:
+    """Every crate's trips in the projects, in time order."""
+    jobs = _jobs(conn, projects)
+    by_ticket: dict[Key, list[Job]] = {}
     found: list[Trip] = []
     for job in jobs:
         if job.ticket:
-            by_ticket.setdefault(job.ticket, []).append(job)
+            by_ticket.setdefault((job.project, job.ticket), []).append(job)
         else:
             found += _batch_trips(job)
     for own in by_ticket.values():
@@ -255,6 +277,7 @@ class Work:
     until: datetime | None  # its end; unfinished: its run's last heartbeat, plus ``LIVE``
     tokens_in: int | None
     steps: int | None
+    project: str = ""
 
     @property
     def crate(self) -> str:
@@ -264,14 +287,16 @@ class Work:
         return self.until is not None and self.started <= at < self.until
 
 
-def _work(conn: sqlite3.Connection, project: str) -> list[Work]:
-    """Every job of the project, in the order they started."""
+def _work(conn: sqlite3.Connection, projects: Projects) -> list[Work]:
+    """Every job of the projects, in the order they started."""
+    names = _listed(projects)
     rows = conn.execute(
-        "SELECT j.id, j.role, j.agent, j.attempt, j.started, j.ended, j.tokens_in, j.steps,"
-        " t.ticket, r.heartbeat FROM jobs j JOIN runs r ON r.id = j.run_id"
-        " JOIN projects p ON p.id = r.project_id LEFT JOIN tickets t ON t.id = j.ticket_id"
-        " WHERE p.name = ? AND j.started IS NOT NULL",
-        (project,),
+        "SELECT j.id, j.role, j.agent, j.attempt, j.started, j.ended, j.tokens_in, j.steps,"  # noqa: S608
+        " t.ticket, r.heartbeat, p.name AS project_name FROM jobs j"
+        " JOIN runs r ON r.id = j.run_id JOIN projects p ON p.id = r.project_id"
+        f" LEFT JOIN tickets t ON t.id = j.ticket_id WHERE {_among(names)}"
+        " AND j.started IS NOT NULL",
+        names,
     ).fetchall()
     found = []
     for r in rows:
@@ -290,22 +315,24 @@ def _work(conn: sqlite3.Connection, project: str) -> list[Work]:
                 until=until,
                 tokens_in=r["tokens_in"],
                 steps=r["steps"],
+                project=r["project_name"],
             )
         )
     return sorted(found, key=lambda w: (w.started, w.job))
 
 
 def _crates(
-    work: Sequence[Work], at: datetime, tickets: dict[str, sqlite3.Row]
+    work: Sequence[Work], at: datetime, tickets: dict[Key, sqlite3.Row]
 ) -> list[tuple[Work, dict[str, Any]]]:
     """The jobs at work at ``at``, each with the crate its machine works on."""
     found = []
     for w in work:
         if not w.covers(at):
             continue
-        ticket = tickets.get(w.ticket) if w.ticket else None
+        ticket = tickets.get((w.project, w.ticket)) if w.ticket else None
         crate = {
             "ticket": w.ticket,
+            "project": w.project,
             "title": ticket["title"] if ticket else None,
             "kind": _kind(ticket["kind"]) if ticket else "batch",
             "role": w.role,
@@ -317,7 +344,7 @@ def _crates(
 
 
 def _working(
-    work: Sequence[Work], at: datetime, tickets: dict[str, sqlite3.Row]
+    work: Sequence[Work], at: datetime, tickets: dict[Key, sqlite3.Row]
 ) -> dict[str, dict[str, Any]]:
     """Each working agent's role and crate at ``at`` (its oldest job's)."""
     found: dict[str, dict[str, Any]] = {}
@@ -327,22 +354,26 @@ def _working(
 
 
 def _states(
-    conn: sqlite3.Connection, project: str, every: Sequence[Trip], at: datetime
-) -> dict[str, str]:
-    """Each ticket's state at ``at``. After its last trip, its row's (merged: done); before,
-    where its trips left its crate (merged: done, on the floor: running, in the queue: ready),
-    and ``planned`` while it waits for a milestone that hasn't started."""
+    conn: sqlite3.Connection, projects: Projects, every: Sequence[Trip], at: datetime
+) -> dict[Key, str]:
+    """Each ticket's state at ``at``, by (project, ticket). After its last trip, its row's
+    (merged: done); before, where its trips left its crate (merged: done, on the floor:
+    running, in the queue: ready), and ``planned`` while it waits for a milestone that hasn't
+    started."""
+    names = _listed(projects)
     rows = conn.execute(
-        "SELECT t.ticket, t.state, m.started FROM tickets t JOIN projects p ON p.id = t.project_id"
-        " LEFT JOIN milestones m ON m.id = t.milestone_id WHERE p.name = ?",
-        (project,),
+        "SELECT t.ticket, t.state, m.started, p.name AS project_name FROM tickets t"  # noqa: S608
+        " JOIN projects p ON p.id = t.project_id"
+        f" LEFT JOIN milestones m ON m.id = t.milestone_id WHERE {_among(names)}",
+        names,
     ).fetchall()
-    moves: dict[str, list[Trip]] = {}
+    moves: dict[Key, list[Trip]] = {}
     for trip in every:
-        moves.setdefault(trip.crate, []).append(trip)
+        moves.setdefault((trip.project, trip.crate), []).append(trip)
     states = {}
     for r in rows:
-        own = moves.get(r["ticket"], [])
+        key = (r["project_name"], r["ticket"])
+        own = moves.get(key, [])
         past = [t for t in own if t.at <= at]
         if past and past[-1].to == "merged":
             state = "done"
@@ -354,8 +385,13 @@ def _states(
             state = "ready"
         if state == "ready" and r["started"] and _when(r["started"]) > at:
             state = "planned"
-        states[r["ticket"]] = state
+        states[key] = state
     return states
+
+
+def _own(states: dict[Key, str], project: str) -> dict[str, str]:
+    """One project's ticket states, by ticket."""
+    return {ticket: state for (owner, ticket), state in states.items() if owner == project}
 
 
 def _config(conn: sqlite3.Connection, project: str) -> Config | None:
@@ -367,6 +403,23 @@ def _config(conn: sqlite3.Connection, project: str) -> Config | None:
         return load_config(Path(row["repo"]))
     except (OSError, ValueError, KeyError, TypeError):  # missing, unreadable or invalid
         return None
+
+
+def _machines_config(conn: sqlite3.Connection, names: Sequence[str]) -> Config | None:
+    """The config the floor's machines come from: each project's own (``_config``), read for
+    its own roles, the factory's one set of machines carrying every role any of them names
+    (F132 D9); None when no project's repo can be read."""
+    found = [config for config in (_config(conn, name) for name in names) if config is not None]
+    if len(found) <= 1:
+        return found[0] if found else None
+    roles: dict[str, tuple[str, ...]] = {}
+    agents: dict[str, Any] = {}
+    for config in found:
+        for role, ids in config.roles.items():
+            roles[role] = tuple(dict.fromkeys((*roles.get(role, ()), *ids)))
+        for agent, own in config.agents.items():
+            agents.setdefault(agent, own)
+    return replace(found[0], roles=roles, agents=agents)
 
 
 def _scale(rating: float | None) -> float:
@@ -429,6 +482,7 @@ def _machines(
     now: datetime,
     merged_by: dict[str, int] | None = None,
     next_lead: str | None = None,
+    next_project: str | None = None,
 ) -> list[dict[str, Any]]:
     """One machine per agent a role names in the config (or, without one, a job used), on the
     station its roles give it: the lead first, then the reviewers, then the developers."""
@@ -490,6 +544,7 @@ def _machines(
                 "off": sorted(r for r in lost if _station([r])),
                 "merged_today": merged_today,
                 "next_ticket": next_lead,
+                "next_project": next_project,  # whose ticket: its link's ?project= (D2)
             }
         )
     return sorted(found, key=lambda m: MACHINE_STATIONS.index(m["station"]))
@@ -516,11 +571,31 @@ def _planting(conn: sqlite3.Connection, project: str, rows: Iterable[sqlite3.Row
 
 
 def _field(
+    conn: sqlite3.Connection, projects: Projects, states: dict[Key, str], at: datetime
+) -> dict[str, Any]:
+    """Every project's field at ``at`` (``_project_field``) as one: the rows, ripe and the set
+    aside in the projects' order, the stash latest first, the counts summed."""
+    parts = [_project_field(conn, name, _own(states, name), at) for name in _listed(projects)]
+    if len(parts) == 1:
+        return parts[0]
+    stash = [m for part in parts for m in part["stash"]]
+    stash.sort(key=lambda m: _when(m["ended"]) if m["ended"] else _LONG_AGO, reverse=True)
+    return {
+        "seeds": sum(part["seeds"] for part in parts),
+        "later": [t for part in parts for t in part["later"]],
+        "planting": sum(part["planting"] for part in parts),
+        "rows": [r for part in parts for r in part["rows"]],
+        "ripe": [m for part in parts for m in part["ripe"]],
+        "stash": stash,
+    }
+
+
+def _project_field(
     conn: sqlite3.Connection, project: str, ticket_states: dict[str, str], at: datetime
 ) -> dict[str, Any]:
-    """The field at ``at``: a milestone is on it once started, ripe once every ticket is done
-    and its review is written (its sign-off sheet stored, F50 D1), in the stash once signed
-    off."""
+    """The project's field at ``at``: a milestone is on it once started, ripe once every
+    ticket is done and its review is written (its sign-off sheet stored, F50 D1), in the stash
+    once signed off. Each milestone and ticket says its project."""
     rows = conn.execute(
         "SELECT m.key, m.title, m.status, m.state, m.started, m.ended, m.signoff, t.ticket,"
         " t.title AS goal FROM milestones m"
@@ -556,6 +631,7 @@ def _field(
             planted.append(
                 {
                     "key": m["key"],
+                    "project": project,
                     "title": m["title"],
                     "ready": states.count("ready"),
                     "running": states.count("running"),
@@ -570,11 +646,14 @@ def _field(
     goals = {r["ticket"]: r["goal"] for r in rows if r["ticket"]}
     return {
         "seeds": len(later),
-        "later": [{"ticket": t, "title": goals.get(t)} for t in later],
+        "later": [{"ticket": t, "project": project, "title": goals.get(t)} for t in later],
         "planting": len(_planting(conn, project, rows)),
         "rows": planted,
-        "ripe": [{"key": m["key"], "title": m["title"]} for m in ripe],
-        "stash": [{"key": m["key"], "title": m["title"], "ended": m["ended"]} for m in stash],
+        "ripe": [{"key": m["key"], "project": project, "title": m["title"]} for m in ripe],
+        "stash": [
+            {"key": m["key"], "project": project, "title": m["title"], "ended": m["ended"]}
+            for m in stash
+        ],
     }
 
 
@@ -582,14 +661,15 @@ def _kind(kind: str | None) -> str:
     return "lead" if kind == "lead" else "developer"
 
 
-def _tickets(conn: sqlite3.Connection, project: str) -> dict[str, sqlite3.Row]:
+def _tickets(conn: sqlite3.Connection, projects: Projects) -> dict[Key, sqlite3.Row]:
+    names = _listed(projects)
     return {
-        r["ticket"]: r
+        (r["project"], r["ticket"]): r
         for r in conn.execute(
-            "SELECT t.ticket, t.title, t.kind, m.key AS milestone FROM tickets t"
-            " JOIN projects p ON p.id = t.project_id"
-            " LEFT JOIN milestones m ON m.id = t.milestone_id WHERE p.name = ?",
-            (project,),
+            "SELECT t.ticket, t.title, t.kind, m.key AS milestone, p.name AS project"  # noqa: S608
+            " FROM tickets t JOIN projects p ON p.id = t.project_id"
+            f" LEFT JOIN milestones m ON m.id = t.milestone_id WHERE {_among(names)}",
+            names,
         )
     }
 
@@ -642,80 +722,95 @@ def live_line(
     now: datetime,
     at: datetime | None = None,
     *,
-    cards: "Board | None" = None,
+    cards: "Board | Mapping[str, Board] | None" = None,
+    projects: Sequence[str] | None = None,
 ) -> dict[str, Any]:
     """D11's document at ``at`` (default ``now``): stations, machines with their state and
     crate, belts with that day's count (since ``at``'s midnight) and ``carrying``, Now and the
-    queue in run order. The jobs working are those whose times cover ``at``."""
+    queue in run order. The jobs working are those whose times cover ``at``. ``projects``
+    (default ``project`` alone) are the projects on the floor, ``project`` the one picked:
+    ``cards`` are its board, or the boards already built by project's name."""
     live = at is None  # the board knows only the present
     at = at or now
+    names = list(projects) if projects is not None else [project]
     midnight = at.replace(hour=0, minute=0, second=0, microsecond=0)
-    tickets = _tickets(conn, project)
-    jobs = _jobs(conn, project)
-    every = trips(conn, project)
+    tickets = _tickets(conn, names)
+    jobs = _jobs(conn, names)
+    every = trips(conn, names)
     found = [t for t in every if t.at <= at]
     today = [t for t in found if t.at >= midnight]
-    states = _states(conn, project, every, at)
+    states = _states(conn, names, every, at)
 
     # What works then, and the belt that brought each crate.
     carrying: set[str] = set()
     now_working = []
-    work = _work(conn, project)
+    work = _work(conn, names)
     for w, on in _crates(work, at, tickets):
-        came = [t for t in found if t.crate == w.crate]
+        came = [t for t in found if (t.project, t.crate) == (w.project, w.crate)]
         if came:
             carrying.update(came[-1].belts)
         now_working.append({**on, "agent": w.agent, "tokens_in": w.tokens_in, "steps": w.steps})
     working = _working(work, at, tickets)
 
-    field = _field(conn, project, states, at)
+    field = _field(conn, names, states, at)
     merged = [
         {
             "ticket": t.crate,
-            "title": tickets[t.crate]["title"],
-            "kind": _kind(tickets[t.crate]["kind"]),
-            "milestone": tickets[t.crate]["milestone"],
+            "project": t.project,
+            "title": tickets[(t.project, t.crate)]["title"],
+            "kind": _kind(tickets[(t.project, t.crate)]["kind"]),
+            "milestone": tickets[(t.project, t.crate)]["milestone"],
         }
         for t in today
-        if t.to == "merged" and t.crate in tickets
+        if t.to == "merged" and (t.project, t.crate) in tickets
     ]
-    upcoming = queries.run_order(conn, project, states)
-    tickets_next: list[dict[str, Any]] = [
-        {
-            "ticket": u.ticket,
-            "title": u.title,
-            "kind": _kind(u.kind),
-            "milestone": u.milestone,
-            "waits": list(u.waits),
-            # what Next in line says in place of a number: the ticket's card, or ``bug`` (F222 D6)
-            "card": "bug" if u.milestone == BUGS else short_key(u.milestone or "m0").upper(),
-            "early_for": u.early_for,
-        }
-        for u in upcoming
-    ]
-    # a parked review goes behind the last ticket that can run; the run order is kept
-    reviews = _due_reviews(conn, project, now)
-    free = max((n for n, t in enumerate(tickets_next, start=1) if not t["waits"]), default=0)
+    # D5: the reviews that can go, every project's tickets that can run project by project
+    # (each in its own run order), the parked reviews, then the tickets that wait
+    reviews: list[dict[str, Any]] = []
+    free: list[dict[str, Any]] = []
+    held: list[dict[str, Any]] = []
+    for name in names:
+        own = [
+            {
+                "ticket": u.ticket,
+                "project": name,
+                "title": u.title,
+                "kind": _kind(u.kind),
+                "milestone": u.milestone,
+                "waits": list(u.waits),
+                # what Next in line says in place of a number: its card, or ``bug`` (F222 D6)
+                "card": "bug" if u.milestone == BUGS else short_key(u.milestone or "m0").upper(),
+                "early_for": u.early_for,
+            }
+            for u in queries.run_order(conn, name, _own(states, name))
+        ]
+        # a parked review goes behind the last ticket that can run; the run order is kept
+        end = max((n for n, t in enumerate(own, start=1) if not t["waits"]), default=0)
+        free += own[:end]
+        held += own[end:]
+        reviews += _due_reviews(conn, name, now)
     ordered = [
         *(r for r in reviews if not r["waits"]),
-        *tickets_next[:free],
+        *free,
         *(r for r in reviews if r["waits"]),
-        *tickets_next[free:],
+        *held,
     ]
     queue = [{**crate, "number": n} for n, crate in enumerate(ordered, start=1)]
 
     counts: dict[str, int | None] = {belt: sum(belt in t.belts for t in today) for belt in BELTS}
     counts.update(dict.fromkeys(FIELD_BELTS))
-    merges: dict[str, datetime] = {}  # each milestone's last merge
+    merges: dict[Key, datetime] = {}  # each (project, milestone)'s last merge
     for t in found:
-        if t.to == "merged" and t.crate in tickets:
-            merges[tickets[t.crate]["milestone"]] = t.at
-    counts["merged→ripe"] = sum(merges.get(m["key"], midnight) > midnight for m in field["ripe"])
+        if t.to == "merged" and (t.project, t.crate) in tickets:
+            merges[(t.project, tickets[(t.project, t.crate)]["milestone"])] = t.at
+    counts["merged→ripe"] = sum(
+        merges.get((m["project"], m["key"]), midnight) > midnight for m in field["ripe"]
+    )
     counts["ripe→stash"] = sum(
         bool(m["ended"]) and midnight <= _when(m["ended"]) <= at for m in field["stash"]
     )
 
-    config = _config(conn, project)
+    config = _machines_config(conn, names)
     merged_by: dict[str, int] = {}
     for t in today:
         if t.to == "merged" and t.job is not None:
@@ -723,12 +818,17 @@ def live_line(
                 if j.id == t.job:
                     merged_by[j.agent] = merged_by.get(j.agent, 0) + 1
                     break
-    next_lead: str | None = None
-    for q in queue:
-        if q["kind"] == "lead":
-            next_lead = q["ticket"]
-            break
-    machines = _machines(conn, config, jobs, working, at, merged_by=merged_by, next_lead=next_lead)
+    lead = next((q for q in queue if q["kind"] == "lead"), None)
+    machines = _machines(
+        conn,
+        config,
+        jobs,
+        working,
+        at,
+        merged_by=merged_by,
+        next_lead=lead["ticket"] if lead else None,
+        next_project=lead["project"] if lead else None,
+    )
     count = {
         "seeds": field["seeds"],
         "planting": field["planting"],
@@ -743,18 +843,25 @@ def live_line(
     if live:
         from factory_dashboard.board import board  # board.py imports from this module
 
-        if cards is None:
-            cards = board(conn, project, now)
-        stages = {stage: len(found) for stage, found in cards.stages.items()}
+        # every project's cards per stage, summed (D9)
+        boards = cards if isinstance(cards, Mapping) else {project: cards} if cards else {}
+        stages: dict[str, int] = {}
+        more = 0
+        for name in names:
+            its = boards.get(name) or board(conn, name, now)
+            for stage, listed in its.stages.items():
+                stages[stage] = stages.get(stage, 0) + len(listed)
+            more += its.more_harvested
         count.update(
             seeds=stages["seed"],
             planting=stages["sprouting"],
             rows=stages["planted"],
             ripe=stages["ripe"],
-            stash=stages["harvested"] + cards.more_harvested,
+            stash=stages["harvested"] + more,
         )
     return {
         "at": at.isoformat(),
+        "many_projects": len(names) > 1,  # each crate's label then starts with its project
         "stations": [
             {"id": key, "label": label, "count": count[key]} for key, label in STATIONS.items()
         ],
@@ -774,8 +881,8 @@ def live_line(
         "merged": merged,
         "field": field,
         "now": {"working": now_working, "next": queue[:3]},
-        "clog": _clog(conn, project, machines, midnight, at),
-        "wait": _wait(conn, project, machines, queue, field, now) if live else None,
+        "clog": _clog(conn, names, machines, midnight, at),
+        "wait": _wait(conn, names, machines, queue, field, now) if live else None,
     }
 
 
@@ -809,7 +916,7 @@ def _nothing_ready(queue: Sequence[dict[str, Any]]) -> str:
 
 def _wait(
     conn: sqlite3.Connection,
-    project: str,
+    projects: Projects,
     machines: Sequence[dict[str, Any]],
     queue: Sequence[dict[str, Any]],
     field: dict[str, Any],
@@ -830,7 +937,7 @@ def _wait(
             "words": words,
         }
 
-    for run in live_runs(conn, project, now):
+    for run in (run for name in _listed(projects) for run in live_runs(conn, name, now)):
         activity = run.activity or ""
         if found := _CLAUDE_WAIT.fullmatch(activity):
             limited = _limit(conn, queries.LEAD_PREFIX, now) is not None
@@ -862,14 +969,14 @@ def _wait(
 
 def _clog(
     conn: sqlite3.Connection,
-    project: str,
+    projects: Projects,
     machines: Sequence[dict[str, Any]],
     since: datetime,
     at: datetime,
 ) -> dict[str, Any]:
     """What clogged the line from ``since`` to ``at`` (f3-04), for the floor's developers."""
     names = {m["id"]: m["name"] for m in machines if m["station"] == "developers"}
-    found = queries.clog(conn, project, since, at, machines=list(names))
+    found = queries.clog(conn, _listed(projects), since, at, machines=list(names))
     return {
         "limit": found.limit,
         "failed": found.failed,
@@ -886,11 +993,11 @@ def _clog(
 # --- replay (f3-06) -------------------------------------------------------------------------
 
 
-def _stages(field: dict[str, Any]) -> dict[str, str]:
-    """Each milestone's stage on the field: ``rows``, ``ripe`` or ``stash``."""
-    stages = {r["key"]: "rows" for r in field["rows"]}
-    stages |= {m["key"]: "ripe" for m in field["ripe"]}
-    return stages | {m["key"]: "stash" for m in field["stash"]}
+def _stages(field: dict[str, Any]) -> dict[Key, str]:
+    """Each (project, milestone)'s stage on the field: ``rows``, ``ripe`` or ``stash``."""
+    stages = {(r["project"], r["key"]): "rows" for r in field["rows"]}
+    stages |= {(m["project"], m["key"]): "ripe" for m in field["ripe"]}
+    return stages | {(m["project"], m["key"]): "stash" for m in field["stash"]}
 
 
 def _idle(
@@ -912,18 +1019,26 @@ def _idle(
 
 
 def replay(
-    conn: sqlite3.Connection, project: str, since: datetime, until: datetime
+    conn: sqlite3.Connection,
+    project: str,
+    since: datetime,
+    until: datetime,
+    *,
+    projects: Sequence[str] | None = None,
 ) -> dict[str, Any]:
     """The line's document at ``since`` (``line``), then every event after it up to ``until``
     in time order, each ``{at, kind, ...}``:
-    - ``trip``: a crate moves, ``{crate, belts, to}``;
-    - ``check``: a crate's work passes or fails the checks, ``{crate, passed, gate}``;
-    - ``machine``: a machine changes state or crate, ``{machine, state, ticket, reset}``;
+    - ``trip``: a crate moves, ``{crate, project, belts, to}``;
+    - ``check``: a crate's work passes or fails the checks, ``{crate, project, passed, gate}``;
+    - ``machine``: a machine changes state or crate, ``{machine, state, ticket, project,
+      reset}``;
     - ``limit``: an agent's limit starts or ends, ``{agent, state, resets}``;
-    - ``card``: a milestone changes stage on the field, ``{card, stage}`` (None: off it);
+    - ``card``: a milestone changes stage on the field, ``{card, project, stage}`` (None: off
+      it);
     - ``idle``: nothing works for over 40 min, one event ``{until, minutes}`` (D10).
-    Times are in ``since``'s zone."""
+    Times are in ``since``'s zone. ``projects`` as for ``live_line``."""
     zone = since.tzinfo
+    names = list(projects) if projects is not None else [project]
 
     def iso(moment: datetime) -> str:
         return moment.astimezone(zone).isoformat()
@@ -931,14 +1046,15 @@ def replay(
     def inside(moment: datetime) -> bool:
         return since < moment <= until
 
-    every, work, jobs = trips(conn, project), _work(conn, project), _jobs(conn, project)
-    tickets, config = _tickets(conn, project), _config(conn, project)
+    every, work, jobs = trips(conn, names), _work(conn, names), _jobs(conn, names)
+    tickets, config = _tickets(conn, names), _machines_config(conn, names)
     gates = {
         r["id"]: _failed_gate(r["gates"])
         for r in conn.execute(
-            "SELECT j.id, j.gates FROM jobs j JOIN runs r ON r.id = j.run_id"
-            " JOIN projects p ON p.id = r.project_id WHERE p.name = ? AND j.gates IS NOT NULL",
-            (project,),
+            "SELECT j.id, j.gates FROM jobs j JOIN runs r ON r.id = j.run_id"  # noqa: S608
+            f" JOIN projects p ON p.id = r.project_id WHERE {_among(names)}"
+            " AND j.gates IS NOT NULL",
+            names,
         )
     }
     events: list[dict[str, Any]] = []
@@ -951,6 +1067,7 @@ def replay(
                 "at": at,
                 "kind": "trip",
                 "crate": trip.crate,
+                "project": trip.project,
                 "belts": list(trip.belts),
                 "to": trip.to,
             }
@@ -959,13 +1076,22 @@ def replay(
             passed = trip.to == "merged"
             gate = None if passed or trip.job is None else gates.get(trip.job)
             events.append(
-                {"at": at, "kind": "check", "crate": trip.crate, "passed": passed, "gate": gate}
-            )
+                {"at": at, "kind": "check", "crate": trip.crate, "project": trip.project,
+                 "passed": passed, "gate": gate}
+            )  # fmt: skip
 
-    def floor(moment: datetime) -> dict[str, tuple[str, str | None, str | None]]:
+    type Floor = dict[str, tuple[str, str | None, str | None, str | None]]
+
+    def floor(moment: datetime) -> Floor:
         machines = _machines(conn, config, jobs, _working(work, moment, tickets), moment)
         return {
-            m["id"]: (m["state"], (m["crate"] or {}).get("ticket"), m["reset"]) for m in machines
+            m["id"]: (
+                m["state"],
+                (m["crate"] or {}).get("ticket"),
+                m["reset"],
+                (m["crate"] or {}).get("project"),
+            )
+            for m in machines
         }
 
     before = floor(since)
@@ -990,32 +1116,35 @@ def replay(
     moments |= {moment for _, start, end in limits for moment in (start, end)}
     for moment in sorted(m for m in moments if inside(m)):
         after = floor(moment.astimezone(zone))
-        for machine, (state, ticket, reset) in after.items():
-            if before.get(machine) != (state, ticket, reset):
+        for machine, (state, ticket, reset, owner) in after.items():
+            if before.get(machine) != (state, ticket, reset, owner):
                 events.append(
                     {"at": iso(moment), "kind": "machine", "machine": machine, "state": state,
-                     "ticket": ticket, "reset": reset}
+                     "ticket": ticket, "project": owner, "reset": reset}
                 )  # fmt: skip
         before = after
 
-    def stages(moment: datetime) -> dict[str, str]:
-        return _stages(_field(conn, project, _states(conn, project, every, moment), moment))
+    def stages(moment: datetime) -> dict[Key, str]:
+        return _stages(_field(conn, names, _states(conn, names, every, moment), moment))
 
     changes = {t.at for t in every if t.to == "merged"}
     for r in conn.execute(
-        "SELECT m.started, m.ended FROM milestones m JOIN projects p ON p.id = m.project_id"
-        " WHERE p.name = ?",
-        (project,),
+        "SELECT m.started, m.ended FROM milestones m JOIN projects p ON p.id = m.project_id"  # noqa: S608
+        f" WHERE {_among(names)}",
+        names,
     ):
         changes |= {_when(r[key]) for key in ("started", "ended") if r[key]}
     was = stages(since)
     for moment in sorted(m for m in changes if inside(m)):
         then = stages(moment)
-        for card in sorted(was.keys() | then.keys(), key=milestone_order):
-            if was.get(card) != then.get(card):
+        for owner, card in sorted(
+            was.keys() | then.keys(), key=lambda c: (milestone_order(c[1]), names.index(c[0]))
+        ):
+            if was.get((owner, card)) != then.get((owner, card)):
                 events.append(
-                    {"at": iso(moment), "kind": "card", "card": card, "stage": then.get(card)}
-                )
+                    {"at": iso(moment), "kind": "card", "card": card, "project": owner,
+                     "stage": then.get((owner, card))}
+                )  # fmt: skip
         was = then
 
     for start, end in _idle(work, since, until):
@@ -1026,7 +1155,7 @@ def replay(
     return {
         "since": since.isoformat(),
         "until": until.isoformat(),
-        "line": live_line(conn, project, until, at=since),
+        "line": live_line(conn, project, until, at=since, projects=names),
         "events": events,
     }
 
@@ -1046,8 +1175,9 @@ def overnight(now: datetime, seen: str | None) -> datetime:
 
 
 def _context(conn: sqlite3.Connection, project: str, now: datetime) -> dict[str, Any]:
-    # the server's local time: the counts start at its midnight
-    return {"active": "/line", "line": live_line(conn, project, now.astimezone())}
+    # the server's local time: the counts start at its midnight; the whole factory's (D9)
+    line = live_line(conn, project, now.astimezone(), projects=every_project(conn, project))
+    return {"active": "/line", "line": line}
 
 
 @router.get("/line")
@@ -1081,7 +1211,8 @@ def line_replay(
     start = _moment(since, "since") if since else overnight(end, request.cookies.get(SEEN))
     if start >= end:
         raise HTTPException(400, "since must come before until")
-    return replay(conn, project, max(start, end - REPLAY_LIMIT), end)
+    start = max(start, end - REPLAY_LIMIT)
+    return replay(conn, project, start, end, projects=every_project(conn, project))
 
 
 @router.get("/line/live", response_class=HTMLResponse)

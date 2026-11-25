@@ -4925,12 +4925,12 @@ def test_one_request_builds_the_board_once(client, monkeypatch, path):
 @pytest.mark.parametrize("path", ["/", "/live"])
 def test_one_request_builds_the_floor_once(client, monkeypatch, path):
     """F228 D3: the Overview and its 5-second refresh build the floor once, not three times:
-    once a project since F132 (the fixture has two)."""
+    one floor for every project since F132 D9 (the fixture has two)."""
     from factory_dashboard import line
 
     calls = _counted(monkeypatch, line, "trips")
     assert client.get(path).status_code == 200
-    assert len(calls) == 2
+    assert len(calls) == 1
 
 
 def test_a_page_with_no_count_of_its_own_still_shows_the_planning_tabs(serve_between, db_path):

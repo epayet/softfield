@@ -69,11 +69,11 @@ def listed_counts(field: dict[str, Any]) -> dict[str, int]:
     }
 
 
-def board_counts(db: Path, now: datetime = LINE_NOW) -> dict[str, int]:
+def board_counts(db: Path, now: datetime = LINE_NOW, project: str = PROJECT) -> dict[str, int]:
     """What the board says each field station holds, from its own cards."""
     conn = connect(db)
     try:
-        found = board(conn, PROJECT, now)
+        found = board(conn, project, now)
     finally:
         conn.close()
     cards = {stage: len(found.stages[stage]) for stage in found.stages}
@@ -187,6 +187,7 @@ def test_the_developers_qwen_machine_works_on_its_crate(line_db):
     assert (qwen["station"], qwen["state"], qwen["local"]) == ("developers", "working", True)
     assert qwen["crate"] == {
         "ticket": "f9-01-working",
+        "project": PROJECT,  # whose crate (F132 D9)
         "title": "Goal of f9-01-working.",
         "kind": "developer",
         "role": "developer",
@@ -437,7 +438,9 @@ def test_the_field_rows_ripe_and_stash_match_the_milestones(line_db):
     assert [m["key"] for m in field["ripe"]] == ["f8"]
     assert [m["key"] for m in field["stash"]] == ["f7", "m4"]  # latest first
     assert (field["seeds"], field["planting"]) == (1, 0)  # f9-04, set aside
-    assert field["later"] == [{"ticket": "f9-04-later", "title": "Goal of f9-04-later."}]
+    assert field["later"] == [
+        {"ticket": "f9-04-later", "project": PROJECT, "title": "Goal of f9-04-later."}
+    ]
     counts = {s["id"]: s["count"] for s in doc["stations"]}
     assert field_counts(doc) == board_counts(line_db)  # the board's cards, not the lists above
     assert (counts["merged"], counts["queue"]) == (2, 4)
@@ -555,9 +558,9 @@ def test_later_lists_the_set_aside_tickets_by_id_and_seeds_counts_them(line_db):
         conn.close()
     field = document(line_db)["field"]
     assert field["later"] == [
-        {"ticket": "f1-90-untitled", "title": None},
-        {"ticket": "f9-04-later", "title": "Goal of f9-04-later."},
-        {"ticket": "f23-01-own", "title": "Goal of f23-01-own."},
+        {"ticket": "f1-90-untitled", "project": PROJECT, "title": None},
+        {"ticket": "f9-04-later", "project": PROJECT, "title": "Goal of f9-04-later."},
+        {"ticket": "f23-01-own", "project": PROJECT, "title": "Goal of f23-01-own."},
     ]
     assert field["seeds"] == 3
 
@@ -755,6 +758,191 @@ def test_an_empty_project_has_an_empty_line(line_db):
     assert {b["today"] for b in doc["belts"] if b["today"] is not None} == {0}
 
 
+# --- every project's floor (F132 D9) ---------------------------------------------------------
+
+TRAVEL = "travel-companion"
+
+
+def write_travel(db: Path) -> None:
+    """A second project on ``line_db``'s floor, its repo unknown (no config of its own); its
+    ``m2`` started this morning (+02:00): ``f9-01-working``, the same id as coucou's ticket,
+    on gpt-oss since 13:50, its run beating 20 s ago; ``m2-02-merged`` merged on gpt-oss
+    08:00–08:30; ``m2-03-next`` ready."""
+    conn = metrics.open_db(db)
+    try:
+        project = metrics.upsert_project(conn, TRAVEL)
+        m2 = metrics.upsert_milestone(
+            conn, project, "m2", title="Trips", status="in progress",
+            started="2026-10-02T07:00:00+02:00",
+        )  # fmt: skip
+        run = metrics.upsert_run(
+            conn, project, "20261002-070000", command="run", started="2026-10-02T07:00:00+02:00",
+            heartbeat=(NOW - timedelta(seconds=20)).isoformat(),
+        )  # fmt: skip
+
+        def ticket(name: str, state: str) -> int:
+            return metrics.upsert_ticket(
+                conn, project, name, milestone_id=m2, kind="developer", state=state,
+                title=f"Trip goal of {name}.",
+            )  # fmt: skip
+
+        def job(ticket_id: int, start: str, end: str | None) -> None:
+            job = metrics.start_job(
+                conn, run, ticket_id=ticket_id, milestone_id=m2, role="developer",
+                agent=GPT_OSS, attempt=1, started=f"2026-10-02T{start}:00+02:00",
+            )  # fmt: skip
+            if end:
+                metrics.finish_job(conn, job, ended=f"2026-10-02T{end}:00+02:00", outcome="passed")
+
+        job(ticket("f9-01-working", "running"), "13:50", None)
+        job(ticket("m2-02-merged", "done"), "08:00", "08:30")
+        ticket("m2-03-next", "ready")
+    finally:
+        conn.close()
+
+
+def factory_floor(db: Path, project: str = PROJECT, now: datetime = LINE_NOW) -> dict[str, Any]:
+    """The floor as the factory-wide views build it: every project's, ``project`` picked."""
+    from factory_dashboard.overview import every_project
+
+    conn = connect(db)
+    try:
+        return live_line(conn, project, now, projects=every_project(conn, project))
+    finally:
+        conn.close()
+
+
+def test_the_floor_is_every_projects_and_the_same_whichever_is_picked(line_db):
+    write_travel(line_db)
+    doc = factory_floor(line_db)
+    assert factory_floor(line_db, TRAVEL) == doc
+    assert doc["many_projects"] is True
+    # the field counts are the sums of every project's cards per stage
+    projects = (PROJECT, TRAVEL)
+    sums = {s: sum(board_counts(line_db, project=p)[s] for p in projects) for s in FIELD}
+    assert field_counts(doc) == sums
+    assert field_counts(doc) != board_counts(line_db)
+    assert {(r["project"], r["key"]) for r in doc["field"]["rows"]} >= {
+        (PROJECT, "f9"),
+        (TRAVEL, "m2"),
+    }
+
+
+def test_each_projects_crate_sits_on_the_shared_machines_with_its_project(line_db):
+    """The same ticket id in two projects is two crates, one on each machine."""
+    write_travel(line_db)
+    doc = factory_floor(line_db)
+    found = machines(doc)
+    assert (found[LOCAL]["crate"]["ticket"], found[LOCAL]["crate"]["project"]) == (
+        "f9-01-working",
+        PROJECT,
+    )
+    assert (found[GPT_OSS]["state"], found[GPT_OSS]["crate"]["project"]) == ("working", TRAVEL)
+    assert found[GPT_OSS]["crate"]["title"] == "Trip goal of f9-01-working."
+    assert sorted((w["project"], w["ticket"]) for w in doc["now"]["working"]) == [
+        (PROJECT, "f9-01-working"),
+        (TRAVEL, "f9-01-working"),
+    ]
+    conn = connect(line_db)
+    try:
+        moved = [
+            (t.project, t.to) for t in trips(conn, [PROJECT, TRAVEL]) if t.crate == "f9-01-working"
+        ]
+    finally:
+        conn.close()
+    assert sorted(moved) == [(PROJECT, "developers"), (TRAVEL, "developers")]
+    # each project's queue, its tickets with their project
+    assert (TRAVEL, "m2-03-next") in [(c["project"], c["ticket"]) for c in doc["queue"]]
+
+
+def test_the_stash_and_the_days_belts_count_every_projects_merges(line_db):
+    write_travel(line_db)
+    doc = factory_floor(line_db)
+    assert [(c["project"], c["ticket"]) for c in doc["merged"]] == [
+        (PROJECT, "f9-02-overnight"),
+        (TRAVEL, "m2-02-merged"),
+        (PROJECT, "f9-03-lead"),
+    ]
+    assert belts(doc)["checks→merged"]["today"] == 3
+    assert belts(doc)["developers→checks"]["today"] == 2
+    assert {s["id"]: s["count"] for s in doc["stations"]}["merged"] == 3
+    assert machines(doc)[GPT_OSS]["merged_today"] == 1
+
+
+def test_one_project_alone_has_no_plate_and_its_floor_reads_as_before(line_db):
+    doc = factory_floor(line_db)  # line_db holds one project
+    assert doc["many_projects"] is False
+    assert doc == document(line_db)
+
+
+def test_a_projects_desk_takes_only_its_own_ripe_cards_from_the_factory_floor(line_db):
+    """The desk reads the floor's ripe cards; on a floor of every project's, another project's
+    ripe card stays off this project's desk."""
+    from factory_dashboard.planning import _ripe
+
+    write_travel(line_db)
+    conn = metrics.open_db(line_db)
+    try:
+        travel = metrics.upsert_project(conn, TRAVEL)
+        m3 = metrics.upsert_milestone(
+            conn, travel, "m3", title="Travel ripe", status="review", signoff={"changed": "It."},
+            started="2026-10-01T07:00:00+02:00",
+        )  # fmt: skip
+        metrics.upsert_ticket(conn, travel, "m3-01-done", milestone_id=m3, state="done")
+    finally:
+        conn.close()
+    floor = factory_floor(line_db)
+    assert {(m["project"], m["key"]) for m in floor["field"]["ripe"]} == {
+        (PROJECT, "f8"),
+        (TRAVEL, "m3"),
+    }
+    conn = connect(line_db)
+    try:
+        mine = [item.link for item in _ripe(conn, PROJECT, LINE_NOW, line=floor)]
+        theirs = [item.link for item in _ripe(conn, TRAVEL, LINE_NOW, line=floor)]
+    finally:
+        conn.close()
+    assert (mine, theirs) == (["/planning/f8"], ["/planning/m3"])
+
+
+def test_a_replay_plays_every_projects_jobs(line_db):
+    write_travel(line_db)
+    since = datetime.fromisoformat("2026-10-02T07:00:00+02:00")
+    conn = connect(line_db)
+    try:
+        found = replay(conn, PROJECT, since, LINE_NOW, projects=[PROJECT, TRAVEL])
+        alone = replay(conn, TRAVEL, since, LINE_NOW, projects=[PROJECT, TRAVEL])
+    finally:
+        conn.close()
+    assert alone == found
+    moved = [(e["project"], e["crate"], e["to"]) for e in found["events"] if e["kind"] == "trip"]
+    assert (TRAVEL, "m2-02-merged", "merged") in moved
+    assert (PROJECT, "f9-03-lead", "merged") in moved
+    assert (TRAVEL, "f9-01-working", "developers") in moved
+    assert (PROJECT, "f9-01-working", "developers") in moved
+    works = [
+        (e["machine"], e["project"], e["ticket"])
+        for e in found["events"]
+        if e["kind"] == "machine" and e["state"] == "working"
+    ]
+    assert (GPT_OSS, TRAVEL, "f9-01-working") in works
+    assert (LOCAL, PROJECT, "f9-01-working") in works
+    assert found["line"]["many_projects"] is True
+
+
+def test_the_floors_routes_serve_every_project_whichever_is_picked(line_db, line_client):
+    write_travel(line_db)
+    floor = json.loads(json.dumps(factory_floor(line_db, now=NOW.astimezone())))
+    json_ = {"Accept": "application/json"}
+    for query in ("", f"?project={TRAVEL}"):
+        assert line_client.get(f"/line/live{query}", headers=json_).json() == floor
+        assert block(line_client.get(f"/{query}").text) == floor
+    since = {"since": "2026-10-02T07:00:00+02:00"}
+    picked = line_client.get("/line/replay", params={**since, "project": TRAVEL}).json()
+    assert line_client.get("/line/replay", params=since).json() == picked
+    assert any(e.get("project") == TRAVEL for e in picked["events"])
+
+
 # --- the page -------------------------------------------------------------------------------
 
 _BLOCK = re.compile(r'<script type="application/json" id="factory-line">(.*?)</script>', re.S)
@@ -950,7 +1138,7 @@ def test_a_replay_starts_from_the_line_at_since(night_db):
     ]  # fmt: skip
     assert ([r["key"] for r in found["line"]["field"]["rows"]], found["line"]["field"]["ripe"]) == (
         ["n1"],
-        [{"key": "n0", "title": "Ripe"}],
+        [{"key": "n0", "project": PROJECT, "title": "Ripe"}],
     )
     assert {m["id"]: m["state"] for m in found["line"]["machines"]} == {LOCAL: "idle", OPUS: "idle"}
 
@@ -2544,13 +2732,78 @@ def test_the_cards_link_keeps_markup_in_the_project_as_text(page, line_client):
     page.goto(f"{ORIGIN}/?{urlencode({'project': hostile})}")
     crate = page.locator("svg#floor [data-queue-crate]").first
     first = crate.get_attribute("data-queue-crate")
+    owner = crate.get_attribute("data-project")
     crate.click()
     card = page.locator("#crate-card")
     assert card.locator("img").count() == 0
     assert page.evaluate("() => window.pwned") is None
+    # F132 D2: the link carries the crate's own project, never the address's
     href = card.locator("a").get_attribute("href")
-    assert href == f"/tickets/{first}?{urlencode({'project': hostile})}"
+    assert href == f"/tickets/{first}?{urlencode({'project': owner})}"
     assert card.locator("a").text_content() == first
+
+
+def test_a_crates_project_with_markup_stays_text_on_its_card_and_link(page, line_db, line_client):
+    """F132 D9: a crate's project comes from the document; markup in it is text, and its
+    link encodes it."""
+    write_travel(line_db)
+    page.clock.install()
+    doc = open_line(page, line_client)
+    hostile = '"><img src=x onerror="window.pwned=1">'
+    doc["queue"][0]["project"] = hostile
+    page.evaluate(
+        "(doc) => { document.getElementById('factory-line').textContent = JSON.stringify(doc);"
+        " document.dispatchEvent(new CustomEvent('htmx:load', { detail: { elt: document } })); }",
+        doc,
+    )
+    first = doc["queue"][0]["ticket"]
+    page.locator(f"svg#floor [data-queue-crate='{first}']").first.click()
+    card = page.locator("#crate-card")
+    assert card.locator("img").count() == 0
+    assert page.evaluate("() => window.pwned") is None
+    assert card.locator(".proj").text_content() == hostile
+    assert card.locator("a").get_attribute("href") == (
+        f"/tickets/{first}?{urlencode({'project': hostile})}"
+    )
+
+
+def test_with_several_projects_a_working_crate_is_labelled_with_its_project(
+    page, line_db, line_client
+):
+    write_travel(line_db)
+    doc = open_line(page, line_client)
+    assert doc["many_projects"] is True
+    page.wait_for_selector(f'svg#floor [data-machine="{GPT_OSS}"] [data-crate]')
+    for agent, owner in ((LOCAL, PROJECT), (GPT_OSS, TRAVEL)):
+        machine = page.locator(f'svg#floor [data-machine="{agent}"]')
+        crate = machine.locator("[data-crate]")
+        assert crate.get_attribute("data-crate") == "f9-01-working"
+        assert crate.get_attribute("data-project") == owner
+        title = crate.locator("title").text_content() or ""
+        assert title.startswith(f"{owner} · f9-01-working")
+        assert machine.locator("[data-plate]").get_attribute("data-plate") == owner
+    legend = page.locator("#line-live .legend").text_content() or ""
+    assert "a crate's label starts with its project's name" in legend
+    # the same id twice: its own card, its own project's link
+    page.click(f'svg#floor [data-machine="{GPT_OSS}"] [data-crate]')
+    card = page.locator("#crate-card")
+    assert card.locator(".proj").text_content() == TRAVEL
+    assert card.locator(".card-title").text_content() == "Trip goal of f9-01-working."
+    href = card.locator("a").get_attribute("href")
+    assert href == f"/tickets/f9-01-working?{urlencode({'project': TRAVEL})}"
+
+
+def test_with_one_project_a_crate_has_no_plate(page, line_client):
+    doc = open_line(page, line_client)  # line_db holds one project
+    assert doc["many_projects"] is False
+    machine = page.locator(f'svg#floor [data-machine="{LOCAL}"]')
+    page.wait_for_selector(f'svg#floor [data-machine="{LOCAL}"] [data-crate]')
+    assert machine.locator("[data-plate]").count() == 0
+    title = machine.locator("[data-crate] title").text_content() or ""
+    assert title.startswith("f9-01-working: ")
+    assert "min" in (machine.text_content() or "")
+    legend = page.locator("#line-live .legend").text_content() or ""
+    assert "its project's name" not in legend
 
 
 def test_the_card_reads_the_document_the_floor_drew_last(page, line_client):

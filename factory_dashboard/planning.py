@@ -479,6 +479,8 @@ def _ripe(
         line = live_line(conn, project, now)
     items: list[DeskItem] = []
     for m in line["field"]["ripe"]:
+        if m["project"] != project:  # a floor of every project's (F132 D9)
+            continue
         # F108 D4: when its review ended; milestone keys are unique per project only
         row = conn.execute(
             "SELECT max(j.ended) AS ended FROM jobs j"

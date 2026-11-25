@@ -1037,7 +1037,7 @@ def _minutes(spans: Iterable[Span]) -> float:
 
 def clog(
     conn: sqlite3.Connection,
-    project: str,
+    project: str | Sequence[str],
     since: datetime,
     now: datetime,
     machines: Sequence[str] | None = None,
@@ -1046,12 +1046,14 @@ def clog(
     Claude's limit while a runner lived, failed developer attempts, each developer machine
     (``machines``; default: the agents that ran a developer job) idle while another job ran,
     and the owner's open items and pauses while no job ran. Only what had happened by ``now``
-    counts."""
+    counts. ``project`` is one project's name, or several (the whole floor's, F132 D9)."""
+    names = [project] if isinstance(project, str) else list(project)
+    among = f"p.name IN ({', '.join('?' * len(names))})"
     window = [(since, now)]
     runs = conn.execute(
-        "SELECT r.started, r.ended, r.heartbeat FROM runs r JOIN projects p ON p.id = r.project_id"
-        " WHERE p.name = ? AND r.started IS NOT NULL",
-        (project,),
+        "SELECT r.started, r.ended, r.heartbeat FROM runs r JOIN projects p ON p.id = r.project_id"  # noqa: S608
+        f" WHERE {among} AND r.started IS NOT NULL",
+        names,
     ).fetchall()
     live = _overlap(
         _union(
@@ -1063,10 +1065,10 @@ def clog(
     )
 
     jobs = conn.execute(
-        "SELECT j.agent, j.role, j.started, j.ended, j.outcome, j.note, r.heartbeat FROM jobs j"
+        "SELECT j.agent, j.role, j.started, j.ended, j.outcome, j.note, r.heartbeat FROM jobs j"  # noqa: S608
         " JOIN runs r ON r.id = j.run_id JOIN projects p ON p.id = r.project_id"
-        " WHERE p.name = ? AND j.started IS NOT NULL",
-        (project,),
+        f" WHERE {among} AND j.started IS NOT NULL",
+        names,
     ).fetchall()
     spans: dict[str, list[Span]] = defaultdict(list)
     failed: list[Span] = []
@@ -1094,9 +1096,9 @@ def clog(
     limit = _overlap(_union((_time(r["at"]), _time(r["resets_at"])) for r in limits), live)
 
     items = conn.execute(
-        "SELECT i.created, i.resolved FROM owner_items i JOIN projects p ON p.id = i.project_id"
-        " WHERE p.name = ? AND i.created IS NOT NULL",
-        (project,),
+        "SELECT i.created, i.resolved FROM owner_items i JOIN projects p ON p.id = i.project_id"  # noqa: S608
+        f" WHERE {among} AND i.created IS NOT NULL",
+        names,
     ).fetchall()
     # The owner's pause (f5-18), from when it took to their resume, or on while it holds
     pauses = conn.execute(

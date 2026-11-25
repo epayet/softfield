@@ -8,7 +8,7 @@ allowance, and the line on the floor.
 
 import json
 import sqlite3
-from collections.abc import Collection, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any, TypedDict
@@ -1066,29 +1066,28 @@ def _live_context(
     now: datetime,
     *,
     line: dict[str, Any] | None = None,
-    cards: "Board | None" = None,
+    cards: "Mapping[str, Board] | None" = None,
 ) -> dict[str, object]:
     """What the ``/live`` partial draws: Needs you, then Now (what works and the next three in
     the run order), for the whole factory (F132 D2): every project's, the same whichever
-    project is picked. ``line`` and ``cards`` are the picked project's, when handed in."""
+    project is picked. ``cards`` are the projects' boards by name and ``line`` the floor
+    (every project's, F132 D9), when handed in; else each is built once here (F228)."""
+    from factory_dashboard.board import board  # board.py imports from here
     from factory_dashboard.coming import _card_titles  # coming.py imports from overview
-    from factory_dashboard.line import _config
+    from factory_dashboard.line import _config, live_line  # line.py imports LIVE from here
     from factory_dashboard.planning import _open_proposals  # planning.py imports from overview
     from runner import metrics
 
     names = every_project(conn, project)
-    found = {
-        name: _project_live(
-            conn,
-            name,
-            now,
-            line=line if name == project else None,
-            cards=cards if name == project else None,
-        )
-        for name in names
-    }
+    boards = dict(cards or {})
+    for name in names:
+        if name not in boards:
+            boards[name] = board(conn, name, now)
+    if line is None:
+        line = live_line(conn, project, now.astimezone(), cards=boards, projects=names)
+    found = {name: _project_live(conn, name, now, line=line, cards=boards[name]) for name in names}
     # the picked project's own: the Planning tab's count, its notices, the reserve's cards
-    own = found.get(project) or _project_live(conn, project, now, line=line, cards=cards)
+    own = found.get(project) or _project_live(conn, project, now, line=line)
     every = [found[name] for name in names]
     pace = claude_pace(conn, project, now)
 
@@ -1244,7 +1243,8 @@ def _project_live(
     cards: "Board | None" = None,
 ) -> _ProjectLive:
     """``project``'s share of the live part, its board and floor built once (F228) unless
-    handed in."""
+    handed in. A floor handed in may be every project's (F132 D9): only ``project``'s crates
+    are its."""
     from factory_dashboard.board import board, reserve_marked  # board.py imports from here
     from factory_dashboard.line import live_line  # line.py imports LIVE from here
     from factory_dashboard.planning import desk, waiting_for_you  # planning imports overview
@@ -1261,7 +1261,7 @@ def _project_live(
     reserve_cards = reserve_marked(conn, project, now, found=cards)
     # as the runner will once it applies the requests: a card asked out has left (F192 D4)
     lane_keys = {c.key for c in reserve_cards if c.lane_asked != "off"}
-    lane, rest = fast_lane(line["queue"], lane_keys)
+    lane, rest = fast_lane([r for r in line["queue"] if r["project"] == project], lane_keys)
     lane_ids = {str(r["ticket"]) for r in lane}
     # "on its way" only on a row of the card asked in, not on a ticket it waits for elsewhere
     asked_in = {c.key for c in reserve_cards if c.lane_asked in ("on", "first")}
@@ -1322,8 +1322,10 @@ def overview(request: Request, conn: Db, project: Project, now: Now) -> HTMLResp
     from factory_dashboard.line import SEEN, live_line, overnight
 
     local = now.astimezone()
-    cards = board(conn, project, now)
-    line = live_line(conn, project, local, cards=cards)
+    # each project's board once, and the floor once: the whole factory's (F132 D9, F228)
+    names = every_project(conn, project)
+    cards = {name: board(conn, name, now) for name in names}
+    line = live_line(conn, project, local, cards=cards, projects=names)
 
     def url(path: str, since: datetime) -> str:
         from urllib.parse import urlencode
