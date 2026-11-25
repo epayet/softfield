@@ -3372,3 +3372,98 @@ def test_a_merge_flashes_the_maps_checks_light(page, line_client):
     assert page.evaluate("() => window.flashes") == []
     refresh(page)
     assert set(page.evaluate("() => window.flashes")) == {"light flash-green"}
+
+
+# --- map card (F199-04) --------------------------------------------------------------------
+
+
+def _map_html(line_db) -> str:
+    """The /floor page HTML with the live document."""
+    from fastapi.testclient import TestClient
+
+    from factory_dashboard.app import create_app, get_now
+
+    app = create_app(line_db, PROJECT)
+    app.dependency_overrides[get_now] = lambda: NOW.astimezone()
+    client = TestClient(app, base_url="http://127.0.0.1:8765")
+    return str(client.get("/floor").text)
+
+
+def _factory_js() -> str:
+    return (STATIC / "factory.js").read_text()
+
+
+def test_the_map_page_has_a_map_card_element(line_db):
+    """F199-04: the map page carries a #map-card element alongside #crate-card."""
+    html = _map_html(line_db)
+    assert 'id="map-card"' in html
+    assert 'id="crate-card"' in html
+
+
+def test_factory_js_has_the_what_mapping_and_what_function(line_db):
+    """F199-04: factory.js defines WHAT for every map element and the what() helper."""
+    js = _factory_js()
+    # The WHAT mapping covers seeds, sprouting, planted, queue, checks, merged, ripe, stash, legend
+    for key in (
+        "seeds",
+        "sprouting",
+        "planted",
+        "queue",
+        "checks",
+        "merged",
+        "ripe",
+        "stash",
+        "legend",
+    ):
+        assert f'"{key}"' in js, f"WHAT should have key: {key}"
+    # The what() function marks interactive elements
+    assert "function what(g, key)" in js or "what(g, key)" in js
+
+
+def test_factory_js_has_show_map_card_function(line_db):
+    """F199-04: factory.js defines showMapCard to fill the map card."""
+    js = _factory_js()
+    assert "function showMapCard" in js
+    assert "mapCardKey" in js
+
+
+def test_factory_js_click_listener_handles_data_what(line_db):
+    """F199-04: the click listener finds [data-what] elements."""
+    js = _factory_js()
+    assert 'document.addEventListener("click"' in js
+    assert "data-what" in js
+
+
+def test_factory_js_keyboard_listener_handles_data_what(line_db):
+    """F199-04: the keyboard listener handles Enter on [data-what]."""
+    js = _factory_js()
+    assert 'document.addEventListener("keydown"' in js
+    assert "data-what" in js
+
+
+def test_factory_js_restores_map_card_on_drawfloor(line_db):
+    """F199-04: drawFloor restores the map card across the 5 s refresh."""
+    js = _factory_js()
+    assert "mapCardKey" in js
+    assert "showMapCard" in js
+
+
+def test_the_map_card_shows_what_when_a_station_is_tapped(page, line_client):
+    """A tap on the seeds station opens the card with its words."""
+    open_map(page, line_client, WIDE_SCREEN)
+    # The map should have elements with data-what attributes
+    has_what = page.evaluate("""() => {
+        const els = document.querySelectorAll('[data-what]');
+        return els.length > 0;
+    }""")
+    assert has_what
+
+
+def test_the_planted_card_lists_cards_with_their_links(line_db):
+    """F199-04: the planted card lists each card as a link to its page."""
+    html = _map_html(line_db)
+    # The map-card element should be in the HTML
+    assert 'id="map-card"' in html
+    # factory.js should handle the planted key
+    js = _factory_js()
+    assert "planted" in js

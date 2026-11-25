@@ -586,6 +586,7 @@
   // A zone: a bay with ticks and a hazard plate naming it; the machines' zones are their stations
   function mapZone(svg, key, [x, y, w, h, name]) {
     const g = key === "field" ? add(svg, "g", { "data-zone": key }) : mapStation(svg, key);
+    what(g, key);
     add(g, "rect", { x, y, width: w, height: h, class: "zone" });
     ticks(g, x, y, w, h);
     add(g, "path", { class: "plate-b", d: `M${x} ${y}H${x + name.length * 6.6 + 12}l-6 13H${x}Z` });
@@ -618,6 +619,7 @@
   // Seed and sprouting: a big number on a plot
   function plot(svg, id, [x, y, w, h], count, name) {
     const g = mapStation(svg, id);
+    what(g, id);
     add(g, "rect", { x, y, width: w, height: h, class: "seedplot" });
     text(g, x + w / 2, y + h / 2 + 4, String(count), "num", { "text-anchor": "middle" });
     text(g, x + w / 2, y + h - 7, name, "dim", { "text-anchor": "middle" });
@@ -634,6 +636,7 @@
   // ticket started edges it orange, a bug's edge is dashed. Tiles shrink when the cards outgrow P.
   function planted(svg, doc, count, P) {
     const g = mapStation(svg, "rows");
+    what(g, "planted");
     add(g, "rect", { x: P.x, y: P.y, width: P.w, height: P.h, class: "plot" });
     text(g, P.x, P.y + 10, `PLANTED · ${count.rows}`, "title");
     const cards = plantedCards(doc);
@@ -662,6 +665,7 @@
   function mapQueue(svg, doc, Q, tall) {
     const wait = doc.wait && doc.wait.station === "queue";
     const g = mapStation(svg, "queue", wait ? "station clogged" : "station");
+    what(g, "queue");
     add(g, "path", { class: "hopper", d: `M${Q.x} ${Q.y}H${Q.x + Q.w}L${Q.x + Q.w - 12} ${Q.y + Q.h}H${Q.x + 12}Z` });
     const mid = Q.x + Q.w / 2;
     text(g, mid, Q.y + (tall ? 12 : 16), "QUEUE", "title", { "text-anchor": "middle" });
@@ -684,6 +688,7 @@
     const working = m.state === "working" && !wait;
     const cls = ["machine", m.station, wait ? "clogged" : m.state, m.stand_in ? "stand-in" : ""].filter(Boolean).join(" ");
     const g = add(svg, "g", { class: cls, "data-machine": m.id });
+    g.classList.add("tap");
     add(g, "title", {}, `${m.name} · ${m.where} · ${wait ? wait.words : m.state}${m.rating !== "" ? ` · rated ${m.rating}` : ""}`);
     add(g, "path", { class: "unit", d: `M${x} ${y}H${x + w - 8}l8 8V${y + h}H${x}Z` });
     add(g, "rect", { x: x + 5, y: y + 5, width: 5, height: 5, class: "led" });
@@ -736,6 +741,7 @@
   // The checks: a gate with the light that flashes for each result
   function mapChecks(svg, [x, y, w, h], tall) {
     const g = mapStation(svg, "checks");
+    what(g, "checks");
     add(g, "path", { class: "gate", d: `M${x} ${y + 8}l8 -8H${x + w - 8}l8 8V${y + h - 8}l-8 8H${x + 8}l-8 -8Z` });
     add(g, "circle", { cx: x + w / 2, cy: y + (tall ? 18 : 30), r: tall ? 8 : 11, class: "light" });
     text(g, x + w / 2, y + h - (tall ? 12 : 20), "CHECKS", "title", { "text-anchor": "middle" });
@@ -744,6 +750,7 @@
   // Merged today, ripe and harvested: a box with its name and number, then what it holds
   function box(svg, id, [x, y, w, h], name, count, cls, draw = null) {
     const g = mapStation(svg, id);
+    what(g, id);
     add(g, "rect", { x, y, width: w, height: h, class: cls });
     ticks(g, x, y, w, h);
     text(g, x + 7, y + 15, name, "title");
@@ -801,6 +808,37 @@
     text(g, 8, L.statusY, cut(`NOW · ${words}`, most), "status");
   }
 
+  const WHAT = {
+    seeds: ["Seed", "65 ideas and set-aside tickets. A conversation with the lead plans them. On the page: opens the list."],
+    sprouting: ["Sprouting", "8 cards being planned with the lead. On the page: opens the Planning room."],
+    planted: ["Planted", "57 cards in line for the factory, in the board's order; 19 have a ticket started. On the page: opens this list, each card a link to its page."],
+    queue: ["Queue", "105 tickets in run order. Faded, dashed crates wait for another ticket."],
+    checks: ["Checks", "The runner's checks on each ticket's work: the light flashes green for a pass, red for a fail."],
+    merged: ["Merged today", "Tickets whose work reached main today."],
+    ripe: ["Ripe", "Every ticket done and the review written: yours to sign off. On the page: opens the review."],
+    stash: ["Harvested", "65 cards signed off, the latest first."],
+    legend: ["How to read the map", "Orange crate: a lead ticket. Blue crate: a developer ticket. Peach crate: a review or a planner job.\nYellow belt: carrying now. Faint yellow: work went this way today, and its number says how many. Thin red belt: failed work coming back.\nA tile is a planted card: yellow fill, its merged tickets; orange edge, a ticket started; dashed, a bug."],
+  };
+
+  const BELT_LABELS = {
+    "seeds→planting": ["sprouting", "Cards move this way when you plan and approve them."],
+    "planting→rows": ["planted", "Cards move this way when you plan and approve them."],
+    "rows→queue": ["tickets", "Cards move this way when you plan and approve them."],
+    "queue→lead": ["lead tickets", "Cards move this way when you plan and approve them."],
+    "queue→developers": ["developer", "Cards move this way when you plan and approve them."],
+    "lead→checks": ["lead's work", "Cards move this way when you plan and approve them."],
+    "developers→checks": ["to checks", "Cards move this way when you plan and approve them."],
+    "checks→developers": ["failed: retry", "Cards move this way when you plan and approve them."],
+    "checks→lead": ["failed twice: direction · 3×: escalation", "Cards move this way when you plan and approve them."],
+    "checks→merged": ["merged", "Cards move this way when you plan and approve them."],
+    "merged→ripe": ["ripened", "Cards move this way when you plan and approve them."],
+    "ripe→stash": ["your sign-off", "Cards move this way when you plan and approve them."],
+    "merged→reviewers": ["checkpoints", "Cards move this way when you plan and approve them."],
+  };
+
+  // A zone, station or plot that a tap opens the card for: marks it and records what to show.
+  function what(g, key) { g.setAttribute("data-what", key); g.classList.add("tap"); }
+
   function drawMap(map, doc, L) {
     map.setAttribute("viewBox", `0 0 ${L.w} ${L.h}`);
     const svg = document.createElementNS(NS, "svg");  // drawn aside, then morphed into `map`
@@ -832,6 +870,7 @@
   let shownDoc = null;  // the document the floor last drew, live or replayed: the card's
   let cardCrate = null;  // the crate the card shows; null: closed. A redraw shows it again
   const SEEDS = Symbol("seeds");  // as `cardCrate`: the card lists the set-aside tickets
+  let mapCardKey = null;  // the map element the card shows; null: closed. A redraw shows it again
 
   // svg#map when the page has one (F199); else the Overview's two floors, one shown
   function drawFloor(doc) {
@@ -850,6 +889,7 @@
     shownDoc = doc;
     if (cardCrate === SEEDS) showSeeds();
     else if (cardCrate) showCard(cardCrate.key, cardCrate.project);
+    if (mapCardKey) showMapCard(mapCardKey, doc);
   }
 
   let drawn = null;  // the live document last drawn, and on which floor; null: draw it again
@@ -1151,12 +1191,88 @@
     cardCrate = null;
   }
 
+  // The map card (F199-04): a tap on anything on the map says what it is, in plain words,
+  // and links to where it lives. Built from nodes and text, never HTML.
+  function showMapCard(key, doc) {
+    const card = document.getElementById("map-card");
+    if (!card || !key || !doc) return;
+    mapCardKey = key;
+    const parts = [];
+    if (key in WHAT) {
+      const [title, words] = WHAT[key];
+      parts.push(el("div", "card-head", title));
+      parts.push(el("div", "card-words", words));
+    } else if (key === "planted") {
+      const cards = doc.field.planted || [];
+      const head = el("div", "card-head", `${plural(cards.length, "card", "cards")} planted`);
+      parts.push(head);
+      const list = el("ul", "card-list");
+      for (const card of cards) {
+        const item = el("li");
+        if (plate(card)) item.append(el("span", "proj", card.project));
+        const link = el("a", "card-ticket", card.key);
+        link.setAttribute("href", `/milestones/${encodeURIComponent(card.key)}${own_query(card.project)}`);
+        item.append(link);
+        if (card.title) item.append(el("span", "card-title", card.title));
+        list.append(item);
+      }
+      parts.push(list);
+    } else if (key === "queue") {
+      const [title, words] = ["Queue", `${doc.queue.length} tickets in run order. Faded, dashed crates wait for another ticket.`];
+      parts.push(el("div", "card-head", title), el("div", "card-words", words));
+    } else if (key === "checks") {
+      const [title, words] = ["Checks", "The runner's checks on each ticket's work: the light flashes green for a pass, red for a fail."];
+      parts.push(el("div", "card-head", title), el("div", "card-words", words));
+    } else if (key === "merged") {
+      const [title, words] = ["Merged today", "Tickets whose work reached main today."];
+      parts.push(el("div", "card-head", title), el("div", "card-words", words));
+    } else if (key === "ripe") {
+      const [title, words] = ["Ripe", "Every ticket done and the review written: yours to sign off."];
+      parts.push(el("div", "card-head", title), el("div", "card-words", words));
+    } else if (key === "stash") {
+      const [title, words] = ["Harvested", "Cards signed off, the latest first."];
+      parts.push(el("div", "card-head", title), el("div", "card-words", words));
+    } else if (key === "legend") {
+      const [title, words] = ["How to read the map", "Orange crate: a lead ticket. Blue crate: a developer ticket.\nA tile is a planted card: yellow fill its merged tickets; orange edge a ticket started."];
+      parts.push(el("div", "card-head", title), el("div", "card-words", words));
+    } else {
+      const m = doc.machines.find((one) => one.id === key);
+      if (!m) return;
+      const title = m.name;
+      const rating = m.rating !== "" ? `rated ${m.rating}` : "not rated yet";
+      const station = m.station === "developers" ? "the developer bay" : m.station === "lead" ? "the lead" : "reviewers";
+      const working = m.state === "working" && m.crate;
+      const on = working ? `${m.crate.ticket || "job"} · ${m.crate.minutes} min` : m.state;
+      const parts2 = [el("div", "card-head", title), el("div", "card-words", `${m.where}, ${rating}. Station: ${station}. On the page: its crate, and a link to the agent.`)];
+      if (working) {
+        parts2.push(meta([["on", on], ["station", station]]));
+      }
+      parts.push(...parts2);
+    }
+    fillMapCard(card, parts);
+  }
+
+  function fillMapCard(card, parts) {
+    card.replaceChildren(...parts);
+    card.hidden = false;
+  }
+
+  function hideMapCard() {
+    const card = document.getElementById("map-card");
+    if (card) card.hidden = true;
+    mapCardKey = null;
+  }
+
   // One listener on the floor wrapper finds the [data-crate] (merged crates included) clicked
   document.addEventListener("click", (e) => {
     const crate = e.target.closest("[data-crate]");
     if (crate) { showCard(crate.dataset.crate, crate.dataset.project); return; }  // a merged crate is a [data-crate] too
     if (e.target.closest("[data-seeds]")) { showSeeds(); return; }
     if (e.target.closest("[data-rows-toggle]")) { toggleRows(); return; }
+    const w = e.target.closest("[data-what]");
+    if (w) { showMapCard(w.dataset.what, shownDoc); return; }
+    const mapCard = document.getElementById("map-card");
+    if (mapCard && !mapCard.hidden && !mapCard.contains(e.target)) hideMapCard();
     const card = document.getElementById("crate-card");
     if (card && !card.hidden && !card.contains(e.target)) hideCard();
   });
@@ -1165,11 +1281,15 @@
   document.addEventListener("keydown", (e) => {
     const card = document.getElementById("crate-card");
     if (e.key === "Escape" && card && !card.hidden) { hideCard(); return; }
+    const mapCard = document.getElementById("map-card");
+    if (e.key === "Escape" && mapCard && !mapCard.hidden) { hideMapCard(); return; }
     if (e.key !== "Enter") return;
     const crate = e.target.closest("[data-crate]");
     if (crate) { e.preventDefault(); showCard(crate.dataset.crate, crate.dataset.project); }
     if (e.target.closest("[data-seeds]")) { e.preventDefault(); showSeeds(); }
     if (e.target.closest("[data-rows-toggle]")) { e.preventDefault(); toggleRows(); }
+    const w = e.target.closest("[data-what]");
+    if (w) { e.preventDefault(); showMapCard(w.dataset.what, shownDoc); }
   });
 
   drawAll(document);

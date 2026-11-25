@@ -12,6 +12,8 @@
     <svg id="map" class="map" viewBox="0 0 960 540" preserveAspectRatio="xMidYMid meet" role="img" aria-label="The factory from above: the field, the queue, the lead, the reviewers and the developer bay, the checks, merged today, ripe and harvested."></svg>
     <script type="application/json" id="factory-line">{{ line | tojson }}</script>
   </section>
+  <div id="map-card" hidden></div>
+  <div id="crate-card" hidden></div>
 </div>
 <script src="{{ static('factory.js') }}" defer></script>
 {% endblock %}
