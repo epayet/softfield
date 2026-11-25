@@ -344,6 +344,46 @@ def queue(
     return sorted(ready_now, key=order) + sorted(waiting, key=order)
 
 
+# --- the stored queue plan (D7) -----------------------------------------------------------
+
+
+def _build_plan_from(
+    plan: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    """The Overview's Queue panel from the runner's stored plan (D7), or None."""
+    if plan is None:
+        return None
+    from factory_dashboard.queue import build
+
+    b = build(plan)
+    return {
+        "sentence": b.sentence,
+        "tickets": b.tickets,
+        "job_count": b.job_count,
+        "can_go": b.can_go,
+        "by_project": b.by_project,
+        "belt": [
+            {
+                "n": r.n,
+                "project": r.project,
+                "kind": r.kind,
+                "subject": r.subject,
+                "title": r.title,
+                "who": r.who,
+                "css": r.css,
+                "waits": r.waits,
+                "reason": r.reason,
+                "card": r.card,
+                "is_ticket": r.is_ticket,
+                "early_for": r.early_for,
+                "preflight": r.preflight,
+            }
+            for r in b.belt
+        ],
+        "at": b.at,
+    }
+
+
 # --- queued support jobs ------------------------------------------------------------------
 
 
@@ -1171,6 +1211,7 @@ def _live_context(
         "reserve_cards": own.reserve_cards,  # named under them (F172 D6)
         "pace": pace.week,  # the week meter's post and plate (f9-29)
         "lead_holds": pace.row,  # what a held lead ticket's row says
+        "plan": _build_plan_from(metrics.latest_queue_plan(conn)),
     }
 
 
