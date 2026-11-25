@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta, timezone
 from html import unescape
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qs, urlencode, urlsplit
+from urllib.parse import parse_qs, quote, urlencode, urlsplit
 
 import pytest
 
@@ -1755,7 +1755,30 @@ def test_the_queue_panel_has_the_whole_queue_link_text(serve, db_path):
                 0,
                 "Over pace.",
                 ("fact 1",),
-                (PlanLine(PROJECT, "ticket", "f1", "Title", None, "go", None, "", "f1"),),
+                (
+                    PlanLine(
+                        PROJECT,
+                        "ticket",
+                        "f1-01-alpha",
+                        "Alpha title",
+                        "lead",
+                        "go",
+                        None,
+                        "",
+                        "F1",
+                    ),
+                    PlanLine(
+                        PROJECT,
+                        "ticket",
+                        "f1-02-beta",
+                        "Beta title",
+                        "developer",
+                        "go",
+                        None,
+                        "",
+                        "F1",
+                    ),
+                ),
             ),
         )
     finally:
@@ -1765,13 +1788,19 @@ def test_the_queue_panel_has_the_whole_queue_link_text(serve, db_path):
     # Plan-derived sentence
     assert "Over pace." in queue_section
     # Plan-derived count
-    assert "1 ticket waiting" in queue_section
-    # Ordered Next in line rows
+    assert "2 tickets waiting" in queue_section
+    # Ordered Next in line rows: number, id, title, who, card
     next_in_line = queue_section.split("Next in line", 1)[1]
-    assert "1 f1" in next_in_line
-    # Exact /queue link
-    assert "The whole queue ›" in queue_section
-    assert "tickets" not in queue_section.split("The whole queue")[1].split("</a>")[0]
+    first = re.search(r"1 f1-01-alpha Alpha title · the lead\s*F1", next_in_line)
+    second = re.search(r"2 f1-02-beta Beta title · a developer\s*F1", next_in_line)
+    assert first and second and first.start() < second.start()
+    # Each ticket links to its own page, in its project
+    raw = section_raw(html, "queue")
+    project = quote(PROJECT)
+    for ticket in ("f1-01-alpha", "f1-02-beta"):
+        assert f'<a href="/tickets/{ticket}?project={project}">{ticket}</a>' in raw
+    # The whole-queue link goes to /queue and reads without counts
+    assert re.search(r'<a href="/queue">\s*The whole queue ›\s*</a>', raw)
     # The old queue rendering does not appear when a plan is stored
     assert "Queue 7 tickets waiting" not in queue_section
 
