@@ -1647,3 +1647,62 @@ textarea { max-height: 60vh; overflow-y: auto; }
 .idea.on-its-way { border-style: dashed; border-color: var(--hazard); border-left-style: solid; }
 .idea .way { font: 600 12px/1.35 var(--mono); color: var(--hazard); }
 .idea .done-note { font-size: 12.5px; color: var(--muted); }
+
+/* The queue (F279 D6): the whole factory's line, from the runner's stored plan */
+.queue-page .q-head h1 { font: 700 22px/1.1 var(--display); letter-spacing: .06em; text-transform: uppercase; margin: 0 0 2px; }
+.queue-page .q-head .src { font: 11px var(--mono); color: var(--muted); }
+.queue-page .mode { position: relative; margin: 10px 0 12px; padding: 12px 14px 12px 22px; background: var(--plate);
+  border: 1px solid var(--rule); clip-path: var(--notch); }
+.queue-page .mode::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 8px;
+  background: repeating-linear-gradient(-45deg, var(--hazard) 0 6px, var(--hazard-ink) 6px 12px); }
+.queue-page .mode .key { font: 600 10.5px var(--display); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.queue-page .mode .say { font: 700 19px/1.25 var(--display); letter-spacing: .02em; margin: 2px 0 6px; text-wrap: balance; }
+.queue-page .mode ul { margin: 0; padding: 0; list-style: none; font-size: 13.5px; color: var(--ink-2); }
+.queue-page .mode li::before { content: "▸ "; color: var(--muted); }
+.queue-page .readouts { grid-template-columns: repeat(3, 1fr); margin: 0 0 12px; }
+.queue-page .readouts div { background: var(--bay); padding: 7px 8px; }
+.queue-page .readouts b { display: block; font: 700 22px/1 var(--display); font-variant-numeric: tabular-nums; }
+.queue-page .readouts span { font: 600 10px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.queue-page .q-projects { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 12px; font-size: 12.5px; color: var(--muted); }
+.queue-page .way { border: 1px dashed var(--opus); padding: 6px 10px; font-size: 13px; margin: 0 0 12px; background: var(--bay); }
+.queue-page .way b { font: 600 11.5px var(--mono); color: var(--warn-ink); }
+.queue-page svg.conveyor { display: block; width: 100%; max-width: 520px; height: auto; margin: 0 0 6px; }
+.queue-page .conveyor .belt-label { font: 9px var(--mono); fill: var(--muted); letter-spacing: 1.5px; }
+.queue-page .conveyor .belt-bed { fill: var(--plate); stroke: var(--rule); }
+.queue-page .conveyor .belt-roll { stroke: var(--rule); }
+.queue-page .conveyor .crate { fill: var(--plate); stroke-width: 2; stroke: var(--ink-2); stroke-dasharray: 4 2; }
+.queue-page .conveyor .crate.developer { stroke: var(--dev); stroke-dasharray: none; }
+.queue-page .conveyor .crate.lead { stroke: var(--opus); stroke-dasharray: none; }
+.queue-page .conveyor .crate-n { font: 11px var(--mono); fill: var(--fg); text-anchor: middle; }
+.queue-page .bay-head { display: flex; align-items: center; gap: 8px; margin: 14px 0 6px;
+  font: 700 12px var(--display); letter-spacing: .12em; text-transform: uppercase; }
+.queue-page .bay-head::after { content: ""; flex: 1; height: 1px; background: var(--rule); }
+.queue-page .bay-head small { font: 400 12px var(--body); letter-spacing: 0; text-transform: none; color: var(--muted); }
+.queue-page .rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.queue-page .rows > li { background: var(--plate); border-left: 3px solid var(--rule); min-width: 0; }
+.queue-page .rows > li.lead { border-left-color: var(--opus); }
+.queue-page .rows > li.developer { border-left-color: var(--dev); }
+.queue-page .rows > li.job { border-left-color: var(--ink-2); border-left-style: double; }
+.queue-page .rows details > summary { list-style: none; display: grid; grid-template-columns: 30px 1fr; gap: 8px; padding: 6px 8px 6px 0; cursor: pointer; }
+.queue-page .rows details > summary::-webkit-details-marker { display: none; }
+.queue-page .rows .n { font: 600 12px var(--mono); color: var(--muted); text-align: right; padding-top: 1px; }
+.queue-page .rows .id { font: 600 12px var(--mono); overflow-wrap: anywhere; }
+.queue-page .rows .t { display: block; font-size: 13.5px; color: var(--fg); }
+.queue-page .rows .why { display: block; font-size: 12.5px; color: var(--muted); }
+.queue-page .rows .why .who-lead { color: var(--opus-ink); }
+.queue-page .rows .why .who-developer { color: var(--dev); }
+.queue-page .rows .more-row { padding: 0 10px 10px 38px; font-size: 13px; color: var(--ink-2); border-top: 1px solid var(--rule); }
+.queue-page .rows .more-row dl { display: grid; grid-template-columns: 82px 1fr; gap: 2px 8px; margin: 8px 0; }
+.queue-page .rows .more-row dt { font: 600 10.5px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); padding-top: 2px; }
+.queue-page .rows .more-row dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.queue-page .rows .more-row ul { margin: 0; padding-left: 16px; }
+.queue-page .rows > li.group > details > summary { display: flex; justify-content: space-between; gap: 8px; padding: 7px 10px; font-size: 13px; }
+.queue-page .rows > li.group > details > .rows { padding: 0 0 6px 10px; }
+.queue-page .rows > li.group b { font: 600 12px var(--mono); overflow-wrap: anywhere; }
+.queue-page .rows .c { font: 700 15px var(--display); color: var(--fg); }
+.queue-page .rows > li.sub { background: none; border: 0; }
+@media (min-width: 900px) {
+  .queue-page .q-top { display: grid; grid-template-columns: 1.3fr 1fr; gap: 16px; align-items: start; }
+  .queue-page .q-top .readouts { margin-top: 34px; }
+  .queue-page .q-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+}

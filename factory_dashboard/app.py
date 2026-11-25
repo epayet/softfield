@@ -123,6 +123,7 @@ def create_app(db: Path, project: str, host: str = HOST) -> FastAPI:
         planning,
         projects,
         proposal,
+        queue,
         requests,
         runs,
         stacks_routes,
@@ -156,6 +157,7 @@ def create_app(db: Path, project: str, host: str = HOST) -> FastAPI:
     app.include_router(thread.router)
     app.include_router(proposal.router)
     app.include_router(board.router)
+    app.include_router(queue.router)
 
     @app.get("/version", response_class=HTMLResponse)
     def version(seen: str = "") -> str:

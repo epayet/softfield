@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}The queue{% endblock %}
+{% block crumbs %} › The queue{% endblock %}
+{% macro plate(name) %}{% if many_projects %}<span class="proj">{{ name }}</span>{% endif %}{% endmacro %}
+{% macro row(r) %}
+<li class="{{ r.css }}" id="row-{{ r.n }}"><details id="q-{{ r.project }}-{{ r.kind }}-{{ r.subject }}"><summary><span class="n">{{ r.n }}</span><span>{{ plate(r.project) }}<span class="id">{% if r.is_ticket %}{{ r.subject }}{% else %}{{ r.kind }} · {{ r.subject }}{% endif %}</span>
+  {% if r.is_ticket and r.title %}<span class="t">{{ r.title }}</span>{% endif %}
+  <span class="why"><span class="who-{{ r.css }}">{{ r.who_words }}</span>{% if r.card %} · {{ r.card | upper }}{% endif %} · {{ r.reason }}{% if r.waits %} · {{ r.waits }}{% endif %}</span></span></summary>
+  <div class="more-row">
+    <dl>
+      {% if r.title %}<dt>{% if r.is_ticket %}Goal{% else %}What{% endif %}</dt><dd>{{ r.title }}</dd>{% endif %}
+      <dt>Why here</dt><dd>{{ r.reason }}{% if r.early_for %}; it goes early because {{ r.early_for }} waits for it{% endif %}</dd>
+      <dt>Waits for</dt><dd>{{ r.waits or "nothing: it can go" }}</dd>
+      {% if r.is_ticket %}<dt>Pre-flight</dt><dd>{% if r.preflight %}<ul>{% for p in r.preflight %}<li>{{ p }}</li>{% endfor %}</ul>{% else %}no problem{% endif %}</dd>{% endif %}
+    </dl>
+    {% if r.is_ticket %}<a href="/tickets/{{ r.subject }}?project={{ r.project | urlencode }}">The ticket ›</a>{% endif %}{% if r.is_ticket and r.card %} · {% endif %}{% if r.card %}<a href="/planning/{{ r.card | lower }}?project={{ r.project | urlencode }}">{{ r.card | upper }}'s thread ›</a>{% endif %}
+  </div></details></li>
+{% endmacro %}
+{% block content %}
+<div class="page queue-page">
+<div id="queue-live" hx-get="/queue{{ q }}" hx-trigger="every 30s [window.liveIdle()]" hx-select="#queue-live" hx-swap="outerHTML">
+{% if plan is none %}
+  <div class="q-head"><h1>The queue</h1></div>
+  <p id="no-plan" class="sub">{{ no_plan }}</p>
+{% else %}
+<div class="q-top">
+  <div>
+    <div class="q-head"><h1>The queue</h1><span class="src">worked out at {{ plan.at | local("%H:%M") }}, the runner's last pick · refreshes every 30 s</span></div>
+    <div class="mode" id="q-mode">
+      <div class="key">What drives the order now</div>
+      <div class="say">{{ plan.sentence }}</div>
+      {% if plan.facts %}<ul>{% for fact in plan.facts %}<li>{{ fact }}</li>{% endfor %}</ul>{% endif %}
+    </div>
+  </div>
+  <div>
+    <div class="readouts" id="q-readouts">
+      <div><b>{{ plan.tickets }}</b><span>tickets · {{ plan.job_count }} job{{ "" if plan.job_count == 1 else "s" }}</span></div>
+      <div><b>{{ plan.can_go }}</b><span>can go</span></div>
+      <div><b>{{ plan.waiting }}</b><span>wait</span></div>
+    </div>
+    {% if many_projects %}<div class="q-projects">{% for name, count in plan.by_project %}<span class="proj">{{ name }}</span>{{ count }} {% endfor %}</div>{% endif %}
+  </div>
+</div>
+{% endif %}
+
+{% for p in pending %}
+<div class="way"><b>On its way</b> · {{ plate(p.project) }}{{ p.words }}{% if p.subject %}: {{ p.subject }}{% endif %} · applied at the next pick</div>
+{% endfor %}
+
+{% if plan is not none %}
+{% if plan.belt %}
+<svg class="conveyor" viewBox="0 0 360 86" role="img" aria-label="The next {{ plan.belt | length }} on the belt">
+  <text class="belt-label" x="0" y="10">NEXT ON THE BELT →</text>
+  <rect class="belt-bed" x="0" y="58" width="360" height="8"/>
+  {% for x in range(20, 360, 40) %}<line class="belt-roll" x1="{{ x }}" y1="58" x2="{{ x }}" y2="66"/>{% endfor %}
+  {% for r in plan.belt %}{% set x = 306 - 54 * loop.index0 %}
+  <a href="#row-{{ r.n }}"><title>{{ r.n }}: {{ r.subject }} ({{ r.who_words }})</title><rect class="crate {{ r.css }}" x="{{ x }}" y="22" width="44" height="34"/><text class="crate-n" x="{{ x + 22 }}" y="44">{{ r.n }}</text></a>
+  {% endfor %}
+  <text class="belt-label" x="0" y="84">dashed: a job · blue: a developer · orange: the lead · tap a crate for its row</text>
+</svg>
+{% endif %}
+
+<div class="q-cols">
+<div>
+{% if plan.lane %}
+<div class="bay-head">Fast lane <small>goes first</small></div>
+<ol class="rows" id="q-lane">{% for r in plan.lane %}{{ row(r) }}{% endfor %}</ol>
+{% endif %}
+{% if plan.jobs %}
+<div class="bay-head">Jobs <small>go before any ticket</small></div>
+<ol class="rows" id="q-jobs">{% for r in plan.jobs %}{{ row(r) }}{% endfor %}</ol>
+{% endif %}
+<div class="bay-head">Can go <small>tickets, in the order the runner takes them</small></div>
+<ol class="rows" id="q-go">
+  {% for r in plan.go_shown %}{{ row(r) }}{% endfor %}
+  {% if plan.go_folded %}
+  <li class="group"><details id="q-more-go"><summary><span>{{ plan.go_folded | length }} more that can go</span><span class="c">{{ plan.go_folded | length }}</span></summary>
+    <ol class="rows">{% for r in plan.go_folded %}{{ row(r) }}{% endfor %}</ol></details></li>
+  {% endif %}
+  {% if not plan.go %}<li class="sub">Nothing can go now.</li>{% endif %}
+</ol>
+</div>
+<div>
+<div class="bay-head">Waits <small>{{ plan.waiting }}, by the ticket they wait for</small></div>
+<ol class="rows" id="q-waits">
+  {% for f in plan.waits %}
+  <li class="group"><details id="q-wait-{{ f.project }}-{{ f.key | replace(' ', '-') }}"><summary><span>{% if f.is_ticket %}for <b>{{ f.key }}</b>{% if f.n %} ({{ f.n }}){% endif %}{% else %}{{ f.key }}{% endif %} {{ plate(f.project) }}</span><span class="c">{{ f.rows | length }}</span></summary>
+    <ol class="rows">{% for r in f.rows %}{{ row(r) }}{% endfor %}</ol></details></li>
+  {% endfor %}
+  {% if not plan.waits %}<li class="sub">Nothing waits.</li>{% endif %}
+</ol>
+</div>
+</div>
+{% endif %}
+</div>
+</div>
+<script>
+  // An open fold stays open across the 30 s refresh (F279 D6): note them before the swap,
+  // open them again after it.
+  (function () {
+    let open = [];
+    document.addEventListener("htmx:beforeSwap", (event) => {
+      if (event.detail.target.id !== "queue-live") return;
+      open = Array.from(document.querySelectorAll("#queue-live details[open]"), (d) => d.id);
+    });
+    document.addEventListener("htmx:afterSettle", () => {
+      open.forEach((id) => { const d = document.getElementById(id); if (d) d.open = true; });
+    });
+  })();
+</script>
+{% endblock %}
