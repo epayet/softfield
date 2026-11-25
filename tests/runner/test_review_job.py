@@ -19,15 +19,13 @@ from runner.review_job import fix_ticket, fix_tickets
 from runner.state import State, load_state, save_state
 from runner.tasks import parse_task
 from tests.runner.conftest import git, write_task
-from tests.runner.test_loop import (  # noqa: F401 - _new_command and _no_probe are fixtures
+from tests.runner.test_loop import (
     COPILOT,
     ROLES,
     SHADOW_FINDING,
     _config,
     _fake_copilot,
     _merged,
-    _new_command,
-    _no_probe,
     _rows,
     _ticket_in,
 )

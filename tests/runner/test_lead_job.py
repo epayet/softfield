@@ -8,13 +8,11 @@ from pathlib import Path
 from runner import lead_job, session
 from runner.claude import UsageLimited
 from tests.runner.conftest import write_task
-from tests.runner.test_loop import (  # noqa: F401 - _new_command and _no_probe are fixtures
+from tests.runner.test_loop import (
     _config,
     _limited_then,
     _Login,
     _login_items,
-    _new_command,
-    _no_probe,
     _rows,
 )
 

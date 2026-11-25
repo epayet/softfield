@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from runner import backup, loop, session, waits
+from runner import backup, loop, session
 from runner.config import Backup, Config, ConfigError, load_config
 from runner.report import TaskRecord
 from tests.runner.conftest import git, write_task
@@ -169,12 +169,6 @@ def test_a_backup_that_keeps_nothing_or_never_waits_is_a_config_error(tmp_path, 
 
 
 # --- the run: at its start, at each pick and while it waits ---------------------------------
-
-
-@pytest.fixture(autouse=True)
-def _quiet_run(monkeypatch):
-    monkeypatch.setattr(session, "OPEN_RUNS", [])
-    monkeypatch.setattr(waits, "fresh_reading", lambda s: None)  # no real `claude -p`
 
 
 @pytest.fixture

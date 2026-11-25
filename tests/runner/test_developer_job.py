@@ -8,11 +8,9 @@ from runner import checks, developer_job, session
 from runner.gates import GateResult
 from runner.tasks import parse_task
 from tests.runner.conftest import write_task
-from tests.runner.test_loop import (  # noqa: F401 - _new_command and _no_probe are fixtures
+from tests.runner.test_loop import (
     _activity,
     _config,
-    _new_command,
-    _no_probe,
 )
 
 

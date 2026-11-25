@@ -5,14 +5,12 @@ from datetime import timedelta
 
 from runner import session, waits
 from tests.runner.conftest import THURSDAY
-from tests.runner.test_loop import (  # noqa: F401 - _new_command and _no_probe are fixtures
+from tests.runner.test_loop import (
     FIVE_RESETS,
     LINE_33,
     _claude_at,
     _config,
     _f9_review_due,
-    _new_command,
-    _no_probe,
     _switch_on,
     _week_read,
 )

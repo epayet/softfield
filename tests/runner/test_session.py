@@ -23,7 +23,7 @@ from runner.config import Backup, Config
 from runner.local_model import TokenTotals
 from runner.state import State, save_state
 from tests.runner.conftest import git, write_task
-from tests.runner.test_loop import (  # noqa: F401 - _new_command and _no_probe are fixtures
+from tests.runner.test_loop import (
     OWNER_MD,
     ROLE_SECTIONS,
     ROLES,
@@ -34,8 +34,6 @@ from tests.runner.test_loop import (  # noqa: F401 - _new_command and _no_probe 
     _job,
     _lead_docs,
     _limited_then,
-    _new_command,
-    _no_probe,
     _rows,
     _state,
     _switch_on,

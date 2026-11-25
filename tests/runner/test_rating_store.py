@@ -8,11 +8,9 @@ from pathlib import Path
 import pytest
 
 from runner import metrics, rating_store, ratings, session
-from tests.runner.test_loop import (  # noqa: F401 - _new_command and _no_probe are fixtures
+from tests.runner.test_loop import (
     AGENTS,
     _config,
-    _new_command,
-    _no_probe,
     _proven,
 )
 

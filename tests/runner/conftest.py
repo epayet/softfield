@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from runner import session
+from runner import session, waits
 
 
 @pytest.fixture(autouse=True)
@@ -207,3 +207,16 @@ def at_the_keyboard(monkeypatch) -> None:
     """ADR 22 item 4: no command asks y/N, so nothing reads the console or waits on it."""
     monkeypatch.setattr("sys.stdin", _Terminal())
     monkeypatch.setattr("select.select", lambda *a: pytest.fail("the runner waited on stdin"))
+
+
+@pytest.fixture(autouse=True)
+def _new_command(monkeypatch):
+    """Each test is a new command, with the runs its exit ends."""
+    monkeypatch.setattr(session, "OPEN_RUNS", [])
+
+
+@pytest.fixture(autouse=True)
+def _no_probe(monkeypatch):
+    """No fresh reading of Claude's windows (f4-07), unless a test asks for one: the stored
+    readings decide, and no real `claude -p` runs."""
+    monkeypatch.setattr(waits, "fresh_reading", lambda s: None)
