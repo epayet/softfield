@@ -6,9 +6,10 @@ difficulty: 2
 depends_on: []
 files:
   - runner/notify.py
-  - runner/loop.py
+  - runner/session.py
 tests:
   - tests/runner/test_notify.py
+  - tests/runner/test_session.py
   - tests/runner/test_loop.py
 ---
 
@@ -16,7 +17,7 @@ tests:
 When Claude's usage limit pauses a job, the runner sends one quiet phone notification saying until when the work waits, with the hours in brackets: "Claude's 5-hour limit: work waits until 22:30 (3 h)".
 
 ### Context
-Read "What happens today" and D1 to D6 in `.softfield/cards/f241-i-want-a-notification-when-a.md`, then `send`, `to_owner` and `item_message` in `runner/notify.py`, `_notify` in `runner/loop.py`, and the branch of the job loop in `runner/loop.py` that starts at the comment "a limit (ADR 15 item 12)" (it records the refusal with `metrics.add_usage_event`, then gives up, parks or waits). `metrics.refusals` in `runner/metrics.py` lists the earlier refusals.
+Read "What happens today" and D1 to D6 in `.softfield/cards/f241-i-want-a-notification-when-a.md`, then `send`, `to_owner` and `item_message` in `runner/notify.py`, `_notify` in `runner/session.py`, and the branch of the job loop in `call_claude` (`runner/session.py`; its limit tests are in `tests/runner/test_session.py`) that starts at the comment "a limit (ADR 15 item 12)" (it records the refusal with `metrics.add_usage_event`, then gives up, parks or waits). `metrics.refusals` in `runner/metrics.py` lists the earlier refusals.
 - In `runner/notify.py`: a function giving the body from the window (`five_hour`, `seven_day`, other or None), the resume time and now, as D2 says; and a `quiet` keyword on `send` and `to_owner` that adds the header `Priority: low` (D5). The other notifications don't change.
 - In the job loop: when the refusal is certain and the agent's name starts with `claude`, read the earlier refusals before recording this one; unless one from the last 6 hours has a `resets_at` within 10 minutes of this one (D3), send the notification through `_notify`, quiet, opening the Overview (`notify.OVERVIEW`). Its time is `limit.resets_at`, or, with none, when the runner tries again (`now` plus `s.cfg.backoff_min`). Send it before giving up, parking or waiting, so all three notify.
 - No owner item and nothing new stored (D1, D3).

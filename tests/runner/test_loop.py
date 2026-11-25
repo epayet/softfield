@@ -5,7 +5,6 @@ import re
 import sqlite3
 import subprocess
 import tempfile
-import threading
 import time
 import types
 import urllib.error
@@ -19,7 +18,6 @@ from pathlib import Path
 import pytest
 
 from runner import (
-    backup,
     checks,
     claude,
     config,
@@ -31,10 +29,11 @@ from runner import (
     planner,
     prompts,
     ratings,
+    session,
 )
 from runner.agents import Agent, JobResult, JobSpec, Reading, Refusal
-from runner.claude import ClaudeJob, LoginExpired, Progress, TransientError, UsageLimited
-from runner.config import Backup, Config
+from runner.claude import ClaudeJob, LoginExpired, TransientError, UsageLimited
+from runner.config import Config
 from runner.gates import GateResult
 from runner.local_model import STOP_REPEATING, OpencodeRun, StreamFacts, TokenTotals
 from runner.report import SessionReport, TaskRecord
@@ -89,7 +88,7 @@ ROLES = {
 @pytest.fixture(autouse=True)
 def _new_command(monkeypatch):
     """Each test is a new command, with the runs its exit ends."""
-    monkeypatch.setattr(loop, "OPEN_RUNS", [])
+    monkeypatch.setattr(session, "OPEN_RUNS", [])
 
 
 REAL_FRESH_READING = loop.fresh_reading
@@ -208,102 +207,9 @@ def test_a_named_milestones_queue_takes_tickets_written_with_either_key(repo, mo
         return TaskRecord(id=task.id, milestone=task.milestone, result="done")
 
     monkeypatch.setattr(loop, "run_task", run_task)
-    s = loop.open_session(_config(repo), None)
+    s = session.open_session(_config(repo), None)
     assert loop.work_queue(s, milestone="f3-factory-line") is False
     assert ran == ["f3-01-a", "f3-02-b"]
-
-
-def test_the_clock_is_utc_whatever_the_zone(paris):
-    assert loop.now().utcoffset() == timedelta(0)
-    assert loop.now().isoformat().endswith("+00:00")
-
-
-def test_a_run_stores_utc_and_its_folder_is_named_in_local_time(repo, paris):
-    s = loop.open_session(_config(repo), "run")
-    assert s.db is not None
-    started = s.db.execute("SELECT started FROM runs").fetchone()["started"]
-    assert started.endswith("+00:00")
-    assert s.run_dir.name == f"{s.report.started.astimezone():%Y%m%d-%H%M%S}"
-    assert s.run_dir.name != f"{s.report.started:%Y%m%d-%H%M%S}"
-    loop.wait_for_claude(s, 0, loop.now(), "x")
-    at, resets = s.db.execute("SELECT at, resets_at FROM usage_events").fetchone()
-    assert at.endswith("+00:00") and resets.endswith("+00:00")
-    loop.close_session(s)
-
-
-OLD_AT = "2026-09-30T15:00:00+01:00"
-OLD_AS_UTC = "2026-09-30T14:00:00+00:00"
-
-
-def _old_database(cfg: Config, *, collide: bool = False) -> None:
-    """A metrics database that still owes the F187 step, with a time in +01:00."""
-    conn = metrics.open_db(cfg.metrics_db)
-    conn.execute("DELETE FROM once_steps WHERE name = ?", (metrics.UTC_STEP,))
-    for at in (OLD_AT, *([OLD_AS_UTC] if collide else [])):
-        conn.execute("INSERT INTO usage_events (agent, at, kind) VALUES ('claude', ?, 's')", (at,))
-    conn.close()
-
-
-def _usage_times(path: Path) -> list[str]:
-    conn = sqlite3.connect(path)
-    try:
-        return [r[0] for r in conn.execute("SELECT at FROM usage_events ORDER BY id")]
-    finally:
-        conn.close()
-
-
-def test_the_old_times_are_converted_after_a_copy_beside_the_database(repo, capsys):
-    cfg = _config(repo)
-    _old_database(cfg)
-    s = loop.open_session(cfg, None)
-    loop.check_backup(s)
-    [copy] = cfg.metrics_db.parent.glob("factory-metrics-*.sqlite")
-    assert _usage_times(copy) == [OLD_AT]  # the owner's data, as it was
-    assert _usage_times(cfg.metrics_db) == [OLD_AS_UTC]
-    assert "converted 1 stored times to UTC (F187)" in capsys.readouterr().out
-    loop.check_backup(s)
-    assert capsys.readouterr().out == ""
-    assert len(list(cfg.metrics_db.parent.glob("factory-metrics-*.sqlite"))) == 1
-
-
-def test_the_old_times_are_converted_once_the_backup_copy_is_written(repo, tmp_path, capsys):
-    folder = tmp_path / "Dropbox"
-    cfg = replace(_config(repo), backup=Backup(folder, 14, 24))
-    _old_database(cfg)
-    s = loop.open_session(cfg, None)
-    s.backups = backup.Backups(cfg.metrics_db, Backup(folder, 14, 24))
-    loop.check_backup(s)
-    [copy] = folder.glob("factory-metrics-*.sqlite")
-    assert _usage_times(copy) == [OLD_AT]
-    assert _usage_times(cfg.metrics_db) == [OLD_AS_UTC]
-    assert not list(cfg.metrics_db.parent.glob("factory-metrics-*.sqlite"))
-    capsys.readouterr()
-    loop.check_backup(s)  # no new copy is due, and nothing is owed
-    assert capsys.readouterr().out == ""
-
-
-def test_a_collision_changes_nothing_and_is_said_once(repo, capsys):
-    cfg = _config(repo)
-    _old_database(cfg, collide=True)
-    s = loop.open_session(cfg, None)
-    loop.check_backup(s)
-    loop.check_backup(s)
-    assert _usage_times(cfg.metrics_db) == [OLD_AT, OLD_AS_UTC]
-    conn = metrics.open_db(cfg.metrics_db)
-    assert metrics.utc_step_owed(conn)
-    conn.close()
-    out = capsys.readouterr().out
-    assert out.count("Converting the stored times to UTC (F187)") == 1
-    assert len([n for n in s.report.notes if "F187" in n]) == 1
-
-
-def test_a_wait_until_a_stored_time_says_it_in_local_time(repo, paris, monkeypatch):
-    s = loop.open_session(_config(repo), None)
-    seen: list[str] = []
-    monkeypatch.setattr(loop, "set_activity", lambda s, activity, until=None: seen.append(activity))
-    loop.wait_for_claude(s, 0, datetime(2026, 10, 29, 8, 0, tzinfo=UTC), None, limit=False)
-    assert "until 09:00" in seen[0]
-    loop.close_session(s)
 
 
 def test_retry_gets_gate_output_and_a_hint_and_can_recover(repo, fake_model):
@@ -514,18 +420,18 @@ def test_a_developer_ticket_a_lead_ticket_waits_for_is_pulled_in_the_developer_p
     _on_card(repo, "f5-01-other", 5)
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "cards")
-    s = loop.open_session(_config(repo))
+    s = session.open_session(_config(repo))
     ready = load_dir(repo / ".softfield" / "tasks" / "ready", 150)
     task = loop._next_task(s, ready, set(), set())
     assert task is not None and task.id == "f9-01-pulled"
-    loop.close_session(s)
+    session.close_session(s)
 
 
 def _claude_limited(monkeypatch, limited: bool) -> None:
     """A job is parked for a Claude limit, its reset ahead."""
     if limited:
 
-        def ahead(s: loop.Session, at: datetime) -> dispatch.Windows:
+        def ahead(s: session.Session, at: datetime) -> dispatch.Windows:
             return dispatch.Windows(limited_until=at + timedelta(hours=1))
 
         monkeypatch.setattr(loop, "_windows_now", ahead)
@@ -539,7 +445,7 @@ def _regate_session(repo: Path, monkeypatch, *, limited: bool = False, **tickets
     _on_card(repo, "f9-01-gates", 9, **tickets)
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "cards")
-    s = loop.open_session(_config(repo), None)
+    s = session.open_session(_config(repo), None)
     s.state.regate["f9-01-gates"] = {"attempt": 1, "agent": "local"}
     _claude_limited(monkeypatch, limited)
     return s, load_dir(repo / ".softfield" / "tasks" / "ready", 150)
@@ -554,14 +460,14 @@ def test_a_ticket_waiting_only_for_its_gates_is_picked_before_better_tickets(rep
     assert loop._dispatch_ticket(s, task, ready).regate
     other = next(t for t in ready if t.id == "f1-01-first")
     assert not loop._dispatch_ticket(s, other, ready).regate
-    loop.close_session(s)
+    session.close_session(s)
 
 
 def test_a_regate_ticket_is_picked_while_claude_is_limited_or_at_its_reserve(repo, monkeypatch):
     s, ready = _regate_session(repo, monkeypatch, limited=True)
     task = loop._next_task(s, ready, set(), set())
     assert task is not None and task.id == "f9-01-gates"
-    loop.close_session(s)
+    session.close_session(s)
 
 
 def test_a_regate_ticket_that_waits_waits_as_today(repo, monkeypatch):
@@ -571,7 +477,7 @@ def test_a_regate_ticket_that_waits_waits_as_today(repo, monkeypatch):
     s.state.regate["f9-01-gates"] = {"attempt": 1, "agent": "local"}
     task = loop._next_task(s, ready, {"f8-01-missing"}, {"f9-01-gates"})  # paused
     assert task is not None and task.id == "f1-01-first"
-    loop.close_session(s)
+    session.close_session(s)
 
 
 def _fast_lane(repo: Path, key: str, place: int) -> None:
@@ -590,7 +496,7 @@ def _lane_session(repo: Path, monkeypatch, *, limited: bool = False):
     _on_card(repo, "f20-01-dep", 20)
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "cards")
-    s = loop.open_session(_config(repo), None)
+    s = session.open_session(_config(repo), None)
     s.state.parked["f2-01-parked"] = {
         "kind": "limit",
         "branch": "",
@@ -609,7 +515,7 @@ def test_the_fast_lane_goes_before_a_due_parked_ticket_and_the_board(repo, monke
     rest = [t for t in ready if t.id != "f20-01-dep"]
     task = loop._next_task(s, rest, {"f20-01-dep"}, set())
     assert task is not None and task.id == "f9-01-lane"
-    loop.close_session(s)
+    session.close_session(s)
 
 
 def test_with_claude_limited_the_line_goes_on_while_the_lanes_lead_ticket_waits(repo, monkeypatch):
@@ -619,7 +525,7 @@ def test_with_claude_limited_the_line_goes_on_while_the_lanes_lead_ticket_waits(
     rest = [t for t in ready if t.id != "f20-01-dep"]
     task = loop._next_task(s, rest, {"f20-01-dep"}, set())
     assert task is not None and task.id == "f1-01-first"
-    loop.close_session(s)
+    session.close_session(s)
 
 
 def _review_fix_session(repo: Path, monkeypatch, *, agent: str = ""):
@@ -649,7 +555,7 @@ def test_a_reviews_fix_goes_after_the_lane_and_the_due_parks_before_the_board(re
     s.state.review_stop["f30"] = "clean"  # a last round's fixes go in the board's order
     task = loop._next_task(s, rest, set(), set())
     assert task is not None and task.id == "f1-01-first"
-    loop.close_session(s)
+    session.close_session(s)
 
 
 def test_a_reviews_lead_fix_is_held_by_the_weeks_pace_line_as_any(repo, monkeypatch):
@@ -660,7 +566,7 @@ def test_a_reviews_lead_fix_is_held_by_the_weeks_pace_line_as_any(repo, monkeypa
     monkeypatch.setattr(loop, "_passed_over", lambda *a: "over the week's pace line")
     task = loop._next_task(s, rest, set(), set())
     assert task is not None and task.id == "f1-01-first"
-    loop.close_session(s)
+    session.close_session(s)
 
 
 def test_dry_run_names_a_reviews_fix_next(repo, capsys):
@@ -712,7 +618,7 @@ def test_the_queue_goes_on_with_other_milestones_while_one_waits(repo, monkeypat
         return TaskRecord(id=task.id, milestone=task.milestone, result="done")
 
     monkeypatch.setattr(loop, "run_task", run_task)
-    s = loop.open_session(_config(repo), None)
+    s = session.open_session(_config(repo), None)
     assert loop.work_queue(s) is False
     assert ran == ["m3-01-free"]
     assert "Waiting: m2-01-held waits for m1-first's sign-off" in s.report.notes
@@ -729,7 +635,7 @@ def test_a_ready_ticket_that_does_not_parse_is_set_aside_and_the_queue_goes_on(r
     git(repo, "commit", "-q", "-m", "tickets")
     ran: list[str] = []
     monkeypatch.setattr(loop, "run_task", _merge_any(repo, ran))
-    s = loop.open_session(_config(repo), None)
+    s = session.open_session(_config(repo), None)
     assert loop.work_queue(s) is False
     assert ran == ["m1-01-good"]
     assert (tasks / "later" / "m1-02-broken.md").is_file()
@@ -751,7 +657,7 @@ def _two_milestones(repo: Path) -> None:
     git(repo, "commit", "-q", "-m", "tickets")
 
 
-def _merge_any(repo: Path, ran: list[str]) -> Callable[[loop.Session, object], TaskRecord]:
+def _merge_any(repo: Path, ran: list[str]) -> Callable[[session.Session, object], TaskRecord]:
     def run_task(s, task):
         ran.append(task.id)
         git(
@@ -771,11 +677,11 @@ def test_the_queue_stops_for_a_milestone_whose_tickets_are_all_done(repo, monkey
     _two_milestones(repo)
     ran: list[str] = []
     monkeypatch.setattr(loop, "run_task", _merge_any(repo, ran))
-    s = loop.open_session(_config(repo))
+    s = session.open_session(_config(repo))
     assert loop.work_queue(s, reviews=True) is False
     assert ran == ["f9-02-last"]
     assert s.report.review == "f9"
-    loop.close_session(s)
+    session.close_session(s)
     conn = metrics.open_db(_config(repo).metrics_db)
     try:
         status = conn.execute("SELECT status FROM milestones WHERE key = 'f9'").fetchone()[0]
@@ -788,7 +694,7 @@ def test_a_milestone_queue_starts_no_review_of_its_own(repo, monkeypatch):
     _two_milestones(repo)
     ran: list[str] = []
     monkeypatch.setattr(loop, "run_task", _merge_any(repo, ran))
-    s = loop.open_session(_config(repo), None)
+    s = session.open_session(_config(repo), None)
     assert loop.work_queue(s) is False
     assert ran == ["f9-02-last", "f10-01-next"]
     assert s.report.review is None
@@ -809,7 +715,7 @@ def test_dry_run_prints_the_pickers_list_with_reasons_and_until_when(repo, capsy
     `not_before` is ahead is skipped, and says until when."""
     _add_task(repo, "m1-01-thing")
     cfg = _config(repo)
-    at = loop.now()
+    at = session.now()
     later = at + timedelta(hours=3)
     conn = metrics.open_db(cfg.metrics_db)
     try:
@@ -838,7 +744,7 @@ def test_dry_run_lists_a_parked_escalation_first_once_its_reset_has_passed(repo,
     _add_task(repo, "m1-01-thing")
     cfg = _config(repo)
     state = load_state(cfg.runs_dir / "state.json")
-    past = (loop.now() - timedelta(minutes=5)).isoformat()
+    past = (session.now() - timedelta(minutes=5)).isoformat()
     state.parked["escalation:m1-00-old"] = {"kind": "escalation", "resets_at": past}
     save_state(state, cfg.runs_dir / "state.json")
     out = _dry_run(repo, capsys)
@@ -850,7 +756,7 @@ def test_dry_run_shows_every_line_paused_by_the_owner(repo, capsys):
     """f5-18: pause is a state of the pick (ADR 22 item 5)."""
     _add_task(repo, "m1-01-thing")
     cfg = _config(repo)
-    save_state(State(owner_pause=loop.now().isoformat()), cfg.runs_dir / "state.json")
+    save_state(State(owner_pause=session.now().isoformat()), cfg.runs_dir / "state.json")
     out = _dry_run(repo, capsys)
     assert "   m1-01-thing: paused by you, place 1, developer ticket" in out
     assert "next: nothing" in out
@@ -869,7 +775,7 @@ def _pause_project(repo: Path, since: str | None) -> None:
 def test_dry_run_says_a_project_paused_by_you_holds_its_tickets(repo, capsys):
     """F124 D4: the project's own pause is the factory's wait, for it alone."""
     _add_task(repo, "m1-01-thing")
-    _pause_project(repo, loop.now().isoformat())
+    _pause_project(repo, session.now().isoformat())
     out = _dry_run(repo, capsys)
     assert "   m1-01-thing: paused by you, place 1, developer ticket" in out
     assert "next: nothing" in out
@@ -879,12 +785,12 @@ def test_dry_run_shows_the_planner_next_while_paused(repo, capsys):
     """f6-14: the owner's message to the lead goes while the line holds."""
     _add_task(repo, "m1-01-thing")
     cfg = _config(repo)
-    save_state(State(owner_pause=loop.now().isoformat()), cfg.runs_dir / "state.json")
+    save_state(State(owner_pause=session.now().isoformat()), cfg.runs_dir / "state.json")
     conn = metrics.open_db(cfg.metrics_db)
     try:
         project = metrics.upsert_project(conn, repo.name)
         metrics.queue_job(
-            conn, project, "planner", "f7#1", "your message on F7", loop.now().isoformat()
+            conn, project, "planner", "f7#1", "your message on F7", session.now().isoformat()
         )
     finally:
         conn.close()
@@ -977,7 +883,7 @@ def test_session_stops_when_an_escalation_changes_the_runner(repo, fake_model, m
 
 def test_refuses_to_start_on_a_dirty_tree(repo, fake_model):
     (repo / "dirty.txt").write_text("x")
-    with pytest.raises(loop.RunnerError, match="clean main"):
+    with pytest.raises(session.RunnerError, match="clean main"):
         loop.run_session(_config(repo), once=False, dry_run=False, escalate=False)
 
 
@@ -2084,7 +1990,7 @@ def test_a_shadow_over_its_pace_is_skipped(repo, fake_model, fake_lead, monkeypa
     script.append(_checkpoint_writes("{}"))
     specs = _fake_copilot(monkeypatch, JobResult(ok=True, text="{}", duration_s=1.0))
     conn = metrics.open_db(_config(repo).metrics_db)
-    metrics.add_usage_event(conn, "copilot-auto", loop.now().isoformat(), "refusal")
+    metrics.add_usage_event(conn, "copilot-auto", session.now().isoformat(), "refusal")
     conn.close()
     report = loop.run_session(_shadowed(repo), once=False, dry_run=False, escalate=False)
     assert report is not None and [t.result for t in report.tasks] == ["done", "done"]
@@ -2265,7 +2171,7 @@ def test_a_lead_ticket_stopped_during_its_check_all_keeps_its_branch(repo, monke
     monkeypatch.setattr(checks, "check_all", stopped)
     with pytest.raises(RuntimeError, match="Ctrl-C"):
         _run(repo)
-    s = loop.open_session(_config(repo), None)
+    s = session.open_session(_config(repo), None)
     assert s.git.current_branch() == "main" and s.git.is_clean()
     assert s.state.interrupted == {
         "lead-ticket:m1-01-lead": {
@@ -2641,7 +2547,7 @@ def _job() -> JobSpec:
     return JobSpec("lead-ticket", "Do the ticket.", timeout=1)
 
 
-def _repair(s: loop.Session, repo: Path, monkeypatch) -> list[str]:
+def _repair(s: session.Session, repo: Path, monkeypatch) -> list[str]:
     path = write_task(repo / ".softfield" / "tasks" / "ready", "m1-01-thing")
     monkeypatch.setattr(loop, "_ticket_problems", lambda s_, p: ["names a missing path"])
     return loop._repair_ticket(
@@ -2651,8 +2557,8 @@ def _repair(s: loop.Session, repo: Path, monkeypatch) -> list[str]:
 
 def test_a_repair_refused_by_a_certain_limit_gives_up_without_waiting(repo, monkeypatch):
     """F191 D6: the job that wrote the ticket has ended: nothing to park, nothing to wait for."""
-    calls = _limited_then(monkeypatch, UsageLimited(loop.now() + timedelta(hours=3)))
-    s = loop.open_session(_config(repo))
+    calls = _limited_then(monkeypatch, UsageLimited(session.now() + timedelta(hours=3)))
+    s = session.open_session(_config(repo))
     assert _repair(s, repo, monkeypatch) == ["names a missing path"]
     assert len(calls) == 1
     events = _rows(repo, "usage_events")
@@ -2663,33 +2569,11 @@ def test_a_repair_refused_by_a_certain_limit_gives_up_without_waiting(repo, monk
 
 def test_a_repair_stopped_by_an_expired_login_gives_up_and_the_item_shows(repo, monkeypatch):
     login = _Login(monkeypatch)
-    s = loop.open_session(_config(repo))
+    s = session.open_session(_config(repo))
     assert _repair(s, repo, monkeypatch) == ["names a missing path"]
     assert len(login.jobs) == 1
     assert len(_login_items(repo)) == 1
     assert not s.state.interrupted and s.state.in_flight is None
-
-
-def test_a_job_cut_off_by_a_usage_limit_resumes_its_session(repo, monkeypatch):
-    """f1: a lead ticket stopped mid-way by a limit carries on where it was, after the reset."""
-    done = JobResult(ok=True, text="", duration_s=1.0, num_turns=4, session_id="s1")
-    calls = _limited_then(monkeypatch, UsageLimited(None, session_id="s1"), done)
-    s = loop.open_session(_config(repo))
-    assert loop.call_claude(s, _job(), "m1", "m1-01-lead") is done
-    assert calls[0] == ("Do the ticket.", None)
-    assert calls[1][1] == "s1" and "usage limit" in calls[1][0]
-    assert any("usage limit" in note for note in s.report.notes)
-
-
-def test_a_session_that_cant_resume_starts_afresh_told_about_its_partial_work(repo, monkeypatch):
-    lost = JobResult(ok=False, text="No conversation found", duration_s=1.0, num_turns=0)
-    done = JobResult(ok=True, text="", duration_s=1.0, num_turns=4)
-    calls = _limited_then(monkeypatch, UsageLimited(None, session_id="s1"), lost, done)
-    s = loop.open_session(_config(repo))
-    assert loop.call_claude(s, _job(), "m1", "m1-01-lead") is done
-    prompt, resume = calls[2]
-    assert resume is None
-    assert prompt.startswith("Do the ticket.") and "git diff" in prompt
 
 
 OWNER_MD = "# The owner\n\n- Low ceremony.\n"
@@ -2736,70 +2620,6 @@ def _headings(prompt: str) -> list[str]:
     return re.findall(r"^## (.+)$", prompt, re.MULTILINE)
 
 
-@pytest.mark.parametrize("role", sorted(ROLE_SECTIONS))
-def test_a_lead_job_starts_with_owner_md_and_exactly_its_roles_sections(repo, monkeypatch, role):
-    """f21 D2: pasted in, first, the same text for every job of the role."""
-    _lead_docs(repo, monkeypatch)
-    done = JobResult(ok=True, text="", duration_s=1.0, num_turns=4)
-    calls = _limited_then(monkeypatch, done, done)
-    s = loop.open_session(_config(repo))
-    loop.call_claude(s, JobSpec(role, "Do the job.", timeout=1), "m1", "m1-first")
-    loop.call_claude(s, JobSpec(role, "Do the other job.", timeout=1), "m1", "m1-second")
-    [(first, _), (second, _)] = calls
-    assert first.startswith(OWNER_MD)
-    assert _headings(first) == ROLE_SECTIONS[role]
-    for heading in ROLE_SECTIONS[role]:
-        assert f"## {heading}\nWhat {heading} says.\n" in first
-    assert "The model." not in first and first.endswith("\n\nDo the job.")
-    # the same start, so jobs close together share the prompt cache
-    assert second.removesuffix("Do the other job.") == first.removesuffix("Do the job.")
-    assert not [note for note in s.report.notes if "went without" in note]
-
-
-def test_a_job_that_is_not_the_leads_gets_no_sections(repo, monkeypatch):
-    _lead_docs(repo, monkeypatch)
-    calls = _limited_then(monkeypatch, JobResult(ok=True, text="", duration_s=1.0))
-    s = loop.open_session(_config(repo))
-    loop.call_claude(s, JobSpec("narrative", "Tell it.", timeout=1), "m1", "narrative")
-    assert calls[0][0] == "Tell it."
-
-
-def test_a_resumed_session_keeps_its_system_prompt_and_one_that_cant_resume_starts_again(
-    repo, monkeypatch
-):
-    """ADR 41 item 2: a system prompt isn't in the session's history, so each run sends it, the
-    same text. Lost, the session starts again as a new one would."""
-    _lead_docs(repo, monkeypatch)
-    lost = JobResult(ok=False, text="No conversation found", duration_s=1.0, num_turns=0)
-    done = JobResult(ok=True, text="", duration_s=1.0, num_turns=4)
-    calls = _limited_then(monkeypatch, done, lost, done)
-    s = loop.open_session(_config(repo))
-    job = JobSpec("planner", "The owner's message.", timeout=1, resume="s1")
-    loop.call_claude(s, job, "m1", "f7:1")
-    loop.call_claude(s, job, "m1", "f7:2")
-    assert calls[0][1] == calls[1][1] == "s1"
-    assert calls[0][0] == calls[1][0] and calls[0][0].endswith("The owner's message.")
-    assert calls[0][0].startswith(OWNER_MD)
-    prompt, resume = calls[2]
-    assert resume is None and prompt.startswith(OWNER_MD)
-    assert _headings(prompt) == ROLE_SECTIONS["planner"]
-
-
-def test_a_heading_missing_from_lead_md_is_a_report_note_and_the_job_runs(repo, monkeypatch):
-    _lead_docs(repo, monkeypatch, without="Tickets")
-    done = JobResult(ok=True, text="", duration_s=1.0, num_turns=4)
-    calls = _limited_then(monkeypatch, done, done)
-    s = loop.open_session(_config(repo))
-    assert loop.call_claude(s, _job(), "m1", "m1-01-lead") is done
-    assert loop.call_claude(s, _job(), "m1", "m1-02-lead") is done
-    prompt, _ = calls[0]
-    assert prompt.startswith(OWNER_MD) and _headings(prompt) == ["Your own work"]
-    assert prompt.endswith("Do the ticket.")
-    notes = [note for note in s.report.notes if "went without" in note]
-    assert len(notes) == 1  # said once, however many jobs
-    assert "lead-ticket" in notes[0] and "Tickets" in notes[0]
-
-
 def test_a_lead_tickets_prompt_starts_with_the_brief_then_names_its_ticket(
     repo, fake_model, fake_lead, monkeypatch
 ):
@@ -2835,57 +2655,6 @@ def test_a_planners_jobs_carry_the_sections_as_their_system_prompt(repo, fake_mo
     assert "Why one queue?" in first and _headings(first) == []
     assert resumed == "s1" and "And the switches?" in second
     assert _headings(second) == [] and "Low ceremony" not in second
-
-
-def test_an_unrecognised_limit_is_retried_a_few_times_then_fails(repo, monkeypatch):
-    unsure = UsageLimited(None, certain=False)
-    calls = _limited_then(monkeypatch, unsure, unsure, unsure, unsure)
-    s = loop.open_session(_config(repo))
-    result = loop.call_claude(s, _job(), "m1", "m1-01-lead")
-    assert not result.ok
-    assert len(calls) == 1 + loop.UNSURE_LIMIT_RETRIES
-
-
-def _sleeps(monkeypatch) -> list[float]:
-    slept: list[float] = []
-    monkeypatch.setattr("time.sleep", slept.append)
-    return slept
-
-
-def test_a_known_limit_without_a_time_retries_every_backoff_min_without_giving_up(
-    repo, monkeypatch
-):
-    """f1: the wait was exponential (15 min, 30, 60 … 5 h), overshooting a 5 h window by hours.
-    A refused call costs nothing, so retry at the minimum every time."""
-    done = JobResult(ok=True, text="", duration_s=1.0, num_turns=4, session_id="s1")
-    limited = UsageLimited(None, session_id="s1")
-    calls = _limited_then(monkeypatch, limited, limited, limited, limited, limited, done)
-    slept = _sleeps(monkeypatch)
-    s = loop.open_session(_config(repo))
-    assert loop.call_claude(s, _job(), "m1", "m1-01-lead") is done
-    assert len(calls) == 6
-    assert slept == [s.cfg.backoff_min] * 5
-
-
-def test_a_dropped_connection_resumes_after_short_waits(repo, monkeypatch):
-    done = JobResult(ok=True, text="", duration_s=1.0, num_turns=4, session_id="s1")
-    blip = TransientError("Connection error.", session_id="s1")
-    calls = _limited_then(monkeypatch, blip, blip, done)
-    slept = _sleeps(monkeypatch)
-    s = loop.open_session(_config(repo))
-    assert loop.call_claude(s, _job(), "m1", "m1-01-review") is done
-    assert [resume for _, resume in calls] == [None, "s1", "s1"]
-    assert slept == list(loop.TRANSIENT_WAITS[:2])
-
-
-def test_a_connection_that_stays_down_fails_the_job(repo, monkeypatch):
-    blip = TransientError("Connection error.")
-    calls = _limited_then(monkeypatch, *[blip] * (len(loop.TRANSIENT_WAITS) + 1))
-    _sleeps(monkeypatch)
-    s = loop.open_session(_config(repo))
-    assert not loop.call_claude(s, _job(), "m1", "m1-01-review").ok
-    assert len(calls) == len(loop.TRANSIENT_WAITS) + 1
-    assert any("Connection error." in note for note in s.report.notes)
 
 
 # --- the metrics database (f1 D2, D3) ---------------------------------------------------
@@ -3142,78 +2911,6 @@ def test_a_stop_in_the_middle_of_an_attempt_still_counts_as_timed_out(repo, fake
     assert fake_model.models == ["lmstudio/m", "lmstudio/m"]
 
 
-def test_a_live_update_changes_tokens_steps_and_heartbeat_only(repo, monkeypatch):
-    s = loop.open_session(_config(repo))
-    job = loop.record_start(s, "m1-01-thing", "m1", "developer", "local-m", log_path="x.jsonl")
-    [job_before], [run_before] = _rows(repo, "jobs"), _rows(repo, "runs")
-    monkeypatch.setattr(loop, "now", lambda: datetime(2030, 1, 1, tzinfo=UTC))
-    loop.live_update(s, job, TokenTotals(500, 20, 5, 3, peak=400))
-    [job_after], [run_after] = _rows(repo, "jobs"), _rows(repo, "runs")
-    assert {k for k in job_before if job_before[k] != job_after[k]} == {
-        "tokens_in",
-        "tokens_out",
-        "steps",
-    }
-    assert (job_after["tokens_in"], job_after["tokens_out"], job_after["steps"]) == (500, 25, 3)
-    assert {k for k in run_before if run_before[k] != run_after[k]} == {"heartbeat"}
-    assert run_after["heartbeat"] == "2030-01-01T00:00:00+00:00"
-
-
-def test_every_claude_job_writes_a_row_and_keeps_its_own_log(repo, monkeypatch):
-    logs: list[Path] = []
-
-    def run_claude(job, repo_, timeout, log_path, now, resume=None):
-        log_path.write_text(job.kind)
-        logs.append(log_path)
-        usage = {"input_tokens": 10, "output_tokens": 5, "cache_read_input_tokens": 100}
-        return JobResult(ok=True, text="", duration_s=1.0, usage=usage, cost_usd=0.75)
-
-    monkeypatch.setattr(claude, "run_claude", run_claude)
-    s = loop.open_session(_config(repo))
-    kinds: list[tuple[str, str | None]] = [
-        ("direction", "m1-01-thing"),
-        ("escalation", "m1-01-thing"),
-        ("escalation", "m1-01-thing"),
-        ("checkpoint", None),
-        ("lead-ticket", "m1-02-lead"),
-        ("review", None),
-        ("narrative", None),
-    ]
-    for kind, ticket in kinds:
-        loop.call_claude(s, JobSpec(kind, "Do it.", timeout=1), "m1", ticket or kind, ticket=ticket)
-    jobs = _rows(repo, "jobs")
-    assert [j["role"] for j in jobs] == [kind for kind, _ in kinds]
-    assert [j["agent"] for j in jobs] == ["claude-opus"] * 3 + ["claude-sonnet"] + [
-        "claude-opus"
-    ] * 3
-    for j in jobs:
-        assert (j["outcome"], j["cost_usd"]) == ("passed", 0.75)
-        assert (j["tokens_in"], j["tokens_out"], j["tokens_cached"]) == (10, 5, 100)
-        assert j["started"] and j["ended"]
-    escalations = [j for j in jobs if j["role"] == "escalation"]
-    assert [j["attempt"] for j in escalations] == [1, 2]
-    assert escalations[0]["log_path"] != escalations[1]["log_path"]
-    assert len(set(logs)) == len(logs)
-    assert [p.read_text() for p in logs] == [kind for kind, _ in kinds]
-
-
-def test_a_job_runs_and_records_the_agent_its_role_resolves_to(repo, monkeypatch):
-    """ADR 14 item 3: `[roles]` decides who does a job, and its row says who did."""
-    models: list[str] = []
-
-    def run_claude(job, repo_, timeout, log_path, now, resume=None):
-        models.append(job.model)
-        return JobResult(ok=True, text="", duration_s=1.0)
-
-    monkeypatch.setattr(claude, "run_claude", run_claude)
-    roles = {**ROLES, "review": ("claude-sonnet",), "checkpoint": ("claude-opus",)}
-    s = loop.open_session(replace(_config(repo), roles=roles))
-    for role in ("review", "checkpoint"):
-        loop.call_claude(s, JobSpec(role, "Do it.", timeout=1), "m1", role)
-    assert [j["agent"] for j in _rows(repo, "jobs")] == ["claude-sonnet", "claude-opus"]
-    assert models == ["sonnet", "opus"]
-
-
 def test_a_developer_attempt_records_its_roles_agent(repo, fake_model):
     _add_task(repo, "m1-01-thing")
     cfg = _config(repo)
@@ -3224,61 +2921,6 @@ def test_a_developer_attempt_records_its_roles_agent(repo, fake_model):
     fake_model.append(_implement)
     loop.run_session(cfg, once=True, dry_run=False, escalate=False)
     assert [(j["role"], j["agent"]) for j in _rows(repo, "jobs")] == [("developer", "local-other")]
-
-
-def test_a_usage_limit_pause_is_a_refusal_event(repo, monkeypatch):
-    resets = loop.now() + timedelta(hours=1)
-    done = JobResult(ok=True, text="", duration_s=1.0, num_turns=4)
-    _limited_then(monkeypatch, UsageLimited(resets, session_id="s1"), done)
-    s = loop.open_session(_config(repo))
-    loop.call_claude(s, _job(), "m1", "m1-01-lead", ticket="m1-01-lead")
-    [event, wait] = _rows(repo, "usage_events")  # and the runner's wait for it (f3-04)
-    assert (event["agent"], event["kind"]) == ("claude-opus", "refusal")
-    assert event["resets_at"] == resets.isoformat()
-    assert (wait["agent"], wait["kind"]) == ("runner", "wait")
-
-
-def _readings(five_hour: float, seven_day: float) -> tuple[Reading, ...]:
-    resets = datetime(2026, 10, 5, 16, 0, tzinfo=UTC)
-    return (Reading("five_hour", five_hour, resets), Reading("seven_day", seven_day, resets))
-
-
-def test_a_jobs_readings_are_usage_events_and_the_same_readings_twice_change_nothing(
-    repo, monkeypatch
-):
-    """f1-44: Claude's allowance, as each job's stream reports it (ADR 15 item 3)."""
-    at = datetime(2026, 10, 1, 12, 0, tzinfo=UTC)
-    monkeypatch.setattr(loop, "now", lambda: at)
-    done = JobResult(ok=True, text="", duration_s=1.0, readings=_readings(0.07, 0.79))
-    _limited_then(monkeypatch, done, done)
-    s = loop.open_session(_config(repo))
-    for _ in range(2):
-        loop.call_claude(s, _job(), "m1", "m1-01-lead", ticket="m1-01-lead")
-    events = _rows(repo, "usage_events")
-    assert [(e["agent"], e["kind"], e["window"], e["value"]) for e in events] == [
-        ("claude-opus", "reading", "five_hour", 0.07),
-        ("claude-opus", "reading", "seven_day", 0.79),
-    ]
-    assert {e["at"] for e in events} == {at.isoformat()}
-    assert {e["resets_at"] for e in events} == {"2026-10-05T16:00:00+00:00"}
-
-
-def test_a_refusal_names_its_window_and_keeps_the_readings_before_it(repo, monkeypatch):
-    resets = loop.now() + timedelta(hours=1)
-    limit = UsageLimited(resets, "s1", window="five_hour", readings=_readings(1.0, 0.5))
-    done = JobResult(ok=True, text="", duration_s=1.0, num_turns=4)
-    _limited_then(monkeypatch, limit, done)
-    s = loop.open_session(_config(repo))
-    loop.call_claude(s, _job(), "m1", "m1-01-lead", ticket="m1-01-lead")
-    events = {(e["kind"], e["window"]): e for e in _rows(repo, "usage_events")}
-    assert set(events) == {
-        ("refusal", "five_hour"),
-        ("reading", "five_hour"),
-        ("reading", "seven_day"),
-        ("wait", None),  # the runner's wait for the reset (f3-04)
-    }
-    assert events["refusal", "five_hour"]["resets_at"] == resets.isoformat()
-    assert events["reading", "five_hour"]["value"] == 1.0
 
 
 def test_a_database_that_cant_be_opened_does_not_stop_the_session(repo, fake_model):
@@ -3593,141 +3235,6 @@ def test_a_blocked_lead_ticket_warns_with_whats_waiting_before_anything_else_run
     assert out.index(warning) < out.index("── m2-01-other")
 
 
-def test_a_claude_job_past_10_minutes_prints_progress(repo, monkeypatch, capsys):
-    ticks = iter(range(0, 10**6, 400))  # every read of the clock is 400 s later
-    monkeypatch.setattr(loop, "clock", lambda: next(ticks))
-    monkeypatch.setattr(loop, "POLL_S", 0.01)
-
-    def run_claude(job, repo_, timeout, log_path, now, resume=None):
-        time.sleep(0.2)
-        return JobResult(ok=True, text="Sorted it.\nDetails.", duration_s=1.0, cost_usd=1.5)
-
-    monkeypatch.setattr(claude, "run_claude", run_claude)
-    s = loop.open_session(_config(repo))
-    loop.call_claude(s, _job(), "m1", "m1-01-lead", ticket="m1-01-lead")
-    out = capsys.readouterr().out
-    assert "▶ [claude-opus] lead-ticket\n" in out
-    assert "… [claude-opus] lead-ticket still running · " in out
-    assert "■ [claude-opus] lead-ticket done · " in out and "$1.50" in out
-    assert "↳ [claude-opus] Sorted it.\n" in out
-
-
-def test_a_claude_job_summary_comes_from_its_note(repo, monkeypatch, capsys):
-    note = repo / "var" / "escalation.md"
-
-    def run_claude(job, repo_, timeout, log_path, now, resume=None):
-        note.write_text("\nRequeued with the missing unit.\n")
-        return JobResult(ok=True, text="Done, see the note.", duration_s=1.0)
-
-    monkeypatch.setattr(claude, "run_claude", run_claude)
-    s = loop.open_session(_config(repo))
-    loop.call_claude(s, _job(), "m1", "m1-01-lead", notes=(repo / "var" / "decision.json", note))
-    out = capsys.readouterr().out
-    assert "↳ [claude-opus] Requeued with the missing unit.\n" in out
-
-
-def test_a_usage_limit_pause_prints_the_resume_time(repo, monkeypatch, capsys):
-    fixed = datetime(2026, 10, 1, 18, 0).astimezone()
-    monkeypatch.setattr(loop, "now", lambda: fixed)
-    done = JobResult(ok=True, text="", duration_s=1.0, num_turns=4)
-    _limited_then(monkeypatch, UsageLimited(fixed + timedelta(hours=1)), done)
-    s = loop.open_session(_config(repo))
-    loop.call_claude(s, _job(), "m1", "m1-01-lead", ticket="m1-01-lead")
-    out = capsys.readouterr().out
-    assert "⏸ [claude-opus] Claude usage limit · resumes 19:01 (in 1 h 01)" in out
-    assert "▶ [claude-opus] lead-ticket resumed" in out
-
-
-# --- the heartbeat thread (f1-49) ---------------------------------------------------------
-
-
-def _heartbeats(repo: Path, seconds: float, sleep: Callable[[float], None]) -> set[object]:
-    """Every heartbeat the run's row shows over ``seconds``, read every 20 ms."""
-    seen: set[object] = set()
-    end = time.monotonic() + seconds
-    while time.monotonic() < end:
-        seen |= {r["heartbeat"] for r in _rows(repo, "runs")}
-        sleep(0.02)
-    return seen
-
-
-@pytest.fixture
-def fast_beat(monkeypatch):
-    monkeypatch.setattr(loop, "HEARTBEAT_EVERY", 0.05)
-
-
-def test_the_heartbeat_advances_while_a_claude_job_blocks(repo, monkeypatch, fast_beat):
-    # f1-18-probes: the Overview called a runner busy in check-all dead, and the owner stopped it
-    seen: set[object] = set()
-
-    def run_claude(job, repo_, timeout, log_path, now, resume=None):
-        seen.update(_heartbeats(repo, 0.5, time.sleep))
-        return JobResult(ok=True, text="", duration_s=1.0)
-
-    monkeypatch.setattr(claude, "run_claude", run_claude)
-    s = loop.open_session(_config(repo))
-    loop.call_claude(s, _job(), "m1", "m1-01-lead", ticket="m1-01-lead")
-    loop._finish_run(s, "done")
-    assert len(seen) >= 3  # the job's start, then two beats at least
-
-
-def test_the_heartbeat_advances_during_a_usage_limit_pause(repo, monkeypatch, fast_beat):
-    done = JobResult(ok=True, text="", duration_s=1.0, num_turns=4)
-    _limited_then(monkeypatch, UsageLimited(None), done)
-    real_sleep, seen = time.sleep, set()
-
-    def pause(seconds: float) -> None:
-        seen.update(_heartbeats(repo, 0.5, real_sleep))
-
-    monkeypatch.setattr("time.sleep", pause)
-    s = loop.open_session(_config(repo))
-    loop.call_claude(s, _job(), "m1", "m1-01-lead", ticket="m1-01-lead")
-    loop._finish_run(s, "done")
-    assert len(seen) >= 3  # the job's start, then two beats at least
-
-
-def test_no_beat_lands_after_the_run_ends(repo, fast_beat):
-    s = loop.open_session(_config(repo))
-    thread = s.heartbeat
-    assert thread is not None and thread.is_alive()
-    time.sleep(0.2)
-    loop._finish_run(s, "done")
-    assert not thread.is_alive()
-    time.sleep(0.2)
-    [run] = _rows(repo, "runs")
-    assert run["ended"] and run["heartbeat"] == run["ended"]
-
-
-def test_a_failing_heartbeat_is_noted_once_and_the_run_goes_on(repo, monkeypatch, fast_beat):
-    beat = metrics.update_run_heartbeat
-
-    def broken(conn: sqlite3.Connection, run_id: int, at: str) -> None:
-        if threading.current_thread() is not threading.main_thread():
-            raise sqlite3.OperationalError("disk I/O error")
-        beat(conn, run_id, at)
-
-    def run_claude(job, repo_, timeout, log_path, now, resume=None):
-        time.sleep(0.3)
-        return JobResult(ok=True, text="", duration_s=1.0)
-
-    monkeypatch.setattr(metrics, "update_run_heartbeat", broken)
-    monkeypatch.setattr(claude, "run_claude", run_claude)
-    s = loop.open_session(_config(repo))
-    assert loop.call_claude(s, _job(), "m1", "m1-01-lead", ticket="m1-01-lead").ok
-    loop._finish_run(s, "done")
-    notes = [n for n in s.report.notes if "metrics database" in n]
-    assert len(notes) == 1 and "disk I/O error" in notes[0]
-    [run] = _rows(repo, "runs")
-    assert run["verdict"] == "done"
-
-
-def test_a_session_with_no_command_starts_no_heartbeat(repo, fast_beat):
-    before = set(threading.enumerate())
-    s = loop.open_session(_config(repo), None)
-    assert s.heartbeat is None
-    assert set(threading.enumerate()) == before
-
-
 def test_a_failing_write_is_noted_once_and_the_run_goes_on(repo, fake_model, monkeypatch):
     _add_task(repo, "m1-01-thing")
 
@@ -3812,40 +3319,6 @@ def test_an_interrupted_lead_ticket_is_committed_to_its_branch_and_resumed(
     assert old["verdict"] == "interrupted" and old["ended"]
 
 
-def test_an_interrupted_job_on_main_is_kept_on_its_own_branch(repo, monkeypatch):
-    def write_then_crash(job, repo_, timeout, log_path, now, resume=None):
-        (repo_ / "coucou" / "fix.py").write_text("FIXED = True\n")
-        raise RuntimeError("crash")
-
-    monkeypatch.setattr(claude, "run_claude", write_then_crash)
-    s = loop.open_session(_config(repo), None)
-    review = JobSpec("review", "Review it.", timeout=1)
-    with pytest.raises(RuntimeError, match="crash"):
-        loop.call_claude(s, review, "m1", "m1-review-r1")
-    assert _state(repo).in_flight is not None
-
-    s = loop.open_session(_config(repo), None)
-    assert s.git.current_branch() == "main" and s.git.is_clean()
-    assert not (repo / "coucou" / "fix.py").exists()
-    kept = git(repo, "show", "--format=%s", "--name-only", "interrupted/review-m1")
-    assert "coucou/fix.py" in kept and "(interrupted)" in kept
-    assert s.state.in_flight is None
-    assert s.state.interrupted == {
-        "review:m1-review-r1": {
-            "session_id": "",
-            "branch": "interrupted/review-m1",
-            "agent": "claude-opus",
-        }
-    }
-
-    calls = _limited_then(monkeypatch, JobResult(ok=True, text="", duration_s=1.0))
-    loop.call_claude(s, review, "m1", "m1-review-r1")
-    [(prompt, resume)] = calls
-    assert resume is None  # no session id was known: it starts again, told where its work is
-    assert prompt.startswith("Review it.") and "interrupted/review-m1" in prompt
-    assert _state(repo).interrupted == {}
-
-
 def test_an_interrupted_local_attempt_counts_as_timed_out(repo, fake_model, capsys):
     _add_task(repo, "m1-01-thing")
 
@@ -3887,7 +3360,7 @@ MONDAY = datetime(2026, 10, 5, 16, 0, tzinfo=UTC)  # the week's reset in `_readi
 
 @pytest.fixture
 def fake_clock(monkeypatch) -> list[datetime]:
-    """``loop.now`` reads the clock; a sleep moves it on, so a reset can pass in a test."""
+    """``session.now`` reads the clock; a sleep moves it on, so a reset can pass in a test."""
     clock = [THURSDAY]
     slept: list[float] = []
 
@@ -3896,7 +3369,7 @@ def fake_clock(monkeypatch) -> list[datetime]:
         clock[0] += timedelta(seconds=seconds)
 
     real_sleep = time.sleep
-    monkeypatch.setattr(loop, "now", lambda: clock[0])
+    monkeypatch.setattr(session, "now", lambda: clock[0])
     monkeypatch.setattr("time.sleep", sleep)
     monkeypatch.setattr("subprocess.time", types.SimpleNamespace(sleep=real_sleep))
     return clock
@@ -3937,7 +3410,7 @@ def test_a_limited_lead_ticket_parks_a_local_ticket_runs_and_it_resumes_after_th
 
     def local(repo_: Path, prompt: str) -> None:
         events.append("local ran")
-        assert loop.now() < resets  # while the lead ticket waits
+        assert session.now() < resets  # while the lead ticket waits
         _implement(repo_, prompt)
 
     monkeypatch.setattr(claude, "run_claude", run_claude)
@@ -3971,7 +3444,7 @@ def test_a_ticket_that_needs_a_direction_while_claude_is_limited_waits_parked(
     kinds: list[tuple[str, bool]] = []
 
     def run_claude(job, repo_, timeout, log_path, now, resume=None):
-        kinds.append((job.kind, loop.now() > resets))
+        kinds.append((job.kind, session.now() > resets))
         if job.kind == "lead-ticket" and len(kinds) == 1:
             raise UsageLimited(resets, session_id="s1")
         if job.kind == "direction":
@@ -4176,10 +3649,10 @@ def _both_choose(repo: Path, capsys) -> tuple[str | None, str | None]:
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "cards")
     capsys.readouterr()
-    s = loop.open_session(_config(repo))
+    s = session.open_session(_config(repo))
     ready = load_dir(s.tasks_dir("ready"), 150)
     task = loop._next_task(s, ready, set(), set())
-    loop.close_session(s)
+    session.close_session(s)
     capsys.readouterr()
     last = _dry_run(repo, capsys).strip().splitlines()[-1]
     dry = last.removeprefix("next: ")
@@ -4316,9 +3789,9 @@ def test_a_protected_developer_ticket_is_held_as_the_lead_ticket_it_is(repo, fak
 def test_over_the_line_a_planner_job_a_review_and_a_checkpoint_may_start(repo, fake_clock):
     """ADR 44 items 4 and 5: `claude_hold` is what holds them as they start."""
     _week_read(repo, 0.65, LINE_33)
-    s = loop.open_session(_config(repo))
+    s = session.open_session(_config(repo))
     assert loop.claude_hold(s, THURSDAY) is None
-    loop.close_session(s)
+    session.close_session(s)
 
 
 def test_a_five_hour_park_is_dropped_at_the_start_of_a_run(repo, fake_clock):
@@ -4372,11 +3845,11 @@ def test_an_old_reserve_park_and_its_desk_item_are_cleared_at_the_start_of_a_run
             conn, project, "reserve", subject, text="…", command="…", created=THURSDAY.isoformat()
         )
     conn.close()
-    s = loop.open_session(_config(repo))
+    s = session.open_session(_config(repo))
     assert s.state.parked == {} and _state(repo).parked == {}
     items = {i["subject"]: i["resolved"] for i in _rows(repo, "owner_items")}
     assert items["m1-01-lead"] is not None and items["week"] is not None
-    loop.close_session(s)
+    session.close_session(s)
 
 
 def test_support_roles_use_the_reserve_with_the_switch_off(repo, fake_model, fake_lead, fake_clock):
@@ -4394,7 +3867,7 @@ def _ask_from_the_dashboard(repo: Path, kind: str, subject=None, value=None) -> 
     conn = metrics.open_db(_config(repo).metrics_db)
     try:
         project = metrics.upsert_project(conn, repo.name, repo=str(repo))
-        return metrics.add_request(conn, project, kind, subject, value, loop.now().isoformat())
+        return metrics.add_request(conn, project, kind, subject, value, session.now().isoformat())
     finally:
         conn.close()
 
@@ -4481,17 +3954,17 @@ def test_every_project_holds_for_a_pause_another_projects_request_took(repo):
     """2026-11-18: the pause sat in travel-companion's state, and Softfield's queued direction
     and its last attempt ran under it. Each project takes the factory's pause at its pick,
     and lets it go once it is resumed, whichever project the resume came from."""
-    s = loop.open_session(_config(repo))
+    s = session.open_session(_config(repo))
     assert s.db is not None and s.state.owner_pause is None
     since = THURSDAY.isoformat()
-    metrics.add_usage_event(s.db, loop.RUNNER_AGENT, since, metrics.OWNER_PAUSE)  # elsewhere
+    metrics.add_usage_event(s.db, session.RUNNER_AGENT, since, metrics.OWNER_PAUSE)  # elsewhere
     loop.apply_owner_requests(s)
     assert s.state.owner_pause == since
     later = (THURSDAY + timedelta(minutes=20)).isoformat()
-    metrics.add_usage_event(s.db, loop.RUNNER_AGENT, since, metrics.OWNER_PAUSE, resets_at=later)
+    metrics.add_usage_event(s.db, session.RUNNER_AGENT, since, metrics.OWNER_PAUSE, resets_at=later)
     loop.apply_owner_requests(s)
     assert s.state.owner_pause is None
-    loop.close_session(s)
+    session.close_session(s)
 
 
 def test_a_projects_own_pause_with_no_event_is_kept(repo):
@@ -4499,10 +3972,10 @@ def test_a_projects_own_pause_with_no_event_is_kept(repo):
     until a resume: no open event is not a resume."""
     since = THURSDAY.isoformat()
     save_state(State(owner_pause=since), _config(repo).runs_dir / "state.json")
-    s = loop.open_session(_config(repo))
+    s = session.open_session(_config(repo))
     loop.apply_owner_requests(s)
     assert s.state.owner_pause == since
-    loop.close_session(s)
+    session.close_session(s)
 
 
 def test_a_paused_runner_with_nothing_to_do_holds_rather_than_ends(
@@ -4557,7 +4030,7 @@ def test_a_message_to_the_lead_while_paused_runs_its_planner_job_before_the_resu
     planned: list[tuple[str, bool, datetime]] = []
 
     def run_claude(job, repo_, timeout, log_path, now, resume=None):
-        planned.append((job.kind, _state(repo).owner_pause is not None, loop.now()))
+        planned.append((job.kind, _state(repo).owner_pause is not None, session.now()))
         return JobResult(ok=True, text='Yes.\n```json\n{"points": []}\n```', duration_s=1.0)
 
     monkeypatch.setattr(claude, "run_claude", run_claude)
@@ -4642,7 +4115,7 @@ def test_a_restart_tries_a_ticket_parked_for_a_limit_again_at_once(
     calls: list[tuple[str | None, datetime]] = []
 
     def run_claude(job, repo_, timeout, log_path, now, resume=None):
-        calls.append((resume, loop.now()))
+        calls.append((resume, session.now()))
         if len(calls) == 1:
             _lead_writes(repo_, "lead")
             raise UsageLimited(resets, session_id="s1")
@@ -4694,11 +4167,11 @@ def test_a_parked_ticket_keeps_claudes_reset_until_it_runs_again(
         _run(repo)
     fake_clock[0] += timedelta(minutes=30)
     (repo / "stray.txt").write_text("the owner's")
-    with pytest.raises(loop.RunnerError):  # a start that stops before any ticket
-        loop.open_session(_config(repo))
+    with pytest.raises(session.RunnerError):  # a start that stops before any ticket
+        session.open_session(_config(repo))
     (repo / "stray.txt").unlink()
-    s = loop.open_session(_config(repo))  # and one that is stopped before it gets there
-    loop._finish_run(s, "interrupted")
+    s = session.open_session(_config(repo))  # and one that is stopped before it gets there
+    session._finish_run(s, "interrupted")
     assert _state(repo).parked["m1-01-lead"]["resets_at"] == resets.isoformat()
     report = _run(repo)
     assert calls == [None, "s1"]  # still tried again at once
@@ -4726,41 +4199,6 @@ def _activities(monkeypatch) -> list[str | None]:
     return written
 
 
-def test_a_pause_for_a_limit_or_a_passing_error_shows_on_the_run_until_it_ends(repo, monkeypatch):
-    resets = loop.now() + timedelta(hours=1)
-    done = JobResult(ok=True, text="", duration_s=1.0, num_turns=4)
-    blip = TransientError("Connection error.", session_id="s1")
-    _limited_then(monkeypatch, UsageLimited(resets, session_id="s1"), blip, done)
-    seen: list[tuple[object, object]] = []
-    monkeypatch.setattr("time.sleep", lambda seconds: seen.append(_activity(repo)))
-    s = loop.open_session(_config(repo))
-    before = _activity(repo)
-    loop.call_claude(s, _job(), "m1", "m1-01-lead", ticket="m1-01-lead")
-    assert before == ("picking the next ticket", None)
-    until = [datetime.fromisoformat(str(at)) for _, at in seen]
-    assert until[0] > resets and until[1] > loop.now()
-    assert [activity for activity, _ in seen] == [
-        f"waiting for Claude · m1-01-lead until {at:%H:%M}" for at in until
-    ]
-    assert _activity(repo) == before  # what the run did before the wait
-
-
-def test_a_wait_for_a_limit_is_kept_but_not_a_pause_for_a_passing_error(repo, monkeypatch):
-    """f3-04: ``waiting_until`` is cleared when the wait ends, so the minutes the line lost
-    to Claude's limit are kept as a ``wait`` usage event, from its start to when it resumes."""
-    resets = loop.now() + timedelta(hours=1)
-    done = JobResult(ok=True, text="", duration_s=1.0, num_turns=4)
-    blip = TransientError("Connection error.", session_id="s1")
-    _limited_then(monkeypatch, UsageLimited(resets, session_id="s1"), blip, done)
-    seen: list[tuple[object, object]] = []
-    monkeypatch.setattr("time.sleep", lambda seconds: seen.append(_activity(repo)))
-    s = loop.open_session(_config(repo))
-    loop.call_claude(s, _job(), "m1", "m1-01-lead", ticket="m1-01-lead")
-    waits = [e for e in _rows(repo, "usage_events") if e["kind"] == "wait"]
-    assert [(e["agent"], e["resets_at"]) for e in waits] == [("runner", seen[0][1])]
-    assert str(waits[0]["at"]) < str(seen[0][1])
-
-
 def test_the_run_says_what_it_does_between_two_tickets(repo, fake_model, monkeypatch):
     """f2-03: between two tickets the page said a bare "Running"."""
     _add_task(repo, "m1-01-thing")
@@ -4780,7 +4218,7 @@ def test_the_run_says_what_it_does_between_two_tickets(repo, fake_model, monkeyp
 def test_a_ctrl_c_leaves_no_run_alive_or_on_the_reserve(repo, fake_model, monkeypatch):
     """f2-03: after a Ctrl-C, run 20261002-055804 kept ended NULL and reserve 1, so the page
     said "on Claude's reserve" until the heartbeat went stale."""
-    _switch_on(repo, "week", at=loop.now())
+    _switch_on(repo, "week", at=session.now())
     _add_task(repo, "m1-01-thing")
 
     def ctrl_c(repo_: Path, prompt: str) -> None:
@@ -4791,12 +4229,12 @@ def test_a_ctrl_c_leaves_no_run_alive_or_on_the_reserve(repo, fake_model, monkey
         _run(repo)
     [run] = _rows(repo, "runs")
     assert run["ended"] is None and run["reserve"] == 1  # the command hasn't exited yet
-    loop.end_open_runs()  # the command's exit
+    session.end_open_runs()  # the command's exit
     [run] = _rows(repo, "runs")
     assert run["ended"] is not None and run["verdict"] == "interrupted"
     assert (run["activity"], run["waiting_until"], run["reserve"]) == (None, None, 0)
     assert [job["outcome"] for job in _rows(repo, "jobs")] == ["interrupted"]
-    loop.end_open_runs()  # a second exit finds nothing left to end
+    session.end_open_runs()  # a second exit finds nothing left to end
     assert _rows(repo, "runs") == [run]
 
 
@@ -4894,143 +4332,12 @@ def test_the_run_names_check_all_while_it_runs(repo, monkeypatch, tmp_path):
         return [checks.Check("tests", True, "")]
 
     monkeypatch.setattr(checks, "check_all", check_all)
-    s = loop.open_session(_config(repo))
+    s = session.open_session(_config(repo))
     before = _activity(repo)
     assert loop._check_all(s, "m1-01-lead", tmp_path, "check-all.txt")
     assert loop._check_all(s, None, tmp_path, "check-all.txt")
     assert seen == ["check-all · m1-01-lead", "check-all on main"]
     assert _activity(repo) == before == ("picking the next ticket", None)
-
-
-def test_a_job_starting_keeps_the_runs_activity_for_after_it(repo):
-    """The page shows the job while it runs; when it ends, the run still says what it does."""
-    s = loop.open_session(_config(repo))
-    loop.set_activity(s, "m1-01-thing")
-    loop.record_start(s, "m1-01-thing", "m1", "developer", "local-m")
-    assert _activity(repo) == ("m1-01-thing", None)
-
-
-def test_a_claude_jobs_row_shows_its_tokens_and_steps_before_it_ends(repo, monkeypatch):
-    """f1-51: Claude jobs showed elapsed time only (f1 D3, amended)."""
-    monkeypatch.setattr(loop, "POLL_S", 0.01)
-    seen: list[dict[str, object]] = []
-
-    def run_claude(job, repo_, timeout, log_path, now, resume=None):
-        assert job.on_progress is not None
-        job.on_progress(Progress(tokens_in=10, tokens_cached=100, tokens_out=5, turns=2))
-        deadline = time.monotonic() + 5
-        while not (row := _rows(repo, "jobs")[0])["steps"] and time.monotonic() < deadline:
-            time.sleep(0.01)
-        seen.append(row)
-        return JobResult(ok=True, text="", duration_s=1.0, num_turns=3)
-
-    monkeypatch.setattr(claude, "run_claude", run_claude)
-    s = loop.open_session(_config(repo))
-    loop.call_claude(s, _job(), "m1", "m1-01-lead", ticket="m1-01-lead")
-    [live] = seen
-    assert live["outcome"] == "running"
-    assert (live["tokens_in"], live["tokens_cached"], live["tokens_out"], live["steps"]) == (
-        10,
-        100,
-        5,
-        2,
-    )
-    [job] = _rows(repo, "jobs")
-    assert (job["outcome"], job["steps"]) == ("passed", 3)
-
-
-@pytest.mark.parametrize(("switch", "reserve"), [("week", True), ("five_hour", False)])
-def test_a_run_started_with_the_week_switch_on_is_on_the_reserve(repo, switch, reserve):
-    _switch_on(repo, switch, at=loop.now())
-    loop.open_session(_config(repo))
-    assert [bool(run["reserve"]) for run in _rows(repo, "runs")] == [reserve]
-
-
-def test_a_ticket_deleted_from_tasks_leaves_the_queue(repo):
-    """f1-30-allowance-forecast, deleted by ADR 15, kept a `ready` row."""
-    conn = metrics.open_db(_config(repo).metrics_db)
-    project = metrics.upsert_project(conn, repo.name)
-    metrics.upsert_ticket(conn, project, "m1-09-gone", state="ready")
-    conn.close()
-    _add_task(repo, "m1-01-thing")
-    loop.open_session(_config(repo))
-    states = {row["ticket"]: row["state"] for row in _rows(repo, "tickets")}
-    assert states == {"m1-09-gone": "removed", "m1-01-thing": "ready"}
-
-
-def test_a_deleted_tickets_row_leaves_whatever_its_state_but_done(repo):
-    """f4-21's `blocked` row, its file deleted, kept "1 blocked now" on the Overview (f6-17);
-    a done ticket's row is history and stays."""
-    conn = metrics.open_db(_config(repo).metrics_db)
-    project = metrics.upsert_project(conn, repo.name)
-    for ticket, state in (("m1-07-stuck", "blocked"), ("m1-08-aside", "later")):
-        metrics.upsert_ticket(conn, project, ticket, state=state)
-    metrics.upsert_ticket(conn, project, "m1-06-shipped", state="done")
-    conn.close()
-    _add_task(repo, "m1-01-thing")
-    loop.open_session(_config(repo))
-    states = {row["ticket"]: row["state"] for row in _rows(repo, "tickets")}
-    assert states == {
-        "m1-07-stuck": "removed",
-        "m1-08-aside": "removed",
-        "m1-06-shipped": "done",
-        "m1-01-thing": "ready",
-    }
-
-
-def test_a_ticket_naming_its_milestone_short_sits_on_its_cards_row(repo):
-    """F2's ticket said `milestone: f2`: its row was a second F2 card, waiting for a review
-    that was done, while the card with the review's sheet showed no tickets (2026-10-22)."""
-    docs = repo / ".softfield" / "cards"
-    docs.mkdir(parents=True, exist_ok=True)
-    (docs / "f2-a-readme.md").write_text("# Milestone F2: a readme\n\n> **State:** ready\n")
-    path = write_task(repo / ".softfield" / "tasks" / "ready", "f2-01-readme")
-    path.write_text(path.read_text().replace("milestone: 1\n", "milestone: f2\n"))
-    git(repo, "add", "-A")
-    git(repo, "commit", "-q", "-m", "a card and its ticket")
-    loop.open_session(_config(repo))
-    keys = {row["id"]: row["key"] for row in _rows(repo, "milestones")}
-    tickets = {row["ticket"]: keys[row["milestone_id"]] for row in _rows(repo, "tickets")}
-    assert tickets == {"f2-01-readme": "f2-a-readme"}
-    assert "f2" not in keys.values()
-
-
-def test_a_card_whose_doc_is_gone_leaves_the_board(repo):
-    """A card merged away or `git rm`ed stayed a seed on the desk (f6-17): its row is
-    `removed`. A milestone row that was never a card (no state) is left as it is."""
-    docs = repo / ".softfield" / "cards"
-    docs.mkdir(parents=True, exist_ok=True)
-    (docs / "f10-one-queue.md").write_text("# Milestone F10: one queue\n\n> **State:** idea\n")
-    git(repo, "add", "-A")
-    git(repo, "commit", "-q", "-m", "a card")
-    conn = metrics.open_db(_config(repo).metrics_db)
-    project = metrics.upsert_project(conn, repo.name)
-    metrics.upsert_milestone(conn, project, "f12-queue-once", title="queue once", state="idea")
-    metrics.upsert_milestone(conn, project, "f10", state="idea")  # the doc names it in full
-    metrics.upsert_milestone(conn, project, "m1", status="done")
-    conn.close()
-    loop.open_session(_config(repo))
-    states = {row["key"]: row["state"] for row in _rows(repo, "milestones")}
-    assert states == {
-        "f12-queue-once": "removed",
-        "f10": "idea",
-        "m1": None,
-        "f10-one-queue": "idea",
-    }
-
-
-def test_a_ticket_set_aside_is_recorded_as_later(repo):
-    """ADR 17 item 3; a later ticket that was ready before leaves the queue too."""
-    conn = metrics.open_db(_config(repo).metrics_db)
-    project = metrics.upsert_project(conn, repo.name)
-    metrics.upsert_ticket(conn, project, "m1-02-aside", state="ready")
-    conn.close()
-    write_task(repo / ".softfield" / "tasks" / "later", "m1-02-aside")
-    git(repo, "add", "-A")
-    git(repo, "commit", "-q", "-m", "aside")
-    loop.open_session(_config(repo))
-    states = {row["ticket"]: row["state"] for row in _rows(repo, "tickets")}
-    assert states == {"m1-02-aside": "later"}
 
 
 # --- routing (f1-25, runner/router.py; ADR 15 items 6, 7 and 9) ----------------------------
@@ -5051,7 +4358,7 @@ def _proven(repo: Path, **rated: float) -> None:
 def test_an_agent_routes_at_the_floor_until_its_third_game(repo, fake_clock):
     """ADR 24 item 3: with 2 games it routes as 1, with 3 as its rating."""
     _proven(repo, claude_sonnet=7)
-    s = loop.open_session(_config(repo))
+    s = session.open_session(_config(repo))
     assert loop.current_ratings(s)["claude-sonnet"] == 7
     conn = metrics.open_db(_config(repo).metrics_db)
     conn.execute("DELETE FROM rating_changes WHERE id = (SELECT min(id) FROM rating_changes)")
@@ -5482,7 +4789,7 @@ def test_at_80_percent_developer_work_goes_first_and_the_lead_ticket_follows_at_
     ran_at: list[datetime] = []
 
     def lead(job, repo_):
-        ran_at.append(loop.now())
+        ran_at.append(session.now())
         _lead_writes(repo_, "lead")
 
     script.append(lead)
@@ -5530,7 +4837,7 @@ def test_with_the_5_hour_switch_on_lead_tickets_go_past_75_percent(
     report = _run(repo)
     assert [t.result for t in report.tasks] == ["done", "done"]
     assert fake_clock[0] == THURSDAY and _rows(repo, "owner_items") == []
-    assert not loop.switch_on(_state(repo), "week", THURSDAY)  # one switch per window
+    assert not session.switch_on(_state(repo), "week", THURSDAY)  # one switch per window
 
 
 @pytest.mark.parametrize(("value", "goes"), [("on", True), ("off", False)])
@@ -5545,7 +4852,7 @@ def test_a_reserve_request_lets_a_lead_ticket_past_75_percent_or_parks_it(
     ran_at: list[datetime] = []
 
     def lead(job, repo_):
-        ran_at.append(loop.now())
+        ran_at.append(session.now())
         _lead_writes(repo_, "lead")
 
     script.append(lead)
@@ -5562,14 +4869,14 @@ def test_at_80_percent_claude_holds_no_support_job_but_at_100_or_resting_it_does
     """ADR 50 items 3 and 4: a review, a direction, an escalation and a checkpoint all start
     through `claude_hold`; the 5-hour mark doesn't hold them, the real limit does."""
     _claude_at(repo, 0.80)
-    s = loop.open_session(_config(repo))
+    s = session.open_session(_config(repo))
     assert loop.claude_hold(s, THURSDAY) is None
-    loop.close_session(s)
+    session.close_session(s)
     _claude_at(repo, 1.0, age=timedelta(minutes=1))
-    s = loop.open_session(_config(repo))
+    s = session.open_session(_config(repo))
     hold = loop.claude_hold(s, THURSDAY)
     assert hold is not None and not hold.five_hour and hold.until >= FIVE_RESETS
-    loop.close_session(s)
+    session.close_session(s)
 
 
 def test_the_week_switch_leaves_the_5_hour_mark_no_park_either(
@@ -5583,7 +4890,7 @@ def test_the_week_switch_leaves_the_5_hour_mark_no_park_either(
     ran_at: list[datetime] = []
 
     def lead(job, repo_):
-        ran_at.append(loop.now())
+        ran_at.append(session.now())
         _lead_writes(repo_, "lead")
 
     script.append(lead)
@@ -5625,7 +4932,7 @@ def _leads_in_order(
 ) -> None:
     def lead(job, repo_):
         task_id = git(repo_, "rev-parse", "--abbrev-ref", "HEAD").strip().removeprefix("task/")
-        ran.append((task_id, loop.now()))
+        ran.append((task_id, session.now()))
         _lead_writes(repo_, task_id.replace("-", "_"))
 
     script.extend([lead] * count)
@@ -5757,7 +5064,7 @@ def test_a_marked_cards_lead_ticket_waits_while_claude_is_limited(
 
     def run_claude(job, repo_, timeout, log_path, now, resume=None):
         task_id = git(repo_, "rev-parse", "--abbrev-ref", "HEAD").strip().removeprefix("task/")
-        ran.append((task_id, loop.now()))
+        ran.append((task_id, session.now()))
         if len(ran) == 1:
             _lead_writes(repo_, "first")
             raise UsageLimited(resets, session_id="s1")
@@ -5814,7 +5121,7 @@ def test_a_checkpoint_refused_by_a_limit_parks_and_developer_tickets_go_on(
     events: list[tuple[object, ...]] = []
 
     def run_claude(job, repo_, timeout, log_path, now, resume=None):
-        events.append((job.kind, resume, loop.now() > resets))
+        events.append((job.kind, resume, session.now() > resets))
         if resume is None:
             raise UsageLimited(resets, session_id="s1")
         return JobResult(ok=True, text="", duration_s=1.0, num_turns=2, session_id="s1")
@@ -5853,7 +5160,7 @@ def test_an_escalation_refused_by_a_limit_parks_and_free_tickets_go_on(
     events: list[tuple[object, ...]] = []
 
     def run_claude(job, repo_, timeout, log_path, now, resume=None):
-        events.append((job.kind, resume, loop.now() > resets))
+        events.append((job.kind, resume, session.now() > resets))
         if job.kind == "escalation" and resume is None:
             raise UsageLimited(resets, session_id="s1")
         return JobResult(ok=True, text="", duration_s=1.0, num_turns=2, session_id="s1")
@@ -5920,7 +5227,7 @@ def _planner_replies(
     first, with ``limited``); a lead ticket writes its file."""
 
     def run_claude(job, repo_, timeout, log_path, now, resume=None):
-        events.append((job.kind, resume, loop.now()))
+        events.append((job.kind, resume, session.now()))
         if job.kind == "lead-ticket":
             _lead_writes(repo_, "lead")
             return JobResult(ok=True, text="", duration_s=1.0)
@@ -6697,7 +6004,7 @@ def _started_from_the_page(repo: Path, *, paused: str | None = metrics.SETTING_U
     try:
         project = metrics.upsert_project(conn, repo.name, repo=str(repo))
         metrics.set_project_paused(conn, repo.name, paused)
-        at = loop.now().isoformat()
+        at = session.now().isoformat()
         metrics.queue_job(conn, project, "setup", "m1", "its setup", at)
     finally:
         conn.close()
@@ -6889,21 +6196,21 @@ def test_no_escalation_is_queued_when_the_command_doesnt_escalate(repo, fake_mod
 def test_a_ticket_waits_behind_its_own_queued_direction(repo, fake_model, fake_lead):
     """ADR 22 item 1: the ticket's last attempt comes after its direction, never before."""
     _escalate_on_protected(repo, fake_model)
-    s = loop.open_session(_config(repo))
-    loop.enqueue(s, "direction", "m1-01-thing", "m1-01-thing failed: protected-paths")
+    s = session.open_session(_config(repo))
+    session.enqueue(s, "direction", "m1-01-thing", "m1-01-thing failed: protected-paths")
     ready = load_dir(s.tasks_dir("ready"), 150)
-    assert loop.waiting_rows(s, ready) == {"m1-01-thing": "waits for its direction"}
-    loop.close_session(s)
+    assert session.waiting_rows(s, ready) == {"m1-01-thing": "waits for its direction"}
+    session.close_session(s)
 
 
 def test_a_due_review_is_queued_with_its_reason(repo, monkeypatch):
     _two_milestones(repo)
     ran: list[str] = []
     monkeypatch.setattr(loop, "run_task", _merge_any(repo, ran))
-    s = loop.open_session(_config(repo))
+    s = session.open_session(_config(repo))
     assert loop.work_queue(s, reviews=True) is False
     assert loop.work_queue(s, reviews=True) is False  # still due: one row, not two
-    loop.close_session(s)
+    session.close_session(s)
     [row] = _rows(repo, "work_queue")
     assert (row["kind"], row["subject"], row["reason"]) == (
         "review",
@@ -6928,61 +6235,61 @@ def _f9_review_due(repo: Path, *, fast_lane: bool, state: str = "building") -> N
 def test_a_lane_cards_due_review_is_in_the_lane_only_while_it_is_on_the_way_in(repo):
     """F242 D1: marked fast lane and still ready or building."""
     _f9_review_due(repo, fast_lane=True)
-    s = loop.open_session(_config(repo), None)
+    s = session.open_session(_config(repo), None)
     assert loop.lane_reviews(repo, s.state) == ["f9"]
-    loop.close_session(s)
+    session.close_session(s)
     (repo / ".softfield" / "cards" / "f9.md").write_text(
         "# Milestone F9: a card\n\n> **State:** needs sign-off · **Fast lane:** yes\n"
     )
     git(repo, "commit", "-q", "-am", "f9 on its way out")
-    s = loop.open_session(_config(repo), None)
+    s = session.open_session(_config(repo), None)
     assert loop.lane_reviews(repo, s.state) == []
-    loop.close_session(s)
+    session.close_session(s)
 
 
 def test_a_lane_cards_review_is_queued_past_another_cards_checkpoint_but_not_its_own(repo):
     """F242 D2: another card's checkpoint or escalation doesn't hold it; one of its own does."""
     _f9_review_due(repo, fast_lane=True)
-    s = loop.open_session(_config(repo), None)
-    loop.enqueue(s, "checkpoint", "f10", "after f10-01")
-    loop.enqueue(s, "escalation", "f10-01-next", "failed")
+    s = session.open_session(_config(repo), None)
+    session.enqueue(s, "checkpoint", "f10", "after f10-01")
+    session.enqueue(s, "escalation", "f10-01-next", "failed")
     loop._queue_due_review(s)
-    assert [(r.kind, r.subject) for r in loop.open_rows(s) if r.kind == "review"] == [
+    assert [(r.kind, r.subject) for r in session.open_rows(s) if r.kind == "review"] == [
         ("review", "f9")
     ]
     rows = loop._runnable_rows(s, [], escalate=True, reviews=True)
     assert {r.subject for r in rows} == {"f10", "f10-01-next", "f9"}
-    loop.close_session(s)
+    session.close_session(s)
 
 
 def test_a_lane_cards_review_waits_for_a_checkpoint_or_escalation_of_its_own_card(repo):
     _f9_review_due(repo, fast_lane=True)
-    s = loop.open_session(_config(repo), None)
-    loop.enqueue(s, "escalation", "f9-02-last", "failed")
+    s = session.open_session(_config(repo), None)
+    session.enqueue(s, "escalation", "f9-02-last", "failed")
     loop._queue_due_review(s)
-    assert [r.kind for r in loop.open_rows(s)] == ["escalation"]
-    assert loop._holds_review(loop.open_rows(s), "f9")
-    assert not loop._holds_review(loop.open_rows(s), "f90")
-    loop.close_session(s)
+    assert [r.kind for r in session.open_rows(s)] == ["escalation"]
+    assert loop._holds_review(session.open_rows(s), "f9")
+    assert not loop._holds_review(session.open_rows(s), "f90")
+    session.close_session(s)
 
 
 def test_a_cards_out_of_the_lane_review_keeps_the_old_rule(repo):
     _f9_review_due(repo, fast_lane=False)
-    s = loop.open_session(_config(repo), None)
-    loop.enqueue(s, "checkpoint", "f10", "after f10-01")
+    s = session.open_session(_config(repo), None)
+    session.enqueue(s, "checkpoint", "f10", "after f10-01")
     loop._queue_due_review(s)
-    assert [r.kind for r in loop.open_rows(s)] == ["checkpoint"]
-    loop.close_session(s)
+    assert [r.kind for r in session.open_rows(s)] == ["checkpoint"]
+    session.close_session(s)
 
 
 def test_at_the_5_hour_mark_no_cards_review_parks(repo, fake_clock):
     """ADR 50 item 3 (it replaces F242 D3's two reserves for the lane card only)."""
     _claude_at(repo, 0.80)
     _f9_review_due(repo, fast_lane=True)
-    s = loop.open_session(_config(repo), None)
+    s = session.open_session(_config(repo), None)
     assert loop.park_review(s, "f9") is False
     assert loop.park_review(s, "f10") is False
-    loop.close_session(s)
+    session.close_session(s)
 
 
 def test_dry_run_lists_a_lane_cards_review_first_in_the_lane(repo, capsys):
@@ -7001,16 +6308,16 @@ def test_a_parked_checkpoint_survives_a_restart_as_a_row_and_runs_after_its_rese
     events: list[tuple[object, ...]] = []
 
     def limited(job, repo_, timeout, log_path, now, resume=None):
-        events.append((job.kind, resume, loop.now() >= resets))
-        if loop.now() < resets:
+        events.append((job.kind, resume, session.now() >= resets))
+        if session.now() < resets:
             raise UsageLimited(resets, session_id="s1")
         return JobResult(ok=True, text="", duration_s=1.0, num_turns=2, session_id="s1")
 
     monkeypatch.setattr(claude, "run_claude", limited)
-    s = loop.open_session(_config(repo))
+    s = session.open_session(_config(repo))
     loop.work_queue(s, once=True)  # m1-01
     loop.work_queue(s, once=True)  # m1-02, then its checkpoint parks
-    loop.close_session(s)
+    session.close_session(s)
     [row] = _queue(repo)
     assert (row["kind"], row["not_before"], row["done"]) == ("checkpoint", resets.isoformat(), None)
     assert _state(repo).parked == {}  # the row holds it, not state.json
@@ -7068,7 +6375,7 @@ def test_an_old_state_files_parked_support_jobs_become_rows_once(repo, fake_cloc
     }
     save_state(state, state_path)
     for _ in range(2):  # a second start adds nothing
-        loop.close_session(loop.open_session(_config(repo)))
+        session.close_session(session.open_session(_config(repo)))
     rows = {(r["kind"], r["subject"]): r for r in _queue(repo)}
     assert set(rows) == {
         ("checkpoint", "m1"),
@@ -7131,7 +6438,7 @@ def test_with_claude_at_its_limit_copilot_does_the_checkpoint_and_its_findings_a
     new = {**fix, "summary": "PART shadows"}
 
     def recheck(job: ClaudeJob, repo_: Path) -> None:
-        assert loop.now() > FIVE_RESETS
+        assert session.now() > FIVE_RESETS
         for ticket in ("m1-01-thing", "m1-02-thing", "m1-04-fix-thing"):
             assert f"- {ticket}: `git show " in job.prompt
         assert "m1-01-thing (coucou/part1.py)" in job.prompt  # what the stand-in filed
@@ -7176,7 +6483,7 @@ def test_with_claude_at_its_limit_copilot_does_the_checkpoint_and_its_findings_a
 def _pre_review_session(repo: Path):
     roles = {**ROLES, "checkpoint-stand-in": (COPILOT.id,)}
     agents = {**_config(repo).agents, COPILOT.id: COPILOT}
-    s = loop.open_session(replace(_config(repo), agents=agents, roles=roles))
+    s = session.open_session(replace(_config(repo), agents=agents, roles=roles))
     (repo / "coucou" / "secret.py").write_text("SECRET = 1\n")
     done = repo / ".softfield" / "tasks" / "done"
     write_task(done, "m1-01-thing")
@@ -7278,7 +6585,7 @@ def _merge_of(repo: Path, ticket: str) -> None:
 
 def _pick(s, passed, *, limited: bool = True, monkeypatch=None):
     monkeypatch.setattr(loop, "_held_at_the_limit", lambda w, at: "out" if limited else None)
-    return loop.pre_review_pick(s.repo, s.state, dispatch.Windows(), loop.now(), passed)
+    return loop.pre_review_pick(s.repo, s.state, dispatch.Windows(), session.now(), passed)
 
 
 def test_a_pre_review_goes_to_the_first_due_milestone_when_claude_is_at_its_limit(
@@ -7289,7 +6596,7 @@ def test_a_pre_review_goes_to_the_first_due_milestone_when_claude_is_at_its_limi
     assert _pick(s, {}, monkeypatch=monkeypatch) == "m1"
     assert _pick(s, {}, limited=False, monkeypatch=monkeypatch) is None
     assert _pick(s, None, monkeypatch=monkeypatch) is None
-    loop.close_session(s)
+    session.close_session(s)
 
 
 def test_a_milestone_with_three_pre_reviews_or_no_merge_since_gets_none(
@@ -7302,22 +6609,22 @@ def test_a_milestone_with_three_pre_reviews_or_no_merge_since_gets_none(
     assert _pick(s, {"m1": [long_ago]}, monkeypatch=monkeypatch) == "m1"  # a merge since
     assert _pick(s, {"m1": [later]}, monkeypatch=monkeypatch) is None  # no merge since
     assert _pick(s, {"m1": [long_ago] * 3}, monkeypatch=monkeypatch) is None  # three already
-    loop.close_session(s)
+    session.close_session(s)
 
 
 def test_the_passed_pre_reviews_are_counted_from_the_jobs(repo, fake_clock):
     s = _pre_review_session(repo)
     assert s.db is not None and s.project_id is not None
     for attempt, outcome in enumerate(("passed", "failed", "passed"), start=1):
-        job = loop.record_start(s, None, "m1", "pre-review", "copilot-auto", attempt=attempt)
+        job = session.record_start(s, None, "m1", "pre-review", "copilot-auto", attempt=attempt)
         assert job is not None
-        metrics.finish_job(s.db, job, ended=loop.now().isoformat(), outcome=outcome)
-    other = loop.record_start(s, None, "m1", "checkpoint", "copilot-auto")
+        metrics.finish_job(s.db, job, ended=session.now().isoformat(), outcome=outcome)
+    other = session.record_start(s, None, "m1", "checkpoint", "copilot-auto")
     assert other is not None
-    metrics.finish_job(s.db, other, ended=loop.now().isoformat(), outcome="passed")
+    metrics.finish_job(s.db, other, ended=session.now().isoformat(), outcome="passed")
     found = metrics.passed_pre_reviews(s.db, s.project_id)
     assert len(found) == 1 and len(next(iter(found.values()))) == 2
-    loop.close_session(s)
+    session.close_session(s)
 
 
 def test_the_dry_run_names_a_pre_review_as_next_when_nothing_else_runs(capsys):
@@ -7332,8 +6639,8 @@ def test_the_idle_turn_runs_the_pre_review_the_pick_names(repo, fake_clock, monk
     monkeypatch.setattr(loop, "_held_at_the_limit", lambda w, at: "out")
     ran: list[str] = []
 
-    def fake(answer: bool) -> Callable[[loop.Session, str], bool]:
-        def run(s: loop.Session, key: str) -> bool:
+    def fake(answer: bool) -> Callable[[session.Session, str], bool]:
+        def run(s: session.Session, key: str) -> bool:
             ran.append(key)
             return answer
 
@@ -7345,13 +6652,13 @@ def test_the_idle_turn_runs_the_pre_review_the_pick_names(repo, fake_clock, monk
     assert loop._pre_review_turn(s) is False and ran == ["m1", "m1"]
     assert loop._pre_review_turn(s) is False  # a failed one waits an hour before another
     assert ran == ["m1", "m1"]
-    loop.close_session(s)
+    session.close_session(s)
 
 
 def test_a_checkpoints_finding_belongs_to_the_milestone_of_the_ticket_at_fault(repo):
     """f8 review: a checkpoint run under F9's key filed F8's findings there, so F8's review
     saw none. A finding on a ticket with no row stays the checkpoint's; a review's always do."""
-    s = loop.open_session(_config(repo))
+    s = session.open_session(_config(repo))
     conn = metrics.open_db(_config(repo).metrics_db)
     try:
         pid = s.project_id
@@ -7379,17 +6686,19 @@ def test_two_stand_in_checkpoints_then_claude_free_make_one_claude_recheck_of_al
     specs = _fake_copilot(monkeypatch, JobResult(ok=True, text='{"findings": []}', duration_s=1))
     roles = {**ROLES, "checkpoint-stand-in": (COPILOT.id,)}
     agents = {**_config(repo).agents, COPILOT.id: COPILOT}
-    s = loop.open_session(replace(_config(repo), agents=agents, roles=roles))
+    s = session.open_session(replace(_config(repo), agents=agents, roles=roles))
     head = git(repo, "rev-parse", "HEAD").strip()
 
     def merged(*tickets: str) -> None:
         s.state.unchecked = [f"{ticket} {head} local-m" for ticket in tickets]
 
     merged("m1-01-a", "m1-02-b")
-    queued = loop.enqueue(s, "checkpoint", "m1", "after m1-01-a and m1-02-b merged", milestone="m1")
+    queued = session.enqueue(
+        s, "checkpoint", "m1", "after m1-01-a and m1-02-b merged", milestone="m1"
+    )
     loop.run_queued(s, queued, escalate=False)
     merged("m1-03-c", "m1-04-d")
-    again = loop.find_row(s, "checkpoint")
+    again = session.find_row(s, "checkpoint")
     assert again is not None
     loop.run_queued(s, again, escalate=False)
     [row] = _queue(repo)  # one re-check, waiting for Claude's window
@@ -7404,7 +6713,7 @@ def test_two_stand_in_checkpoints_then_claude_free_make_one_claude_recheck_of_al
     assert jobs == []
     script.append(_checkpoint_writes('{"findings": []}'))
     fake_clock[0] = FIVE_RESETS + timedelta(minutes=1)
-    free = loop.find_row(s, "checkpoint")
+    free = session.find_row(s, "checkpoint")
     assert free is not None
     loop.run_queued(s, free, escalate=False)
     [job] = jobs
@@ -7440,7 +6749,7 @@ def test_each_batch_of_merges_gets_its_stand_in_while_the_checkpoint_waits_for_c
     specs = _fake_copilot(monkeypatch, JobResult(ok=True, text='{"findings": []}', duration_s=1))
     roles = {**ROLES, "checkpoint-stand-in": (COPILOT.id,)}
     agents = {**_config(repo).agents, COPILOT.id: COPILOT}
-    s = loop.open_session(replace(_config(repo), agents=agents, roles=roles))
+    s = session.open_session(replace(_config(repo), agents=agents, roles=roles))
     for _ in range(3):  # m1-01, m1-02 and its stand-in, then m1-03
         loop.work_queue(s, escalate=False, once=True)
     assert len(specs) == 1  # one merge since: the row stays parked
@@ -7470,7 +6779,7 @@ def test_a_stand_in_that_fails_on_the_next_batch_parks_the_checkpoint_again_for_
     _fake_copilot(monkeypatch, JobResult(ok=True, text='{"findings": []}', duration_s=1))
     roles = {**ROLES, "checkpoint-stand-in": (COPILOT.id,)}
     agents = {**_config(repo).agents, COPILOT.id: COPILOT}
-    s = loop.open_session(replace(_config(repo), agents=agents, roles=roles))
+    s = session.open_session(replace(_config(repo), agents=agents, roles=roles))
     for _ in range(3):  # m1-01, m1-02 and its stand-in, then m1-03
         loop.work_queue(s, escalate=False, once=True)
     failed = _fake_copilot(monkeypatch, JobResult(ok=False, text="", duration_s=1))
@@ -7491,7 +6800,7 @@ def test_without_a_stand_in_the_next_batch_leaves_the_checkpoint_parked_for_clau
     """F151: with no stand-in to run, the row parks again and the developer tickets go on."""
     _claude_at(repo, 1.0)
     _four_merges(repo, fake_model)
-    s = loop.open_session(_config(repo))
+    s = session.open_session(_config(repo))
     for _ in range(4):
         loop.work_queue(s, escalate=False, once=True)
     assert len(s.report.tasks) == 4 and all(t.result == "done" for t in s.report.tasks)
@@ -7527,7 +6836,7 @@ def test_a_review_at_100_percent_parks_and_a_developer_ticket_runs_meanwhile(
     ran: list[str] = []
     monkeypatch.setattr(loop, "run_task", _merge_any(repo, ran))
     monkeypatch.setattr(loop, "wait_for_room", lambda *a: pytest.fail("the runner slept"))
-    s = loop.open_session(_config(repo))
+    s = session.open_session(_config(repo))
     assert loop.work_queue(s, reviews=True, once=True) is False
     assert ran == ["f10-01-next"] and s.report.review is None
     assert fake_clock[0] == THURSDAY  # nothing slept
@@ -7555,11 +6864,11 @@ def test_with_no_ticket_left_the_queue_sleeps_to_the_parked_reviews_reset(
     merge = _merge_any(repo, [])
 
     def run_task(s, task):
-        ran.append((task.id, loop.now() < FIVE_RESETS))
+        ran.append((task.id, session.now() < FIVE_RESETS))
         return merge(s, task)
 
     monkeypatch.setattr(loop, "run_task", run_task)
-    s = loop.open_session(_config(repo))
+    s = session.open_session(_config(repo))
     assert loop.work_queue(s, reviews=True) is False
     assert ran == [("f10-01-next", True), ("f10-02-after", True)]
     assert s.report.review == "f9" and fake_clock[0] > FIVE_RESETS
@@ -7568,14 +6877,14 @@ def test_with_no_ticket_left_the_queue_sleeps_to_the_parked_reviews_reset(
 def test_the_5_hour_switch_lets_the_review_go_at_once(repo, fake_clock, at_the_keyboard):
     _claude_at(repo, 0.80)
     _switch_on(repo, "five_hour")
-    loop.wait_for_room(loop.open_session(_config(repo)), "the review")
+    loop.wait_for_room(session.open_session(_config(repo)), "the review")
     assert fake_clock[0] == THURSDAY
 
 
 def test_at_80_percent_a_named_milestones_review_doesnt_wait(repo, fake_clock, at_the_keyboard):
     """ADR 50 item 3: `runner milestone`'s `wait_for_room` returns at once, switch off."""
     _claude_at(repo, 0.80)
-    loop.wait_for_room(loop.open_session(_config(repo)), "the review")
+    loop.wait_for_room(session.open_session(_config(repo)), "the review")
     assert fake_clock[0] == THURSDAY
 
 
@@ -7590,7 +6899,7 @@ def _ticket_in(repo: Path, folder: str, task_id: str) -> None:
     git(repo, "commit", "-q", "-m", f"{task_id} in {folder}")
 
 
-def _merged(s: loop.Session, task_id: str) -> None:
+def _merged(s: session.Session, task_id: str) -> None:
     """A developer merge of ``task_id`` (already in done/), as ``_merge`` lists it."""
     s.state.unchecked.append(f"{task_id} abc123 local-m")
     task = type("T", (), {"agent": "developer", "milestone": task_id.split("-")[0]})()
@@ -7606,34 +6915,34 @@ def _finish(repo: Path, task_id: str) -> None:
 def test_the_last_merge_of_a_milestone_queues_no_checkpoint(repo):
     _ticket_in(repo, "done", "f9-01-first")
     _ticket_in(repo, "ready", "f9-02-last")
-    s = loop.open_session(_config(repo))
+    s = session.open_session(_config(repo))
     _merged(s, "f9-01-first")  # still building: one merge, below the count
     assert s.state.unchecked == ["f9-01-first abc123 local-m"]
     _finish(repo, "f9-02-last")
     _merged(s, "f9-02-last")
-    assert loop.find_row(s, loop.CHECKPOINT) is None
+    assert session.find_row(s, session.CHECKPOINT) is None
     assert s.state.unchecked == []
-    loop.close_session(s)
+    session.close_session(s)
 
 
 def test_a_lead_ticket_completing_the_milestone_drops_its_unchecked_merge(repo):
     """Else the checkpoint after the next milestone's merge reads what the review has read."""
     _ticket_in(repo, "done", "f9-01-first")
     _ticket_in(repo, "ready", "f9-02-lead")
-    s = loop.open_session(_config(repo))
+    s = session.open_session(_config(repo))
     _merged(s, "f9-01-first")
     _finish(repo, "f9-02-lead")
     lead = type("T", (), {"agent": "lead", "milestone": "f9"})()
     loop.note_merge(s, lead, TaskRecord(id="f9-02-lead", milestone="f9", result="done"))
     assert s.state.unchecked == []
-    loop.close_session(s)
+    session.close_session(s)
 
 
 def test_a_stand_ins_batch_the_review_reads_leaves_the_recheck(repo, capsys):
     _ticket_in(repo, "done", "f9-01-first")
     _ticket_in(repo, "done", "f10-01-first")
     _ticket_in(repo, "ready", "f10-02-next")
-    s = loop.open_session(_config(repo))
+    s = session.open_session(_config(repo))
     s.state.recheck = ["f9-01-first abc123 copilot", "f10-01-first def456 copilot"]
     s.state.recheck_filed = [["f9-01-first", "a.py"]]
     loop._drop_covered_merges(s)
@@ -7643,57 +6952,57 @@ def test_a_stand_ins_batch_the_review_reads_leaves_the_recheck(repo, capsys):
     s.state.recheck = ["f9-01-first abc123 copilot"]
     loop._drop_covered_merges(s)
     assert s.state.recheck == [] and s.state.recheck_filed == []
-    loop.close_session(s)
+    session.close_session(s)
 
 
 def test_a_parked_checkpoint_left_with_nothing_leaves_no_session_to_resume(repo):
     """The next checkpoint, on other merges, must start afresh: not carry on this one's."""
     _ticket_in(repo, "done", "f9-01-first")
-    s = loop.open_session(_config(repo))
-    key = loop.job_key(loop.CHECKPOINT, loop.CHECKPOINT)
+    s = session.open_session(_config(repo))
+    key = session.job_key(session.CHECKPOINT, session.CHECKPOINT)
     s.state.interrupted[key] = {"session_id": "old", "branch": "", "cause": "limit"}
     _merged(s, "f9-01-first")
     assert s.state.unchecked == [] and key not in s.state.interrupted
-    loop.close_session(s)
+    session.close_session(s)
 
 
 def test_the_fixes_of_a_reviews_last_round_keep_their_checkpoint(repo, capsys):
     """No round follows it, so nothing else would read them, however due the milestone looks."""
     for n in (1, 2):
         _ticket_in(repo, "done", f"f9-0{n}-fix")
-    s = loop.open_session(_config(repo))
+    s = session.open_session(_config(repo))
     s.last_round = "f9"
     _merged(s, "f9-01-fix")
     _merged(s, "f9-02-fix")
-    row = loop.find_row(s, loop.CHECKPOINT)
+    row = session.find_row(s, session.CHECKPOINT)
     assert row is not None and row.reason == "after f9-01-fix and f9-02-fix merged"
     assert "no checkpoint" not in capsys.readouterr().out
-    loop.close_session(s)
+    session.close_session(s)
 
 
 def test_a_merge_of_another_milestone_still_building_keeps_its_checkpoint_count(repo):
     _ticket_in(repo, "done", "f10-01-first")
     _ticket_in(repo, "ready", "f10-02-next")
-    s = loop.open_session(_config(repo))
+    s = session.open_session(_config(repo))
     _merged(s, "f10-01-first")
     _ticket_in(repo, "done", "f9-01-only")
     _merged(s, "f9-01-only")  # f9 is complete: its review reads this one
-    assert loop.find_row(s, loop.CHECKPOINT) is None
+    assert session.find_row(s, session.CHECKPOINT) is None
     assert s.state.unchecked == ["f10-01-first abc123 local-m"]
-    loop.close_session(s)
+    session.close_session(s)
 
 
 def test_a_fix_merged_while_the_review_is_stopped_at_restart_queues_no_checkpoint(repo):
     _ticket_in(repo, "done", "f9-01-first")
     _ticket_in(repo, "done", "f9-03-fix")
     _ticket_in(repo, "ready", "f9-04-waits")  # the milestone is not due: only the stop covers it
-    s = loop.open_session(_config(repo))
+    s = session.open_session(_config(repo))
     s.state.review_stop["f9"] = "restart"
     _merged(s, "f9-01-first")
     _merged(s, "f9-03-fix")
-    assert loop.find_row(s, loop.CHECKPOINT) is None
+    assert session.find_row(s, session.CHECKPOINT) is None
     assert s.state.unchecked == []
-    loop.close_session(s)
+    session.close_session(s)
 
 
 def test_a_fix_merged_between_two_review_rounds_queues_no_checkpoint(repo):
@@ -7701,25 +7010,25 @@ def test_a_fix_merged_between_two_review_rounds_queues_no_checkpoint(repo):
     _ticket_in(repo, "done", "f9-01-first")
     _ticket_in(repo, "done", "f9-03-fix")
     _ticket_in(repo, "ready", "f9-04-fix")  # the milestone is not due: being reviewed covers it
-    s = loop.open_session(_config(repo))
+    s = session.open_session(_config(repo))
     s.state.review_counts["f9"] = [3]
     _merged(s, "f9-01-first")
     _merged(s, "f9-03-fix")
-    assert loop.find_row(s, loop.CHECKPOINT) is None
+    assert session.find_row(s, session.CHECKPOINT) is None
     assert s.state.unchecked == []
-    loop.close_session(s)
+    session.close_session(s)
 
 
 def test_two_merges_of_a_milestone_still_building_queue_a_checkpoint(repo):
     for n in (1, 2):
         _ticket_in(repo, "done", f"f9-0{n}-done")
     _ticket_in(repo, "ready", "f9-03-next")
-    s = loop.open_session(_config(repo))
+    s = session.open_session(_config(repo))
     _merged(s, "f9-01-done")
     _merged(s, "f9-02-done")
-    row = loop.find_row(s, loop.CHECKPOINT)
+    row = session.find_row(s, session.CHECKPOINT)
     assert row is not None and row.reason == "after f9-01-done and f9-02-done merged"
-    loop.close_session(s)
+    session.close_session(s)
 
 
 def test_a_queued_checkpoint_whose_merges_the_review_reads_runs_no_job(repo, fake_lead, capsys):
@@ -7727,32 +7036,32 @@ def test_a_queued_checkpoint_whose_merges_the_review_reads_runs_no_job(repo, fak
     for n in (1, 2):
         _ticket_in(repo, "done", f"f9-0{n}-done")
     _ticket_in(repo, "ready", "f9-03-last")
-    s = loop.open_session(_config(repo))
+    s = session.open_session(_config(repo))
     _merged(s, "f9-01-done")
     _merged(s, "f9-02-done")  # the count reaches 2: a checkpoint is queued
-    row = loop.find_row(s, loop.CHECKPOINT)
+    row = session.find_row(s, session.CHECKPOINT)
     assert row is not None
     path = repo / ".softfield" / "tasks"
     (path / "ready" / "f9-03-last.md").rename(path / "done" / "f9-03-last.md")  # the last merge
     loop.run_queued(s, row, escalate=False)
     assert jobs == [] and s.state.unchecked == []
-    assert loop.find_row(s, loop.CHECKPOINT) is None
+    assert session.find_row(s, session.CHECKPOINT) is None
     assert "no checkpoint: F9's review reads f9-01-done, f9-02-done" in capsys.readouterr().out
     loop._queue_due_review(s)
-    review = loop.find_row(s, loop.REVIEW)
+    review = session.find_row(s, session.REVIEW)
     assert review is not None and review.subject == "f9"
-    loop.close_session(s)
+    session.close_session(s)
 
 
 def test_a_review_parked_for_a_real_limit_keeps_lead_work_from_claude(repo, fake_clock):
     """A review parked at the window's real limit is a limit, as a parked checkpoint is."""
     _claude_at(repo, 1.0)
-    s = loop.open_session(_config(repo))
+    s = session.open_session(_config(repo))
     assert loop.park_review(s, "f9") is True
-    assert loop._limits_ahead(s, loop.now(), five_hour=False) == [FIVE_RESETS]
-    assert loop._limits_ahead(s, loop.now()) == [FIVE_RESETS]
-    loop.park_row(s, "review", "f9", FIVE_RESETS)
-    assert loop._limits_ahead(s, loop.now(), five_hour=False) == [FIVE_RESETS]
+    assert loop._limits_ahead(s, session.now(), five_hour=False) == [FIVE_RESETS]
+    assert loop._limits_ahead(s, session.now()) == [FIVE_RESETS]
+    session.park_row(s, "review", "f9", FIVE_RESETS)
+    assert loop._limits_ahead(s, session.now(), five_hour=False) == [FIVE_RESETS]
 
 
 def _source_ticket(repo: Path) -> None:
@@ -7815,7 +7124,7 @@ def _fresh_claude(
     def run_claude(job, repo_, timeout, log_path, now, resume=None):
         jobs.append(job)
         if job.kind == "probe":
-            probed.append(loop.now())
+            probed.append(session.now())
             return probe()
         _lead_writes(repo_, f"lead{len(jobs)}")
         time.sleep(20 * 60)
@@ -7935,7 +7244,7 @@ class _Login:
         self.jobs: list[str] = []
         self.told: list[str] = []
         monkeypatch.setattr(claude, "run_claude", self._run_claude)
-        monkeypatch.setattr(loop, "_notify", lambda s, words, path: self.told.append(words))
+        monkeypatch.setattr(session, "_notify", lambda s, words, path: self.told.append(words))
 
     def _run_claude(self, job, repo_, timeout, log_path, now, resume=None):
         self.jobs.append(job.kind)
@@ -7952,10 +7261,10 @@ class _Login:
 
 
 def _login_items(repo: Path) -> list[dict[str, object]]:
-    return [i for i in _rows(repo, "owner_items") if i["kind"] == loop.LOGIN_KIND]
+    return [i for i in _rows(repo, "owner_items") if i["kind"] == session.LOGIN_KIND]
 
 
-def _picks(s: loop.Session) -> None:
+def _picks(s: session.Session) -> None:
     """The picks until nothing can run, as `softfield run`'s turn makes them."""
     loop.work_queue(s, reviews=True, wait=False)
 
@@ -7968,7 +7277,7 @@ def test_a_lead_ticket_on_an_expired_login_waits_and_goes_once_the_login_works(
     _passes(monkeypatch)
     fake_model.append(_implement)
     login = _Login(monkeypatch)
-    s = loop.open_session(_config(repo))
+    s = session.open_session(_config(repo))
 
     _picks(s)
     # Stopped in ready/, with no attempt counted, and the developer's ticket still ran
@@ -7987,7 +7296,7 @@ def test_a_lead_ticket_on_an_expired_login_waits_and_goes_once_the_login_works(
     ready = load_dir(s.tasks_dir("ready"), 150)
     line = loop._idle_line(s, ready, set(), {})
     assert "1 ticket waits for Claude's login" in line and "1 expired Claude login" in line
-    assert loop._wait_for_reset(s, ready, loop.open_rows(s)) is False
+    assert loop._wait_for_reset(s, ready, session.open_rows(s)) is False
 
     fake_clock[0] += timedelta(minutes=4, seconds=59)
     _picks(s)
@@ -8021,7 +7330,7 @@ def test_a_planner_job_on_an_expired_login_keeps_its_row_and_says_nothing_on_its
     _lead_task(repo, "m1-01-lead")
     _passes(monkeypatch)
     login = _Login(monkeypatch)
-    s = loop.open_session(_config(repo))
+    s = session.open_session(_config(repo))
 
     _picks(s)
     # The planner's job was stopped; Claude's next job waits with it and runs nothing
@@ -8029,7 +7338,7 @@ def test_a_planner_job_on_an_expired_login_keeps_its_row_and_says_nothing_on_its
     [row] = [r for r in _rows(repo, "work_queue") if r["kind"] == "planner"]
     assert row["done"] is None and row["not_before"] is not None
     assert [m["author"] for m in _messages(repo)] == ["owner"]
-    assert [i["kind"] for i in _rows(repo, "owner_items")] == [loop.LOGIN_KIND]
+    assert [i["kind"] for i in _rows(repo, "owner_items")] == [session.LOGIN_KIND]
     assert len(login.told) == 1
 
     login.works = True
@@ -8051,19 +7360,19 @@ def test_a_review_parked_while_the_login_is_out_goes_when_it_works(
     _lead_task(repo, "m1-01-lead")
     _passes(monkeypatch)
     login = _Login(monkeypatch)
-    s = loop.open_session(_config(repo))
+    s = session.open_session(_config(repo))
     _picks(s)
     assert loop.park_review(s, "m1") is True
-    [row] = [r for r in loop.open_rows(s) if r.kind == loop.REVIEW]
-    assert s.state.queued[loop.row_key(row)][loop.LOGIN_HELD] is True
-    hold = loop.claude_hold(s, loop.now())
+    [row] = [r for r in session.open_rows(s) if r.kind == session.REVIEW]
+    assert s.state.queued[session.row_key(row)][session.LOGIN_HELD] is True
+    hold = loop.claude_hold(s, session.now())
     assert hold is not None and hold.reason == "Claude's login has expired"
     login.works = True
     fake_clock[0] += timedelta(minutes=5)
     loop.check_login(s)
-    [row] = [r for r in loop.open_rows(s) if r.kind == loop.REVIEW]
-    assert row.not_before is None and loop.LOGIN_HELD not in s.state.queued[loop.row_key(row)]
-    assert loop.claude_hold(s, loop.now()) is None
+    [row] = [r for r in session.open_rows(s) if r.kind == session.REVIEW]
+    assert row.not_before is None and session.LOGIN_HELD not in s.state.queued[session.row_key(row)]
+    assert loop.claude_hold(s, session.now()) is None
 
 
 def test_a_restart_on_a_login_still_out_holds_the_ticket_again_and_says_nothing_new(
@@ -8072,16 +7381,16 @@ def test_a_restart_on_a_login_still_out_holds_the_ticket_again_and_says_nothing_
     _lead_task(repo, "m1-01-lead")
     _passes(monkeypatch)
     login = _Login(monkeypatch)
-    first = loop.open_session(_config(repo))
+    first = session.open_session(_config(repo))
     _picks(first)
-    loop.close_session(first)
+    session.close_session(first)
 
-    second = loop.open_session(_config(repo))
-    assert _state(repo).parked["m1-01-lead"][loop.RETRY] is True  # a restart tries it at once
+    second = session.open_session(_config(repo))
+    assert _state(repo).parked["m1-01-lead"][session.RETRY] is True  # a restart tries it at once
     _picks(second)
     assert login.jobs == ["lead-ticket", "probe"]  # the probe goes first, and holds it again
     entry = _state(repo).parked["m1-01-lead"]
-    assert loop.RETRY not in entry and entry[loop.LOGIN_HELD] is True
+    assert session.RETRY not in entry and entry[session.LOGIN_HELD] is True
     assert len(_login_items(repo)) == 1 and len(login.told) == 1
 
 
@@ -8091,12 +7400,12 @@ def test_a_restart_after_logging_in_clears_the_item_and_runs_the_ticket(
     _lead_task(repo, "m1-01-lead")
     _passes(monkeypatch)
     login = _Login(monkeypatch)
-    first = loop.open_session(_config(repo))
+    first = session.open_session(_config(repo))
     _picks(first)
-    loop.close_session(first)
+    session.close_session(first)
 
     login.works = True
-    _picks(loop.open_session(_config(repo)))  # at once: the owner may have just logged in
+    _picks(session.open_session(_config(repo)))  # at once: the owner may have just logged in
     assert login.jobs == ["lead-ticket", "probe", "lead-ticket"]
     [item] = _login_items(repo)
     assert item["resolved"] is not None
@@ -8111,11 +7420,11 @@ def test_the_login_is_the_machines_so_another_projects_item_stands_for_this_one(
     conn = metrics.open_db(_config(repo).metrics_db)
     other = metrics.upsert_project(conn, "other", repo="/elsewhere")
     metrics.upsert_owner_item(
-        conn, other, loop.LOGIN_KIND, "claude", text=LOGIN_TEXT, command="", created="2026"
+        conn, other, session.LOGIN_KIND, "claude", text=LOGIN_TEXT, command="", created="2026"
     )
     conn.commit()
     conn.close()
-    s = loop.open_session(_config(repo))
+    s = session.open_session(_config(repo))
     assert s.db is not None
     loop.check_login(s)  # the first pick asks: the other project's item says it's out
     assert login.jobs == ["probe"]
@@ -8136,18 +7445,18 @@ def test_the_login_is_the_machines_so_another_projects_item_stands_for_this_one(
 def test_a_job_that_cannot_park_waits_for_the_login_where_it_is(repo, fake_clock, monkeypatch):
     """A review `runner milestone` runs has no queue to go back to: it waits, as for a limit."""
     login = _Login(monkeypatch)
-    s = loop.open_session(_config(repo))
+    s = session.open_session(_config(repo))
     tries: list[datetime] = []
     real = login._run_claude
 
     def run_claude(job, repo_, timeout, log_path, now, resume=None):
-        tries.append(loop.now())
+        tries.append(session.now())
         login.works = len(tries) > 1
         return real(job, repo_, timeout, log_path, now, resume)
 
     monkeypatch.setattr(claude, "run_claude", run_claude)
     job = JobSpec(role="review", prompt="Review.", timeout=1)
-    result = loop.call_claude(s, job, "m1", "m1-review-r1")
+    result = session.call_claude(s, job, "m1", "m1-review-r1")
     assert result.ok and tries == [THURSDAY, THURSDAY + timedelta(minutes=5)]
     assert len(_login_items(repo)) == 1 and len(login.told) == 1
 
@@ -8416,7 +7725,7 @@ def test_the_run_takes_a_lead_ticket_over_the_pace_line_at_once_and_never_idles(
     ran_at: list[datetime] = []
 
     def lead(job, repo_):
-        ran_at.append(loop.now())
+        ran_at.append(session.now())
         _lead_implements(job, repo_)
 
     script.append(lead)
@@ -8520,7 +7829,7 @@ def test_once_and_a_milestones_queue_end_with_nothing_to_run_as_before(
     _readings_at(repo, 1.0)
     _lead_task(repo, "m1-01-lead")
     monkeypatch.setattr(loop, "_idle_wait", lambda: pytest.fail("it held"))
-    s = loop.open_session(_config(repo))
+    s = session.open_session(_config(repo))
     assert loop.work_queue(s, reviews=True, once=True) is False
     assert loop.work_queue(s, milestone="m1") is False
     assert _state(repo).parked == {}
@@ -8552,13 +7861,13 @@ def test_an_idle_run_with_work_done_ends_its_session_at_midnight_to_report_it(
 
 def test_the_new_day_that_ends_an_idle_session_is_the_machines(repo, paris, monkeypatch):
     """F187: 22:30 and 23:10 UTC are one day in UTC, but midnight has passed in Paris."""
-    s = loop.open_session(_config(repo), None)
+    s = session.open_session(_config(repo), None)
     s.report.started = datetime(2026, 10, 29, 22, 30, tzinfo=UTC)
     s.report.tasks = [TaskRecord("m1-01-a", "m1", "done")]
-    monkeypatch.setattr(loop, "now", lambda: datetime(2026, 10, 29, 23, 10, tzinfo=UTC))
+    monkeypatch.setattr(session, "now", lambda: datetime(2026, 10, 29, 23, 10, tzinfo=UTC))
     assert loop._idle_holds(s) is False
     assert s.report.idle
-    loop.close_session(s)
+    session.close_session(s)
 
 
 def test_a_ctrl_c_while_idle_ends_the_run_with_its_session_report(
@@ -8578,7 +7887,7 @@ def _ctrl_c_at_the_owners_requests(monkeypatch, when: Callable[[], object]) -> N
     """A Ctrl-C that lands outside the poll's sleep: as the run reads the owner's requests."""
     real = loop.apply_owner_requests
 
-    def interrupted(s: loop.Session) -> None:
+    def interrupted(s: session.Session) -> None:
         if when():
             raise KeyboardInterrupt
         real(s)
@@ -8609,7 +7918,7 @@ def test_a_ctrl_c_while_the_run_isnt_idle_is_still_an_interrupt(repo, fake_clock
     with pytest.raises(KeyboardInterrupt):
         _run(repo)
     assert not (repo / ".softfield" / "sessions").exists()
-    loop.end_open_runs()
+    session.end_open_runs()
     assert _rows(repo, "runs")[-1]["verdict"] == "interrupted"
 
 
@@ -8704,12 +8013,12 @@ def test_a_pause_skips_the_lane_pass_and_the_planning_still_goes():
     assert calls == [("softfield", "queued"), ("coucou", "queued")]
 
 
-def _lane_queue(repo: Path, monkeypatch, ran: list[str]) -> loop.Session:
+def _lane_queue(repo: Path, monkeypatch, ran: list[str]) -> session.Session:
     """A planner reply queued beside `_lane_session`'s tickets; what runs is recorded in ``ran``."""
-    s: loop.Session
+    s: session.Session
     s, _ = _lane_session(repo, monkeypatch)
-    loop.enqueue(s, dispatch.PLANNER, "general", "the owner's message")
-    assert [row.kind for row in loop.open_rows(s)] == [dispatch.PLANNER]
+    session.enqueue(s, dispatch.PLANNER, "general", "the owner's message")
+    assert [row.kind for row in session.open_rows(s)] == [dispatch.PLANNER]
     monkeypatch.setattr(loop, "run_task", _merge_any(repo, ran))
 
     def run_queued(s, row, escalate):
@@ -8729,7 +8038,7 @@ def test_the_lane_pass_runs_the_lane_ticket_not_the_queued_planner_reply(repo, m
     s = _lane_queue(repo, monkeypatch, ran)
     assert loop.work_queue(s, reviews=True, wait=False, once=True, lane_only=True) is False
     assert ran == ["f20-01-dep"]  # what the lane's ticket waits for is in the lane
-    loop.close_session(s)
+    session.close_session(s)
 
 
 def test_the_lane_pass_with_no_lane_ticket_runs_nothing(repo, monkeypatch):
@@ -8743,7 +8052,7 @@ def test_the_lane_pass_with_no_lane_ticket_runs_nothing(repo, monkeypatch):
     with pytest.raises(_Ran):  # the queued pass, after it, takes the reply
         loop.work_queue(s, reviews=True, wait=False, take_tickets=False)
     assert ran == ["planner"]
-    loop.close_session(s)
+    session.close_session(s)
 
 
 def test_the_queued_pass_runs_one_job_then_gives_the_lane_its_turn(repo, monkeypatch):
@@ -8752,7 +8061,7 @@ def test_the_queued_pass_runs_one_job_then_gives_the_lane_its_turn(repo, monkeyp
     got a turn. One queued job, then the round starts again with the lane."""
     ran: list[str] = []
     s = _lane_queue(repo, monkeypatch, ran)
-    loop.enqueue(s, dispatch.PLANNER, "f9", "a second reply")
+    session.enqueue(s, dispatch.PLANNER, "f9", "a second reply")
 
     def run_queued(s, row, escalate):
         if ran:
@@ -8762,7 +8071,7 @@ def test_the_queued_pass_runs_one_job_then_gives_the_lane_its_turn(repo, monkeyp
     monkeypatch.setattr(loop, "run_queued", run_queued)
     assert loop.work_queue(s, reviews=True, wait=False, take_tickets=False) is False
     assert ran == ["general"]
-    loop.close_session(s)
+    session.close_session(s)
 
 
 def _ticket_queues(repo: Path, monkeypatch, ran: list[str], kind: str, subject: str | None):
@@ -8774,12 +8083,12 @@ def _ticket_queues(repo: Path, monkeypatch, ran: list[str], kind: str, subject: 
     _on_card(repo, "f9-02-second", 9, deps="[f9-01-first]")
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "cards")
-    s = loop.open_session(_config(repo))
+    s = session.open_session(_config(repo))
     merge = _merge_any(repo, ran)
 
     def run_task(s, task):
         record = merge(s, task)
-        loop.enqueue(s, kind, subject or task.id, "queued while the ticket ran")
+        session.enqueue(s, kind, subject or task.id, "queued while the ticket ran")
         return record
 
     def run_queued(s, row, escalate):
@@ -8799,8 +8108,8 @@ def test_a_ticket_turn_hands_back_before_a_planner_reply_queued_meanwhile(repo, 
     s = _ticket_queues(repo, monkeypatch, ran, dispatch.PLANNER, "general")
     assert loop.work_queue(s, reviews=True, wait=False, once=True) is False
     assert ran == ["f9-01-first"]
-    assert [row.kind for row in loop.open_rows(s)] == [dispatch.PLANNER]  # still waiting
-    loop.close_session(s)
+    assert [row.kind for row in session.open_rows(s)] == [dispatch.PLANNER]  # still waiting
+    session.close_session(s)
 
 
 def test_a_ticket_turn_still_runs_its_own_tickets_direction(repo, monkeypatch):
@@ -8809,7 +8118,7 @@ def test_a_ticket_turn_still_runs_its_own_tickets_direction(repo, monkeypatch):
     with pytest.raises(_Ran):
         loop.work_queue(s, reviews=True, wait=False, once=True)
     assert ran == ["f9-01-first", "direction f9-01-first"]
-    loop.close_session(s)
+    session.close_session(s)
 
 
 def test_a_review_due_after_a_ticket_turn_waits_for_the_round(repo, monkeypatch):
@@ -8818,13 +8127,13 @@ def test_a_review_due_after_a_ticket_turn_waits_for_the_round(repo, monkeypatch)
     _two_milestones(repo)
     ran: list[str] = []
     monkeypatch.setattr(loop, "run_task", _merge_any(repo, ran))
-    s = loop.open_session(_config(repo))
+    s = session.open_session(_config(repo))
     assert loop.work_queue(s, reviews=True, wait=False, once=True) is False
     assert ran == ["f9-02-last"]
     assert s.report.review is None
     assert loop.work_queue(s, reviews=True, wait=False, take_tickets=False) is False
     assert s.report.review == "f9"
-    loop.close_session(s)
+    session.close_session(s)
 
 
 def test_a_project_paused_by_you_runs_its_planning_and_requests_but_not_its_tickets(
@@ -8839,13 +8148,13 @@ def test_a_project_paused_by_you_runs_its_planning_and_requests_but_not_its_tick
 
     def run_queued(s, row, escalate):
         ran.append(row.kind)
-        metrics.finish_queued(s.db, row.id, loop.now().isoformat())
+        metrics.finish_queued(s.db, row.id, session.now().isoformat())
 
     monkeypatch.setattr(loop, "run_queued", run_queued)
-    s = loop.open_session(_config(repo))
+    s = session.open_session(_config(repo))
     since = THURSDAY - timedelta(minutes=30)
     _pause_project(repo, since.isoformat())
-    loop.enqueue(s, dispatch.PLANNER, "general", "the owner's message")
+    session.enqueue(s, dispatch.PLANNER, "general", "the owner's message")
     assert loop.work_queue(s, reviews=True, wait=False, once=True, lane_only=True) is False
     assert loop.work_queue(s, reviews=True, wait=False, take_tickets=False) is False
     assert ran == ["planner"]
@@ -8858,7 +8167,7 @@ def test_a_project_paused_by_you_runs_its_planning_and_requests_but_not_its_tick
     assert ran == ["planner", "m1-01-thing"]
     [resumed] = [r for r in _rows(repo, "owner_requests") if r["kind"] == "resume_project"]
     assert resumed["result"] == "resumed"
-    loop.close_session(s)
+    session.close_session(s)
 
 
 def test_dry_run_says_an_archived_projects_tickets_are_archived(repo, capsys):
@@ -8881,12 +8190,12 @@ def test_an_archived_project_runs_its_planning_and_requests_but_not_its_tickets(
 
     def run_queued(s, row, escalate):
         ran.append(row.kind)
-        metrics.finish_queued(s.db, row.id, loop.now().isoformat())
+        metrics.finish_queued(s.db, row.id, session.now().isoformat())
 
     monkeypatch.setattr(loop, "run_queued", run_queued)
-    s = loop.open_session(_config(repo))
+    s = session.open_session(_config(repo))
     _pause_project(repo, metrics.ARCHIVED)
-    loop.enqueue(s, dispatch.PLANNER, "general", "the owner's message")
+    session.enqueue(s, dispatch.PLANNER, "general", "the owner's message")
     assert loop.work_queue(s, reviews=True, wait=False, take_tickets=False) is False
     assert ran == ["planner"]
     assert loop.work_queue(s, reviews=True, wait=False, once=True) is False
@@ -8897,7 +8206,7 @@ def test_an_archived_project_runs_its_planning_and_requests_but_not_its_tickets(
     assert ran == ["planner", "m1-01-thing"]
     [done] = [r for r in _rows(repo, "owner_requests") if r["kind"] == "unarchive_project"]
     assert done["result"] == "unarchived: back in the list, last"
-    loop.close_session(s)
+    session.close_session(s)
 
 
 def test_every_projects_queued_jobs_go_before_any_ticket():
@@ -8945,8 +8254,8 @@ def test_run_projects_skips_a_project_off_main_once_reviews_and_closes_every_ses
 
     def open_session(cfg):
         if cfg.project_name == "coucou":
-            raise loop.RunnerError("start the runner on a clean main branch")
-        report = SimpleNamespace(review=None, started=loop.now(), tasks=[], claude_runs=[])
+            raise session.RunnerError("start the runner on a clean main branch")
+        report = SimpleNamespace(review=None, started=session.now(), tasks=[], claude_runs=[])
         s = SimpleNamespace(
             cfg=cfg, repo=cfg.repo, picks=0, report=report, state=SimpleNamespace(owner_pause=None)
         )
@@ -8996,7 +8305,7 @@ def test_after_a_review_hands_its_fix_over_the_owners_order_holds(monkeypatch):
     found: list[bool] = []
 
     def open_session(cfg):
-        report = SimpleNamespace(review=None, started=loop.now(), tasks=[], claude_runs=[])
+        report = SimpleNamespace(review=None, started=session.now(), tasks=[], claude_runs=[])
         return SimpleNamespace(
             cfg=cfg, repo=cfg.repo, picks=0, report=report, state=SimpleNamespace(owner_pause=None)
         )
@@ -9053,7 +8362,7 @@ def test_a_review_that_changes_the_runner_closes_every_session_before_the_restar
     closed = []
 
     def open_session(cfg):
-        report = SimpleNamespace(review=None, started=loop.now(), tasks=[], claude_runs=[])
+        report = SimpleNamespace(review=None, started=session.now(), tasks=[], claude_runs=[])
         return SimpleNamespace(
             cfg=cfg, repo=cfg.repo, picks=0, report=report, state=SimpleNamespace(owner_pause=None)
         )
@@ -9093,7 +8402,7 @@ def test_a_ctrl_c_mid_job_leaves_that_project_as_one_projects_run_would(monkeypa
     closed = []
 
     def open_session(cfg):
-        report = SimpleNamespace(review=None, started=loop.now(), tasks=[], claude_runs=[])
+        report = SimpleNamespace(review=None, started=session.now(), tasks=[], claude_runs=[])
         return SimpleNamespace(
             cfg=cfg, repo=cfg.repo, picks=0, report=report, state=SimpleNamespace(owner_pause=None)
         )
@@ -9120,7 +8429,7 @@ def test_a_card_committed_outside_the_run_reaches_the_board_at_the_next_round(mo
     cfg = SimpleNamespace(repo=Path("/r/ducks"), project_name="ducks")
     calls: list[str] = []
     synced = []
-    report = SimpleNamespace(review=None, started=loop.now(), tasks=[], claude_runs=[])
+    report = SimpleNamespace(review=None, started=session.now(), tasks=[], claude_runs=[])
     s = SimpleNamespace(
         cfg=cfg, repo=cfg.repo, picks=0, report=report, state=SimpleNamespace(owner_pause=None)
     )
@@ -9154,7 +8463,7 @@ def test_a_softfield_merge_moves_live_and_restarts_when_its_job_ends(repo, tmp_p
     live = tmp_path / "live"
     git(repo, "worktree", "add", "-q", "--detach", str(live), "main")
     monkeypatch.setattr("runner.config.HOME", live)
-    monkeypatch.setattr(loop, "set_activity", lambda s, what: None)
+    monkeypatch.setattr(session, "set_activity", lambda s, what: None)
     s = SimpleNamespace(repo=repo, report=SimpleNamespace(notes=[]))
     code = loop._runner_code(repo)
     assert not loop._new_code(s, code)  # type: ignore[arg-type]
@@ -9165,26 +8474,6 @@ def test_a_softfield_merge_moves_live_and_restarts_when_its_job_ends(repo, tmp_p
     assert loop._new_code(s, code)  # type: ignore[arg-type]
     assert git(live, "rev-parse", "HEAD") == git(repo, "rev-parse", "main")
     assert s.report.notes == [loop.RESTART_NOTE]
-
-
-def test_an_interrupted_job_whose_branch_is_gone_starts_again(repo, capsys):
-    """The owner's first `softfield run` after the split (2026-10-14): state.json said f19-02
-    was cut off on task/f19-02-one-live-poll, a branch left in Coucou's repo; the run crashed.
-    Now it says so, forgets the job, and the ticket starts again from main."""
-    cfg = _config(repo)
-    in_flight = {
-        "kind": "local", "ticket": "m1-01-thing", "branch": "task/m1-01-thing",
-        "agent": "local-qwen", "attempt": 2, "job_id": 1,
-        "started": "2026-10-14T07:25:51+01:00",
-    }  # fmt: skip
-    save_state(State(in_flight=in_flight), cfg.runs_dir / "state.json")
-    s = loop.open_session(cfg, None)
-    assert s.git.current_branch() == "main" and s.git.is_clean()
-    assert s.state.in_flight is None and _state(repo).in_flight is None
-    assert s.state.timed_out == {}  # it didn't run out of time: it never ran here
-    assert (
-        "m1-01-thing's branch task/m1-01-thing is gone: it starts again" in capsys.readouterr().out
-    )
 
 
 def test_the_code_a_process_runs_on_is_fingerprinted_once(repo, tmp_path, monkeypatch):
@@ -9260,7 +8549,7 @@ def _open_items(s) -> list[str]:
 def test_a_pick_pushes_what_is_signed_off_and_doesnt_ask_again(repo, tmp_path, monkeypatch):
     """ADR 42: the runner pushes, and no tag changed means no call to the remote."""
     _signed_off_project(repo, tmp_path, monkeypatch)
-    s = loop.open_session(_config(repo))
+    s = session.open_session(_config(repo))
     loop.check_push(s)
     assert git(repo, "ls-remote", "--tags", "origin").strip().endswith("refs/tags/f1-done")
     monkeypatch.setattr(
@@ -9276,7 +8565,7 @@ def test_the_activity_says_pushing_only_while_a_push_runs(repo, tmp_path, monkey
     from runner import push
 
     _signed_off_project(repo, tmp_path, monkeypatch)
-    s = loop.open_session(_config(repo))
+    s = session.open_session(_config(repo))
     s.activity = "picking the next ticket"
     seen: list[str | None] = []
     real = push.push_signed_off
@@ -9291,7 +8580,7 @@ def test_the_activity_says_pushing_only_while_a_push_runs(repo, tmp_path, monkey
     assert s.activity == "picking the next ticket"
     activities: list[str] = []
     monkeypatch.setattr(
-        loop, "set_activity", lambda sess, activity, *a: activities.append(activity)
+        session, "set_activity", lambda sess, activity, *a: activities.append(activity)
     )
     loop.check_push(s)
     assert activities == []
@@ -9305,7 +8594,7 @@ def test_a_held_push_is_a_desk_item_and_goes_when_it_clears(repo, tmp_path, monk
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "a key")
     git(repo, "tag", "-f", "f1-done")
-    s = loop.open_session(_config(repo))
+    s = session.open_session(_config(repo))
     loop.check_push(s)
     [text] = _open_items(s)
     assert "config.py:1" in text and key not in text
@@ -9320,7 +8609,7 @@ def test_a_held_push_is_a_desk_item_and_goes_when_it_clears(repo, tmp_path, monk
 
 def test_a_project_with_no_origin_pushes_nothing(repo, monkeypatch):
     monkeypatch.setattr("runner.push.push_signed_off", lambda *a, **k: pytest.fail("pushed"))
-    loop.check_push(loop.open_session(_config(repo)))
+    loop.check_push(session.open_session(_config(repo)))
 
 
 def test_both_added_keeps_each_sides_added_lines_ours_first():

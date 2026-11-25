@@ -4,8 +4,8 @@ it, a drag writes it, and the first apply of the owner's requests makes it in to
 import json
 from pathlib import Path
 
-from runner import loop, metrics, order, requests
-from runner.loop import close_session, open_session
+from runner import loop, metrics, order, requests, session
+from runner.session import close_session, open_session
 from runner.state import State
 from runner.tasks import load_dir, parse_task, pick_next, pulls, run_order, task_place
 from tests.runner.conftest import git, write_task
@@ -53,7 +53,7 @@ def _pick_order(repo: Path) -> list[str]:
     """The ready tickets in the order the run takes them, as `softfield run --dry-run` and the
     pick read them (`loop._dispatch_tickets`, `loop._cards`)."""
     ready = load_dir(repo / ".softfield" / "tasks" / "ready", 400)
-    tickets = loop._dispatch_tickets(repo, ready, set(), set(), {}, loop.now())
+    tickets = loop._dispatch_tickets(repo, ready, set(), set(), {}, session.now())
     picked, left = [], list(ready)
     cards = loop._cards(repo, ready)
     while (task := pick_next(left, set(), set(), cards)) is not None:
@@ -340,7 +340,7 @@ def test_a_drags_list_is_the_order_sent_and_the_table_equals_it(repo):
         metrics.add_request(conn, project, "reorder", None, json.dumps(["f9", "f7"]), "2026-11-12")
     finally:
         conn.close()
-    requests.apply_requests(repo, repo / "var" / "factory-metrics.sqlite", loop.now(), State())
+    requests.apply_requests(repo, repo / "var" / "factory-metrics.sqlite", session.now(), State())
     # the order sent, then the rest in the list's order; the done card's line dropped
     assert order.read_order(repo) == ["f9", "f7", BUG, "f8"]
     assert _pick_order(repo) == ["f9-01-a", "f7-01-a", BUG, "f8-01-a"]
@@ -356,7 +356,7 @@ def test_a_sync_makes_the_table_equal_to_the_list(repo):
     try:
         assert _table(repo) == ["f8", "f7"]
         _listed(repo, "f7", "f8")
-        loop.sync_cards(s)
+        session.sync_cards(s)
         assert _table(repo) == ["f7", "f8"]
     finally:
         close_session(s)

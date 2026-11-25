@@ -43,7 +43,7 @@ class State:
     # so far. Dropped when its row is done.
     queued: dict[str, dict[str, Any]] = field(default_factory=dict)
     # The owner's reserve switches (ADR 22 item 4, f8 D4): "week" or "five_hour" -> when it
-    # was turned on. Off is absent; on lasts 24 hours (`loop.switch_on`).
+    # was turned on. Off is absent; on lasts 24 hours (`session.switch_on`).
     switches: dict[str, str] = field(default_factory=dict)
     # The owner paused the factory (f5-18), and when it took: the run finishes the job it is
     # on, then picks nothing until they resume. Not `paused_until`, which is a limit's.

@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from runner import cli, loop, metrics, owner, procs
+from runner import cli, loop, metrics, owner, procs, session
 from runner.config import load_config
 from runner.milestone import PARKED, RESTART
 from runner.report import SessionReport
@@ -131,10 +131,10 @@ def test_a_restart_hands_no_reserve_answer_on_the_switches_outlive_it(in_repo, m
     state_path = in_repo / ".softfield" / "var" / "runs" / "state.json"
 
     def run(cfg, key, base):
-        seen.append(loop.switch_on(load_state(state_path), "week", loop.now()))
+        seen.append(session.switch_on(load_state(state_path), "week", session.now()))
         if len(seen) == 1:
             state = load_state(state_path)
-            state.switches["week"] = loop.now().isoformat()  # the owner turned it on
+            state.switches["week"] = session.now().isoformat()  # the owner turned it on
             save_state(state, state_path)
             return RESTART
         return "clean"
@@ -303,7 +303,7 @@ def test_a_milestone_command_ending_after_the_sign_off_records_no_verdict(in_rep
 def test_a_ctrl_c_or_a_crash_ends_the_commands_runs(in_repo, monkeypatch):
     """f2-03: a Ctrl-C left run 20261002-055804 alive and on the reserve."""
     ended: list[str] = []
-    monkeypatch.setattr(loop, "end_open_runs", lambda: ended.append("ended"))
+    monkeypatch.setattr(session, "end_open_runs", lambda: ended.append("ended"))
 
     def ctrl_c(cfg, key, base):
         raise KeyboardInterrupt
@@ -322,7 +322,7 @@ def test_runner_pause_and_resume_write_the_dashboards_requests(in_repo, monkeypa
     """f5-18: the console's pause goes by the request, as `runner reserve` does; with no run
     live, the command applies it at once, so the next run starts paused."""
     at = datetime(2026, 10, 7, 21, 30, tzinfo=UTC)
-    monkeypatch.setattr(loop, "now", lambda: at)
+    monkeypatch.setattr(session, "now", lambda: at)
     state_path = in_repo / ".softfield" / "var" / "runs" / "state.json"
     assert cli.main(["pause"]) == 0
     assert load_state(state_path).owner_pause == at.isoformat()
@@ -342,7 +342,7 @@ def test_runner_pause_and_resume_write_the_dashboards_requests(in_repo, monkeypa
 
 def test_runner_pause_during_a_live_run_leaves_it_to_the_run(in_repo, monkeypatch, capsys):
     at = datetime(2026, 10, 7, 21, 30, tzinfo=UTC)
-    monkeypatch.setattr(loop, "now", lambda: at)
+    monkeypatch.setattr(session, "now", lambda: at)
     conn = metrics.open_db(in_repo / "var" / "factory-metrics.sqlite")
     project = metrics.upsert_project(conn, in_repo.name)
     beat = (at - timedelta(seconds=30)).isoformat()

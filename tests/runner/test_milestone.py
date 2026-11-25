@@ -7,10 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from runner import claude, cli, loop, metrics, milestone, owner, shots
+from runner import claude, cli, loop, metrics, milestone, owner, session, shots
 from runner.agents import JobResult, Refusal
 from runner.gates import GateResult
-from runner.loop import close_session, open_session
 from runner.milestone import (
     Card,
     card,
@@ -22,6 +21,7 @@ from runner.milestone import (
     signoff_sections,
 )
 from runner.report import TaskRecord
+from runner.session import close_session, open_session
 from runner.state import State, load_state, save_state
 from runner.tasks import append_footer
 from tests.runner.conftest import git, write_task
@@ -947,7 +947,7 @@ def test_round_one_that_finds_no_commit_says_where_to_look(repo):
 def clock(monkeypatch) -> list[datetime]:
     """`test_loop`'s fake clock: a sleep moves it on."""
     at = [THURSDAY]
-    monkeypatch.setattr(loop, "now", lambda: at[0])
+    monkeypatch.setattr(session, "now", lambda: at[0])
     monkeypatch.setattr("time.sleep", lambda s: at.__setitem__(0, at[0] + timedelta(seconds=s)))
     monkeypatch.setattr(loop, "fresh_reading", lambda s: None)  # no real `claude -p`
     return at
@@ -976,11 +976,11 @@ def test_a_named_milestones_review_still_waits_for_claude(repo, monkeypatch, clo
     events: list[tuple[str, bool]] = []
 
     def run_e2e(*a):
-        events.append(("e2e", loop.now() > FIVE_RESETS))
+        events.append(("e2e", session.now() > FIVE_RESETS))
         return GateResult("e2e", True, "")
 
     def run_claude(job, repo_, timeout, log_path, now, resume=None):
-        events.append(("review", loop.now() > FIVE_RESETS))
+        events.append(("review", session.now() > FIVE_RESETS))
         _review_writes(job, repo_, [])
         return JobResult(ok=True, text="", duration_s=1.0)
 
@@ -1194,7 +1194,7 @@ def test_a_review_parked_between_rounds_resumes_at_its_round_on_its_own_fixes(
     prompts: list[str] = []
 
     def run_task(s, task):
-        events.append(f"{task.id} at {loop.now():%H:%M}")
+        events.append(f"{task.id} at {session.now():%H:%M}")
         git(
             repo,
             "mv",
@@ -1287,7 +1287,7 @@ def test_a_review_refused_mid_round_parks_and_the_line_goes_on(repo, monkeypatch
     stops: list[dict[str, str]] = []
 
     def run_task(s, task):
-        events.append(f"{task.id} at {loop.now():%H:%M}")
+        events.append(f"{task.id} at {session.now():%H:%M}")
         stops.append(dict(s.state.review_stop))
         git(
             repo,
@@ -1356,7 +1356,7 @@ LOGGED_OUT = JobResult(ok=False, text="", duration_s=1.0, login_expired=True, se
 
 @pytest.mark.parametrize(
     ("first", "until", "login"),
-    [(NO_TIME, timedelta(seconds=1), False), (LOGGED_OUT, loop.LOGIN_CHECK, True)],
+    [(NO_TIME, timedelta(seconds=1), False), (LOGGED_OUT, session.LOGIN_CHECK, True)],
     ids=["a limit with no time", "an expired login"],
 )
 def test_a_review_stopped_mid_round_parks_its_row_and_goes_on_from_that_round(
@@ -1376,7 +1376,7 @@ def test_a_review_stopped_mid_round_parks_its_row_and_goes_on_from_that_round(
     [row] = _rows(repo, "work_queue")
     assert row["kind"] == "review" and row["subject"] == "m1" and row["done"] is None
     assert row["not_before"] == (THURSDAY + until).isoformat()
-    assert bool(state.queued["review:m1"].get(loop.LOGIN_HELD)) is login
+    assert bool(state.queued["review:m1"].get(session.LOGIN_HELD)) is login
     if login:  # the next check finds the owner logged in again
         monkeypatch.setattr(loop, "probe", lambda *a: JobResult(ok=True, text="", duration_s=0))
         s = open_session(cfg, None)
@@ -1419,7 +1419,7 @@ def test_a_resumed_review_is_told_its_runs_folder_and_its_findings_are_found_in_
     (_, first_run), (prompt, second_run) = calls
     assert first_run != second_run
     shown = second_run.relative_to(repo).as_posix()
-    assert prompt.endswith(loop.RUN_FOLDER_NOTE.format(run=shown))
+    assert prompt.endswith(session.RUN_FOLDER_NOTE.format(run=shown))
     assert (second_run / "review-m1-r1.json").is_file()
     assert not (first_run / "review-m1-r1.json").exists()
     assert "findings were in an earlier run's folder: moved" in capsys.readouterr().out

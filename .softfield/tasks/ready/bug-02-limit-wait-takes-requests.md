@@ -8,6 +8,7 @@ area: factory
 finding: f101-uv-runner-run-command-stopped-when-F3
 files:
   - runner/loop.py
+  - runner/session.py
   - docs/workflow.md
 tests:
   - tests/runner/test_loop.py
@@ -17,7 +18,7 @@ tests:
 While `softfield run` waits for a Claude limit to reset with nothing else to run, it applies the owner's requests as they come and starts whatever they make runnable, as the idle hold does since F101.
 
 ### Context
-Read `def _wait_for_reset`, `def wait_for_claude`, `def _idle_holds`, `def _idle_line`, `def _hold_for_the_owner` and `def work_queue` in `runner/loop.py`, and in `tests/runner/test_loop.py` `test_waiting_with_nothing_to_run_without_claude_shows_on_the_run` and `test_the_reserve_switch_turned_on_while_the_run_is_idle_runs_the_tickets` (the worked example, with `def _idles`). `runner/**` is protected: write the tests first, each failing for the right reason.
+Read `def _wait_for_reset`, `def _idle_holds`, `def _idle_line`, `def _hold_for_the_owner` and `def work_queue` in `runner/loop.py`, `def wait_for_claude` in `runner/session.py` (F290: what every job shares), and in `tests/runner/test_loop.py` `test_waiting_with_nothing_to_run_without_claude_shows_on_the_run` and `test_the_reserve_switch_turned_on_while_the_run_is_idle_runs_the_tickets` (the worked example, with `def _idles`). `runner/**` is protected: write the tests first, each failing for the right reason.
 - Today: a lead ticket parked for a limit Claude refused (not the reserve) with no developer ticket runnable makes `_wait_for_reset` sleep to the reset in one `time.sleep`, up to 5 hours or the rest of the week. Only the 5-hour switch is read meanwhile, and only for work held by the owner's share. A plant, a message, an approved plan, a pause, a queued ticket all wait for the reset: the standing runner is up and deaf, which F101 set out to end ("applies every request from the dashboard as it comes").
 - The run is git's one writer and nothing else runs during the wait, so it may apply every request there (`apply_owner_requests`), as the pause's hold and the idle hold do, every `HOLD_POLL_S`.
 - The wait ends early when a request made something runnable: a developer ticket queued or approved, a planner job (they run under the reserve), a switch. With nothing new it goes on to the reset.

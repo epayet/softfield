@@ -18,34 +18,16 @@ from runner.config import Config, project_checks, read_protected
 from runner.gates import GateResult
 from runner.gitops import Git, GitError, parse_trailers, with_trailers
 from runner.loop import (
-    CHECK_TICKETS,
-    CLAUDE_HEADLESS_AGENT,
-    MAIN,
     NO_E2E,
-    REVIEW,
-    RUNNER_AGENT,
-    Parked,
-    RunnerError,
-    Session,
     _passed_over,
-    _record,
     _windows_now,
-    call_claude,
-    clock,
-    close_session,
-    enqueue,
-    finish_row,
-    now,
-    open_session,
     park_review,
     rate_verdicts,
     record_findings,
     review_reason,
     run_e2e,
-    runner_commit,
     starting_ratings,
     wait_for_room,
-    with_progress,
     work_queue,
 )
 from runner.review import (
@@ -55,6 +37,26 @@ from runner.review import (
     recurring_for_claude,
     stop_reason,
     update_seen,
+)
+from runner.session import (
+    CHECK_TICKETS,
+    CLAUDE_HEADLESS_AGENT,
+    MAIN,
+    REVIEW,
+    RUNNER_AGENT,
+    Parked,
+    RunnerError,
+    Session,
+    _record,
+    call_claude,
+    clock,
+    close_session,
+    enqueue,
+    finish_row,
+    now,
+    open_session,
+    runner_commit,
+    with_progress,
 )
 from runner.state import State, save_state
 from runner.tasks import (

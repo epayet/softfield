@@ -278,7 +278,7 @@ class Status:
         return f"Job running {self.job_for}" + (f" · {self.attempt}" if self.attempt else "")
 
 
-PICKING = "picking the next ticket"  # runner/loop.py's PICKING: between jobs
+PICKING = "picking the next ticket"  # runner/session.py's PICKING: between jobs
 IDLE = "Idle: "  # runner writes its idle activity starting with this prefix (F101)
 
 

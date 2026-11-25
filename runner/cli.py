@@ -24,6 +24,7 @@ from runner import (
     procs,
     report,
     requests,
+    session,
     setup,
 )
 from runner.config import (
@@ -36,7 +37,7 @@ from runner.config import (
 )
 from runner.gates import layout_problems
 from runner.gitops import Git, GitError
-from runner.loop import RunnerError, local_agent, run_session
+from runner.loop import run_session
 from runner.milestone import (
     PARKED,
     RESTART,
@@ -48,6 +49,7 @@ from runner.milestone import (
     signed_off,
 )
 from runner.requests import ticket_problems
+from runner.session import RunnerError, local_agent
 from runner.state import load_state, save_state
 from runner.tasks import TaskError, milestone_arg
 
@@ -92,7 +94,7 @@ def _request(cfg: Config, kind: str, subject: str | None, value: str | None) -> 
     conn = metrics.open_db(cfg.metrics_db)
     try:
         project = metrics.upsert_project(conn, cfg.project_name, repo=str(cfg.repo))
-        metrics.add_request(conn, project, kind, subject, value, loop.now().isoformat())
+        metrics.add_request(conn, project, kind, subject, value, session.now().isoformat())
     finally:
         conn.close()
 
@@ -288,7 +290,7 @@ def _create(repo: Path, db: Path, quick: bool) -> int:
     print("The runner takes it from its next round, between two jobs.")
     planning = False
     if card is not None:  # the lead plans it without waiting for a message
-        planning = setup.plan_first_card(name, card, db, loop.now().isoformat())
+        planning = setup.plan_first_card(name, card, db, session.now().isoformat())
     print(setup.hand_over(name, card, host, planning=planning))
     return 0
 
@@ -460,7 +462,7 @@ def _apply_requests(cfg: Config, db: Path) -> None:
         if loop.live_run(replace(cfg, metrics_db=db)) is not None:
             return
         state = load_state(state_path)
-        lines = requests.apply_requests(cfg.repo, db, loop.now(), state)
+        lines = requests.apply_requests(cfg.repo, db, session.now(), state)
         if lines:
             save_state(state, state_path)
     except Exception as exc:
@@ -676,17 +678,17 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command in (None, "run"):
             while True:
-                session = run_session(
+                ran = run_session(
                     cfg,
                     once=getattr(args, "once", False),
                     dry_run=getattr(args, "dry_run", False),
                     escalate=not getattr(args, "no_escalate", False),
                 )
-                if session is not None and session.restart:
+                if ran is not None and ran.restart:
                     _restart()  # `runner run` is the standing command (ADR 17): it carries on
-                if session is None or (session.review is None and not session.idle):
+                if ran is None or (ran.review is None and not ran.idle):
                     break
-                if session.review is not None and _review(cfg, repo, session.review):
+                if ran.review is not None and _review(cfg, repo, ran.review):
                     _restart()  # else back to the queue (f4-20)
         elif args.command == "milestone":
             key = milestone_arg(repo, args.number)
@@ -810,7 +812,7 @@ def main(argv: list[str] | None = None) -> int:
                     print()
                 if args.replay:
                     print("Replayed under ADR 24:")
-                    for redone in loop.replay_ratings(conn, project, start, loop.now()):
+                    for redone in loop.replay_ratings(conn, project, start, session.now()):
                         moved = f"→ {redone.after:.2f}" if redone.written else "unchanged"
                         print(
                             f"{redone.agent:<28} {redone.before:.2f} {moved},"
@@ -879,7 +881,7 @@ def main(argv: list[str] | None = None) -> int:
     finally:
         # A Ctrl-C or a crash leaves no run looking alive or on the reserve (f2-03). A
         # self-restart ended its run before `execve`, and the new run keeps the yes.
-        loop.end_open_runs()
+        session.end_open_runs()
     return 0
 
 

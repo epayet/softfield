@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from factory_dashboard import queries
-from runner import bench, gates, loop, metrics, sandbox
+from runner import bench, gates, loop, metrics, sandbox, session
 from runner.agents import Agent, JobResult, JobSpec, Refusal
 from runner.config import Config
 from runner.gitops import Git, with_trailers
@@ -113,7 +113,7 @@ def fake_agents(monkeypatch) -> dict[str, list[Act]]:
         pytest.fail("bench called Claude")
 
     monkeypatch.setattr(bench, "adapter_for", adapter_for)
-    monkeypatch.setattr(loop, "call_claude", no_claude)
+    monkeypatch.setattr(session, "call_claude", no_claude)
     file_gates = tuple(
         g
         for g in gates.GATES
@@ -261,7 +261,7 @@ def test_an_opencode_agent_edits_its_copy_never_the_main_checkout(
     fake.write_text(FAKE_OPENCODE)
     fake.chmod(0o755)
     monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
-    monkeypatch.setattr(loop, "call_claude", lambda *a, **k: pytest.fail("bench called Claude"))
+    monkeypatch.setattr(session, "call_claude", lambda *a, **k: pytest.fail("bench called Claude"))
     file_gates = tuple(g for g in gates.GATES if g.__name__ in {"gate_protected", "gate_diff_size"})
     monkeypatch.setattr(gates, "GATES", file_gates)
     cfg = replace(_config(repo, copies), opencode_timeout=60)
@@ -300,7 +300,7 @@ def test_an_opencode_agent_started_from_the_main_checkout_still_edits_its_copy(
     fake.chmod(0o755)
     monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
     monkeypatch.setenv("PWD", str(repo))  # `softfield bench` typed in the main checkout
-    monkeypatch.setattr(loop, "call_claude", lambda *a, **k: pytest.fail("bench called Claude"))
+    monkeypatch.setattr(session, "call_claude", lambda *a, **k: pytest.fail("bench called Claude"))
     file_gates = tuple(g for g in gates.GATES if g.__name__ in {"gate_protected", "gate_diff_size"})
     monkeypatch.setattr(gates, "GATES", file_gates)
     cfg = replace(_config(repo, copies), opencode_timeout=60)
@@ -365,7 +365,7 @@ def test_a_change_already_in_the_main_checkout_is_no_leak(repo, copies, fake_age
 
 def test_a_bench_dir_inside_the_repo_is_refused(repo, fake_agents):
     _history(repo)
-    with pytest.raises(loop.RunnerError, match=r"\[bench\] dir"):
+    with pytest.raises(session.RunnerError, match=r"\[bench\] dir"):
         bench.run_bench(_config(repo, repo / "var" / "copies"), [TICKET], ["fake-a"])
     assert not (repo / "var" / "copies").exists()
 
@@ -608,7 +608,7 @@ def test_later_findings_on_the_tickets_are_known_but_rejected_ones_are_not(
 
 def test_a_review_bench_skips_the_agents_own_checkpoints(repo, copies, fake_agents):
     _checkpointed(repo)
-    with pytest.raises(loop.RunnerError, match="no checkpoint of m1"):
+    with pytest.raises(session.RunnerError, match="no checkpoint of m1"):
         bench.run_review_bench(_config(repo, copies), ["m1"], ["claude-opus"])
 
 
@@ -641,9 +641,9 @@ def test_an_unusable_answer_fails_its_replay_and_the_bench_goes_on(repo, copies,
 
 def test_unknown_tickets_and_agents_fail_before_anything_runs(repo, copies, fake_agents):
     _history(repo)
-    with pytest.raises(loop.RunnerError, match="no-such-agent"):
+    with pytest.raises(session.RunnerError, match="no-such-agent"):
         bench.run_bench(_config(repo, copies), [TICKET], ["no-such-agent"])
-    with pytest.raises(loop.RunnerError, match="m1-99-none"):
+    with pytest.raises(session.RunnerError, match="m1-99-none"):
         bench.run_bench(_config(repo, copies), ["m1-99-none"], ["fake-a"])
     assert not (repo / "var" / "factory-metrics.sqlite").exists()
 
@@ -672,7 +672,7 @@ def _sandboxed_bench(repo, copies, tmp_path_factory, monkeypatch, script: str):
     monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
     # The test's main checkout is under /tmp, which the sandbox lets tools write
     monkeypatch.setattr(sandbox, "TOOL_DIRS", (Path("/dev"),))
-    monkeypatch.setattr(loop, "call_claude", lambda *a, **k: pytest.fail("bench called Claude"))
+    monkeypatch.setattr(session, "call_claude", lambda *a, **k: pytest.fail("bench called Claude"))
     file_gates = tuple(g for g in gates.GATES if g.__name__ in {"gate_protected", "gate_diff_size"})
     monkeypatch.setattr(gates, "GATES", file_gates)
     return replace(_config(repo, copies), opencode_timeout=60)

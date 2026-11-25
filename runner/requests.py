@@ -29,6 +29,7 @@ from runner import (
     order,
     owner,
     planner,
+    session,
     setup,
     stacks,
 )
@@ -141,19 +142,19 @@ def _switch(
 ) -> str:
     """A reserve switch turned on (for 24 hours) or off; the items the owner acted on are
     answered: the switch's own lapse item and, when on, the tickets parked for it."""
-    if switch not in loop.SWITCHES:
-        return f"a reserve switch is {' or '.join(loop.SWITCHES)}, not {switch!r}"
+    if switch not in session.SWITCHES:
+        return f"a reserve switch is {' or '.join(session.SWITCHES)}, not {switch!r}"
     if value not in _SWITCHED:
         return f"a reserve switch is turned on or off, not {value!r}"
     name, on = str(switch), value == "on"
-    parked = loop.FIVE_HOUR_KIND if name == loop.FIVE_HOUR else loop.RESERVE_KIND
+    parked = session.FIVE_HOUR_KIND if name == session.FIVE_HOUR else session.RESERVE_KIND
     for row in metrics.open_owner_items(conn, project_id):
         kind, subject = row["kind"], row["subject"]
-        lapsed = kind == loop.RESERVE_KIND and subject == name
-        waiting = on and kind == parked and subject not in loop.SWITCHES
+        lapsed = kind == session.RESERVE_KIND and subject == name
+        waiting = on and kind == parked and subject not in session.SWITCHES
         if lapsed or waiting:
             metrics.resolve_owner_item(conn, row["id"], now.isoformat())
-    return f"Claude's reserve: {loop.set_switch(state, name, on, now)}"
+    return f"Claude's reserve: {session.set_switch(state, name, on, now)}"
 
 
 def _pause(conn: sqlite3.Connection, state: State, now: datetime, kind: str) -> str:
@@ -168,12 +169,12 @@ def _pause(conn: sqlite3.Connection, state: State, now: datetime, kind: str) -> 
             state.owner_pause = since
             return f"already paused, since {datetime.fromisoformat(since).astimezone():%H:%M}"
         state.owner_pause = now.isoformat()
-        metrics.add_usage_event(conn, loop.RUNNER_AGENT, state.owner_pause, PAUSE)
+        metrics.add_usage_event(conn, session.RUNNER_AGENT, state.owner_pause, PAUSE)
         return "paused: the runner finishes its job, then holds"
     if since is None:
         return "not paused"
     state.owner_pause = None
-    metrics.add_usage_event(conn, loop.RUNNER_AGENT, since, PAUSE, resets_at=now.isoformat())
+    metrics.add_usage_event(conn, session.RUNNER_AGENT, since, PAUSE, resets_at=now.isoformat())
     return "resumed"
 
 
@@ -657,7 +658,7 @@ def auto_merge(
             repo, conn, project_id, now, duplicate, kept, by="lead", summary=_summary(proposal)
         )
         message = f"{name} merged into {planner.thread_name(kept)} by the lead"
-        git.commit_all(with_trailers(message, agent=loop.CLAUDE_HEADLESS_AGENT))
+        git.commit_all(with_trailers(message, agent=session.CLAUDE_HEADLESS_AGENT))
     except planner.PlannerError as exc:
         _undo(git, None if moved is None else moved.made)
         return str(exc)
@@ -729,7 +730,7 @@ def _put_back(
     branch was drafted (f170 D2): each of ``card``'s tickets the branch adds in ready/ or later/
     that its base lacks while main holds the name in ready/, by main's path, to the branch's path.
     The running ticket is not one: its clash is refused as any other."""
-    base = git.run("merge-base", loop.MAIN, branch).strip()
+    base = git.run("merge-base", session.MAIN, branch).strip()
     found = {}
     removed = {path for mode, path in changes if mode == "000000"}
     for mode, path in changes:
@@ -763,7 +764,7 @@ def _replace_put_back(git: Git, put_back: Mapping[str, str]) -> None:
 def clash_words(branch: str) -> str:
     """What a plan branch that clashes with main asks of the owner (F139-F1): its planner job
     rebuilds it on main."""
-    return f"{branch} clashes with {loop.MAIN}: press Refresh against main on its page"
+    return f"{branch} clashes with {session.MAIN}: press Refresh against main on its page"
 
 
 def plan_clash(repo: Path, thread: str) -> str | None:
@@ -787,7 +788,7 @@ def _clash_settles(git: Git, branch: str, put_back: Mapping[str, str]) -> bool:
         "--write-tree",
         "--name-only",
         "--no-messages",
-        loop.MAIN,
+        session.MAIN,
         branch,
         check=False,
     )
@@ -903,7 +904,7 @@ def _approve_plan(
     if planned and branch is not None:
         # a note main merged into the card while the plan was drafted is kept with it, not refused
         if planner.merged_tree(repo, branch) is None and loop.catch_up_plan(git, branch, thread):
-            git.checkout(loop.MAIN)
+            git.checkout(session.MAIN)
         changes = _drafts(git, branch)
         if replan:
             put_back = _put_back(git, branch, changes, thread, running)
@@ -940,7 +941,7 @@ def _approve_plan(
         except GitError:
             if not _settle_clash(git, put_back):
                 _undo(git)
-                return f"{branch} clashes with {loop.MAIN}: not approved"
+                return f"{branch} clashes with {session.MAIN}: not approved"
     made: Path | None = None
     moved: dict[tuple[str, str], _Moved] = {}
     entering = False  # F222 D2: the card enters the line, last
@@ -1079,7 +1080,7 @@ def _renumber_draft(repo: Path, draft: str, target: str, old: int, new: int) -> 
 
 def _renumber_mentions(git: Git, draft: str, target: str, old: int, new: int) -> None:
     """On the plan branch: what this branch alone drafted says the ADR's new number."""
-    changed = git.run("diff", "--name-only", f"{loop.MAIN}...HEAD").splitlines()
+    changed = git.run("diff", "--name-only", f"{session.MAIN}...HEAD").splitlines()
     for name in changed:
         path = Path(git.repo, name)
         if not name.startswith((".softfield/cards/", ".softfield/tasks/")) or not path.is_file():
@@ -1171,11 +1172,11 @@ def _accept_adr(
             if target != draft:
                 git.run("rm", "-q", draft)
                 _renumber_mentions(git, draft, target, number, new)
-            git.run("checkout", loop.MAIN, "--", target)
-            message = f"runner: ADR {new} accepted on {loop.MAIN}"
+            git.run("checkout", session.MAIN, "--", target)
+            message = f"runner: ADR {new} accepted on {session.MAIN}"
             git.commit_all(with_trailers(message, agent="runner"), author=RUNNER_AUTHOR)
         finally:
-            git.checkout(loop.MAIN)
+            git.checkout(session.MAIN)
         result = f"accepted {target}"
         if target != draft:
             result += f" (number {number} was taken, so it is ADR {new})"
@@ -1796,7 +1797,7 @@ def move_to_list(repo: Path) -> list[str]:
     path = order.order_path(repo)
     listed = path.exists() or path.is_symlink()
     git = Git(repo)
-    if git.current_branch() != loop.MAIN:
+    if git.current_branch() != session.MAIN:
         return []  # the next apply on main moves it
     board = _board(repo, State())  # the running bug ticket keeps its place too
     files = {
@@ -1907,14 +1908,14 @@ def _free_parked(
             ready.append(parse_task(path, _MAX_DIFF))
         except (ValueError, yaml.YAMLError, OSError):  # as ticket_problems: it won't read
             continue
-    held = (loop.RESERVE_KIND, loop.FIVE_HOUR_KIND)
+    held = (session.RESERVE_KIND, session.FIVE_HOUR_KIND)
     freed = {
         task_id
         for task_id in loop.reserve_cards(repo, ready)
         if (state.parked.get(task_id) or {}).get("kind") in held
     }
     for task_id in freed:
-        state.parked[task_id][loop.RETRY] = True
+        state.parked[task_id][session.RETRY] = True
     for row in metrics.open_owner_items(conn, project_id):
         if row["kind"] in held and row["subject"] in freed:
             metrics.resolve_owner_item(conn, row["id"], now.isoformat())
@@ -1970,14 +1971,14 @@ def _reserve(
 ) -> str:
     """A reserve request: one of the owner's two switches (``_switch``), or a card's mark
     (``_card_reserve``, F172 D2)."""
-    if subject in loop.SWITCHES:
+    if subject in session.SWITCHES:
         return _switch(conn, project_id, state, now, subject, value)
     return _card_reserve(repo, conn, project_id, state, now, subject, value)
 
 
 def _commits(kind: str, subject: object) -> bool:
     """Whether a request commits: a reserve request on a card does, its switches don't."""
-    return kind in _COMMITS or (kind == RESERVE and subject not in loop.SWITCHES)
+    return kind in _COMMITS or (kind == RESERVE and subject not in session.SWITCHES)
 
 
 def _waits(repo: Path, kind: str, subject: object = None) -> str | None:
@@ -1987,12 +1988,12 @@ def _waits(repo: Path, kind: str, subject: object = None) -> str | None:
     if not _commits(kind, subject):
         return None
     git = Git(repo)
-    if git.current_branch() != loop.MAIN:
-        return f"waits for the repo to be on {loop.MAIN}"
+    if git.current_branch() != session.MAIN:
+        return f"waits for the repo to be on {session.MAIN}"
     if kind == SIGNOFF and not git.is_clean():
-        return f"waits for a clean {loop.MAIN}: a sign-off commits the whole tree"
+        return f"waits for a clean {session.MAIN}: a sign-off commits the whole tree"
     if kind in _APPROVALS and not git.is_clean():
-        return f"waits for a clean {loop.MAIN}: an approval commits on it"
+        return f"waits for a clean {session.MAIN}: an approval commits on it"
     return None
 
 
@@ -2066,7 +2067,7 @@ def _apply(
             return _change(conn, project_id, now, row)
     except (
         owner.OwnerError,
-        loop.RunnerError,
+        session.RunnerError,
         TaskError,
         planner.PlannerError,
         setup.SetupError,
@@ -2220,10 +2221,10 @@ def _lapse(
     """The switches on for 24 hours turned off, quietly (F97 D7, 2026-11-24): a lever that is
     off only sends lead tickets after the developers' (ADR 50 item 6), so nothing asks the
     owner and nothing goes to the phone. One line each, for the console."""
-    which = {loop.WEEK: "the week's switch"}
+    which = {session.WEEK: "the week's switch"}
     return [
         f"Claude's reserve: {which.get(switch, 'the 5-hour switch')} went off after 24 hours."
-        for switch in loop.lapse_switches(state, now)
+        for switch in session.lapse_switches(state, now)
     ]
 
 
@@ -2265,7 +2266,10 @@ def _settle_waits(conn: sqlite3.Connection, project_id: int, state: State, now: 
     ran, merged or went back (f8-03's stayed a day after it merged, 2026-10-06)."""
     for row in metrics.open_owner_items(conn, project_id):
         kind, subject = row["kind"], row["subject"]
-        if kind not in (loop.RESERVE_KIND, loop.FIVE_HOUR_KIND) or subject in loop.SWITCHES:
+        if (
+            kind not in (session.RESERVE_KIND, session.FIVE_HOUR_KIND)
+            or subject in session.SWITCHES
+        ):
             continue
         if (state.parked.get(subject) or {}).get("kind") != kind:
             metrics.resolve_owner_item(conn, row["id"], now.isoformat())

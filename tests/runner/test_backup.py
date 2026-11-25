@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from runner import backup, loop
+from runner import backup, loop, session
 from runner.config import Backup, Config, ConfigError, load_config
 from runner.report import TaskRecord
 from tests.runner.conftest import git, write_task
@@ -173,7 +173,7 @@ def test_a_backup_that_keeps_nothing_or_never_waits_is_a_config_error(tmp_path, 
 
 @pytest.fixture(autouse=True)
 def _quiet_run(monkeypatch):
-    monkeypatch.setattr(loop, "OPEN_RUNS", [])
+    monkeypatch.setattr(session, "OPEN_RUNS", [])
     monkeypatch.setattr(loop, "fresh_reading", lambda s: None)  # no real `claude -p`
 
 
@@ -184,7 +184,7 @@ def fake_clock(monkeypatch) -> list[datetime]:
     def sleep(seconds: float) -> None:
         clock[0] += timedelta(seconds=seconds)
 
-    monkeypatch.setattr(loop, "now", lambda: clock[0])
+    monkeypatch.setattr(session, "now", lambda: clock[0])
     monkeypatch.setattr("time.sleep", sleep)
     return clock
 
@@ -272,33 +272,33 @@ def test_a_folder_not_writable_is_one_note_and_the_run_goes_on(
 
 def test_a_long_wait_writes_a_copy_without_a_pick(repo, tmp_path, fake_clock):
     folder = tmp_path / "Dropbox"
-    s = loop.open_session(_config(repo, folder))
-    loop.check_backup(s)
+    s = session.open_session(_config(repo, folder))
+    session.check_backup(s)
     assert _copies(folder) == [_name(THURSDAY)]
     resumes = THURSDAY + timedelta(hours=30)
-    loop.wait_for_claude(s, 30 * 3600, resumes, "m1-01-lead", limit=False)
+    session.wait_for_claude(s, 30 * 3600, resumes, "m1-01-lead", limit=False)
     assert len(_copies(folder)) == 2
-    loop.close_session(s)
+    session.close_session(s)
 
 
 def test_a_wait_watching_a_switch_writes_a_copy_too(repo, tmp_path, fake_clock):
     folder = tmp_path / "Dropbox"
-    s = loop.open_session(_config(repo, folder))
-    loop.check_backup(s)
+    s = session.open_session(_config(repo, folder))
+    session.check_backup(s)
     resumes = THURSDAY + timedelta(hours=30)
-    loop.wait_for_claude(s, 30 * 3600, resumes, "m1-01-lead", limit=False, until=lambda: False)
+    session.wait_for_claude(s, 30 * 3600, resumes, "m1-01-lead", limit=False, until=lambda: False)
     assert len(_copies(folder)) == 2
-    loop.close_session(s)
+    session.close_session(s)
 
 
 def test_the_owners_pause_writes_a_copy_while_it_holds(repo, tmp_path, fake_clock, monkeypatch):
     folder = tmp_path / "Dropbox"
-    s = loop.open_session(_config(repo, folder))
-    loop.check_backup(s)
+    s = session.open_session(_config(repo, folder))
+    session.check_backup(s)
     s.state.owner_pause = THURSDAY.isoformat()
     polls = [0]
 
-    def apply(s_: loop.Session) -> None:
+    def apply(s_: session.Session) -> None:
         fake_clock[0] += timedelta(hours=13)
         polls[0] += 1
         if polls[0] == 2:
@@ -308,4 +308,4 @@ def test_the_owners_pause_writes_a_copy_while_it_holds(repo, tmp_path, fake_cloc
     monkeypatch.setattr(loop, "_planning_goes", lambda s_: False)
     assert loop._hold_for_the_owner(s)
     assert len(_copies(folder)) == 2
-    loop.close_session(s)
+    session.close_session(s)

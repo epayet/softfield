@@ -10,6 +10,7 @@ files:
   - runner/planner.py
   - runner/requests.py
   - runner/loop.py
+  - runner/session.py
   - runner/setup.py
   - runner/prompts.py
   - runner/instructions/task-format.md
@@ -29,7 +30,8 @@ Read D4 in `.softfield/cards/f133-each-project-has-its-own-series.md` (ADR 30 al
 - `runner/milestone.py`: `_CARD_AREA_RE` and the `area` field of `Card`.
 - `runner/planner.py`: `_area`, `planting`, `seed_area`, `seed_card` (its header).
 - `runner/requests.py`: `_plant`, which compares and records the area; its guard that a title can't set the card keeps checking the state and `milestone_after`. Keep this file's own `_CARD_AREA_RE`: `_card_marked` still writes the fast lane after an old doc's Area.
-- `runner/loop.py`: `record_ticket` and the card sync that pass `area=`, `ticket_area`'s import, and the fix ticket's `meta |= {"area": …}`.
+- `runner/session.py`: `record_ticket` and the card sync (`sync_cards`) that pass `area=`, and `ticket_area`'s import.
+- `runner/loop.py`: the fix ticket's `meta |= {"area": …}`.
 - `runner/setup.py`: `publish_cards`.
 - `runner/prompts.py`: the planner's words on a bug's frontmatter, which ask for `area:`.
 - `runner/instructions/task-format.md`: the `area:` line, the milestone header's **Area:** and the bug rules.

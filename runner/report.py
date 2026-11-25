@@ -139,7 +139,7 @@ def _tasks_line(tasks: list[TaskRecord]) -> str:
 
 def run_url(report: SessionReport) -> str:
     """The run's page on the dashboard. The runner names a run's folder after its start
-    (``runner.loop.open_session``)."""
+    (``runner.session.open_session``)."""
     return f"{DASHBOARD_URL}/runs/{report.started.astimezone():%Y%m%d-%H%M%S}"
 
 

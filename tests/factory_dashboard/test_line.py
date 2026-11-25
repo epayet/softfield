@@ -22,7 +22,7 @@ from fastapi.testclient import TestClient
 from factory_dashboard.board import HARVESTED, board
 from factory_dashboard.line import BELTS, STATIONS, live_line, overnight, replay, trips
 from factory_dashboard.queries import connect
-from runner import dispatch, loop, metrics
+from runner import dispatch, loop, metrics, session
 from tests.factory_dashboard.conftest import LINE_NOW, LOCAL, NOW, OPUS, PROJECT, SONNET
 
 STATIC = Path(__file__).resolve().parents[2] / "factory_dashboard" / "static"
@@ -375,7 +375,9 @@ def test_an_idle_runner_with_an_empty_queue_says_so(line_db):
     assert (found["station"], found["words"]) == ("queue", "nothing ready: the queue is empty")
 
 
-@pytest.mark.parametrize("activity", [None, "f9-01-working", loop.PICKING, "gates · f9-01-working"])
+@pytest.mark.parametrize(
+    "activity", [None, "f9-01-working", session.PICKING, "gates · f9-01-working"]
+)
 def test_a_working_runner_has_no_wait(line_db, activity):
     assert waiting(line_db, activity) is None
 

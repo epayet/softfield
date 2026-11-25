@@ -41,7 +41,7 @@ from factory_dashboard import queries
 from factory_dashboard.app import Db, Now, Project, render
 from factory_dashboard.jobs import _failed_gate
 from factory_dashboard.overview import LIVE, live_runs
-from runner import dispatch, loop, metrics
+from runner import dispatch, loop, metrics, session
 from runner.config import Config, load_config
 from runner.tasks import BUGS, milestone_order, short_key
 
@@ -779,10 +779,10 @@ def live_line(
     }
 
 
-# What the run says while it waits (``loop.set_activity``): `wait_for_claude`'s words, with the
+# What the run says while it waits (``session.set_activity``): `wait_for_claude`'s words, with the
 # job it waits for, and the two causes `_idle_line` gives for Claude.
 _CLAUDE_WAIT = re.compile(
-    re.escape(loop.WAITING_FOR_CLAUDE) + r"(?: · (?P<what>.+?))?(?: until \d\d:\d\d)?"
+    re.escape(session.WAITING_FOR_CLAUDE) + r"(?: · (?P<what>.+?))?(?: until \d\d:\d\d)?"
 )
 _IDLE_CLAUDE = re.compile(
     r"for Claude(?P<reserve>'s reserve · the week resets| until) (?P<when>\S+ \d\d:\d\d)"

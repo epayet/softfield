@@ -7,6 +7,7 @@ depends_on: [f241-01-limit-pause-notifies]
 files:
   - runner/notify.py
   - runner/loop.py
+  - runner/session.py
 tests:
   - tests/runner/test_notify.py
   - tests/runner/test_loop.py
@@ -16,7 +17,7 @@ tests:
 When no project can start anything on its own for 12 hours or more, `softfield run` sends one phone notification saying so and until when: "Done until Mon 16:00 (51 h): Claude's week is used up. You can switch off."
 
 ### Context
-Read "What happens today" and D1 to D4 in `.softfield/cards/f250-i-want-a-notification-when-the.md`. Then, in `runner/loop.py`: `run_projects` and `project_round` (the round over every project), `work_queue`'s branch where `job is None` without `wait` (it sets the idle line), `_idle_line`, `_lead_tickets_passed_over`, `_resets` and `s.state.parked`; and in `runner/notify.py`: `send` and the body function f241-01 added for F241 D2's time words (the weekday when not today, the hours in brackets, minutes under an hour).
+Read "What happens today" and D1 to D4 in `.softfield/cards/f250-i-want-a-notification-when-the.md`. Then, in `runner/loop.py`: `run_projects` and `project_round` (the round over every project), `work_queue`'s branch where `job is None` without `wait` (it sets the idle line), `_idle_line`, `_lead_tickets_passed_over` and `s.state.parked`; `_resets` and `_notify` in `runner/session.py`; and in `runner/notify.py`: `send` and the body function f241-01 added for F241 D2's time words (the weekday when not today, the hours in brackets, minutes under an hour).
 - `claude_resumes(s, ready, paused, held)` in `runner/loop.py` (D2): the earliest moment Claude-held work of this session could start (the parked tickets' resets not yet due, and the "until" `_lead_tickets_passed_over` computes), or None when Claude holds nothing. `_idle_line` uses it, so its words don't change.
 - `notify.done_message(resumes, now, *, reserve, waiting)` (D3): the body; `resumes` None means "All work done: nothing is ready."; `reserve` true when only the reserve passes lead work over; `waiting` the count of open owner items across projects.
 - In `run_projects`: after a round where no job ran, decide D1 across every live session; once it has held 10 minutes in a row, send it once with `notify.send("Softfield", …, notify.OVERVIEW)`, its failure noted in a session's report as `_notify` does; a round where a job ran re-arms it (D4). Nothing is stored.

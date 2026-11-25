@@ -66,32 +66,34 @@ from runner.gitops import RUNNER_AUTHOR, Git, with_trailers
 from runner.local_model import empty_cause, is_local, warmup
 from runner.loop import (
     BENCH,
+    _answer_json,
+    _log_running,
+    _merge_files,
+    _prompt,
+    _read_blocked,
+    _record_refusal,
+    rate_bench,
+    starting_ratings,
+)
+from runner.report import SessionReport
+from runner.review import Finding, ReviewFileError, parse_checkpoint
+from runner.session import (
     MAIN,
     RUNNER_AGENT,
     RunnerError,
     Session,
-    _answer_json,
     _attempt_end,
     _finish_attempt,
     _finish_run,
-    _log_running,
-    _merge_files,
     _metrics_failed,
-    _prompt,
-    _read_blocked,
     _record,
     _record_readings,
-    _record_refusal,
     _start_heartbeat,
     next_number,
     now,
-    rate_bench,
     record_start,
-    starting_ratings,
     with_progress,
 )
-from runner.report import SessionReport
-from runner.review import Finding, ReviewFileError, parse_checkpoint
 from runner.state import load_state
 from runner.tasks import _FOOTER_BLOCK_RE, Task, parse_task
 

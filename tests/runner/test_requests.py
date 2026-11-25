@@ -11,7 +11,7 @@ from typing import Any, cast
 
 import pytest
 
-from runner import cli, dispatch, loop, metrics, milestone, planner, requests, setup
+from runner import cli, dispatch, loop, metrics, milestone, planner, requests, session, setup
 from runner.gitops import Git, GitError
 from runner.state import State, load_state, save_state
 from runner.tasks import append_footer, load_dir
@@ -296,10 +296,10 @@ def test_a_reserve_request_turns_its_switch_on_for_24_hours_and_off(repo, switch
     assert line.startswith(f"reserve {switch}: ") and "on until Fri 12:00" in line
     assert state.switches == {switch: NOW.isoformat()}
     assert _request(repo, asked) == (NOW.isoformat(), line.split(": ", 1)[1])
-    assert loop.switch_on(state, switch, NOW + timedelta(hours=23, minutes=59))
-    assert not loop.switch_on(state, switch, NOW + timedelta(hours=24))
+    assert session.switch_on(state, switch, NOW + timedelta(hours=23, minutes=59))
+    assert not session.switch_on(state, switch, NOW + timedelta(hours=24))
     other = {"week": "five_hour", "five_hour": "week"}[switch]
-    assert not loop.switch_on(state, other, NOW)  # one switch per window
+    assert not session.switch_on(state, other, NOW)  # one switch per window
     _ask(repo, "reserve", switch, "off")
     [line] = _apply(repo, state)
     assert line.endswith("is off") and state.switches == {}
@@ -355,7 +355,7 @@ def test_a_switch_on_for_24_hours_reads_off_and_asks_nothing(repo):
     state = State(
         switches={"week": (NOW - timedelta(hours=24)).isoformat(), "five_hour": NOW.isoformat()}
     )
-    assert not loop.switch_on(state, "week", NOW)
+    assert not session.switch_on(state, "week", NOW)
     lines = _apply(repo, state)
     assert "Claude's reserve: the week's switch went off after 24 hours" in lines[0]
     assert state.switches == {"five_hour": NOW.isoformat()}  # the other one stays on
@@ -434,7 +434,7 @@ def test_a_wait_takes_only_the_switches_and_leaves_the_rest_for_the_pick(repo):
     finally:
         conn.close()
     assert _request(repo, asked) == (NOW.isoformat(), line.split(": ", 1)[1])
-    assert loop.switch_on(state, "five_hour", NOW)
+    assert session.switch_on(state, "five_hour", NOW)
 
 
 # --- `reserve` on a card: it may use Claude's reserve (F172 D2, D4) ----------------------------
@@ -1008,10 +1008,10 @@ def test_approving_first_frees_the_cards_parked_tickets(repo):
     _board(repo, {"f8": 100})
     _plan(repo, {".softfield/tasks/later/f7-01-a.md": _ticket("f7-01-a")})
     state = State()
-    state.parked["f7-01-a"] = {"kind": loop.RESERVE_KIND}
+    state.parked["f7-01-a"] = {"kind": session.RESERVE_KIND}
     _ask(repo, "approve_plan", "f7", "first")
     _apply(repo, state)
-    assert state.parked["f7-01-a"][loop.RETRY] is True
+    assert state.parked["f7-01-a"][session.RETRY] is True
 
 
 def test_approving_first_with_no_ticket_in_ready_is_approved_as_plain(repo):
@@ -1284,7 +1284,9 @@ def clashing_plan(repo: Path, *, replayable: bool = True) -> None:
 def _planner_job_starts(repo: Path) -> list[str]:
     """``loop._plan_branch``, as a planner job on F7 starts; its session report's notes."""
     report = SimpleNamespace(notes=[])
-    loop._plan_branch(cast(loop.Session, SimpleNamespace(git=Git(repo), report=report)), "plan/f7")
+    loop._plan_branch(
+        cast(session.Session, SimpleNamespace(git=Git(repo), report=report)), "plan/f7"
+    )
     git(repo, "checkout", "-q", "main")
     return list(report.notes)
 
@@ -3323,7 +3325,7 @@ def test_a_reworked_blocked_ticket_failing_pre_flight_refuses_the_replan(repo):
 
 @pytest.fixture
 def at_now(monkeypatch):
-    monkeypatch.setattr(loop, "now", lambda: NOW)
+    monkeypatch.setattr(session, "now", lambda: NOW)
 
 
 def _switches(repo: Path) -> dict[str, str]:
@@ -3379,7 +3381,7 @@ def test_use_reserve_turns_the_switches_on_for_24_hours(
 
     def run_session(cfg, *, once, dry_run, escalate):
         state = load_state(cfg.runs_dir / "state.json")
-        seen.append({s for s in ("week", "five_hour") if loop.switch_on(state, s, NOW)})
+        seen.append({s for s in ("week", "five_hour") if session.switch_on(state, s, NOW)})
         return None
 
     monkeypatch.setattr(cli, "run_session", run_session)

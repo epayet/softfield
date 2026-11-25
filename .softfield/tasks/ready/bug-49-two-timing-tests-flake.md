@@ -9,8 +9,10 @@ finding: f90-editing-seeds-that-i-ve-planted-F2
 tests_only: true
 files:
   - tests/runner/test_loop.py
+  - tests/runner/test_session.py
 tests:
   - tests/runner/test_loop.py
+  - tests/runner/test_session.py
 ---
 
 ### Goal
@@ -23,7 +25,7 @@ Two timing tests in `tests/runner/test_loop.py` fail now and then on unrelated w
 
 A third, seen in F170's review (2026-11-03) on 16 workers: `test_a_pause_lets_the_job_finish_then_holds_until_the_owner_resumes` asserts `slept == [5.0, 5.0]` and got `[5.0, 5.0, 0.001]`. It passed alone and with its file on 16 workers. Nothing in `runner/` names 0.001, so find what made that short sleep first, then assert on the holds alone (the 5.0 sleeps).
 
-Checked against main on 2026-11-09 (F231): the week-switch test is gone (F219, ADR 44 item 6 ended that park), so two remain: `test_the_heartbeat_advances_during_a_usage_limit_pause` and `test_a_pause_lets_the_job_finish_then_holds_until_the_owner_resumes`.
+Checked against main on 2026-11-09 (F231): the week-switch test is gone (F219, ADR 44 item 6 ended that park), so two remain: `test_the_heartbeat_advances_during_a_usage_limit_pause` (in `tests/runner/test_session.py` since F290) and `test_a_pause_lets_the_job_finish_then_holds_until_the_owner_resumes` (still in `tests/runner/test_loop.py`).
 
 ### Done when
 - the two remaining tests pass reliably under a loaded machine and still fail without the behaviour they check

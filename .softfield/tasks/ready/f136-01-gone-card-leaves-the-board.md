@@ -5,11 +5,11 @@ agent: lead
 difficulty: 2
 depends_on: []
 files:
-  - runner/loop.py
+  - runner/session.py
   - runner/metrics.py
   - runner/setup.py
 tests:
-  - tests/runner/test_loop.py
+  - tests/runner/test_session.py
   - tests/runner/test_metrics.py
 ---
 
@@ -17,7 +17,7 @@ tests:
 A card whose doc left `.softfield/cards/` leaves the board even when another doc has the same short key, so two cards never share one thread.
 
 ### Context
-Read D5 in `.softfield/cards/f136-if-i-forgot-about-a-projject.md`, then `sync_cards` in `runner/loop.py`, `remove_cards` and `_card_short` in `runner/metrics.py`, and `publish_cards` in `runner/setup.py`.
+Read D5 in `.softfield/cards/f136-if-i-forgot-about-a-projject.md`, then `sync_cards` in `runner/session.py` (its tests, as `test_a_card_whose_doc_is_gone_leaves_the_board`, are in `tests/runner/test_session.py`), `remove_cards` and `_card_short` in `runner/metrics.py`, and `publish_cards` in `runner/setup.py`.
 - Today `sync_cards` passes `present` as short keys, so in test-factory-hello the old `m1-hello-and-happy-birthday` row (its doc gone) stays on the board beside `m1-uv-run-hi`, and both share the `m1` thread.
 - Card docs are never renamed, so a row's full key is the doc's file stem (`milestone_key(path.stem)`).
 - `publish_cards` runs before the runner's first round: it removes such rows the same way.

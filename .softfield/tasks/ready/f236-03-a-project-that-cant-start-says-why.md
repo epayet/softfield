@@ -6,6 +6,7 @@ difficulty: 2
 depends_on: []
 files:
   - runner/loop.py
+  - runner/session.py
   - runner/gitops.py
 tests:
   - tests/runner/test_loop.py
@@ -15,7 +16,7 @@ tests:
 When the runner can't open a registered project (not on main, or changes not committed), the owner sees it on that project's Planning desk with the reason, instead of the project silently never being worked on.
 
 ### Context
-Read D7 in `.softfield/cards/f236-softfield-init-adds-a-project-to.md`, then `run_projects` and `open_session` in `runner/loop.py` (the `refused` set and its console line), `is_clean` and `current_branch` in `runner/gitops.py`, and `upsert_owner_item`, `resolve_owner_item`, `open_owner_items` and `find_project` in `runner/metrics.py`; for how another owner item is raised and resolved by the runner, follow an existing caller of `upsert_owner_item` in `runner/loop.py`.
+Read D7 in `.softfield/cards/f236-softfield-init-adds-a-project-to.md`, then `run_projects` in `runner/loop.py` (the `refused` set and its console line) and `open_session` in `runner/session.py`, `is_clean` and `current_branch` in `runner/gitops.py`, and `upsert_owner_item`, `resolve_owner_item`, `open_owner_items` and `find_project` in `runner/metrics.py`; for how another owner item is raised and resolved by the runner, follow an existing caller of `upsert_owner_item` in `runner/loop.py`.
 - What happened (2026-11-09): coaster-ranker passed `softfield doctor` at 21:34 and was handed over, but has no row in `runs`; its "Plan this card." job (work_queue 662) waited from 22:38 while later softfield jobs ran, and the Projects page said "nothing for you".
 - The item's text, in plain words: "The runner can't start {name}: it isn't on its main branch ({branch})." or "The runner can't start {name}: these changes aren't committed: {paths}." (at most ten paths, then "and N more"), followed by "It tries again every round."
 - Keep the console line as it is; the item is said once, like it.

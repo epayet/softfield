@@ -195,7 +195,7 @@ def _owned(proc: subprocess.Popen[str], folder: Path | None) -> Iterator[None]:
 
 def stop_all() -> None:
     """Stop every group still running, and remove their temp folders. At exit: Claude jobs and
-    gates wait in a worker thread (`loop.with_progress`), which a Ctrl-C in the main thread
+    gates wait in a worker thread (`session.with_progress`), which a Ctrl-C in the main thread
     never interrupts."""
     with _live_lock:
         procs = dict(_live)

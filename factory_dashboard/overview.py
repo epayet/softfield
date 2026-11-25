@@ -27,7 +27,7 @@ from factory_dashboard.app import (
     factory_wide_status,
     render,
 )
-from runner import allowance, loop, metrics
+from runner import allowance, loop, metrics, session
 from runner.requests import CHANGE, PLANT, RESERVE, owners_words
 from runner.state import State, load_state
 from runner.tasks import milestone_order, short_key
@@ -849,7 +849,7 @@ def agent_allowances(conn: sqlite3.Connection, now: datetime) -> list[WindowAllo
 
 
 # Claude's windows each have the owner's reserve switch (f8 D4): allowance window -> switch
-SWITCH_OF = {"five_hour": loop.FIVE_HOUR, "seven_day": loop.WEEK}
+SWITCH_OF = {"five_hour": session.FIVE_HOUR, "seven_day": session.WEEK}
 
 
 @dataclass
@@ -857,7 +857,7 @@ class Switch:
     """One reserve switch beside its Claude meter."""
 
     name: str  # "week" or "five_hour": the reserve request's subject
-    label: str  # the runner's words for it (`loop.SWITCHES`)
+    label: str  # the runner's words for it (`session.SWITCHES`)
     until: str | None  # "Mon 21:40" while it is on, as `set_switch` words it; None when off
     asked: str | None  # "on" or "off": the owner's latest request the runner hasn't taken
 
@@ -891,10 +891,10 @@ def reserve_switches(conn: sqlite3.Connection, project: str, now: datetime) -> d
     switches = {}
     for window, name in SWITCH_OF.items():
         until = None
-        if state is not None and loop.switch_on(state, name, now):
+        if state is not None and session.switch_on(state, name, now):
             ends = queries.local(state.switches[name])
-            until = f"{ends + timedelta(hours=loop.USE_RESERVE_HOURS):%a %H:%M}"
-        switches[window] = Switch(name, loop.SWITCHES[name], until, asked.get(name))
+            until = f"{ends + timedelta(hours=session.USE_RESERVE_HOURS):%a %H:%M}"
+        switches[window] = Switch(name, session.SWITCHES[name], until, asked.get(name))
     return switches
 
 
@@ -941,8 +941,8 @@ def claude_pace(conn: sqlite3.Connection, project: str, now: datetime) -> Claude
     ]
     reserves = {
         name
-        for name, switch in (("seven_day", loop.WEEK), ("five_hour", loop.FIVE_HOUR))
-        if state is not None and loop.switch_on(state, switch, now)
+        for name, switch in (("seven_day", session.WEEK), ("five_hour", session.FIVE_HOUR))
+        if state is not None and session.switch_on(state, switch, now)
     }
     cost = loop.LEAD_COST
     week = next((w for w in windows if w.name == "seven_day"), None)
@@ -963,7 +963,7 @@ def claude_pace(conn: sqlite3.Connection, project: str, now: datetime) -> Claude
                 full=week.used >= capacity - allowance.EPS,
             )
         elif line is not None:
-            held = allowance.lead_hold(loop.CLAUDE, [week], cost, now) is not None
+            held = allowance.lead_hold(session.CLAUDE, [week], cost, now) is not None
             goes = allowance.lead_goes_at(week, cost, now) if held else None
             pace = WeekPace(
                 "over" if held else "on",
@@ -980,12 +980,12 @@ def claude_pace(conn: sqlite3.Connection, project: str, now: datetime) -> Claude
         full = [
             w
             for w in windows
-            if allowance.lead_hold(loop.CLAUDE, [w], loop.FULL, now, reserves=loop.AT_THE_LIMIT)
+            if allowance.lead_hold(session.CLAUDE, [w], loop.FULL, now, reserves=loop.AT_THE_LIMIT)
         ]
         known = [e for w in full if (e := allowance.lead_goes_at(w, loop.FULL, now)) is not None]
         until = f" until about {max(known).astimezone():%a %H:%M}" if known else ""
         row = f"waits for Claude{until}"
-    elif allowance.lead_hold(loop.CLAUDE, windows, cost, now, reserves=reserves) is not None:
+    elif allowance.lead_hold(session.CLAUDE, windows, cost, now, reserves=reserves) is not None:
         row = "goes when nothing else can"
     return ClaudePace(pace, row)
 

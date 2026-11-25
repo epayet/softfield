@@ -22,9 +22,9 @@ from runner.config import project_name
 from runner.gates import parse_blocked
 from runner.gitops import LOCAL_MODEL_AGENT, Git, GitError, parse_trailers
 from runner.local_model import parse_events, stream_facts
-from runner.loop import CLAUDE_HEADLESS_AGENT, TICKET_FOLDERS
 from runner.milestone import _commit_time, all_footers, milestone_doc, signoff_sections
 from runner.review import ReviewFileError, parse_review
+from runner.session import CLAUDE_HEADLESS_AGENT, TICKET_FOLDERS
 from runner.state import load_state
 from runner.tasks import (
     TaskError,
@@ -132,7 +132,7 @@ class LogName:
 
 
 def claude_log_name(name: str) -> LogName | None:
-    """``claude-<kind>-<subject>[-N][-retryK].log``, as ``runner.loop.call_claude`` names it."""
+    """``claude-<kind>-<subject>[-N][-retryK].log``, as ``runner.session.call_claude`` names it."""
     match = _CLAUDE_LOG_RE.match(name)
     if match is None:
         return None

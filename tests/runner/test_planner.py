@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from runner import claude, loop, metrics, milestone, planner
+from runner import claude, metrics, milestone, planner, session
 from runner.gitops import Git, GitError
 from runner.state import State
 from runner.tasks import milestone_key
@@ -1104,7 +1104,7 @@ def test_a_plant_request_writes_and_commits_an_idea_card_with_the_owners_words(r
     no Claude needed, so it goes on while Claude is parked at a limit."""
     _f6(repo)
     monkeypatch.setattr(claude, "run_claude", _no_claude)
-    monkeypatch.setattr(loop, "call_claude", _no_claude)
+    monkeypatch.setattr(session, "call_claude", _no_claude)
     parked = State(parked={"f6-05-replan": {"kind": "lead", "resets_at": "2026-10-01T17:00:00"}})
     (repo / "coucou" / "thing.py").write_text("# the owner's edit, left alone\n")
     head = git(repo, "rev-parse", "HEAD").strip()
