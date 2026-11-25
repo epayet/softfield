@@ -27,3 +27,10 @@ f279-i-would-like-to-be-able-C2762-2: No-plan fallback test is too presence-base
 - each finding above no longer holds: the tests it names check content, and would fail if the code were wrong
 - the listed `tests:` pass, with no change outside `tests/`
 - all gates pass
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
