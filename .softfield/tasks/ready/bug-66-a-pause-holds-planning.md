@@ -1,5 +1,5 @@
 ---
-id: bug-65-a-pause-holds-planning
+id: bug-66-a-pause-holds-planning
 milestone: bugs
 difficulty: 5
 depends_on: []
