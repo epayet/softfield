@@ -1,6 +1,6 @@
 # ADR 54: A pause holds everything, planning too
 
-- **Status:** Proposed
+- **Status:** Accepted (by the owner, 2026-11-25)
 - **Date:** 2026-11-25
 - **Deciders:** project owner (accepts), Claude (drafts)
 - **Amends:** [ADR 22](22-one-visible-queue.md) item 5's ⚑ "Except planning" (owner, 2026-10-07; built in f6-14), and what [F6](../cards/f6-planning-room.md) D1 "While paused" and D2 "As built (f6-13)" say about pauses. Nothing else changes: Pause and Resume on the top bar, a running job finishing before the pause takes hold, the pause's usage event, the daily backup, the fast lane being held by a pause (ADR 35 item 5), and the per-project pause (ADR 30).
@@ -12,7 +12,8 @@
 3. **A pause starts at the end of the running job**, as today: the top bar says "pausing" until that job has finished and the runner is back on main, then "paused". From that point the folder is the owner's.
 4. **The top bar's words change** from "only planning goes until you resume" to "nothing runs until you resume; what you send waits for it", and the desk's planning rows say "waits for your resume" while paused.
 5. ⚑ **Approving a `replan` no longer lifts a pause**, since nothing is approved during one. The planner prompt (`prompts.PLANNER`) stops suggesting a pause before a `replan`. A ticket the line is running is still refused by the approval (f6-13).
-6. **The docs follow:** ADR 22 item 5 and F6 D1 and D2 point here; `lead.md`'s "Steering loop" says that a replan runs after the resume, and its line on merging "while the runner is stopped (or paused on main)" stays as it is.
+6. **No resume onto a folder that isn't clean** (settled with the owner, 2026-11-25): at a resume, if the main folder is off main or has changes that aren't committed, the runner stays paused and the top bar says why ("the folder has changes that aren't committed: commit or undo them, then resume"). It resumes at the next poll once the folder is clean, without being asked again.
+7. **The docs follow:** ADR 22 item 5 and F6 D1 and D2 point here; `lead.md`'s "Steering loop" says that a replan runs after the resume, and its line on merging "while the runner is stopped (or paused on main)" stays as it is.
 
 ## Alternatives turned down
 - **Keep planning during a pause, and give each planner job a worktree of its own** (the lead's recommendation, 2026-11-25): the main folder would never leave main, and the steering loop would keep working while the line holds. Turned down for now: the owner wants a pause that means "hands off", and this is the smaller change. It stays a candidate for later.
