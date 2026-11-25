@@ -1,4 +1,4 @@
-# Milestone F302: on factory suggestions i can plant or plant and ask the…
+# Milestone F302: Edit a review's idea in its own plate before planting it
 
 > **State:** idea · **Area:** factory
 > Planted by the owner on 2026-11-25.
