@@ -35,3 +35,9 @@ attempts: 3
 tokens: 7627000
 logs: .softfield/var/runs/20261124-231522/f124-04-pause-plate-redraws-when-done
 ```
+
+```yaml
+# --- runner ---
+result: done
+finished_by: lead
+```
