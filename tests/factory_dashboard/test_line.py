@@ -3467,3 +3467,23 @@ def test_the_planted_card_lists_cards_with_their_links(line_db):
     # factory.js should handle the planted key
     js = _factory_js()
     assert "planted" in js
+
+
+def test_tapping_the_queue_station_shows_a_link_to_queue(page, line_client):
+    """F279-05: on the map, the queue station's tap says its count and opens /queue."""
+    open_map(page, line_client, WIDE_SCREEN)
+    page.wait_for_selector(f"{MAP} [data-what]")
+    queue_station = page.locator(f"{MAP} [data-what='queue']")
+    queue_station.click()
+    card = page.locator("#map-card")
+    assert not card.is_hidden()
+    card_text = card.text_content() or ""
+    assert "Queue" in card_text
+    link = card.locator("a")
+    assert link.count() >= 1
+    href = link.first.get_attribute("href")
+    assert href is not None
+    assert href == "/queue"
+    with page.expect_navigation():
+        page.evaluate("el => el.click()", link.first.element_handle())
+    assert page.url.endswith("/queue")

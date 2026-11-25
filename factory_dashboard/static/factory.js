@@ -1198,10 +1198,13 @@
     if (!card || !key || !doc) return;
     mapCardKey = key;
     const parts = [];
-    if (key in WHAT) {
-      const [title, words] = WHAT[key];
-      parts.push(el("div", "card-head", title));
-      parts.push(el("div", "card-words", words));
+    if (key === "queue") {
+      const [title, words] = ["Queue", `${doc.queue.length} tickets in run order. Faded, dashed crates wait for another ticket.`];
+      const a = document.createElement("a");
+      a.className = "card-all";
+      a.href = "/queue";
+      a.textContent = "The whole queue ›";
+      parts.push(el("div", "card-head", title), el("div", "card-words", words), a);
     } else if (key === "planted") {
       const cards = doc.field.planted || [];
       const head = el("div", "card-head", `${plural(cards.length, "card", "cards")} planted`);
@@ -1217,9 +1220,10 @@
         list.append(item);
       }
       parts.push(list);
-    } else if (key === "queue") {
-      const [title, words] = ["Queue", `${doc.queue.length} tickets in run order. Faded, dashed crates wait for another ticket.`];
-      parts.push(el("div", "card-head", title), el("div", "card-words", words));
+    } else if (key in WHAT) {
+      const [title, words] = WHAT[key];
+      parts.push(el("div", "card-head", title));
+      parts.push(el("div", "card-words", words));
     } else if (key === "checks") {
       const [title, words] = ["Checks", "The runner's checks on each ticket's work: the light flashes green for a pass, red for a fail."];
       parts.push(el("div", "card-head", title), el("div", "card-words", words));
