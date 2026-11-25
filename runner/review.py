@@ -148,11 +148,20 @@ def update_seen(seen: dict[str, int], round_: ReviewRound) -> dict[str, int]:
     return updated
 
 
+def own_findings(seen: dict[str, int], milestone: str) -> dict[str, int]:
+    """``seen`` keeps every milestone's findings, by ids that start with their milestone's key:
+    these are ``milestone``'s."""
+    prefix = f"{milestone}-"
+    return {fid: count for fid, count in seen.items() if fid.startswith(prefix)}
+
+
 def recurring_for_claude(seen: dict[str, int], milestone: str) -> list[str]:
     """This milestone's findings open for a second round: Claude fixes these, not the local
-    model. ``seen`` keeps every milestone's, by ids that start with their milestone's key."""
-    prefix = f"{milestone}-"
-    return sorted(fid for fid, count in seen.items() if count == 2 and fid.startswith(prefix))
+    model."""
+    return sorted(fid for fid, count in own_findings(seen, milestone).items() if count == 2)
+
+
+RECURRED = "a finding came back a third time"
 
 
 def stop_reason(
@@ -161,15 +170,18 @@ def stop_reason(
     previous_count: int | None,
     seen: dict[str, int],
     max_rounds: int,
+    *,
+    milestone: str,
 ) -> str | None:
-    """Why the loop must stop after this round, or None to continue."""
+    """Why the loop must stop after this round, or None to continue. Only ``milestone``'s own
+    findings recur (bug-65: M3's m3-F7 stopped every review after it at round 1)."""
     if round_.stop:
         return round_.stop
     count = sum(f.holds_review for f in round_.findings)
     if count == 0:
         return "clean"
-    if any(n >= 3 for n in seen.values()):
-        return "a finding came back a third time"
+    if any(n >= 3 for n in own_findings(seen, milestone).values()):
+        return RECURRED
     if previous_count is not None and count >= previous_count:
         return f"findings did not decrease ({previous_count} -> {count})"
     if round_no >= max_rounds:

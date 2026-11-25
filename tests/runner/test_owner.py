@@ -34,6 +34,20 @@ def test_a_clean_milestone_is_ready_for_sign_off(repo: Path):
     assert text.rstrip().endswith("Then: softfield signoff 1")
 
 
+def test_a_milestone_with_a_fix_still_to_run_is_not_ready_for_sign_off(repo: Path):
+    """bug-65: F290's verdict said ready while its fix f290-09 waited in ready/, and the desk
+    listed no sign-off."""
+    _review(repo)
+    write_task(repo / ".softfield" / "tasks" / "done", "m1-01-thing")
+    write_task(repo / ".softfield" / "tasks" / "ready", "m1-09-fix")
+    code, text = owner.verdict(repo, "m1", State(), "review round cap (3) reached")
+    assert code == 0
+    assert text.startswith("⏳ FIXES TO RUN FIRST")
+    assert "  • m1-09-fix" in text
+    assert "READY FOR SIGN-OFF" not in text and "softfield signoff" not in text
+    assert "Pair a phone" not in text  # the steps come with the verdict that says ready
+
+
 def test_a_decision_for_the_owner_says_what_and_what_next(repo: Path):
     write_task(repo / ".softfield" / "tasks" / "escalated", "m1-02-photos")
     write_task(repo / ".softfield" / "tasks" / "ready", "m1-03-gallery", "[m1-02-photos]")

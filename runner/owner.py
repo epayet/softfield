@@ -238,7 +238,8 @@ def _recorded(
 def verdict(
     repo: Path, milestone: str, state: State, review_stop: str, db: Path | None = None
 ) -> tuple[int, str]:
-    """The last thing ``runner milestone`` prints, and its exit code: 0 ready, 2 needs you.
+    """The last thing ``runner milestone`` prints, and its exit code: 0 ready or fixes still
+    to run, 2 needs you.
     With a metrics ``db``, its items become owner items there (f1 D8)."""
     items = owner_items(repo, milestone, state, review_stop)
     ready = [
@@ -270,6 +271,11 @@ def verdict(
         lines.append(f"  Next: decide the above, then rerun  {rerun}")
         lines += _recorded(repo, db, milestone, "needs you", items)
         return 2, "\n".join(lines) + "\n"
+    if ready:  # bug-65: its review stopped with fixes queued; the desk offers it once they're done
+        lines = ["⏳ FIXES TO RUN FIRST", *(f"  • {t.id}" for t in ready), ""]
+        lines.append("  Then it waits for your sign-off on the dashboard.")
+        lines += _recorded(repo, db, milestone, "fixes to run", items)
+        return 0, "\n".join(lines) + "\n"
     review = milestone_file(repo, "reviews", milestone)
     lines = ["✅ READY FOR SIGN-OFF", f"  Review: {review.relative_to(repo)} ({review_stop})"]
     match = _TEST_STEPS.search(review.read_text(encoding="utf-8")) if review.is_file() else None

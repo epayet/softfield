@@ -237,6 +237,9 @@ def open_session(cfg: Config, command: str | None = "run") -> Session:
     ]
     for key in asked:
         del state.parked[key]
+    from runner.milestone import forget_wrong_stops  # runner.milestone imports this module
+
+    reopened = forget_wrong_stops(cfg.repo, state)
     # A ticket parked for a limit is tried again at once: the owner may have reset the
     # allowance before restarting (2026-10-01). Still limited, it parks on Claude's new reset.
     # A parked support job is a queue row, tried again the same way (`_queue_parked`).
@@ -246,7 +249,7 @@ def open_session(cfg: Config, command: str | None = "run") -> Session:
     retried = [k for k, entry in state.parked.items() if not _due(entry, at)]
     for key in retried:
         state.parked[key][RETRY] = True
-    if asked or retried:
+    if asked or retried or reopened:
         save_state(state, state_path)
     # Without an in-flight job, a dirty tree isn't the runner's: leave it to the owner.
     if git.current_branch() != MAIN or not git.is_clean():
@@ -266,6 +269,10 @@ def open_session(cfg: Config, command: str | None = "run") -> Session:
     if recovered:
         s.log(recovered)
         s.report.notes.append(recovered)
+    if reopened:  # bug-65
+        note = f"review under way again, wrongly stopped: {', '.join(k.upper() for k in reopened)}"
+        s.log(f"[{RUNNER_AGENT}] {note}")
+        s.report.notes.append(note)
     return s
 
 

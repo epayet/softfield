@@ -24,8 +24,10 @@ from runner.loop import (
 )
 from runner.rating_store import rate_verdicts, starting_ratings
 from runner.review import (
+    RECURRED,
     ReviewFileError,
     ReviewRound,
+    own_findings,
     parse_review,
     recurring_for_claude,
     stop_reason,
@@ -515,6 +517,24 @@ def _reviewed(repo: Path, state: State, key: str) -> bool:
     return key not in state.review_counts and milestone_file(repo, "reviews", key).is_file()
 
 
+def forget_wrong_stops(repo: Path, state: State) -> list[str]:
+    """bug-65: until 2026-11-25 a review stopped as RECURRED when any milestone's finding had
+    come back a third time, so M3's m3-F7 stopped 15 reviews at their first round. Such a stop
+    whose own findings never reached 3 is forgotten, unless the card is signed off: its review
+    is under way again and goes on from its next round once its fixes are done. Returns their
+    keys; the caller saves ``state``."""
+    wrong = [
+        key
+        for key, stop in state.review_stop.items()
+        if stop == RECURRED
+        and not any(n >= 3 for n in own_findings(state.finding_seen, key).values())
+        and not signed_off(repo, key)
+    ]
+    for key in wrong:
+        del state.review_stop[key]
+    return wrong
+
+
 def due_reviews(repo: Path, state: State) -> list[str]:
     """The milestones whose review `runner run` starts, in milestone order, by full key: every
     ticket in done/, not signed off, and no review yet."""
@@ -851,7 +871,9 @@ def review_milestone(cfg: Config, milestone: str, base: str, *, park: bool = Fal
         previous = rounds[-1] if rounds else None
         rounds.append(count)
         save_state(s.state, s.state_path)
-        reason = stop_reason(round_no, round_, previous, seen, cfg.review_rounds)
+        reason = stop_reason(
+            round_no, round_, previous, seen, cfg.review_rounds, milestone=milestone
+        )
         if park:  # the main queue runs the fixes (F191 D7): nothing here waits or sleeps
             if reason:
                 stop = reason

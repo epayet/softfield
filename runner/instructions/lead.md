@@ -80,7 +80,7 @@ Format: [`runner/instructions/task-format.md`](../task-format.md). Craft: [`runn
 Per `docs/workflow.md` §Milestone review loop. Grade findings **blocking**, **should-fix** or **nit**, and route each: a ticket, a direct fix, or a draft ADR (which stops the loop).
 - **Fixes go to developer tickets by default** ([ADR 17](../../.softfield/adr/17-always-on-factory.md) item 5). F2's review cost $5.52, partly because it fixed five findings itself.
   - Fix it yourself only when it's small (about 20 lines in one file), protected or security code, or a developer already failed that fix once.
-  - Fix tickets get the usual checkpoint, not another review round.
+  - The next round reads the fix tickets, with no checkpoint (ADR 38). Only the fixes of a review that has stopped get a checkpoint, at once when they finish the card (bug-65).
 - Read the tests as closely as the code: missing edge cases, and every existing test a developer changed (the session reports list them).
 - Check the project's user-facing language reads as its `.softfield/project.md` asks.
 - Read a changed factory page with `softfield look page <address>` before the tests, and check one fixture against a real record ([ADR 37](../../.softfield/adr/37-a-review-reads-the-real-page-first.md)); take screenshots of product pages when you have a browser. The layout check covers the rest.
