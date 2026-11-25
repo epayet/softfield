@@ -1,4 +1,4 @@
-# Milestone F297: The plant a card for a stack button doesn't ask the lead…
+# Milestone F297: Projects page plant buttons also ask the lead
 
 > **State:** idea · **Area:** factory
 > Planted by the owner on 2026-11-25.
