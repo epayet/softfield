@@ -3,7 +3,7 @@ id: f290-08-planner-job-own-module
 agent: lead
 milestone: f290-runner-loop-py-is-6-500
 difficulty: 5
-max_diff: 6000                      # a move counts its lines twice: removed and added
+max_diff: 8000                      # a move counts its lines twice: removed and added
 depends_on: [f290-07-review-job-own-module]
 commands: [cp, sed -i]
 files:
@@ -17,6 +17,7 @@ files:
   - tests/runner/test_loop.py
   - tests/runner/conftest.py
   - tests/runner/test_planner.py
+  - tests/runner/test_requests.py
   - AGENTS.md
   - runner/instructions/claude.md
   - .softfield/cards/f290-runner-loop-py-is-6-500.md
@@ -30,8 +31,9 @@ The planner's and the setup's jobs (plan branches, drafts, the auto-merge, where
 ### Context
 Read the Decisions in `.softfield/cards/f290-runner-loop-py-is-6-500.md` (D1–D8), and follow f290-07's commit (`git log -1 --stat`).
 - The candidates in `runner/loop.py`: from `def _plan_branch` to the end of `def _left_on_main` (`def catch_up_plan` and `def both_added` too; `runner/requests.py` calls `loop.catch_up_plan`), `def run_planner`, `def run_setup`, `def work_stands`, `def ticket_minutes`, `def _name_card`, `def _commit_drafts`, `def _auto_merge`, applying D3. `def setting_up`, `def project_pause` and `def project_archived` stay if only the scheduler uses them.
-- `runner/loop.py` imports `runner/setup.py` inside `run_setup` ("it imports the planner, which imports this"), and `runner/planner.py` reads `loop.MAIN` inside a function: once the planner job has left, check whether those imports can move to the top of their file without a cycle, and fix their comments to say what is true.
-- D5: the planner test that patches `call_claude` on `loop` (`tests/runner/test_planner.py`) patches it on `session` already since f290-01; check.
+- `runner/loop.py` imports `runner/setup.py` inside `run_setup` ("it imports the planner, which imports this"), and `runner/setup.py` imports `runner.planner` inside a function with the comment "runner.planner imports the loop", though `runner/planner.py` imports neither the loop nor the session: once the planner job has left, check whether those imports can move to the top of their file without a cycle, and fix their comments to say what is true (line 436's `runner.milestone imports the loop` stays true). `runner/planner.py`'s `_MAIN` comment says `loop.MAIN; loop imports this module`: `MAIN` is `session.MAIN` since f290-01.
+- `tests/runner/test_requests.py` calls `loop._plan_branch` (a helper that drives it): point it at `planner_job`.
+- D5: the planner test that patches `call_claude` (`tests/runner/test_planner.py`) patches it on `session` already since f290-01; check.
 - Then D8's last part: `AGENTS.md` item 5 names the runner's edges as `runner/session.py`, the `_job` modules and `runner/loop.py`, and adds one line: "A new job kind gets its own `runner/<kind>_job.py`; `runner/loop.py` only schedules." Point `runner/instructions/claude.md`'s mention of `loop.py` at the module that now calls Claude. Fix the docstring at the top of `runner/loop.py` to say it is the scheduler.
 - Log the sizes as landed (each new module and test file, and `runner/loop.py`) under `## As built (f290-08)` in the card doc, one line each.
 - Then D7 for each moved name.

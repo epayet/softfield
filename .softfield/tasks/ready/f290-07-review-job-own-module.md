@@ -12,6 +12,7 @@ files:
   - runner/session.py
   - runner/developer_job.py
   - runner/milestone.py
+  - runner/bench.py
   - tests/runner/test_loop.py
   - tests/runner/conftest.py
   - tests/runner/test_milestone.py
@@ -24,7 +25,9 @@ The runner's reviews short of the milestone review (checkpoints, shadow and stan
 
 ### Context
 Read the Decisions in `.softfield/cards/f290-runner-loop-py-is-6-500.md` (D1–D8), and follow f290-06's commit (`git log -1 --stat`).
-- The candidates in `runner/loop.py`: from `def _done_milestone` to the end of `def record_findings` (`def under_review`, `def _drop_covered_merges`, `def note_merge`), and from `def _authors` to the end of `def fix_ticket` (`def checkpoint`, `def shadow_checkpoint`, `def _read_only_review`, `def stand_in_checkpoint`, `def pre_review`, `def pre_review_pick`, `def _pre_review_turn`, `def fix_tickets`), plus `def _name_checkpoint`, `def checkpoint_reason` and `def review_reason` if f290-01 left them, applying D3.
+- The candidates in `runner/loop.py`: from `def _done_milestone` to the end of `def record_findings` (`def under_review`, `def _drop_covered_merges`, `def note_merge`), and from `def _authors` to the end of `def fix_ticket` (`def checkpoint`, `def shadow_checkpoint`, `def _read_only_review`, `def stand_in_checkpoint`, `def pre_review`, `def pre_review_pick`, `def _pre_review_turn`, `def fix_tickets`), plus `def _name_checkpoint` and `def review_reason`, applying D3 (f290-01 already took `checkpoint_reason` to `runner/session.py`).
+- `runner/review_job.py` imports at module level `block` from `runner/developer_job.py`, `_written_tickets` and `_repair_ticket` from `runner/lead_job.py` (the checkpoint's ticket repair), `_record_refusal` from `runner/session.py`.
+- `runner/bench.py` imports `_answer_json` and `_merge_files` from the loop: point them at `runner/review_job.py`.
 - `runner/milestone.py` imports `record_findings` and `review_reason` from the loop and is imported back by these functions inside them (`due_reviews`, `_done_tickets`, `signed_off`): keep those imports inside the functions (D4).
 - D5: `pre_review` is patched on `loop` by the scheduler's tests; they keep patching it there if the scheduler calls it.
 - For a long move, `cp` the file and delete line ranges with `sed -i 'A,Bd' <file>`; check with `git diff --stat`.
