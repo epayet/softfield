@@ -7,6 +7,8 @@ agent: lead
 area: factory
 files:
   - runner/loop.py
+  - runner/session.py
+  - runner/developer_job.py
 tests:
   - tests/runner/test_loop.py
 ---
@@ -17,7 +19,7 @@ A lead ticket whose branch is behind main has main merged in before its check-al
 ### Context
 On 2026-11-10 f139-03 resumed its session from 2026-11-09 on its old branch (`_lead_route` and the `interrupted` entry in `run_lead_task`). Main had changed `_plan_branch` in `runner/loop.py` overnight (f235-01's `catch_up_plan`). `_settle_lead_task` ran check-all on the old base, which passed, then `s.git.squash_merge` clashed. The `GitError` was not caught: the run stopped, leaving main's folder half squashed, with markers in `runner/loop.py`, and `softfield run` then failed to import. The lead landed it by hand (commits 1391e8cc and a00b4328).
 
-Read `_settle_lead_task`, `_catch_up` and `block` in `runner/loop.py`. A developer ticket's branch already gets main through `_catch_up` before its gates ("runner: merge main into task/…" commits): follow that. Do it after `commit_all` and before `_check_results`, so check-all runs on the merged tree.
+Read `_settle_lead_task` in `runner/loop.py`, `_catch_up` in `runner/session.py` (F290: what every job shares) and `block` in `runner/developer_job.py` (F290: a developer ticket's job). A developer ticket's branch already gets main through `_catch_up` before its gates ("runner: merge main into task/…" commits): follow that. Do it after `commit_all` and before `_check_results`, so check-all runs on the merged tree.
 
 ### Done when
 - a lead ticket whose branch is behind main and merges cleanly gets main merged in before check-all, and is squashed into main as today

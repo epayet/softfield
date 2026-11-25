@@ -22,6 +22,7 @@ import yaml
 
 from runner import (
     config,
+    developer_job,
     dispatch,
     loop,
     metrics,
@@ -2231,7 +2232,7 @@ def _lapse(
 def _answered_block(conn: sqlite3.Connection, project_id: int, now: datetime, ticket: str) -> None:
     """A ticket out of blocked/, tried again or set aside: its item leaves the desk (F106 D3)."""
     for row in metrics.open_owner_items(conn, project_id):
-        if row["kind"] == loop.BLOCKED_KIND and row["subject"] == ticket:
+        if row["kind"] == developer_job.BLOCKED_KIND and row["subject"] == ticket:
             metrics.resolve_owner_item(conn, row["id"], now.isoformat())
 
 

@@ -5,7 +5,7 @@ agent: lead
 difficulty: 4
 depends_on: []
 files:
-  - runner/loop.py
+  - runner/developer_job.py
 tests:
   - tests/runner/test_loop.py
 ---
@@ -14,7 +14,7 @@ tests:
 While main fails its tests, the runner starts no ticket but the one that would mend main, and a red main's failing checks add up instead of replacing each other.
 
 ### Context
-Read D1, D2 and D5 in `.softfield/cards/f202-while-main-is-red-hold-tickets.md` and ADR 47 in `.softfield/adr/47-a-red-main-holds-every-ticket-but-the-mender.md`, then `red_main_text`, `_main_is_red`, `_waits_for_red_main`, `waits_for_main` and `_held_by_red_main` in `runner/loop.py`. Follow the red-main tests in `tests/runner/test_loop.py` (search `main_red`). `runner/**` is protected: tests first.
+Read D1, D2 and D5 in `.softfield/cards/f202-while-main-is-red-hold-tickets.md` and ADR 47 in `.softfield/adr/47-a-red-main-holds-every-ticket-but-the-mender.md`, then `red_main_text`, `_main_is_red`, `_waits_for_red_main`, `waits_for_main` and `_held_by_red_main` in `runner/developer_job.py` (F290: a developer ticket's job). Follow the red-main tests in `tests/runner/test_loop.py` (search `main_red`). `runner/**` is protected: tests first.
 - `MAIN_TESTS` ("tests") is check-all's name for the test suite; a developer's wait writes it as the failing check.
 - `_main_is_red` today overwrites `s.state.main_red` whole; with it already set, keep `head`, `ticket` and `mender` and only add the new check names.
 

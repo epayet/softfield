@@ -43,6 +43,7 @@ from runner.gitops import (
     LOCAL_MODEL_AUTHOR,
     RUNNER_AUTHOR,
     Git,
+    GitError,
     with_trailers,
 )
 from runner.local_model import (
@@ -1726,3 +1727,51 @@ def close_session(s: Session) -> SessionReport:
 
 
 PARKED_REASON = "parked for a Claude limit"
+
+
+def _has_branch(git: Git, branch: str) -> bool:
+    return bool(git.run("branch", "--list", branch).strip())
+
+
+def _catch_up(s: Session, branch: str) -> bool:
+    """Check out ``branch`` with main merged in, so it holds the latest tickets and code (a
+    direction's repair, a requeue, other merges). False, back on main, if they clash."""
+    s.git.checkout(branch)
+    name, email = RUNNER_AUTHOR.removesuffix(">").split(" <")
+    message = with_trailers(f"runner: merge {MAIN} into {branch}", agent=RUNNER_AGENT)
+    try:
+        s.git.run(
+            *("-c", f"user.name={name}", "-c", f"user.email={email}"),
+            *("merge", "-q", "--no-verify", "--no-edit", "-m", message, MAIN),
+        )
+    except GitError:
+        s.git.run("merge", "--abort", check=False)
+        s.git.checkout(MAIN)
+        return False
+    return True
+
+
+def _record_refusal(
+    s: Session, agent: str, run: JobResult, what: str = "a developer attempt"
+) -> None:
+    """A cloud agent's refusal, for the allowance (ADR 15 item 2): its reset if it said."""
+    if (limit := run.refusal) is None:
+        return
+    _record(
+        s,
+        metrics.add_usage_event,
+        agent,
+        now().isoformat(),
+        "refusal",
+        window=limit.window,
+        resets_at=limit.resets_at.isoformat() if limit.resets_at else None,
+    )
+    sure = "a limit" if limit.certain else "an error that may be a limit"
+    s.report.notes.append(f"{agent} refused {what} ({sure}): {run.text[:200]}")
+
+
+def _main_head(s: Session) -> str | None:
+    try:
+        return s.git.run("rev-parse", MAIN).strip()
+    except (GitError, OSError):
+        return None

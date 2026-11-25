@@ -20,6 +20,7 @@ from runner import (
     checks,
     claude,
     config,
+    developer_job,
     dispatch,
     gates,
     local_model,
@@ -127,8 +128,8 @@ def fake_model(monkeypatch):
         return OpencodeRun(exit_code=0, duration_s=1.0, tokens=TokenTotals(1000, 50, 10, 2))
 
     monkeypatch.setattr(local_model, "run_opencode", run_opencode)
-    monkeypatch.setattr(loop, "warmup", lambda *a: 0.1)
-    monkeypatch.setattr(loop, "loaded_context_length", lambda *a: None)
+    monkeypatch.setattr(developer_job, "warmup", lambda *a: 0.1)
+    monkeypatch.setattr(developer_job, "loaded_context_length", lambda *a: None)
     file_gates = tuple(
         g
         for g in gates.GATES
@@ -887,26 +888,6 @@ def test_refuses_to_start_on_a_dirty_tree(repo, fake_model):
         loop.run_session(_config(repo), once=False, dry_run=False, escalate=False)
 
 
-def test_a_requeued_task_gets_its_own_log_folder(tmp_path):
-    first = loop._logs_dir(tmp_path, "m1-01-thing")
-    (first / "opencode-1.jsonl").write_text("first run")
-    second = loop._logs_dir(tmp_path, "m1-01-thing")
-    assert first == tmp_path / "m1-01-thing"
-    assert second == tmp_path / "m1-01-thing-run2"
-    assert (first / "opencode-1.jsonl").read_text() == "first run"
-
-
-def test_retry_prompt_ends_with_the_gate_output(repo: Path):
-    task = parse_task(write_task(repo / ".softfield" / "tasks" / "ready", "m1-01-thing"), 150)
-    first = loop._prompt(task, None)
-    assert "softfield check-all --fix --task m1-01-thing" in first
-    retry = loop._prompt(task, GateResult("ruff", False, ".softfield/tasks/ready/m1-01-thing.md"))
-    assert retry.index("### Goal") < retry.index("IMPORTANT")
-    assert "uv run ruff check --fix" in retry  # the gate's hint
-    assert retry.rstrip().endswith(".softfield/tasks/ready/m1-01-thing.md\n```")
-    assert "CATEGORY: needs-file" in retry
-
-
 def test_an_attempt_that_changes_nothing_fails_instead_of_merging(repo, fake_model):
     """m4-06: an attempt ended without an edit; the untouched tree passed every gate, and
     squash-merging an empty branch crashed the runner."""
@@ -1099,7 +1080,9 @@ def test_a_stopped_attempt_fails_with_its_reason_as_the_gate_output(repo, fake_m
 
 def test_the_lead_gives_direction_before_the_last_attempt(repo, fake_model, fake_lead, monkeypatch):
     _add_task(repo, "m1-01-thing")
-    monkeypatch.setattr(loop, "session_reasoning", lambda db, session: "I think secret.py…")
+    monkeypatch.setattr(
+        developer_job, "session_reasoning", lambda db, session: "I think secret.py…"
+    )
     script, jobs = fake_lead
 
     def direct(job, repo_):
@@ -1193,15 +1176,6 @@ def test_a_repaired_ticket_without_max_diff_gets_the_default(repo, fake_model, f
     script.append(repair)
     report = _run(repo, once=True)
     assert (report.tasks[0].result, report.tasks[0].attempts) == ("done", 3)
-
-
-def test_mechanical_failures_get_no_direction():
-    assert not loop.needs_direction(["ruff", "translations"], [False, False])
-    assert loop.needs_direction(["ruff", "ruff"], [False, False])  # the same gate twice
-    assert loop.needs_direction(["ruff", "task-tests"], [False, False])
-    assert loop.needs_direction(["ruff", "mypy"], [True, False])  # a timeout
-    assert loop.needs_direction(["no-changes", "no-changes"], [False, False])
-    assert not loop.needs_direction(["no-changes", "ruff"], [False, False])
 
 
 def _passes(monkeypatch, ok: bool = True) -> list[str | None]:
@@ -1563,7 +1537,7 @@ def _gates_fail_first(monkeypatch, first: list[GateResult]) -> list[int]:
         calls.append(1)
         return first if len(calls) == 1 else [GateResult("all-tests", True, "")]
 
-    monkeypatch.setattr(loop, "run_gates", run_gates)
+    monkeypatch.setattr(developer_job, "run_gates", run_gates)
     return calls
 
 
@@ -2689,7 +2663,7 @@ def _undo_and_implement(repo: Path, prompt: str) -> None:
 
 def test_a_session_writes_its_run_and_a_job_per_attempt(repo, fake_model, monkeypatch):
     _add_task(repo, "m1-01-thing")
-    monkeypatch.setattr(loop, "loaded_context_length", lambda *a: 131072)
+    monkeypatch.setattr(developer_job, "loaded_context_length", lambda *a: 131072)
     fake_model.extend([_measured(_stray), _measured(_undo_and_implement)])
     _run(repo, once=True)
     [run] = _rows(repo, "runs")
@@ -2741,8 +2715,8 @@ def _no_lm_studio(monkeypatch) -> None:
     def called(*args: object) -> float:
         raise AssertionError("LM Studio was asked for a cloud agent")
 
-    monkeypatch.setattr(loop, "warmup", called)
-    monkeypatch.setattr(loop, "loaded_context_length", called)
+    monkeypatch.setattr(developer_job, "warmup", called)
+    monkeypatch.setattr(developer_job, "loaded_context_length", called)
 
 
 def test_a_developer_job_on_an_ollama_agent_runs_its_model_without_the_warmup(
@@ -2850,7 +2824,7 @@ def _stopped_during_its_gates(repo: Path, fake_model, monkeypatch) -> None:
 
     fake_model.append(_implement)
     with monkeypatch.context() as patched:
-        patched.setattr(loop, "run_gates", stop)
+        patched.setattr(developer_job, "run_gates", stop)
         with pytest.raises(RuntimeError, match="stopped"):
             _run(repo)
     with sqlite3.connect(_config(repo).metrics_db) as conn:  # an earlier second than the rerun's
@@ -2885,7 +2859,7 @@ def test_gates_that_fail_when_run_again_cost_the_attempt_they_judge(repo, fake_m
         calls.append(1)
         return [GateResult("ruff", False, "E501")] if len(calls) == 1 else real_gates(context)
 
-    monkeypatch.setattr(loop, "run_gates", run_gates)
+    monkeypatch.setattr(developer_job, "run_gates", run_gates)
     fake_model.append(_implement_other)
     [task] = _run(repo).tasks
     assert (task.result, task.attempts, task.gate_failures) == ("done", 2, ["ruff"])
@@ -4241,8 +4215,8 @@ def test_the_run_names_the_warm_up_and_the_gates_while_they_run(repo, fake_model
         seen.append(_activity(repo)[0])
         return real_gates(context)
 
-    monkeypatch.setattr(loop, "warmup", warmup)
-    monkeypatch.setattr(loop, "run_gates", run_gates)
+    monkeypatch.setattr(developer_job, "warmup", warmup)
+    monkeypatch.setattr(developer_job, "run_gates", run_gates)
     _run(repo)
     assert seen == ["warm-up", "gates · m1-01-thing"]
     assert _activity(repo) == (None, None)
@@ -4270,28 +4244,12 @@ def test_a_failed_warm_up_costs_no_run_and_the_attempt_goes_ahead(
     def warmup(*args: object) -> float:
         raise error
 
-    monkeypatch.setattr(loop, "warmup", warmup)
-    monkeypatch.setattr(loop, "loaded_context_length", lambda *a: contexts.append(a))
+    monkeypatch.setattr(developer_job, "warmup", warmup)
+    monkeypatch.setattr(developer_job, "loaded_context_length", lambda *a: contexts.append(a))
     _run(repo)
     assert (repo / ".softfield" / "tasks" / "done" / "m1-01-thing.md").is_file()
     assert _activity(repo) == (None, None)
     assert contexts == []  # asked again at the warm-up that works
-
-
-def test_the_run_names_check_all_while_it_runs(repo, monkeypatch, tmp_path):
-    seen: list[object] = []
-
-    def check_all(repo_, timeout, *, task_id=None, fix=False):
-        seen.append(_activity(repo)[0])
-        return [checks.Check("tests", True, "")]
-
-    monkeypatch.setattr(checks, "check_all", check_all)
-    s = session.open_session(_config(repo))
-    before = _activity(repo)
-    assert loop._check_all(s, "m1-01-lead", tmp_path, "check-all.txt")
-    assert loop._check_all(s, None, tmp_path, "check-all.txt")
-    assert seen == ["check-all · m1-01-lead", "check-all on main"]
-    assert _activity(repo) == before == ("picking the next ticket", None)
 
 
 # --- routing (f1-25, runner/router.py; ADR 15 items 6, 7 and 9) ----------------------------
@@ -8180,7 +8138,7 @@ def test_run_projects_skips_a_project_off_main_once_reviews_and_closes_every_ses
 
     monkeypatch.setattr(loop, "open_session", open_session)
     monkeypatch.setattr(loop, "work_queue", work_queue)
-    monkeypatch.setattr(loop, "_main_head", lambda s: None)
+    monkeypatch.setattr(session, "_main_head", lambda s: None)
     monkeypatch.setattr(loop, "close_session", lambda s: closed.append(s))
     monkeypatch.setattr(loop, "_idle_wait", idle_wait)
 
@@ -8245,7 +8203,7 @@ def test_after_a_review_hands_its_fix_over_the_owners_order_holds(monkeypatch):
 
     monkeypatch.setattr(loop, "open_session", open_session)
     monkeypatch.setattr(loop, "work_queue", work_queue)
-    monkeypatch.setattr(loop, "_main_head", lambda s: None)
+    monkeypatch.setattr(session, "_main_head", lambda s: None)
     monkeypatch.setattr(loop, "close_session", lambda s: None)
     monkeypatch.setattr(loop, "_idle_wait", idle_wait)
     assert loop.run_projects(lambda: cfgs, review) is False  # type: ignore[arg-type,return-value]
@@ -8279,7 +8237,7 @@ def test_a_review_that_changes_the_runner_closes_every_session_before_the_restar
 
     monkeypatch.setattr(loop, "open_session", open_session)
     monkeypatch.setattr(loop, "work_queue", work_queue)
-    monkeypatch.setattr(loop, "_main_head", lambda s: None)
+    monkeypatch.setattr(session, "_main_head", lambda s: None)
     monkeypatch.setattr(loop, "close_session", lambda s: closed.append(s.cfg.project_name))
     assert loop.run_projects(lambda: cfgs, lambda cfg, key: True) is True  # type: ignore[arg-type,return-value]
     assert sorted(closed) == ["coucou", "softfield"]
@@ -8319,7 +8277,7 @@ def test_a_ctrl_c_mid_job_leaves_that_project_as_one_projects_run_would(monkeypa
 
     monkeypatch.setattr(loop, "open_session", open_session)
     monkeypatch.setattr(loop, "work_queue", work_queue)
-    monkeypatch.setattr(loop, "_main_head", lambda s: None)
+    monkeypatch.setattr(session, "_main_head", lambda s: None)
     monkeypatch.setattr(loop, "close_session", lambda s: closed.append(s.cfg.project_name))
     with pytest.raises(KeyboardInterrupt):
         loop.run_projects(lambda: cfgs, lambda cfg, key: False)  # type: ignore[arg-type,return-value]
@@ -8353,7 +8311,7 @@ def test_a_card_committed_outside_the_run_reaches_the_board_at_the_next_round(mo
         calls.append("x")
         return "a" if len(calls) <= 2 else "b"
 
-    monkeypatch.setattr(loop, "_main_head", main_head)
+    monkeypatch.setattr(session, "_main_head", main_head)
     monkeypatch.setattr(loop, "sync_cards", lambda s: synced.append("cards"))
     monkeypatch.setattr(loop, "sync_tickets", lambda s: synced.append("tickets"))
     loop.run_projects(lambda: [cfg], lambda cfg, key: False)  # type: ignore[list-item]

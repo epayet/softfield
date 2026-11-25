@@ -8,6 +8,7 @@ files:
   - runner/backup.py
   - runner/config.py
   - runner/loop.py
+  - runner/developer_job.py
   - runner/session.py
 tests:
   - tests/runner/test_backup.py
@@ -18,7 +19,7 @@ tests:
 The dashboard can read the backups (the machine's `[backup]` settings and each copy's time and size), and copies that keep failing for an hour put an item on the owner's desk that clears itself when one works.
 
 ### Context
-Read D2 and D4 in `.softfield/cards/f178-show-the-backups-on-the-dashboard.md`, then `runner/backup.py` (`copies`, `taken_at`, `Backups`, `RETRY_AFTER`), `machine_ntfy` and `_backup` in `runner/config.py`, `check_backup` and `_notify` in `runner/session.py`, and in `runner/loop.py` `_resolve_items` and the `upsert_owner_item` call in `run_planner` as the example of an item the runner opens.
+Read D2 and D4 in `.softfield/cards/f178-show-the-backups-on-the-dashboard.md`, then `runner/backup.py` (`copies`, `taken_at`, `Backups`, `RETRY_AFTER`), `machine_ntfy` and `_backup` in `runner/config.py`, `check_backup` and `_notify` in `runner/session.py`, `_resolve_items` in `runner/developer_job.py` and the `upsert_owner_item` call in `run_planner` in `runner/loop.py` as the example of an item the runner opens.
 - `listing(folder)` returns `Copy(path, taken, size)` oldest first; missing folder → `[]`; a file gone before its `stat` (pruned by a running copy while the dashboard lists) is skipped.
 - `machine_backup()` reads only the machine file, like `machine_ntfy`, through `_backup`.
 - `ITEM_KIND = "backup"` lives in `runner/backup.py`; the item's subject is `metrics`, its text one plain sentence: "The metrics database's daily copy has failed since <d Mon HH:MM>: <Type>: <error>. The runner tries again every 5 minutes; this clears by itself when one works."

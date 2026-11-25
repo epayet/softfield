@@ -9,6 +9,7 @@ files:
   - runner/checks.py
   - runner/gates.py
   - runner/loop.py
+  - runner/developer_job.py
   - runner/templates/project.toml
   - factory_dashboard/static/factory.js
 tests:
@@ -21,7 +22,7 @@ tests:
 `check-all`, the gates and the auto-format before them run the project's own lint, fix and test commands from `[checks]`, with today's ruff and pytest commands as the defaults.
 
 ### Context
-Read D2 and D3 in `.softfield/cards/f121-projects-not-on-main-or-not.md`, then `Checks`, `project_checks` and `suite_args` in `runner/config.py`, `check_all` in `runner/checks.py`, and `autoformat`, `gate_ruff`, `gate_task_tests`, `gate_all_tests`, `HINTS` and `GATES` in `runner/gates.py`, and `MECHANICAL` in `runner/loop.py`.
+Read D2 and D3 in `.softfield/cards/f121-projects-not-on-main-or-not.md`, then `Checks`, `project_checks` and `suite_args` in `runner/config.py`, `check_all` in `runner/checks.py`, and `autoformat`, `gate_ruff`, `gate_task_tests`, `gate_all_tests`, `HINTS` and `GATES` in `runner/gates.py`, and `MECHANICAL` in `runner/developer_job.py`.
 - New keys in `Checks`: `lint`, `fix`, `test`, `fix_suffixes`, each defaulting to the exact argv D2 gives, so Softfield, Coucou and travel-companion run what they run today. A key of the wrong shape raises `ConfigError`, as the others do.
 - `fix` commands are ended by the runner: with the changed files whose suffix is in `fix_suffixes` (auto-format before the gates), or with `.` (`check-all --fix`). The fixes run in their order; a non-zero exit is not a failure, as today.
 - The ticket's tests or `suite_args` end the `test` command; `-n` workers only when `test_workers` is above 0, as today.

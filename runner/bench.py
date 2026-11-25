@@ -61,17 +61,14 @@ from runner.agents import (
     adapter_for,
 )
 from runner.config import Config, read_protected
+from runner.developer_job import _log_running, _prompt, _read_blocked
 from runner.gates import NO_CHANGES, GateContext, GateResult, parse_blocked, run_gates
 from runner.gitops import RUNNER_AUTHOR, Git, with_trailers
 from runner.local_model import empty_cause, is_local, warmup
 from runner.loop import (
     BENCH,
     _answer_json,
-    _log_running,
     _merge_files,
-    _prompt,
-    _read_blocked,
-    _record_refusal,
     rate_bench,
     starting_ratings,
 )
@@ -88,6 +85,7 @@ from runner.session import (
     _metrics_failed,
     _record,
     _record_readings,
+    _record_refusal,
     _start_heartbeat,
     next_number,
     now,

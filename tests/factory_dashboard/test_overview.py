@@ -10,7 +10,7 @@ from urllib.parse import parse_qs, urlencode, urlsplit
 import pytest
 
 from factory_dashboard.overview import queue, queued_jobs
-from runner import loop, metrics
+from runner import developer_job, metrics
 from tests.factory_dashboard.conftest import (
     LOCAL,
     NOW,
@@ -357,8 +357,8 @@ def test_a_failing_check_on_main_stops_the_line_and_still_notifies(serve_between
     client = serve_between(activity="check-all on main")
     sign_off_all(db_path)
     conn = metrics.open_db(db_path)
-    # as the runner writes it (red_main_text in runner/loop.py): the check as its subject, the
-    # failing lines, the waiting ticket and its branch, and no command
+    # as the runner writes it (red_main_text in runner/developer_job.py): the check as its
+    # subject, the failing lines, the waiting ticket and its branch, and no command
     text = (
         "main fails ruff: runner/loop.py:12:1: F401 `os` imported but unused / Found 1 error."
         " · f9-02-the-pond's work waits on task/f9-02-the-pond;"
@@ -367,7 +367,7 @@ def test_a_failing_check_on_main_stops_the_line_and_still_notifies(serve_between
     try:
         project = metrics.upsert_project(conn, PROJECT)
         metrics.upsert_owner_item(
-            conn, project, loop.MAIN_RED_KIND, "ruff", text=text,
+            conn, project, developer_job.MAIN_RED_KIND, "ruff", text=text,
             command="", created=NOW.isoformat(),
         )  # fmt: skip
     finally:

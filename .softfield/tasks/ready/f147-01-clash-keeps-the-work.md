@@ -6,7 +6,8 @@ agent: lead
 difficulty: 4
 area: factory
 files:
-  - runner/loop.py
+  - runner/developer_job.py
+  - runner/session.py
   - runner/prompts.py
 tests:
   - tests/runner/test_loop.py
@@ -18,7 +19,7 @@ When a developer ticket's branch clashes with main and is reset, its work is sav
 
 ### Context
 Read "What the code does", Done when and Decisions D1–D2 in `.softfield/cards/f147-what-happens-to-checkpointing-and-wip.md`.
-In `runner/loop.py`: `_start_attempt`, `_catch_up`, `run_task` (the `reset_at_start = _start_attempt(s, branch, "")` line and the attempt loop after it), `give_direction`, `_prompt`, `_direction_needs`. In `runner/gitops.py`: `fresh_branch` (don't change it). In `runner/prompts.py`: `RESET`, `DIRECTION`, `FRESH`, `DIRECTED`.
+In `runner/developer_job.py` (F290: a developer ticket's job): `_start_attempt`, `run_task` (the `reset_at_start = _start_attempt(s, branch, "")` line and the attempt loop after it), `give_direction`, `_prompt`, `_direction_needs`. In `runner/session.py`: `_catch_up`. In `runner/gitops.py`: `fresh_branch` (don't change it). In `runner/prompts.py`: `RESET`, `DIRECTION`, `FRESH`, `DIRECTED`.
 - Save the diff of the branch's own work (`main...task/<id>`, i.e. against the merge base), taken before `fresh_branch` runs. Every clash goes through `_start_attempt`, including the one at the top of `run_task`.
 - A clash found at the top of `run_task` must reach the attempt that follows: the direction (if one is due) and the developer's prompt (`prompts.RESET["conflict"]`). Today `reset_at_start` only feeds the regate.
 - A clash adds a report note and a job note containing "clashed with main".

@@ -27,7 +27,7 @@ from factory_dashboard.app import (
     factory_wide_status,
     render,
 )
-from runner import allowance, loop, metrics, session, waits
+from runner import allowance, developer_job, metrics, session, waits
 from runner.requests import CHANGE, PLANT, RESERVE, owners_words
 from runner.state import State, load_state
 from runner.tasks import milestone_order, short_key
@@ -672,7 +672,7 @@ _OVERVIEW_TITLES = {
     "escalated": "A ticket is blocked",
     "reserve": "Claude's allowance: your choice",
     "five-hour": "Claude's allowance: your choice",
-    loop.MAIN_RED_KIND: "A check fails on main",
+    developer_job.MAIN_RED_KIND: "A check fails on main",
     "runner": "The runner stopped",
     "queue": "The runner is idle",
 }
@@ -1102,7 +1102,7 @@ def _live_context(
     # titles), then every project's other items
     desks = [{"project": p.name, "count": len(p.items)} for p in every if p.items]
     # F97 D3: what stops the line shows in Now, not in Needs you
-    stops = ("runner", "queue", loop.MAIN_RED_KIND)
+    stops = ("runner", "queue", developer_job.MAIN_RED_KIND)
     line_stops = [n for p in every for n in p.needs if n.kind in stops]
     needs = [n for p in every for n in p.needs if n.kind not in stops]
 

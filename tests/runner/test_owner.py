@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from runner import loop, metrics, milestone, owner
+from runner import developer_job, metrics, milestone, owner
 from runner.config import project_name
 from runner.state import State
 from runner.tasks import append_footer
@@ -295,7 +295,7 @@ def test_the_verdicts_blocked_item_says_what_block_said(repo: Path):
     state = _needs_you(repo)
     write_task(repo / ".softfield" / "tasks" / "ready", "m1-06-after", "[m1-04-thing]")
     owner.verdict(repo, "m1", state, "adr-needed", db=_db(repo))
-    said = loop.blocked_text("m1-04-thing", "2 escalations used", 1)
+    said = developer_job.blocked_text("m1-04-thing", "2 escalations used", 1)
     assert _open(repo)[("blocked", "m1-04-thing")]["text"] == said
     assert said == "m1-04-thing blocked: 2 escalations used · 1 ticket waits behind it"
 

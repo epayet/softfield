@@ -17,8 +17,8 @@ import yaml
 
 from runner import metrics, notify
 from runner.config import project_name
+from runner.developer_job import BLOCKED_KIND, blocked_text
 from runner.gitops import RUNNER_AUTHOR, Git, with_trailers
-from runner.loop import BLOCKED_KIND, blocked_text
 from runner.milestone import WAITS, footer_fields, signed_off, signoff_sections
 from runner.state import State
 from runner.tasks import (
