@@ -27,3 +27,12 @@ Read `.softfield/cards/f279-i-would-like-to-be-able.md` (D7) and the Overview pi
 - with no plan stored, the panel reads as today
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 4803
+gate_failures: []
+tokens: 3343556
+```
