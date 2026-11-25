@@ -32,3 +32,10 @@ Read the Decisions in `.softfield/cards/f290-runner-loop-py-is-6-500.md`, the tw
 - `## Replan (f290-03)` in the card doc lists each ticket checked and what changed, or "unchanged"
 - `tests/runner/test_tasks.py` passes, so every ready ticket passes pre-flight
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
