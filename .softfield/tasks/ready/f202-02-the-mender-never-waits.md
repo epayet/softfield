@@ -8,6 +8,7 @@ depends_on:
 files:
   - runner/loop.py
   - runner/developer_job.py
+  - runner/lead_job.py
 tests:
   - tests/runner/test_loop.py
 ---
@@ -16,7 +17,7 @@ tests:
 The ticket that would mend a red main never waits for main itself, and a repair ticket queued after main went red is found as the mender as soon as it is ready.
 
 ### Context
-Read D3 and D4 in `.softfield/cards/f202-while-main-is-red-hold-tickets.md` and ADR 47 items 3 and 4, then `_mender`, `_main_is_red`, `_waits_for_red_main` and the attempt loop in `run_task` (where `failed.name == ALL_TESTS`) in `runner/developer_job.py` (F290: a developer ticket's job), and `_settle_lead_task` and the pick loop that calls `_look_at_main` and `waits_for_main` in `runner/loop.py`. `runner/**` is protected: tests first.
+Read D3 and D4 in `.softfield/cards/f202-while-main-is-red-hold-tickets.md` and ADR 47 items 3 and 4, then `_mender`, `_main_is_red`, `_waits_for_red_main` and the attempt loop in `run_task` (where `failed.name == ALL_TESTS`) in `runner/developer_job.py` (F290: a developer ticket's job), `_settle_lead_task` in `runner/lead_job.py` (F290: a lead ticket's job), and the pick loop that calls `_look_at_main` and `waits_for_main` in `runner/loop.py`. `runner/**` is protected: tests first.
 - Today a mender that fails a check main fails waits on its branch like any other ticket, and main waits for it: nothing moves.
 - `main_red` gains `said`: the failing checks' output, its first 4000 characters, written by `_main_is_red`. A state file without it still loads.
 

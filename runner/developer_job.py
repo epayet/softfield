@@ -607,7 +607,7 @@ def run_task(s: Session, task: Task, directing: Mapping[str, Any] | None = None)
     its turn behind the support work a yes to the 5-hour question freed) or behind its queued
     direction. ``directing`` is that direction's needs: the run that gives it, then the last
     attempt."""
-    from runner.loop import run_lead_task  # runner.loop imports this module
+    from runner.lead_job import run_lead_task  # runner.lead_job imports this module
 
     kept = s.waiting.pop(task.id, None) if directing is not None else None
     rec = kept or TaskRecord(id=task.id, milestone=task.milestone)

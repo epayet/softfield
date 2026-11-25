@@ -8,6 +8,7 @@ area: factory
 finding: f153-i-wonder-if-sonnet-would-be-F4
 files:
   - runner/loop.py
+  - runner/lead_job.py
 tests:
   - tests/runner/test_loop.py
 ---
@@ -16,7 +17,7 @@ tests:
 A lead-ticket job whose `check-all` failed is recorded as failed, so the first-time pass rate can be read from the jobs.
 
 ### Context
-Read `def _settle_lead_task` and `def _settle_or_step_up` in `runner/loop.py`. `runner/**` is protected: tests first.
+Read `def _settle_lead_task` and `def _settle_or_step_up` in `runner/lead_job.py` (F290: a lead ticket's job). `runner/**` is protected: tests first.
 - A lead-ticket job's `jobs.outcome` is its session's, not its `check-all`'s: a Sonnet attempt that failed `check-all` reads "passed". ADR 32 item 6's first-time pass rate needs the check's result.
 - Finish such a job "failed" with the note "check-all failed"; a job whose check passed stays "passed".
 
