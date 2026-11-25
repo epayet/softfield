@@ -1,6 +1,7 @@
 # Milestone F286: Reviews look for complexity and leave the code simpler (Boy Scout rule)
 
-> **State:** ready · **Area:** factory · **Fast lane:** yes
+> **State:** done · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-25. Base: git tag `f286-i-want-code-reviews-to-highlight-start`. Report: [`.softfield/reviews/f286-i-want-code-reviews-to-highlight.md`](../reviews/f286-i-want-code-reviews-to-highlight.md).
 > Planted by the owner on 2026-11-21.
 
 ## Notes

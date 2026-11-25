@@ -1,5 +1,7 @@
 # Review: F286, Reviews look for complexity and leave the code simpler (Boy Scout rule)
 
+- **Status:** done, signed off by the owner on 2026-11-25.
+
 **Status:** round 1 done, ready for your sign-off.
 
 ### 1. What changed
