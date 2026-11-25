@@ -1,6 +1,6 @@
 # Milestone F279: The queue: the whole factory's line on one page, in the runner's order
 
-> **State:** ready · **Area:** factory
+> **State:** ready · **Area:** factory · **Fast lane:** yes
 > Planted by the owner on 2026-11-19.
 
 ## Notes
