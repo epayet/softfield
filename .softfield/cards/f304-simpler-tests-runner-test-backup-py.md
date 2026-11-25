@@ -1,4 +1,4 @@
-# Milestone F304: Simpler: tests/runner/test_backup.py keeps its own…
+# Milestone F304: Backup tests use the shared fake clock and THURSDAY
 
 > **State:** idea · **Area:** factory
 > Planted by the owner on 2026-11-25.
