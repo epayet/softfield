@@ -3,6 +3,7 @@ import json
 import pytest
 
 from runner.review import (
+    RECURRED,
     Finding,
     ReviewFileError,
     ReviewRound,
@@ -146,22 +147,27 @@ def test_a_malformed_checkpoint_file_is_an_error(tmp_path, text):
 
 def test_nits_and_resolved_findings_never_loop():
     resolved = Finding("m1-F1", "blocking", "local", "bug", resolved=True)
-    assert stop_reason(1, _round(NIT, resolved), None, {}, 3) == "clean"
+    assert stop_reason(1, _round(NIT, resolved), None, {}, 3, milestone="m1") == "clean"
 
 
 def test_claude_can_stop_the_loop():
-    assert stop_reason(1, _round(BLOCKING, stop="adr-needed"), None, {}, 3) == "adr-needed"
+    assert (
+        stop_reason(1, _round(BLOCKING, stop="adr-needed"), None, {}, 3, milestone="m1")
+        == "adr-needed"
+    )
 
 
 def test_findings_must_decrease():
-    assert stop_reason(2, _round(BLOCKING, SHOULD), 2, {}, 3) == (
+    assert stop_reason(2, _round(BLOCKING, SHOULD), 2, {}, 3, milestone="m1") == (
         "findings did not decrease (2 -> 2)"
     )
-    assert stop_reason(2, _round(BLOCKING), 2, {}, 3) is None
+    assert stop_reason(2, _round(BLOCKING), 2, {}, 3, milestone="m1") is None
 
 
 def test_round_cap():
-    assert stop_reason(3, _round(BLOCKING), 2, {}, 3) == "review round cap (3) reached"
+    assert (
+        stop_reason(3, _round(BLOCKING), 2, {}, 3, milestone="m1") == "review round cap (3) reached"
+    )
 
 
 def test_recurrence():
@@ -170,7 +176,10 @@ def test_recurrence():
     seen = update_seen(seen, _round(BLOCKING))
     assert recurring_for_claude(seen, "m1") == ["m1-F1"]
     seen = update_seen(seen, _round(BLOCKING))
-    assert stop_reason(3, _round(BLOCKING), 5, seen, 9) == "a finding came back a third time"
+    assert (
+        stop_reason(3, _round(BLOCKING), 5, seen, 9, milestone="m1")
+        == "a finding came back a third time"
+    )
 
 
 def test_only_this_milestones_findings_recur():
@@ -180,13 +189,24 @@ def test_only_this_milestones_findings_recur():
     assert recurring_for_claude(seen, "m3") == []
 
 
+def test_another_milestones_finding_never_stops_this_review():
+    """bug-65: M3's m3-F7, open three rounds on 2026-09-29, stopped every review after it at
+    its first round, F290's on 2026-11-25 among them."""
+    seen = {"m3-F7": 3, "m11-F1": 3, "m1-F1": 1}
+    assert stop_reason(1, _round(BLOCKING), None, seen, 3, milestone="m1") is None
+    seen["m1-F1"] = 3
+    assert stop_reason(1, _round(BLOCKING), None, seen, 3, milestone="m1") == RECURRED
+
+
 @pytest.mark.parametrize("route", ["later", "report"])
 def test_a_should_fix_point_set_aside_holds_no_round(route):
     """F149: no fix is coming for it, so it can't recur or keep the review going."""
     aside = Finding("m1-F4", "should-fix", route, "untouched code")
     assert update_seen({}, _round(aside)) == {}
-    assert stop_reason(1, _round(aside), None, {}, 3) == "clean"
-    assert stop_reason(1, _round(BLOCKING, aside), 2, {}, 3) is None  # one open, down from two
+    assert stop_reason(1, _round(aside), None, {}, 3, milestone="m1") == "clean"
+    assert (
+        stop_reason(1, _round(BLOCKING, aside), 2, {}, 3, milestone="m1") is None
+    )  # one open, down from two
     assert aside.actionable  # a stand-in checkpoint's still gets its fix ticket (`fix_tickets`)
 
 
@@ -201,7 +221,7 @@ def test_a_should_fix_point_set_aside_holds_no_round(route):
 def test_anything_else_still_holds_the_review(finding):
     assert finding.holds_review
     assert update_seen({}, _round(finding)) == {finding.id: 1}
-    assert stop_reason(1, _round(finding), None, {}, 3) is None
+    assert stop_reason(1, _round(finding), None, {}, 3, milestone="m1") is None
 
 
 @pytest.mark.parametrize("route", ["later", "report", "backlog"])

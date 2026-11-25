@@ -1,4 +1,4 @@
-# Milestone F294: This was a suggestion card, is that a model capacity…
+# Milestone F294: Sonnet takes Qwen's hard tickets and second tries, before Opus steps in
 
 > **State:** idea · **Area:** factory
 > Planted by the owner on 2026-11-24.

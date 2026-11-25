@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F296 mock-up: each milestone's code lines, on the board, its page and the Milestones table</title>
+<style>
+  /* The dashboard's own tokens (factory_dashboard/static/dashboard.css), dark theme */
+  :root {
+    --floor: #12161b; --bay: #181e25; --plate: #1f2730; --grid: #222b34; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+    --hazard: #f2b10a; --hazard-ink: #1a1405; --opus: #ff9640; --sonnet: #ffc48a;
+    --factory: #f2b10a; --good: #5fd17a;
+    --ghost: repeating-linear-gradient(135deg, transparent 0 5px, rgba(255,255,255,.07) 5px 7px);
+    --display: "Chakra Petch", "Bahnschrift", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+  body { margin: 0; background: var(--floor); color: var(--fg); font: 15px/1.5 var(--body); padding: 20px; }
+  h1 { font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 4px; }
+  h3 { font: 600 13px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 22px 0 8px; }
+  p.lede { color: var(--ink-2); max-width: 760px; margin: 0 0 8px; }
+  a { color: var(--sonnet); text-decoration: none; }
+  .switch { display: inline-flex; margin: 12px 0 0; border: 1px solid var(--rule); }
+  .switch button { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 10px 18px;
+    background: var(--bay); color: var(--muted); border: 0; cursor: pointer; }
+  .switch button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+  .versions { display: grid; gap: 28px; }
+  @media (min-width: 900px) { .versions.both { grid-template-columns: 1fr 1fr; } .versions.both [data-version] { display: block !important; } .switch { display: none; } }
+  .phone { width: 390px; max-width: 100%; }
+  .new { outline: 1px dashed var(--good); outline-offset: 2px; }
+  .note { display: block; font: 12px var(--mono); color: var(--good); margin: 4px 0 0; }
+  .legend { color: var(--ink-2); font-size: 13px; margin: 14px 0 0; }
+  [hidden] { display: none !important; }
+
+  /* ---- the board's cards, as drawn (dashboard.css .cards / .card) ---- */
+  .stage { background: var(--bay); border: 1px solid var(--rule); }
+  .stage-head { padding: 8px 10px; border-bottom: 1px solid var(--rule); }
+  .stage-head h4 { font: 600 14px var(--display); letter-spacing: .08em; text-transform: uppercase; margin: 0; }
+  .stage-head span { font: 12px var(--mono); color: var(--muted); }
+  .cards { display: flex; flex-direction: column; gap: 8px; padding: 10px; }
+  .card { display: flex; flex-direction: column; justify-content: center; gap: 5px; min-height: 44px;
+    padding: 9px 10px; background: var(--plate); border: 1px solid var(--rule);
+    border-left: 4px solid var(--factory); color: var(--fg); }
+  .card.started { border-color: var(--opus); border-left-color: var(--factory); }
+  .harvested .card { border-style: dashed; border-left-style: solid; color: var(--ink-2); }
+  .card-meta { font: 600 11px var(--mono); color: var(--muted); }
+  .card-meta b { color: var(--fg); }
+  .card-title { font: 600 14px/1.25 var(--body); }
+  .meter { display: block; height: 8px; background: var(--floor); border: 1px solid var(--rule); position: relative; }
+  .meter > span { position: absolute; inset: 1px auto 1px 1px; background: var(--opus); }
+  .card-count { font: 12px var(--mono); color: var(--muted); }
+  .card-growing { display: inline-flex; align-items: center; margin-left: 4px; padding: 1px 6px;
+    font: 600 10.5px var(--display); letter-spacing: .08em; text-transform: uppercase;
+    color: var(--opus); border: 1px solid var(--opus); background: var(--floor); }
+
+  /* ---- proposed: the code plate, in the rules' ink (no status colour: growing isn't a fault) ---- */
+  .card-code { align-self: flex-start; display: inline-flex; align-items: stretch; gap: 0;
+    background: var(--floor); border: 1px solid var(--rule); font: 600 11px var(--mono); color: var(--fg); }
+  .card-code b { font: 600 10px var(--display); letter-spacing: .1em; text-transform: uppercase;
+    padding: 2px 6px; background: var(--rule); color: var(--fg); }
+  .card-code span { padding: 2px 7px; }
+  .card-code em { font-style: normal; color: var(--muted); padding: 2px 7px 2px 0; }
+  /* the calmer variant: words in the count line only */
+  .card-count .code { color: var(--fg); }
+
+  /* ---- the milestone page's Behind it folds (dashboard.css .folds) ---- */
+  .panel { background: var(--bay); border: 1px solid var(--rule); min-width: 0; }
+  .folds details { border-bottom: 1px solid var(--grid); }
+  .folds details:last-child { border-bottom: 0; }
+  .folds summary { min-height: 48px; padding: 6px 14px; display: flex; flex-wrap: wrap; gap: 0 10px; align-items: center; list-style: none; cursor: pointer; }
+  .folds summary::-webkit-details-marker { display: none; }
+  .folds summary b { font: 600 12.5px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); }
+  .folds summary b::before { content: "› "; color: var(--muted); }
+  .folds details[open] summary b::before { content: "⌄ "; }
+  .folds summary span { font: 12px var(--mono); color: var(--muted); }
+  .folds summary span .code { color: var(--fg); }
+  .folds .inside { padding: 2px 14px 12px; }
+  .spend { display: grid; grid-template-columns: max-content minmax(0, 1fr) max-content; gap: 5px 10px; align-items: center; font-size: 13px; margin: 0 0 8px; }
+  .spend i { display: block; height: 10px; background: var(--ink-2); }
+  .spend b { font: 600 12.5px var(--mono); }
+  .kv { display: grid; grid-template-columns: max-content 1fr; gap: 3px 14px; margin: 0; font-size: 14px; }
+  .kv dt { color: var(--muted); } .kv dd { margin: 0; }
+  .kv dd .mono { font: 600 12.5px var(--mono); }
+  /* proposed: code added and removed to scale, added solid ink, removed the ghost stripe */
+  .codebar { display: flex; height: 10px; margin: 4px 0 2px; max-width: 260px; border: 1px solid var(--rule); }
+  .codebar .plus { background: var(--ink-2); }
+  .codebar .minus { background: var(--ghost), var(--plate); }
+
+  /* ---- the Milestones table ---- */
+  table { border-collapse: collapse; font-size: 13.5px; width: 100%; }
+  th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+  th { font: 600 11.5px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  td.num, th.num { text-align: right; font-family: var(--mono); font-size: 12.5px; }
+  .scroll { overflow-x: auto; }
+</style>
+</head>
+<body>
+<h1>F296: how much code each milestone added</h1>
+<p class="lede">Real numbers: every merged ticket's commit, leaving out <code>tests/</code>, <code>docs/</code>, <code>.softfield/</code> and Markdown, as the review's "Code lines" row counts them (F286 D4). F286 +92 −13, F285 +216 −4, F273 +109 −2, F245 +2 −0, and F290's eight merged tickets so far +6,170 −5,723.</p>
+<div class="switch" role="group" aria-label="Which version">
+  <button type="button" data-show="today" aria-pressed="false">Today</button>
+  <button type="button" data-show="proposed" aria-pressed="true">Proposed</button>
+</div>
+
+<div class="versions both">
+
+<!-- Today: copied from factory_dashboard/templates/board.html, milestone.html and milestones.html -->
+<div data-version="today" hidden>
+  <h3>The board · Planted and Harvested (phone)</h3>
+  <div class="phone">
+    <section class="stage"><div class="stage-head"><h4>Planted</h4><span>in line for the factory, #1 first · 75, 34 growing</span></div>
+      <div class="cards">
+        <a class="card started" href="#"><span class="card-meta"><b>#6</b> <span>F290</span> <span class="card-growing">growing</span></span>
+          <span class="card-title">Split runner/loop.py into one module per job kind, with no change in behaviour</span>
+          <span class="meter"><span style="width: 89%"></span></span>
+          <span class="card-count">8 of 9 tickets</span></a>
+      </div>
+    </section>
+    <section class="stage harvested" style="margin-top: 10px"><div class="stage-head"><h4>Harvested</h4><span>signed off or fixed · 134, latest 4</span></div>
+      <div class="cards">
+        <a class="card" href="#"><span class="card-meta"><span>F286</span></span><span class="card-title">Reviews look for complexity and leave the code simpler (Boy Scout rule)</span></a>
+        <a class="card" href="#"><span class="card-meta"><span>F273</span></span><span class="card-title">Forget a project from the Projects page</span></a>
+        <a class="card" href="#"><span class="card-meta"><span>F285</span></span><span class="card-title">Copilot pre-reviews a finished milestone while Claude is out</span></a>
+        <a class="card" href="#"><span class="card-meta"><span>F245</span></span><span class="card-title">An approved card shows as Seed until the runner's next round</span></a>
+      </div>
+    </section>
+  </div>
+
+  <h3>F286's page · Behind it</h3>
+  <section class="panel folds phone">
+    <details open><summary><b>What it cost</b><span>$5.12, of which the review $1.35</span></summary>
+      <div class="inside">
+        <div class="spend"><span>Planning</span><i style="width: 61%"></i><b>$3.11</b><span>The review</span><i style="width: 26%"></i><b>$1.35</b><span>The lead's tickets</span><i style="width: 13%"></i><b>$0.66</b></div>
+        <dl class="kv"><dt>Review score</dt><dd>8.0/10</dd><dt>Review rounds</dt><dd>1</dd></dl>
+      </div></details>
+  </section>
+
+  <h3>Milestones</h3>
+  <section class="panel"><div class="scroll"><table>
+    <thead><tr><th>Key</th><th>Status</th><th class="num">Merged</th><th class="num">Claude $</th><th class="num">Net $</th></tr></thead>
+    <tbody>
+      <tr><td>F290-RUNNER-LOOP-PY-IS-6-500</td><td>review</td><td class="num">8</td><td class="num">$39.35</td><td class="num">$0.00</td></tr>
+      <tr><td>F286-I-WANT-CODE-REVIEWS-TO-HIGHLIGHT</td><td>done</td><td class="num">2</td><td class="num">$5.12</td><td class="num">$0.00</td></tr>
+      <tr><td>F273-I-NEED-THE-ABILITY-TO-FORGET</td><td>done</td><td class="num">2</td><td class="num">$6.12</td><td class="num">-$3.86</td></tr>
+      <tr><td>F285-I-THINK-I-SAID-AT-SOME</td><td>done</td><td class="num">3</td><td class="num">$3.88</td><td class="num">-$0.06</td></tr>
+    </tbody></table></div></section>
+  <p class="legend">How much code a milestone added is only in its review's Numbers, at the bottom of a signed-off card's page.</p>
+</div>
+
+<!-- Proposed -->
+<div data-version="proposed">
+  <h3>The board · Planted and Harvested (phone)</h3>
+  <div class="phone">
+    <section class="stage"><div class="stage-head"><h4>Planted</h4><span>in line for the factory, #1 first · 75, 34 growing</span></div>
+      <div class="cards">
+        <a class="card started" href="#"><span class="card-meta"><b>#6</b> <span>F290</span> <span class="card-growing">growing</span></span>
+          <span class="card-title">Split runner/loop.py into one module per job kind, with no change in behaviour</span>
+          <span class="meter"><span style="width: 89%"></span></span>
+          <span class="card-count">8 of 9 tickets</span>
+          <span class="card-code new"><b>Code</b><span>+447 lines</span><em>so far</em></span></a>
+        <span class="note">a plate in the rules' ink once a ticket has merged; "so far" until it's harvested</span>
+      </div>
+    </section>
+    <section class="stage harvested" style="margin-top: 10px"><div class="stage-head"><h4>Harvested</h4><span>signed off or fixed · 134, latest 4</span></div>
+      <div class="cards">
+        <a class="card" href="#"><span class="card-meta"><span>F286</span></span><span class="card-title">Reviews look for complexity and leave the code simpler (Boy Scout rule)</span><span class="card-code new"><b>Code</b><span>+79 lines</span></span></a>
+        <a class="card" href="#"><span class="card-meta"><span>F273</span></span><span class="card-title">Forget a project from the Projects page</span><span class="card-code new"><b>Code</b><span>+107 lines</span></span></a>
+        <a class="card" href="#"><span class="card-meta"><span>F285</span></span><span class="card-title">Copilot pre-reviews a finished milestone while Claude is out</span><span class="card-code new"><b>Code</b><span>+212 lines</span></span></a>
+        <a class="card" href="#"><span class="card-meta"><span>F245</span></span><span class="card-title">An approved card shows as Seed until the runner's next round</span><span class="card-code new"><b>Code</b><span>+2 lines</span></span></a>
+      </div>
+    </section>
+    <h3>Calmer, if the plate is too much</h3>
+    <section class="stage harvested"><div class="cards">
+      <a class="card" href="#"><span class="card-meta"><span>F286</span></span><span class="card-title">Reviews look for complexity and leave the code simpler (Boy Scout rule)</span><span class="card-count new"><span class="code">+79 lines of code</span></span></a>
+    </div></section>
+  </div>
+
+  <h3>F286's page · Behind it</h3>
+  <section class="panel folds phone">
+    <details open><summary><b>What it cost</b><span>$5.12, of which the review $1.35 · <span class="code new">code +79 lines</span></span></summary>
+      <div class="inside">
+        <div class="spend"><span>Planning</span><i style="width: 61%"></i><b>$3.11</b><span>The review</span><i style="width: 26%"></i><b>$1.35</b><span>The lead's tickets</span><i style="width: 13%"></i><b>$0.66</b></div>
+        <dl class="kv"><dt>Review score</dt><dd>8.0/10</dd><dt>Review rounds</dt><dd>1</dd>
+          <dt class="new">Code lines</dt><dd class="new"><span class="mono">+92 −13, net +79</span>
+            <span class="codebar"><span class="plus" style="width: 87.6%"></span><span class="minus" style="width: 12.4%"></span></span>
+            <span style="font-size: 12px; color: var(--muted)">added, removed: tests, docs and Markdown left out</span></dd></dl>
+      </div></details>
+  </section>
+  <span class="note">the fold's line says it while closed, so it's read without opening</span>
+
+  <h3>Milestones</h3>
+  <section class="panel"><div class="scroll"><table>
+    <thead><tr><th>Key</th><th>Status</th><th class="num">Merged</th><th class="num">Claude $</th><th class="num new">Code lines</th><th class="num">Net $</th></tr></thead>
+    <tbody>
+      <tr><td>F290-RUNNER-LOOP-PY-IS-6-500</td><td>review</td><td class="num">8</td><td class="num">$39.35</td><td class="num new">+447</td><td class="num">$0.00</td></tr>
+      <tr><td>F286-I-WANT-CODE-REVIEWS-TO-HIGHLIGHT</td><td>done</td><td class="num">2</td><td class="num">$5.12</td><td class="num new">+79</td><td class="num">$0.00</td></tr>
+      <tr><td>F273-I-NEED-THE-ABILITY-TO-FORGET</td><td>done</td><td class="num">2</td><td class="num">$6.12</td><td class="num new">+107</td><td class="num">-$3.86</td></tr>
+      <tr><td>F285-I-THINK-I-SAID-AT-SOME</td><td>done</td><td class="num">3</td><td class="num">$3.88</td><td class="num new">+212</td><td class="num">-$0.06</td></tr>
+    </tbody></table></div></section>
+  <p class="legend"><span class="new">Dashed green</span> marks what is new. The net is code lines added less removed, by the milestone's merged tickets. A milestone that shrank the code reads <b>−40 lines</b>, in the same ink: no colour says good or bad. A card with nothing merged shows nothing.</p>
+</div>
+
+</div>
+
+<script>
+  function wireSwitch() {
+    document.querySelectorAll(".switch button").forEach((button) => {
+      button.addEventListener("click", () => {
+        document.querySelectorAll(".switch button").forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
+        document.querySelectorAll("[data-version]").forEach((v) => { v.hidden = v.dataset.version !== button.dataset.show; });
+      });
+    });
+  }
+  wireSwitch();
+</script>
+</body>
+</html>

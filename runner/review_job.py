@@ -52,6 +52,7 @@ from runner.session import (
 )
 from runner.state import State, save_state
 from runner.tasks import (
+    BUGS,
     Task,
     TaskError,
     milestone_file,
@@ -133,6 +134,21 @@ def _drop_covered_merges(s: Session) -> None:
         s.log(f"no checkpoint: {key.upper()}'s review reads {', '.join(tickets)}")
 
 
+def _finishes_its_card(s: Session, milestone: str) -> bool:
+    """bug-65: the merge left its card with no ticket to build, and a merge of that card is
+    still unchecked: no review round reads it (`_drop_covered_merges` kept it), so its
+    checkpoint runs now, not after another card's merge."""
+    from runner.milestone import _BUILDING, _ticket_milestones  # it imports this module
+
+    key = short_key(milestone)
+    if key == BUGS:  # no card: its merges wait for the count (ADR 19 item 2)
+        return False
+    building = set().union(*(_ticket_milestones(s.repo, folder) for folder in _BUILDING))
+    if key in building:
+        return False
+    return any(_done_milestone(s, entry.split()[0]) == key for entry in s.state.unchecked)
+
+
 def note_merge(s: Session, task: Task, rec: TaskRecord) -> None:
     """After a developer merge (``_merge`` lists it as unchecked): every ``checkpoint_every``
     of them, queue a checkpoint. One already queued runs on every merge since; one parked for
@@ -142,7 +158,10 @@ def note_merge(s: Session, task: Task, rec: TaskRecord) -> None:
     if rec.result != "done":
         return
     _drop_covered_merges(s)
-    if task.agent != "developer" or len(s.state.unchecked) < s.cfg.checkpoint_every:
+    finished = _finishes_its_card(s, task.milestone)
+    if not finished and (
+        task.agent != "developer" or len(s.state.unchecked) < s.cfg.checkpoint_every
+    ):
         return
     if (row := find_row(s, CHECKPOINT)) is not None:
         if s.state.recheck and _row_waits(s, CHECKPOINT, row.subject):

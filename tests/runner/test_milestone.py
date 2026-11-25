@@ -992,8 +992,10 @@ def test_a_named_milestones_review_still_waits_for_claude(repo, monkeypatch, clo
     assert row["done"] is not None and row["not_before"] is None
 
 
-def test_a_last_rounds_fix_merge_stays_for_a_checkpoint(repo, monkeypatch):
-    """ADR 38's covered merges are those a next round reads: at the round cap there is none."""
+def test_a_last_rounds_fix_merge_gets_its_checkpoint_at_once(repo, monkeypatch):
+    """ADR 38's covered merges are those a next round reads: at the round cap there is none.
+    The fix finishes the card, so its checkpoint runs at once (bug-65), not after another
+    card's merge."""
     _milestone_repo(repo)
     cfg = _config(repo)
     state_path = cfg.runs_dir / "state.json"
@@ -1001,8 +1003,12 @@ def test_a_last_rounds_fix_merge_stays_for_a_checkpoint(repo, monkeypatch):
     state.review_counts["m1"] = [3, 2]  # two of the three rounds run
     save_state(state, state_path)
     seen: list[str] = []
+    checkpoints: list[str] = []
 
     def run_claude(job, repo_, timeout, log_path, now, resume=None):
+        if "doing a checkpoint" in job.prompt:
+            checkpoints.append(job.prompt)
+            return JobResult(ok=True, text="", duration_s=1.0)
         milestone_ticket(repo_, "ready", "m1-05-fix", "m1")
         _review_writes(job, repo_, [{**LEAK, "id": "m1-F1"}])
         return JobResult(ok=True, text="", duration_s=1.0)
@@ -1024,7 +1030,8 @@ def test_a_last_rounds_fix_merge_stays_for_a_checkpoint(repo, monkeypatch):
     monkeypatch.setattr(milestone, "run_e2e", lambda *a: GateResult("e2e", True, ""))
     stop = milestone.review_milestone(cfg, "m1", "m1-start")
     assert stop == "review round cap (3) reached" and seen == ["m1-05-fix"]
-    assert load_state(state_path).unchecked == ["m1-05-fix abc123 local-m"]
+    assert len(checkpoints) == 1 and "m1-05-fix" in checkpoints[0]
+    assert load_state(state_path).unchecked == []
 
 
 def _fix_review(repo, monkeypatch, *, agent: str, over: bool, runs: bool):

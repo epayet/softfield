@@ -16,6 +16,7 @@ from runner.agents import JobResult
 from runner.report import TaskRecord
 from runner.review import Finding
 from runner.review_job import fix_ticket, fix_tickets
+from runner.state import State, load_state, save_state
 from runner.tasks import parse_task
 from tests.runner.conftest import git, write_task
 from tests.runner.test_loop import (  # noqa: F401 - _new_command and _no_probe are fixtures
@@ -287,11 +288,12 @@ def test_a_parked_checkpoint_left_with_nothing_leaves_no_session_to_resume(repo)
 
 def test_the_fixes_of_a_reviews_last_round_keep_their_checkpoint(repo, capsys):
     """No round follows it, so nothing else would read them, however due the milestone looks."""
-    for n in (1, 2):
-        _ticket_in(repo, "done", f"f9-0{n}-fix")
+    _ticket_in(repo, "done", "f9-01-fix")
+    _ticket_in(repo, "ready", "f9-02-fix")
     s = session.open_session(_config(repo))
     s.last_round = "f9"
     _merged(s, "f9-01-fix")
+    _finish(repo, "f9-02-fix")
     _merged(s, "f9-02-fix")
     row = session.find_row(s, session.CHECKPOINT)
     assert row is not None and row.reason == "after f9-01-fix and f9-02-fix merged"
@@ -335,6 +337,79 @@ def test_a_fix_merged_between_two_review_rounds_queues_no_checkpoint(repo):
     _merged(s, "f9-03-fix")
     assert session.find_row(s, session.CHECKPOINT) is None
     assert s.state.unchecked == []
+    session.close_session(s)
+
+
+def test_a_cards_last_merge_with_no_round_to_read_it_queues_its_checkpoint_at_once(repo):
+    """bug-65: F290's review had stopped, so its last fix f290-09 would have waited for another
+    card's merge before a checkpoint read it, while the desk offered its sign-off."""
+    _ticket_in(repo, "done", "f9-01-first")
+    _ticket_in(repo, "ready", "f9-09-fix")
+    s = session.open_session(_config(repo))
+    s.state.review_counts["f9"] = [1]
+    s.state.review_stop["f9"] = "review round cap (3) reached"
+    _finish(repo, "f9-09-fix")
+    _merged(s, "f9-09-fix")
+    row = session.find_row(s, session.CHECKPOINT)
+    assert row is not None and row.reason == "after f9-09-fix merged"
+    session.close_session(s)
+
+
+def test_a_lead_ticket_finishing_a_stopped_card_queues_the_checkpoint_of_its_fix(repo):
+    _ticket_in(repo, "done", "f9-08-fix")
+    _ticket_in(repo, "ready", "f9-09-lead")
+    s = session.open_session(_config(repo))
+    s.state.review_counts["f9"] = [1]
+    s.state.review_stop["f9"] = "findings did not decrease (1 -> 1)"
+    _merged(s, "f9-08-fix")
+    assert session.find_row(s, session.CHECKPOINT) is None  # f9-09 still to come
+    _finish(repo, "f9-09-lead")
+    lead = type("T", (), {"agent": "lead", "milestone": "f9"})()
+    review_job.note_merge(s, lead, TaskRecord(id="f9-09-lead", milestone="f9", result="done"))
+    row = session.find_row(s, session.CHECKPOINT)
+    assert row is not None and row.reason == "after f9-08-fix merged"
+    session.close_session(s)
+
+
+def test_another_cards_lone_merge_still_waits_for_the_count(repo):
+    _ticket_in(repo, "done", "f9-01-first")
+    _ticket_in(repo, "ready", "f9-02-next")
+    _ticket_in(repo, "done", "f10-01-fix")
+    s = session.open_session(_config(repo))
+    s.state.review_counts["f10"] = [1]
+    s.state.review_stop["f10"] = "review round cap (3) reached"
+    _merged(s, "f9-01-first")
+    assert session.find_row(s, session.CHECKPOINT) is None
+    assert s.state.unchecked == ["f9-01-first abc123 local-m"]
+    session.close_session(s)
+
+
+def test_a_review_stopped_by_another_milestones_finding_goes_on(repo):
+    """bug-65: the stops the bug recorded go when the runner starts. F290's review is under way
+    again (its fix runs with no checkpoint) and due once the fix is done; a real one stays, and
+    so does a signed-off card's."""
+    from runner.milestone import due_reviews
+    from runner.review import RECURRED
+
+    _ticket_in(repo, "done", "f9-01-first")
+    _ticket_in(repo, "ready", "f9-09-fix")
+    _ticket_in(repo, "done", "f10-01-first")
+    _ticket_in(repo, "done", "f11-01-first")
+    git(repo, "tag", "f11-done")
+    state = State(
+        finding_seen={"m3-F7": 3, "f9-F1": 1, "f10-F2": 3, "f11-F1": 1},
+        review_counts={"f9": [1], "f10": [1, 1, 1], "f11": [1]},
+        review_stop={"f9": RECURRED, "f10": RECURRED, "f11": RECURRED},
+    )
+    save_state(state, _config(repo).runs_dir / "state.json")
+    s = session.open_session(_config(repo))
+    assert s.state.review_stop == {"f10": RECURRED, "f11": RECURRED}
+    assert review_job.under_review(s.state) == {"f9"}
+    assert load_state(_config(repo).runs_dir / "state.json").review_stop == s.state.review_stop
+    _finish(repo, "f9-09-fix")
+    _merged(s, "f9-09-fix")
+    assert session.find_row(s, session.CHECKPOINT) is None  # round 2 reads it
+    assert due_reviews(repo, s.state) == ["f9"]
     session.close_session(s)
 
 
