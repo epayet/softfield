@@ -40,3 +40,10 @@ Read the Decisions in `.softfield/cards/f290-runner-loop-py-is-6-500.md` (D1–D
 - `runner/cli.py`, `runner/milestone.py`, `runner/requests.py` and `runner/bench.py` import the moved names from `runner/session.py`
 - no ticket in `.softfield/tasks/ready/` or `.softfield/tasks/later/` names a moved `def` or `class` beside `runner/loop.py`
 - all gates pass (see `docs/workflow.md`), mypy included
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
