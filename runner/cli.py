@@ -22,6 +22,7 @@ from runner import (
     notify,
     owner,
     procs,
+    rating_store,
     report,
     requests,
     session,
@@ -800,26 +801,26 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "ratings":
             conn = metrics.open_db(args.db or cfg.metrics_db)
             try:
-                start = loop.starting_ratings(cfg)
+                start = rating_store.starting_ratings(cfg)
                 project = metrics.upsert_project(conn, project_name(repo), repo=str(repo))
                 if (cut_off := args.void_benches_before) is not None:
                     if cut_off.tzinfo is None:
                         raise RunnerError(f"--void-benches-before {cut_off}: give its time zone")
-                    voided = loop.void_benches_before(conn, project, cfg.agents, cut_off)
+                    voided = rating_store.void_benches_before(conn, project, cfg.agents, cut_off)
                     print(f"Voided {sum(voided.values())} bench jobs before {cut_off}:")
                     for agent, count in sorted(voided.items()):
                         print(f"{agent:<28} {count}")
                     print()
                 if args.replay:
                     print("Replayed under ADR 24:")
-                    for redone in loop.replay_ratings(conn, project, start, session.now()):
+                    for redone in rating_store.replay_ratings(conn, project, start, session.now()):
                         moved = f"→ {redone.after:.2f}" if redone.written else "unchanged"
                         print(
                             f"{redone.agent:<28} {redone.before:.2f} {moved},"
                             f" {redone.games} coding games"
                         )
                     print()
-                current, _ = loop.standing(conn, start)
+                current, _ = rating_store.standing(conn, start)
             finally:
                 conn.close()
             for agent, rating in sorted(current.items(), key=lambda item: -item[1]):

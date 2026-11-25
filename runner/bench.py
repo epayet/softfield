@@ -65,13 +65,8 @@ from runner.developer_job import _log_running, _prompt, _read_blocked
 from runner.gates import NO_CHANGES, GateContext, GateResult, parse_blocked, run_gates
 from runner.gitops import RUNNER_AUTHOR, Git, with_trailers
 from runner.local_model import empty_cause, is_local, warmup
-from runner.loop import (
-    BENCH,
-    _answer_json,
-    _merge_files,
-    rate_bench,
-    starting_ratings,
-)
+from runner.loop import _answer_json, _merge_files
+from runner.rating_store import BENCH, rate_bench, starting_ratings
 from runner.report import SessionReport
 from runner.review import Finding, ReviewFileError, parse_checkpoint
 from runner.session import (

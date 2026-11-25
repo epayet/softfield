@@ -23,6 +23,7 @@ from runner.developer_job import (
     block,
 )
 from runner.gitops import LOCAL_MODEL_AGENT, with_trailers
+from runner.rating_store import rate_finished
 from runner.report import TaskRecord
 from runner.session import (
     CHECK_TICKETS,
@@ -200,8 +201,6 @@ def _settle_lead_task(
     """The lead ticket's work, merged once check-all passes, else blocked on its branch;
     ``lead`` is the agent that did it (ADR 32 item 4). Unless it's the ``last`` attempt, a
     failed check-all leaves it for the next agent's: False, and nothing settled."""
-    from runner.loop import rate_finished  # runner.loop imports this module
-
     branch = f"task/{task.id}"
     s.git.commit_all(with_trailers(f"wip {task.id} (lead)", agent=CLAUDE_HEADLESS_AGENT))
     if not s.git.changed_files(MAIN):  # an interrupted run's commit counts too
@@ -388,8 +387,6 @@ def _settle_escalation(
     the decision it wrote, its work by check-all as any other's (f17-01 wrote "implemented",
     then was cut off waiting on its own second check-all); one with no decision keeps its
     work off main."""
-    from runner.loop import rate_finished  # runner.loop imports this module
-
     escalated = s.tasks_dir("escalated") / task.path.name
     branch = f"task/{task.id}"
     try:
@@ -476,8 +473,6 @@ def _finish_branch(
     """An escalation that finished the developer's work on ``task/<id>`` (ADR 15 item 8):
     squash-merged as `_merge` does once `check-all --task` passes, crediting the lead (who
     merged it) and the developer (a trailer). Anything else off main is kept and blocked."""
-    from runner.loop import rate_finished  # runner.loop imports this module
-
     branch = f"task/{task.id}"
     escalated = s.tasks_dir("escalated") / task.path.name
     if on == MAIN:  # "finish" without checking the branch out: its edits stay off main

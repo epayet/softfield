@@ -16,7 +16,7 @@ tests:
 `softfield ratings --void-benches-before` leaves the stored ratings without the voided games.
 
 ### Context
-Read the `ratings` command in `runner/cli.py` (`--void-benches-before`, `--replay`) and `def void_benches_before` in `runner/loop.py`, and `test_ratings_replay_twice_gives_the_same_ratings` in `tests/runner/test_cli.py`. `runner/**` is protected: tests first.
+Read the `ratings` command in `runner/cli.py` (`--void-benches-before`, `--replay`) and `def void_benches_before` in `runner/rating_store.py`, and `test_ratings_replay_twice_gives_the_same_ratings` in `tests/runner/test_cli.py`. `runner/**` is protected: tests first.
 - Today the void without `--replay` voids the jobs but leaves the stored ratings with those games in them, and says nothing. Make the void imply the replay.
 - No CLI test covers the flag, nor its refusal of a time without a zone: add both.
 

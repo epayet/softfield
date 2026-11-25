@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from runner import cli, loop, metrics, owner, procs, session, waits
+from runner import cli, loop, metrics, owner, procs, rating_store, session, waits
 from runner.config import load_config
 from runner.milestone import PARKED, RESTART
 from runner.report import SessionReport
@@ -484,8 +484,8 @@ def test_ratings_replay_twice_gives_the_same_ratings(in_repo, capsys):
             started=f"2026-0{n + 1}-01T10:00:00+00:00",
         )
         metrics.finish_job(conn, job, ended=f"2026-0{n + 1}-01T11:00:00+00:00", outcome=outcome)
-        start = loop.starting_ratings(load_config(in_repo))
-        loop.rate_ticket(conn, project, ticket, start, datetime(2026, n + 1, 2, tzinfo=UTC))
+        start = rating_store.starting_ratings(load_config(in_repo))
+        rating_store.rate_ticket(conn, project, ticket, start, datetime(2026, n + 1, 2, tzinfo=UTC))
     for k in range(2):  # the old rules: a penalty per finding on m1-01's code
         metrics.add_rating_change(
             conn,

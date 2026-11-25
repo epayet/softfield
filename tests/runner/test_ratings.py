@@ -2,7 +2,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from runner import loop, metrics
+from runner import metrics, rating_store
 from runner.agents import Agent
 from runner.ratings import (
     CODING,
@@ -299,8 +299,8 @@ def test_a_merged_ticket_is_rated_once(db):
             ("local", "developer", "passed", "2026-10-02T10:20:00+00:00"),
         ],
     )
-    loop.rate_ticket(db, project, "f1-01", START, AT)
-    loop.rate_ticket(db, project, "f1-01", START, AT + timedelta(minutes=1))
+    rating_store.rate_ticket(db, project, "f1-01", START, AT)
+    rating_store.rate_ticket(db, project, "f1-01", START, AT + timedelta(minutes=1))
     assert _changes(db) == [("local", CODING, 5.0, 5.0, "merged later")]  # a refusal isn't a loss
 
 
@@ -310,7 +310,7 @@ def test_a_finished_ticket_credits_the_lead_and_costs_the_developer(db):
         for n, role in enumerate(("developer", "developer", "last-attempt"))
     ]
     project, _ = _ticket(db, "f1-02", difficulty=6, merged_by="claude-opus", jobs=jobs)
-    loop.rate_ticket(db, project, "f1-02", START, AT)
+    rating_store.rate_ticket(db, project, "f1-02", START, AT)
     assert [(a, r) for a, _, _, _, r in _changes(db)] == [
         ("local", "not merged"),
         ("claude-opus", "merged at the first attempt"),
@@ -320,7 +320,7 @@ def test_a_finished_ticket_credits_the_lead_and_costs_the_developer(db):
 def test_a_blocked_lead_ticket_is_a_loss_for_the_lead(db):
     jobs = [("claude-opus", "lead-ticket", "passed", "2026-10-02T10:00:00+00:00")]
     project, _ = _ticket(db, "f1-03", difficulty=7, state="blocked", jobs=jobs)
-    loop.rate_ticket(db, project, "f1-03", START, AT)
+    rating_store.rate_ticket(db, project, "f1-03", START, AT)
     [(agent, _, before, after, result)] = _changes(db)
     assert (agent, result) == ("claude-opus", "not merged") and after < before
 
@@ -328,7 +328,7 @@ def test_a_blocked_lead_ticket_is_a_loss_for_the_lead(db):
 def test_a_ticket_with_no_difficulty_is_not_rated(db):
     jobs = [("local", "developer", "passed", "2026-10-02T10:00:00+00:00")]
     project, _ = _ticket(db, "f1-04", difficulty=None, merged_by="local", jobs=jobs)
-    loop.rate_ticket(db, project, "f1-04", START, AT)
+    rating_store.rate_ticket(db, project, "f1-04", START, AT)
     assert _changes(db) == []
 
 
@@ -336,8 +336,8 @@ def test_ratings_build_on_the_latest_change(db):
     jobs = [("local", "developer", "passed", "2026-10-02T10:00:00+00:00")]
     project, _ = _ticket(db, "f1-05", merged_by="local", jobs=jobs)
     _ticket(db, "f1-06", merged_by="local", jobs=jobs)
-    loop.rate_ticket(db, project, "f1-05", START, AT)
-    loop.rate_ticket(db, project, "f1-06", START, AT + timedelta(minutes=1))
+    rating_store.rate_ticket(db, project, "f1-05", START, AT)
+    rating_store.rate_ticket(db, project, "f1-06", START, AT + timedelta(minutes=1))
     first, second = _changes(db)
     assert round(second[2], 3) == first[3]
 
@@ -353,8 +353,8 @@ def test_the_reviews_verdicts_are_rated_once_with_distinct_moments(db):
         ("F4", None, "claude-opus"),  # not judged
     ):
         metrics.add_finding(db, milestone, key, ticket_id=ticket_id, verdict=verdict, agent=agent)
-    loop.rate_verdicts(db, project, "f1", START, "claude-sonnet", AT)
-    loop.rate_verdicts(db, project, "f1", START, "claude-sonnet", AT + timedelta(hours=1))
+    rating_store.rate_verdicts(db, project, "f1", START, "claude-sonnet", AT)
+    rating_store.rate_verdicts(db, project, "f1", START, "claude-sonnet", AT + timedelta(hours=1))
     assert [(a, s, r) for a, s, _, _, r in _changes(db)] == [
         ("claude-sonnet", REVIEWING, "confirmed f1-C9-F1"),
         ("local", CODING, "finding f1-C9-F1"),
@@ -371,15 +371,15 @@ def _merged_first(db, ticket, merged_by="local"):
 def test_four_findings_on_a_ticket_merged_first_cost_one_quarter_step_in_all(db):
     """ADR 24 item 1, also when a later review judges more findings on the same ticket."""
     project, ticket_id = _merged_first(db, "f1-08")
-    loop.rate_ticket(db, project, "f1-08", START, AT)
+    rating_store.rate_ticket(db, project, "f1-08", START, AT)
     milestone = metrics.upsert_milestone(db, project, "f1")
     for n in range(4):
         metrics.add_finding(
             db, milestone, f"F{n}", ticket_id=ticket_id, verdict="confirmed", agent="claude-opus"
         )
-    loop.rate_verdicts(db, project, "f1", START, "claude-sonnet", AT + timedelta(hours=1))
+    rating_store.rate_verdicts(db, project, "f1", START, "claude-sonnet", AT + timedelta(hours=1))
     metrics.add_finding(db, milestone, "F9", ticket_id=ticket_id, verdict="missed")
-    loop.rate_verdicts(db, project, "f1", START, "claude-sonnet", AT + timedelta(hours=2))
+    rating_store.rate_verdicts(db, project, "f1", START, "claude-sonnet", AT + timedelta(hours=2))
     local = [c for c in _changes(db) if c[0] == "local"]
     assert [r for *_, r in local] == ["merged at the first attempt", "finding F0"]
     _, _, before, after, _ = local[1]
@@ -393,7 +393,7 @@ def test_findings_on_a_ticket_not_merged_cost_its_developer_nothing(db):
     metrics.add_finding(
         db, milestone, "F1", ticket_id=ticket_id, verdict="confirmed", agent="claude-opus"
     )
-    loop.rate_verdicts(db, project, "f1", START, "claude-sonnet", AT)
+    rating_store.rate_verdicts(db, project, "f1", START, "claude-sonnet", AT)
     assert [a for a, *_ in _changes(db)] == ["claude-opus"]
 
 
@@ -424,10 +424,10 @@ def _benched(db, ticket, agent, outcomes, run="bench-1", at="2026-10-02T09:00:00
 def test_a_bench_replay_passed_first_is_a_game_and_the_real_one_is_still_played_once(db):
     project, _ = _merged_first(db, "f1-10")
     run = _benched(db, "f1-10", "local", ["passed"])
-    loop.rate_bench(db, project, run, "f1-10", "local", START, AT)
-    loop.rate_bench(db, project, run, "f1-10", "local", START, AT + timedelta(minutes=1))
-    loop.rate_ticket(db, project, "f1-10", START, AT + timedelta(minutes=2))
-    loop.rate_ticket(db, project, "f1-10", START, AT + timedelta(minutes=3))
+    rating_store.rate_bench(db, project, run, "f1-10", "local", START, AT)
+    rating_store.rate_bench(db, project, run, "f1-10", "local", START, AT + timedelta(minutes=1))
+    rating_store.rate_ticket(db, project, "f1-10", START, AT + timedelta(minutes=2))
+    rating_store.rate_ticket(db, project, "f1-10", START, AT + timedelta(minutes=3))
     changes = _changes(db)
     assert [(a, s, r) for a, s, _, _, r in changes] == [
         ("local", CODING, "bench passed at the first attempt"),
@@ -437,14 +437,14 @@ def test_a_bench_replay_passed_first_is_a_game_and_the_real_one_is_still_played_
     later = _benched(
         db, "f1-10", "local", ["failed", "failed"], "bench-2", "2026-10-02T12:30:00+00:00"
     )
-    loop.rate_bench(db, project, later, "f1-10", "local", START, AT + timedelta(hours=1))
+    rating_store.rate_bench(db, project, later, "f1-10", "local", START, AT + timedelta(hours=1))
     assert _changes(db)[-1][4] == "bench not passed"  # another bench run, another game
 
 
 def test_a_refused_bench_replay_is_no_game(db):
     project, _ = _merged_first(db, "f1-11")
     run = _benched(db, "f1-11", "local", ["failed", "refused"])
-    loop.rate_bench(db, project, run, "f1-11", "local", START, AT)
+    rating_store.rate_bench(db, project, run, "f1-11", "local", START, AT)
     assert _changes(db) == []
 
 
@@ -490,6 +490,6 @@ def test_routing_reads_the_floor_until_three_coding_games(db):
             ticket_id=ticket_id,
             result=f"confirmed F{n}",
         )
-    routed = loop.routing_ratings(db, START)
+    routed = rating_store.routing_ratings(db, START)
     assert routed == {"claude-sonnet": LOWEST, "claude-opus": 8.5, "local": LOWEST}
-    assert loop.standing(db, START)[0]["claude-sonnet"] == 7.5  # the stored rating stays
+    assert rating_store.standing(db, START)[0]["claude-sonnet"] == 7.5  # the stored rating stays

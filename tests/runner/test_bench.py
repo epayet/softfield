@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from factory_dashboard import queries
-from runner import bench, gates, loop, metrics, sandbox, session
+from runner import bench, gates, metrics, rating_store, sandbox, session
 from runner.agents import Agent, JobResult, JobSpec, Refusal
 from runner.config import Config
 from runner.gitops import Git, with_trailers
@@ -350,8 +350,8 @@ def test_a_replay_that_changes_the_main_checkout_is_void_and_stops_the_bench(
     assert (repo / "coucou" / "leaked.py").exists()  # left for the owner to look at
     assert not list(copies.iterdir())
     # nor does `runner ratings --replay` play it later
-    assert loop._bench_game("fake-a", TICKET, 5, ["void"]) is None
-    assert loop._bench_game("fake-a", TICKET, 5, ["failed"]) is not None
+    assert rating_store._bench_game("fake-a", TICKET, 5, ["void"]) is None
+    assert rating_store._bench_game("fake-a", TICKET, 5, ["failed"]) is not None
 
 
 def test_a_change_already_in_the_main_checkout_is_no_leak(repo, copies, fake_agents):

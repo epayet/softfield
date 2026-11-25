@@ -1,8 +1,8 @@
 """Each agent's one rating, from 1 to 10 (ADR 14 items 6–7, ADR 15 item 9, ADR 24).
 
 Pure: ratings, results and history are parameters; the runner reads the metrics database and
-writes ``rating_changes`` (``runner.loop``). Coding results and review verdicts move the same
-rating; a change's ``skill`` names which moved it.
+writes ``rating_changes`` (``runner.rating_store``). Coding results and review verdicts move the
+same rating; a change's ``skill`` names which moved it.
 
 - **A game** is played against a ticket's difficulty (the corrected one when set). The
   expected result is a logistic of the gap, ``1 / (1 + exp(−(rating − difficulty) / SCALE))``:

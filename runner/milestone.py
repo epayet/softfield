@@ -19,13 +19,12 @@ from runner.gates import GateResult
 from runner.gitops import Git, GitError, parse_trailers, with_trailers
 from runner.loop import (
     NO_E2E,
-    rate_verdicts,
     record_findings,
     review_reason,
     run_e2e,
-    starting_ratings,
     work_queue,
 )
+from runner.rating_store import rate_verdicts, starting_ratings
 from runner.review import (
     ReviewFileError,
     ReviewRound,

@@ -58,6 +58,7 @@ from runner.local_model import (
     stop_reason,
     warmup,
 )
+from runner.rating_store import current_ratings, rate_finished
 from runner.report import TaskRecord
 from runner.session import (
     CLAUDE_HEADLESS_AGENT,
@@ -140,8 +141,6 @@ def route_developer(
     """Who takes this attempt (ADR 15 items 6–7). Expected costs are left at 0, as for a lead
     ticket (``LEAD_COST``): no agent's share of a window per job is learned yet, so where it
     stands against its pace line decides. Lead work comes first (ADR 16 item 2)."""
-    from runner.loop import current_ratings  # runner.loop imports this module
-
     at = session.now()
     agents = candidates(s, role)
     ticket = router.Ticket(task.id, task.difficulty)
@@ -813,8 +812,6 @@ def run_task(s: Session, task: Task, directing: Mapping[str, Any] | None = None)
 
 def _merge(s: Session, task: Task, rec: TaskRecord, agent: str) -> None:
     """Merge the work of ``agent``, the developer whose attempt passed."""
-    from runner.loop import rate_finished  # runner.loop imports this module
-
     branch = f"task/{task.id}"
     changes = s.git.numstat(MAIN)
     changed = s.git.changed_files(MAIN)
@@ -1023,8 +1020,6 @@ def blocked_text(task_id: str, reason: str, waiting: int) -> str:
 def block(s: Session, task_path: Path, reason: str) -> None:
     """Move a task to blocked/ with its reason; its dependants pause (ADR 12 item 10). The owner
     has it on their desk at once (F106 D1), with no command: the desk's buttons answer it."""
-    from runner.loop import rate_finished  # runner.loop imports this module
-
     target = s.tasks_dir("blocked") / task_path.name
     s.git.move(task_path, target)
     append_footer(target, {"result": "blocked", "reason": reason})
