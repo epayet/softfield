@@ -37,3 +37,12 @@ The two autouse fixtures every runner test file needs (`_new_command` and `_no_p
 - `tests/runner/test_backup.py` has no `_quiet_run`.
 - No `noqa: F401` comment in `tests/runner/` mentions `_new_command` or `_no_probe`.
 - Every test in `tests/runner/` passes, with the same names as before.
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 934
+gate_failures: []
+tokens: 503119
+```
