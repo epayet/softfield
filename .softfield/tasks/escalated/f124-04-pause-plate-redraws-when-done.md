@@ -26,3 +26,12 @@ Once the runner has taken a project's Pause or Resume, that project's plate on t
 - a new order dragged but not sent on another plate is still shown after the redraw
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: ruff)
+attempts: 3
+tokens: 7627000
+logs: .softfield/var/runs/20261124-231522/f124-04-pause-plate-redraws-when-done
+```
