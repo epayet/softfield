@@ -1,5 +1,7 @@
 # Review: F290, Split runner/loop.py into one module per job kind, with no change in behaviour
 
+- **Status:** done, signed off by the owner on 2026-11-25.
+
 **Status:** review done after round 2; ready for your sign-off.
 
 ### 1. What changed

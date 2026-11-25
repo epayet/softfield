@@ -1,6 +1,7 @@
 # Milestone F290: Split runner/loop.py into one module per job kind, with no change in behaviour
 
-> **State:** ready · **Area:** factory · **Fast lane:** yes
+> **State:** done · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-25. Base: git tag `f290-runner-loop-py-is-6-500-start`. Report: [`.softfield/reviews/f290-runner-loop-py-is-6-500.md`](../reviews/f290-runner-loop-py-is-6-500.md).
 > Planted by the owner on 2026-11-24.
 
 ## Notes
