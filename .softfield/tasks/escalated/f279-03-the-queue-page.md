@@ -34,3 +34,12 @@ Read `.softfield/cards/f279-i-would-like-to-be-able.md` (D2, D6) and build the P
 - the page reads the same whichever project is picked
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: stopped)
+attempts: 3
+tokens: 1675520
+logs: .softfield/var/runs/20261125-083314/f279-03-the-queue-page
+```
