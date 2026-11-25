@@ -1742,7 +1742,8 @@ def test_empty_queue_shows_message_once(serve):
 
 
 def test_the_queue_panel_has_the_whole_queue_link_text(serve, db_path):
-    """f279-06: the whole-queue link reads "The whole queue ›", not counts (C2757-1)."""
+    """f279-06: the whole-queue link reads "The whole queue ›", not counts (C2757-1).
+    Also verifies the plan-derived content: sentence, count, ordered Next in line rows."""
     from runner.dispatch import FactoryPlan, PlanLine
 
     conn = metrics.open_db(db_path)
@@ -1761,8 +1762,29 @@ def test_the_queue_panel_has_the_whole_queue_link_text(serve, db_path):
         conn.close()
     html = serve().get("/").text
     queue_section = section(html, "queue")
+    # Plan-derived sentence
+    assert "Over pace." in queue_section
+    # Plan-derived count
+    assert "1 ticket waiting" in queue_section
+    # Ordered Next in line rows
+    next_in_line = queue_section.split("Next in line", 1)[1]
+    assert "1 f1" in next_in_line
+    # Exact /queue link
     assert "The whole queue ›" in queue_section
     assert "tickets" not in queue_section.split("The whole queue")[1].split("</a>")[0]
+    # The old queue rendering does not appear when a plan is stored
+    assert "Queue 7 tickets waiting" not in queue_section
+
+
+def test_overview_queue_panel_falls_back_to_old_rendering_when_no_plan(serve, db_path):
+    """f279-07: when no plan is stored, the Overview shows the older queue rendering."""
+    html = serve().get("/").text
+    queue_section = section(html, "queue")
+    # No plan: shows count + Next in line (older rendering)
+    assert "tickets waiting" in queue_section
+    assert "Next in line" in queue_section
+    # The plan-derived sentence does not appear
+    assert "Over pace." not in queue_section
 
 
 def test_tickets_and_a_queued_job_count_the_tickets(queue_client, db_path):
