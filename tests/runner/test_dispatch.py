@@ -4,7 +4,19 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
 from runner import allowance
-from runner.dispatch import SETUP, Pick, Queued, Ticket, Windows, pick, plan
+from runner.dispatch import (
+    GROUPS,
+    SETUP,
+    FactoryPlan,
+    Pick,
+    PlanLine,
+    Queued,
+    Ticket,
+    Windows,
+    group,
+    pick,
+    plan,
+)
 
 NOW = datetime(2026, 10, 5, 12, 0, tzinfo=UTC)
 OPEN = Windows()  # nothing holds Claude back
@@ -410,3 +422,35 @@ def test_while_the_owner_pauses_the_lane_waits_and_the_planner_goes():
     assert {line.pick.subject: line.waits for line in lines}["f172-01"] == "paused by you"
     got = pick(LANE_QUEUE, tickets, OPEN, NOW, paused=True, first={"f172-01", "f8-05"})
     assert got is not None and got.kind == "planner"
+
+
+# --- The factory's plan (F279 D2, D3) ----------------------------------------------------
+
+
+def test_each_line_has_its_group_in_the_factorys_order():
+    """F279 D3: the lane, the queued jobs, the tickets that can go, then those that wait. A lead
+    ticket over the pace line goes when nothing else can: it can go, so it is in ``go``."""
+    windows = Windows(claude=(_week_at_33(0.65),))
+    tickets = [_lead("f8-02"), _dev("f8-07"), _dev("f8-08", waits="waiting on f8-06")]
+    lines = plan(
+        [_row("checkpoint", "f8")], [*tickets, _dev("f9-01", 9)], windows, NOW, first={"f9-01"}
+    )
+    groups = {line.pick.subject: group(line, lane={"f9-01"}) for line in lines}
+    assert groups == {"f9-01": "lane", "f8": "jobs", "f8-02": "go", "f8-07": "go", "f8-08": "waits"}
+    assert [GROUPS.index(g) for g in groups.values()] == sorted(
+        GROUPS.index(g) for g in groups.values()
+    )
+    limited = plan([], [_lead("f8-02")], Windows(limited_until=NOW + timedelta(hours=1)), NOW)
+    assert group(limited[0], lane=set()) == "waits"
+    assert group(limited[0], lane=set(), chosen=True) == "go"  # what the pick takes can go
+
+
+def test_the_factorys_plan_and_its_lines_are_plain_values():
+    """F279 D2: what the runner stores and the dry run prints."""
+    line = PlanLine(
+        "softfield", "ticket", "f8-07", "Its goal", "developer", "go", None, "place 1", "f8"
+    )
+    assert (line.early_for, line.preflight) == (None, ())
+    factory = FactoryPlan(NOW, 0, "Your board's order, the lead and developers alike", (), (line,))
+    assert factory.next_up == "nothing"
+    assert replace(factory, picked=None).lines == (line,)

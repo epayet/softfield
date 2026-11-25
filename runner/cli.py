@@ -404,9 +404,7 @@ def _run_projects(args: argparse.Namespace, restarted: bool) -> int:
         print("runner: no project to run: set one up in its folder with `softfield init`")
         return 1
     if getattr(args, "dry_run", False):
-        for cfg in configs:
-            print(f"== {cfg.project_name} ({cfg.repo})")
-            loop.dry_run_plan(cfg)
+        loop.dry_run_factory(configs)  # the factory's one list, as the run stores it (F279 D1)
         return 0
     running = [cfg.project_name for cfg in configs if loop.live_run(cfg) is not None]
     if running:

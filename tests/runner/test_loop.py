@@ -1,7 +1,9 @@
 """The whole task loop on a real temporary git repo, with the model and command gates faked."""
 
+import argparse
 import json
 import re
+import shutil
 import sqlite3
 import subprocess
 import tempfile
@@ -19,6 +21,7 @@ import pytest
 from runner import (
     checks,
     claude,
+    cli,
     config,
     developer_job,
     dispatch,
@@ -810,7 +813,7 @@ def test_dry_run_lists_no_review_once_its_done(repo, capsys):
         cfg.runs_dir / "state.json",
     )
     out = _dry_run(repo, capsys)
-    assert "review" not in out
+    assert "review F9" not in out  # each line names its project, here the test's folder
     assert "-> f10-01-next: runnable" in out
 
 
@@ -6034,9 +6037,11 @@ def test_with_claude_at_its_limit_copilot_does_the_checkpoint_and_its_findings_a
 
 
 def test_the_dry_run_names_a_pre_review_as_next_when_nothing_else_runs(capsys):
-    loop._print_plan([], [], set(), set(), Path("."), None, lambda: "f285-i-think")
+    at = session.now()
+    pre_review = "Copilot's pre-review of F285"
+    loop.print_plan(dispatch.FactoryPlan(at, None, "Your board's order", (), (), pre_review))
     assert "next: Copilot's pre-review of F285" in capsys.readouterr().out
-    loop._print_plan([], [], set(), set(), Path("."), None)
+    loop.print_plan(dispatch.FactoryPlan(at, None, "Your board's order", (), ()))
     assert "next: nothing" in capsys.readouterr().out
 
 
@@ -7576,3 +7581,181 @@ def test_a_held_push_is_a_desk_item_and_goes_when_it_clears(repo, tmp_path, monk
 def test_a_project_with_no_origin_pushes_nothing(repo, monkeypatch):
     monkeypatch.setattr("runner.push.push_signed_off", lambda *a, **k: pytest.fail("pushed"))
     loop.check_push(session.open_session(_config(repo)))
+
+
+# --- The factory's plan (F279 D1–D4) --------------------------------------------------------
+
+
+def _second_project(repo: Path, tmp_path_factory) -> Config:
+    """A second project, a copy of ``repo`` as it stands, sharing its metrics database."""
+    other = tmp_path_factory.mktemp("projects") / "second"
+    shutil.copytree(repo, other)
+    return replace(_config(other), metrics_db=_config(repo).metrics_db)
+
+
+def _queue_job(cfg: Config, kind: str, subject: str, reason: str) -> None:
+    conn = metrics.open_db(cfg.metrics_db)
+    try:
+        project = metrics.upsert_project(conn, cfg.project_name, repo=str(cfg.repo))
+        metrics.queue_job(conn, project, kind, subject, reason, session.now().isoformat())
+    finally:
+        conn.close()
+
+
+def _two_projects(repo: Path, tmp_path_factory) -> tuple[Config, Config]:
+    """The first project has a developer ticket that can go; the second a queued checkpoint."""
+    second = _second_project(repo, tmp_path_factory)
+    _add_task(repo, "m1-01-thing")
+    _queue_job(second, "checkpoint", "m1", "after m1-01 merged")
+    return _config(repo), second
+
+
+def test_the_factorys_plan_lists_every_projects_jobs_before_any_ticket(repo, tmp_path_factory):
+    """F279 D3: the second project's checkpoint goes before the first project's ticket."""
+    first, second = _two_projects(repo, tmp_path_factory)
+    plan = loop.factory_plan([first, second], session.now())
+    assert [(ln.project, ln.kind, ln.subject, ln.group, ln.who) for ln in plan.lines] == [
+        (second.project_name, "checkpoint", "m1", "jobs", None),
+        (first.project_name, "ticket", "m1-01-thing", "go", "developer"),
+    ]
+    assert plan.lines[0].waits is None  # Claude is free: the checkpoint goes (bug-21)
+    assert (plan.picked, plan.next_up) == (0, "checkpoint m1")
+    assert plan.sentence == "Your board's order, the lead and developers alike"
+    assert plan.facts[-1] == f"Next: checkpoint m1 ({second.project_name})"
+    ticket = plan.lines[1]
+    assert (ticket.title, ticket.card, ticket.preflight) == ("Make the thing work.", "m1", ())
+
+
+def test_a_tickets_preflight_problems_are_in_its_line(repo):
+    _add_task(repo, "m1-01-thing")
+    task = repo / ".softfield" / "tasks" / "ready" / "m1-01-thing.md"
+    task.write_text(
+        task.read_text().replace("`coucou/thing.py`\n\n### Steps", "`render.js`\n\n### Steps")
+    )
+    git(repo, "commit", "-qam", "bare name")
+    [line] = loop.factory_plan([_config(repo)], session.now()).lines
+    assert line.preflight == ("referenced path does not exist: render.js",)
+
+
+def test_over_pace_the_plan_says_so_with_the_weeks_reading_and_the_developers_runway(
+    repo, fake_clock
+):
+    """F279 D4: the runner's words for what drives the order; the owner's pause comes first."""
+    _week_read(repo, 0.65, LINE_33)
+    _lead_and_developer(repo)
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "cards")
+    cfg = _config(repo)
+    plan = loop.factory_plan([cfg], THURSDAY)
+    assert plan.sentence == "Over pace: developers first, the lead when nothing else can"
+    week = r"Claude's week 65% used, today's pace \d+%; resets \w+ \d+ \w+ \d\d:\d\d"
+    assert re.fullmatch(week, plan.facts[0])
+    assert plan.facts[1] == "1 developer ticket can go now"
+    by_id = {line.subject: line for line in plan.lines}
+    assert by_id["f2-01-thing"].group == by_id["f1-01-lead"].group == "go"
+    assert plan.picked is not None and plan.lines[plan.picked].subject == "f2-01-thing"
+    save_state(State(owner_pause=THURSDAY.isoformat()), cfg.runs_dir / "state.json")
+    paused = loop.factory_plan([cfg], THURSDAY)
+    assert paused.sentence.startswith("Paused by you since ")
+    assert (paused.picked, paused.next_up) == (None, "nothing")
+
+
+def test_the_developers_runway_is_the_median_tickets_minutes():
+    assert loop._runway(2, [10.0, 17.5, 25.0]) == "2 developer tickets can go now, about 35 min"
+    assert loop._runway(1, []) == "1 developer ticket can go now"
+    assert loop._runway(0, [10.0]) == "No developer ticket can go now"
+
+
+def test_at_claudes_limit_the_plan_says_until_when_and_a_checkpoint_would_park_or_stand_in(
+    repo, fake_clock
+):
+    """F279 D4, bug-21: the run picks a queued job with no windows and it parks itself or goes
+    to a stand-in as it starts; the plan says so, not "waits"."""
+    _week_read(repo, 1.0, LINE_33)
+    _lead_and_developer(repo)
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "cards")
+    cfg = _config(repo)
+    _queue_job(cfg, "checkpoint", "f1", "after f1-01 merged")
+    plan = loop.factory_plan([cfg], THURSDAY)
+    until = dispatch._when(LINE_33, THURSDAY)
+    assert plan.sentence == f"Claude at its limit until {until}: developers only"
+    [checkpoint] = [line for line in plan.lines if line.kind == "checkpoint"]
+    assert checkpoint.waits is not None
+    assert checkpoint.waits.startswith("would park or go to a stand-in")
+    assert plan.picked is not None and plan.lines[plan.picked].subject == "f2-01-thing"
+
+
+def test_softfield_runs_dry_run_prints_one_list_for_every_project_and_writes_nothing(
+    repo, tmp_path_factory, monkeypatch, capsys
+):
+    first, second = _two_projects(repo, tmp_path_factory)
+    monkeypatch.setattr(cli, "_project_configs", lambda: [first, second])
+    assert cli._run_projects(argparse.Namespace(dry_run=True), False) == 0
+    out = capsys.readouterr().out
+    assert out.startswith("Your board's order, the lead and developers alike\n")
+    assert f"-> checkpoint m1: runnable, after m1-01 merged  [{second.project_name}]" in out
+    assert f"   m1-01-thing: runnable, place 1, developer ticket  [{first.project_name}]" in out
+    assert out.count("->") == 1 and out.count("next: ") == 1
+    assert out.strip().splitlines()[-1] == "next: checkpoint m1"
+    assert not first.runs_dir.exists() and not second.runs_dir.exists()
+    conn = metrics.open_db(first.metrics_db)
+    try:
+        assert metrics.latest_queue_plan(conn) is None
+    finally:
+        conn.close()
+
+
+def test_a_run_stores_the_factorys_plan_before_its_job_starts(repo, monkeypatch):
+    """F279 D1: what the page shows is what the runner was about to do."""
+    _add_task(repo, "m1-01-thing")
+    _add_task(repo, "m1-02-later", "[m1-09-not-yet]")  # so no review is due after the first
+    cfg = _config(repo)
+    seen: list[dict[str, object] | None] = []
+    merge = _merge_any(repo, [])
+
+    def run_task(s, task):
+        conn = metrics.open_db(cfg.metrics_db)
+        try:
+            seen.append(metrics.latest_queue_plan(conn))
+        finally:
+            conn.close()
+        return merge(s, task)
+
+    monkeypatch.setattr(loop, "run_task", run_task)
+    assert loop.run_projects(lambda: [cfg], lambda cfg, key: False) is False
+    [stored] = seen
+    assert stored is not None
+    assert isinstance(stored["picked"], int) and isinstance(stored["lines"], list)
+    assert stored["lines"][stored["picked"]]["subject"] == "m1-01-thing"
+    assert datetime.fromisoformat(str(stored["at"])).utcoffset() == timedelta(0)
+
+
+def test_a_round_that_runs_nothing_stores_the_plan_at_most_once_a_minute(monkeypatch):
+    from types import SimpleNamespace
+
+    cfgs = [SimpleNamespace(repo=Path("/r/softfield"), project_name="softfield")]
+    clock = [THURSDAY]
+    stored: list[datetime] = []
+    polls = iter([None, None, None, None, KeyboardInterrupt])
+
+    def idle_wait():
+        clock[0] += timedelta(seconds=20)
+        if (step := next(polls)) is not None:
+            raise step()
+
+    def open_session(cfg):
+        report = SimpleNamespace(review=None, started=clock[0], tasks=[], claude_runs=[])
+        return SimpleNamespace(
+            cfg=cfg, repo=cfg.repo, picks=0, report=report, state=SimpleNamespace(owner_pause=None)
+        )
+
+    monkeypatch.setattr(session, "now", lambda: clock[0])
+    monkeypatch.setattr(loop, "store_plan", lambda configs, at: stored.append(at))
+    monkeypatch.setattr(loop, "open_session", open_session)
+    monkeypatch.setattr(loop, "work_queue", lambda s, **kw: False)
+    monkeypatch.setattr(session, "_main_head", lambda s: None)
+    monkeypatch.setattr(loop, "close_session", lambda s: None)
+    monkeypatch.setattr(loop, "_idle_wait", idle_wait)
+    loop.run_projects(lambda: cfgs, lambda cfg, key: False)  # type: ignore[arg-type,return-value]
+    assert stored == [THURSDAY, THURSDAY + timedelta(seconds=60)]  # rounds at 0, 20, … 80 s

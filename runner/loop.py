@@ -3,10 +3,12 @@ session's rounds and the dry run. Each job kind runs in its own ``runner/<kind>_
 
 import hashlib
 import sqlite3
+import statistics
 import time
 from collections import Counter
 from collections.abc import Callable, Collection, Mapping, Sequence
-from datetime import datetime
+from dataclasses import dataclass
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -42,7 +44,7 @@ from runner.gitops import (
     GitError,
 )
 from runner.lead_job import handle_escalation
-from runner.planner_job import run_planner, run_setup, setting_up
+from runner.planner_job import run_planner, run_setup, setting_up, ticket_minutes
 from runner.procs import run_bounded
 from runner.report import SessionReport, TaskRecord
 from runner.review_job import (
@@ -720,6 +722,7 @@ def work_queue(
     take_tickets: bool = True,
     wait: bool = True,
     lane_only: bool = False,
+    before_job: Callable[[], None] | None = None,
 ) -> bool:
     """Work through .softfield/tasks/ready (one milestone's, if given) and the queued jobs their
     runs
@@ -749,7 +752,8 @@ def work_queue(
     with ``lane_only`` (F235 D1) only the fast lane, its tickets and the directions and
     escalations about them, so the round can run every project's lane before any queued job;
     without ``wait`` it never holds or sleeps here (for Claude's reset, the owner's pause or
-    nothing to run) but returns, so the next project can go.
+    nothing to run) but returns, so the next project can go; ``before_job`` runs once a job is
+    picked, before it starts (the factory's plan is stored then, F279 D1).
 
     With ``reviews`` and without ``once`` (the standing `runner run`), it doesn't return with
     nothing to run: it holds, saying what it waits for (`_idle_line`), and each turn applies
@@ -865,6 +869,8 @@ def work_queue(
         if idle is not None:
             idle = None
             session.set_activity(s, PICKING)
+        if before_job is not None:
+            before_job()
         if job.kind == REVIEW:
             if park_review(s, job.subject):  # the line goes on meanwhile (F53 D1)
                 continue
@@ -1005,6 +1011,18 @@ def run_projects(
     refused: set[Path] = set()
     busy: list[Session] = []  # the session in a turn: a Ctrl-C there leaves it as it is
     synced: dict[Path, str] = {}  # each project's main, as its cards and tickets were read
+    running: list[Config] = []  # the round's projects, whose plan is stored (F279 D1)
+    planned: list[datetime] = []  # when it was stored last
+
+    def plan_now() -> None:  # never stops the run
+        at = session.now()
+        planned[:] = [at]
+        try:
+            store_plan(running, at)
+        except Exception as exc:
+            stamp = f"{local_clock():%H:%M:%S}"
+            line = f"the queue's plan wasn't stored ({type(exc).__name__}: {exc})"
+            print(f"[{stamp}] [{RUNNER_AGENT}] {line}", flush=True)
 
     def turn(s: Session, **kw: Any) -> tuple[bool, bool]:
         # A card or ticket committed outside the run (`softfield init`'s setup session, a
@@ -1016,7 +1034,9 @@ def run_projects(
             synced[s.repo] = head
         before = s.picks
         busy.append(s)
-        restart = work_queue(s, escalate=escalate, reviews=True, wait=False, **kw)
+        restart = work_queue(
+            s, escalate=escalate, reviews=True, wait=False, before_job=plan_now, **kw
+        )
         busy.remove(s)
         key = s.report.review
         if key is not None and not restart:
@@ -1056,10 +1076,13 @@ def run_projects(
             for s in live:  # the round's hold is the factory's pause, as it stands now
                 if sync_pause(s):
                     save_state(s.state, s.state_path)
+            running[:] = [s.cfg for s in live]
             restart, ran = project_round(live, turn)
             if restart:
                 return True
             if not ran:
+                if not planned or session.now() - planned[0] >= PLAN_EVERY:
+                    plan_now()
                 _idle_wait()
     except KeyboardInterrupt:
         print(f"[{local_clock():%H:%M:%S}] [{RUNNER_AGENT}] Ended by you.", flush=True)
@@ -1253,18 +1276,173 @@ def _waits_text(held: dict[str, str]) -> str:
 
 
 def dry_run_plan(cfg: Config) -> None:
-    """`runner run --dry-run` (f8-02): `dispatch.plan`'s list, each job with what it waits for and
-    why it is there, with `choose_ticket`'s ticket marked as next as the runner would take it
-    (ADR 44 item 9), and each ticket's pre-flight problems
-    (runner/instructions/task-writing.md).
-    Reads
-    .softfield/tasks/, state.json and the metrics database if there is one: any branch, any tree,
-    and
-    no run folder or row (f1-33). A due review not queued yet is listed as the run would queue it,
-    and a support job an older state.json parked as the row the run makes of it."""
+    """`runner run --dry-run` (f8-02): one project's `factory_plan`, printed."""
+    dry_run_factory([cfg])
+
+
+def dry_run_factory(configs: Sequence[Config]) -> None:
+    """`softfield run --dry-run` (F279 D1): the factory's plan, as the runner would store it now,
+    printed as one list (`print_plan`). It writes nothing."""
+    print_plan(factory_plan(configs, session.now()))
+
+
+WOULD_PARK = "would park or go to a stand-in"  # a queued job Claude's windows hold (bug-21)
+NEXT = "Next: "  # the plan's last fact: what goes next
+PLAN_EVERY = timedelta(minutes=1)  # a round that runs nothing stores the plan at most this often
+_HEADS = {dispatch.LANE: "Fast lane", dispatch.JOBS: "Jobs", dispatch.GO: "Can go"}
+
+
+@dataclass(frozen=True)
+class _ProjectPlan:
+    """One project's part of the factory's plan, read as `_project_plan` reads it."""
+
+    name: str
+    lines: tuple[dispatch.PlanLine, ...]
+    chosen: str | None  # `choose_ticket`'s ticket; None while the owner holds the project
+    windows: dispatch.Windows
+    owner_pause: str | None  # the factory's pause, since when
+    main_red: bool
+    pre_review: Callable[[], str | None]  # the milestone Copilot would pre-review (ADR 51)
+    minutes: tuple[float, ...]  # its last merged tickets' minutes (`ticket_minutes`)
+
+
+def factory_plan(configs: Sequence[Config], at: datetime) -> dispatch.FactoryPlan:
+    """The whole factory's plan (F279 D1–D4), in `project_round`'s order: every project's fast
+    lane, then the queued jobs project by project in the owner's order, then the tickets that can
+    go, then those that wait. The line picked is the first that goes: a job with no wait, or a
+    project's `choose_ticket` ticket. With none, Copilot's pre-review if one is due (ADR 51).
+    Reads each project's .softfield/tasks/, state.json and the metrics database if there is one;
+    writes nothing (f1-33)."""
+    projects = [_project_plan(cfg, at) for cfg in configs]
+    chosen = {p.name: p.chosen for p in projects}
+    lines = tuple(
+        line
+        for group in dispatch.GROUPS
+        for p in projects
+        for line in p.lines
+        if line.group == group
+    )
+
+    def goes(line: dispatch.PlanLine) -> bool:
+        if line.kind == dispatch.TICKET:
+            return line.subject == chosen[line.project]
+        return line.waits is None
+
+    picked = next((n for n, line in enumerate(lines) if goes(line)), None)
+    next_up, next_project = "nothing", None
+    if picked is not None:
+        next_up, next_project = (
+            _job_name(lines[picked].kind, lines[picked].subject),
+            lines[picked].project,
+        )
+    else:
+        for p in projects:
+            if (milestone := p.pre_review()) is not None:
+                next_up = f"Copilot's pre-review of {short_key(milestone).upper()}"
+                next_project = p.name
+                break
+    facts = [fact] if (fact := _claude_reading(projects, at)) else []
+    developers = sum(
+        line.who == "developer" and line.group == dispatch.GO and line.waits is None
+        for line in lines
+    )
+    facts.append(_runway(developers, [m for p in projects for m in p.minutes]))
+    facts.append(f"{NEXT}{next_up}" + (f" ({next_project})" if next_project else ""))
+    return dispatch.FactoryPlan(
+        at, picked, _sentence(projects, lines, at), tuple(facts), lines, next_up
+    )
+
+
+def _sentence(
+    projects: Sequence[_ProjectPlan], lines: Sequence[dispatch.PlanLine], at: datetime
+) -> str:
+    """What drives the order now (F279 D4), from `choose_ticket`'s inputs, the first that
+    applies: the owner's pause, a red main, Claude's limit, the pace line or a mark, the fast
+    lane, else the board's order."""
+    if (since := next((p.owner_pause for p in projects if p.owner_pause), None)) is not None:
+        when = datetime.fromisoformat(since).astimezone()
+        return f"Paused by you since {when:%H:%M}: only planning goes until you resume"
+    if (red := next((p.name for p in projects if p.main_red), None)) is not None:
+        return f"Main fails its tests on {red}: what needs main waits for its fix"
+    for p in projects:
+        if (limit := _limit_words(p.windows, at)) is not None:
+            return limit
+    for p in projects:
+        over = waits._passed_over(p.windows, at) or allowance.lead_hold(
+            CLAUDE, p.windows.claude, LEAD_COST, at, reserves=p.windows.reserves
+        )
+        if over is not None:
+            return "Over pace: developers first, the lead when nothing else can"
+    if any(line.group == dispatch.LANE for line in lines):
+        return "The fast lane goes first"
+    return "Your board's order, the lead and developers alike"
+
+
+def _limit_words(windows: dispatch.Windows, at: datetime) -> str | None:
+    """ "Claude at its limit until <when>" while a job is parked for a limit or a window is full
+    or resting (`_held_at_the_limit`), else None."""
+    limited = windows.limited_until is not None and windows.limited_until > at
+    if not limited and waits._held_at_the_limit(windows, at) is None:
+        return None
+    ends = [windows.limited_until] if limited and windows.limited_until is not None else []
+    for window in windows.claude:
+        full = allowance.lead_hold(CLAUDE, [window], FULL, at, reserves=AT_THE_LIMIT) is not None
+        if full and (end := allowance.lead_goes_at(window, FULL, at)) is not None:
+            ends.append(end)
+    if not ends:
+        return "Claude at its limit: developers only"
+    return f"Claude at its limit until {dispatch._when(max(ends), at)}: developers only"
+
+
+def _claude_reading(projects: Sequence[_ProjectPlan], at: datetime) -> str | None:
+    """Claude's week as the top bar reads it ("week 82% used, today's pace 42%"), else its
+    5-hour window; None with no reading."""
+    windows = next((p.windows.claude for p in projects if p.windows.claude), ())
+    by_name = {w.name: w for w in windows}
+    for name in ("seven_day", "five_hour"):
+        window = by_name.get(name)
+        if window is None or not window.capacity:
+            continue
+        text = f"Claude's {allowance.LABELS[name]} {window.used / window.capacity:.0%} used"
+        if (line := allowance.pace_line(window, at)) is not None:
+            text += f", today's pace {line / window.capacity:.0%}"
+        if window.resets_at is not None:
+            text += f"; resets {dispatch._when(window.resets_at, at)}"
+        return text
+    return None
+
+
+def _runway(count: int, minutes: Sequence[float]) -> str:
+    """The developers' runway (F279 D4): the tickets they can take now, and about how long they
+    take at the median of the last merged tickets (`ticket_minutes`)."""
+    if not count:
+        return "No developer ticket can go now"
+    text = f"{_counted(count, 'developer ticket')} can go now"
+    if minutes:
+        text += f", about {count * statistics.median(minutes):.0f} min"
+    return text
+
+
+def store_plan(configs: Sequence[Config], at: datetime) -> None:
+    """The factory's plan stored in the metrics database (F279 D1), replacing the last one."""
+    plan = factory_plan(configs, at)
+    for db in dict.fromkeys(cfg.metrics_db for cfg in configs):
+        conn = metrics.open_db(db)
+        try:
+            metrics.store_queue_plan(conn, plan)
+        finally:
+            conn.close()
+
+
+def _project_plan(cfg: Config, at: datetime) -> _ProjectPlan:
+    """One project's lines for `factory_plan`: `dispatch.plan`'s list, each job with what it
+    waits for and why it is there, `choose_ticket`'s ticket as the runner would take it (ADR 44
+    item 9), and each ticket's pre-flight problems (runner/instructions/task-writing.md). A due
+    review not queued yet is listed as the run would queue it, and a support job an older
+    state.json parked as the row the run makes of it. A queued job only Claude's windows hold
+    would park or go to a stand-in as it starts, as the run picks it with none (bug-21)."""
     from runner.milestone import due_reviews  # runner.milestone imports this module
 
-    at = session.now()
     tasks = cfg.repo / ".softfield" / "tasks"
     ready = load_dir(tasks / "ready", cfg.default_max_diff)
     done = task_ids(tasks / "done")
@@ -1279,6 +1457,8 @@ def dry_run_plan(cfg: Config) -> None:
     behind = {
         q.subject: f"waits for its {q.kind}" for q in queued if q.kind in (DIRECTION, ESCALATION)
     }
+    red = _held_by_red_main(cfg.repo, state, ready)
+    behind |= {t: f"waits for {MAIN} to pass its checks" for t in red if t not in behind}
     tickets = _dispatch_tickets(
         cfg.repo, ready, done, paused, state.parked, at, behind, state.regate.keys()
     )
@@ -1297,14 +1477,24 @@ def dry_run_plan(cfg: Config) -> None:
     why = hold or dispatch.PAUSED
     rows = dispatch.plan(queued, tickets, listed, at, paused=by_the_owner, first=lane, hold=why)
     held = dispatch.plan(queued, tickets, windows, at, paused=by_the_owner, first=lane, hold=why)
-    lines = [h if h.pick.kind == dispatch.TICKET else r for r, h in zip(rows, held, strict=True)]
+    free = dispatch.plan(
+        queued, tickets, dispatch.Windows(), at, paused=by_the_owner, first=lane, hold=why
+    )
+    # The run picks a queued job with no windows; Claude's limit then parks it or hands it to a
+    # stand-in as it starts (`claude_hold`): its line says so (bug-21)
+    out = dispatch._limited(listed, at) or waits._held_at_the_limit(listed, at)
+    lines = []
+    for row, ticket, picked in zip(rows, held, free, strict=True):
+        if ticket.pick.kind == dispatch.TICKET:
+            lines.append(ticket)
+        elif picked.waits is None and (row.waits or out) is not None:
+            lines.append(dispatch.Line(row.pick, f"{WOULD_PARK} ({row.waits or out})"))
+        else:
+            lines.append(row)
     chosen = choose_ticket(
         ready,
         done,
-        paused
-        | _held(cfg.repo, ready).keys()
-        | behind.keys()
-        | _held_by_red_main(cfg.repo, state, ready),
+        paused | _held(cfg.repo, ready).keys() | behind.keys(),
         cards=_cards(cfg.repo, ready),
         regate=state.regate,
         parked=state.parked,
@@ -1327,7 +1517,70 @@ def dry_run_plan(cfg: Config) -> None:
             conn.close()
         return pre_review_pick(cfg.repo, state, windows, at, passed)
 
-    _print_plan(lines, ready, done, paused, cfg.repo, next_id, pre_review_next)
+    by_id = {t.id: t for t in ready}
+    by_ticket = {t.id: t for t in tickets}
+    name = cfg.project_name
+
+    def plan_line(line: dispatch.Line) -> dispatch.PlanLine:
+        kind, subject = line.pick.kind, line.pick.subject
+        if kind != dispatch.TICKET:
+            task = by_id.get(subject) if kind in (DIRECTION, ESCALATION) else None
+            card = _card_of(task.milestone) if task else None
+            if kind in (CHECKPOINT, REVIEW):
+                card = _card_of(subject)
+            where = dispatch.group(line, lane=lane)
+            reason = line.pick.reason
+            return dispatch.PlanLine(
+                name, kind, subject, reason, None, where, line.waits, reason, card
+            )
+        task, ticket = by_id[subject], by_ticket[subject]
+        goal = task.sections.get("Goal", "").strip()
+        return dispatch.PlanLine(
+            name,
+            kind,
+            subject,
+            goal.splitlines()[0] if goal else "",
+            "lead" if ticket.lead else "developer",
+            dispatch.group(line, lane=lane, chosen=subject == next_id),
+            line.waits,
+            line.pick.reason,
+            _card_of(task.milestone),
+            ticket.early_for,
+            tuple(preflight(task, cfg.repo)),
+        )
+
+    return _ProjectPlan(
+        name,
+        tuple(plan_line(line) for line in lines),
+        next_id,
+        windows,
+        state.owner_pause,
+        state.main_red is not None,
+        pre_review_next,
+        tuple(_stored_minutes(cfg)),
+    )
+
+
+def _card_of(key: str) -> str | None:
+    """A milestone key's card, as the board names it; None for the bugs or a key that isn't one."""
+    if key == BUGS:
+        return None
+    try:
+        return short_key(key)
+    except TaskError:
+        return None
+
+
+def _stored_minutes(cfg: Config) -> list[float]:
+    """`ticket_minutes` for the project, none without a metrics database; a read makes none."""
+    if not cfg.metrics_db.is_file():
+        return []
+    conn = metrics.open_db(cfg.metrics_db)
+    try:
+        project = metrics.find_project(conn, cfg.project_name)
+        return [] if project is None else ticket_minutes(conn, project)
+    finally:
+        conn.close()
 
 
 def _stored_paused(cfg: Config) -> str | None:
@@ -1426,45 +1679,33 @@ def _still_parked(entry: dict[str, Any], at: datetime) -> bool:
     )
 
 
-def _job_name(job: dispatch.Pick) -> str:
-    if job.kind == dispatch.TICKET:
-        return job.subject
-    if job.kind == dispatch.REVIEW:
-        return f"review {short_key(job.subject).upper()}"
-    return f"{job.kind} {job.subject}"
+def _job_name(kind: str, subject: str) -> str:
+    if kind == dispatch.TICKET:
+        return subject
+    if kind == dispatch.REVIEW:
+        return f"review {short_key(subject).upper()}"
+    return f"{kind} {subject}"
 
 
-def _print_plan(
-    lines: list[dispatch.Line],
-    ready: list[Task],
-    done: set[str],
-    paused: set[str],
-    repo: Path,
-    next_ticket: str | None,
-    pre_review: Callable[[], str | None] = lambda: None,
-) -> None:
-    """Each job in the order it would run, the next one marked, and each ticket's pre-flight
-    problems. Of the tickets only ``next_ticket`` can be next (`choose_ticket`); with nothing
-    else to run, ``pre_review`` names the milestone Copilot would pre-review (ADR 51)."""
-    print(f"ready: {len(ready)}  done: {len(done)}  paused: {len(paused)}")
-    tasks = {t.id: t for t in ready}
-
-    def goes(line: dispatch.Line) -> bool:
-        if line.pick.kind == dispatch.TICKET:
-            return line.pick.subject == next_ticket
-        return line.waits is None
-
-    picked = next((line for line in lines if goes(line)), None)
-    for line in lines:
-        marker = "->" if line is picked else "  "
-        print(f"{marker} {_job_name(line.pick)}: {line.waits or 'runnable'}, {line.pick.reason}")
-        if line.pick.kind == dispatch.TICKET:
-            for problem in preflight(tasks[line.pick.subject], repo):
-                print(f"     pre-flight: {problem}")
-    if picked is None and (milestone := pre_review()) is not None:
-        print(f"next: Copilot's pre-review of {short_key(milestone).upper()}")
-        return
-    print(f"next: {_job_name(picked.pick) if picked else 'nothing'}")
+def print_plan(plan: dispatch.FactoryPlan) -> None:
+    """The factory's plan for the terminal (F279 D1): its sentence and facts, then each line
+    in the order it would run under its group's heading, with its project, the pick marked,
+    and each ticket's pre-flight problems under it; last, what goes next."""
+    print(plan.sentence)
+    for fact in plan.facts:
+        if not fact.startswith(NEXT):  # the last line says it
+            print(f"  · {fact}")
+    heading = None
+    for n, line in enumerate(plan.lines):
+        if line.group != heading:
+            heading = line.group
+            print(f"{_HEADS.get(heading, 'Waits')}:")
+        marker = "->" if n == plan.picked else "  "
+        name = _job_name(line.kind, line.subject)
+        print(f"{marker} {name}: {line.waits or 'runnable'}, {line.reason}  [{line.project}]")
+        for problem in line.preflight:
+            print(f"     pre-flight: {problem}")
+    print(f"next: {plan.next_up}")
 
 
 # ADR 00 and docs/testing.md: end-to-end runs in Chromium and WebKit.

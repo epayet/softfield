@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from runner import metrics
+from runner import dispatch, metrics
 
 TABLES = {
     "projects",
@@ -23,6 +23,7 @@ TABLES = {
     "planner_threads",
     "planner_messages",
     "board_order",
+    "queue_plan",
 }
 T0 = "2026-09-30T15:23:11+02:00"
 T1 = "2026-09-30T15:40:00+02:00"
@@ -70,7 +71,7 @@ def test_a_fresh_path_gets_every_table_and_the_latest_version(tmp_path):
     conn = metrics.open_db(path)
     assert path.is_file()
     assert _tables(conn) >= TABLES
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 16 == len(metrics.MIGRATIONS)
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 17 == len(metrics.MIGRATIONS)
     assert conn.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
     assert conn.execute("PRAGMA foreign_keys").fetchone()[0] == 1
     conn.close()
@@ -132,6 +133,34 @@ def test_the_board_order_is_rewritten_whole_per_project(db):
     assert metrics.board_order(db, second) == ["f1"]
     metrics.set_board_order(db, first, [])
     assert metrics.board_order(db, first) == []
+
+
+def _plan(at: datetime, subject: str) -> dispatch.FactoryPlan:
+    line = dispatch.PlanLine(
+        "coucou", "ticket", subject, "Its goal", "developer", "go", None, "place 1", "m1",
+        preflight=("referenced path does not exist: render.js",),
+    )  # fmt: skip
+    return dispatch.FactoryPlan(at, 0, "The fast lane goes first", ("Next: x",), (line,), "x")
+
+
+def test_the_queue_plan_is_one_row_replaced_each_time(db):
+    """F279 D1: the runner's plan at its last pick, `at` in UTC, read back as stored."""
+    assert metrics.latest_queue_plan(db) is None
+    at = datetime.fromisoformat(T0)
+    metrics.store_queue_plan(db, _plan(at, "m1-01-thing"))
+    metrics.store_queue_plan(db, _plan(at + timedelta(minutes=2), "m1-02-next"))
+    assert _count(db, "queue_plan") == 1
+    stored = metrics.latest_queue_plan(db)
+    assert stored is not None
+    assert stored["at"] == "2026-09-30T13:25:11+00:00"
+    assert stored["picked"] == 0
+    assert stored["sentence"] == "The fast lane goes first"
+    assert stored["facts"] == ["Next: x"]
+    assert stored["next_up"] == "x"
+    [line] = stored["lines"]
+    assert (line["project"], line["subject"], line["group"]) == ("coucou", "m1-02-next", "go")
+    assert line["preflight"] == ["referenced path does not exist: render.js"]
+    assert line["waits"] is None
 
 
 def test_opening_again_changes_nothing(tmp_path):

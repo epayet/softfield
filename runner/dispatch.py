@@ -122,6 +122,55 @@ class Line:
     waits: str | None
 
 
+# The factory's plan (F279 D2, D3): its groups, in the order they go
+LANE, JOBS, GO, WAITS = "lane", "jobs", "go", "waits"
+GROUPS = (LANE, JOBS, GO, WAITS)
+GAP = "goes when nothing else can"  # a lead ticket over the pace line or a mark (ADR 50 item 2)
+
+
+@dataclass(frozen=True)
+class PlanLine:
+    """One line of the factory's plan: a queued job or a ready ticket of one project."""
+
+    project: str
+    kind: str  # TICKET or a queued job's kind
+    subject: str
+    title: str  # a ticket's goal, a job's reason
+    who: str | None  # "lead" or "developer"; None for a job
+    group: str  # one of GROUPS
+    waits: str | None  # why it can't go now, as `plan` says; None: it can
+    reason: str  # why it sits there (`Pick.reason`)
+    card: str | None  # its card's short key, if it has one
+    early_for: str | None = None  # the ticket it runs early for (F173 D7)
+    preflight: tuple[str, ...] = ()  # a ticket's pre-flight problems
+
+
+@dataclass(frozen=True)
+class FactoryPlan:
+    """The whole factory's line in the order the runner takes it (F279 D1, D2)."""
+
+    at: datetime
+    picked: int | None  # the index in ``lines`` of what the runner takes next
+    sentence: str  # what drives the order now (D4)
+    facts: tuple[str, ...]  # up to three
+    lines: tuple[PlanLine, ...]
+    next_up: str = "nothing"  # what goes next, in the dry run's words
+
+
+def group(line: Line, *, lane: Collection[str], chosen: bool = False) -> str:
+    """``line``'s group in the factory's plan (F279 D3): a lane row or ticket (``lane``'s
+    ids), a queued job, a ticket that can go (the one chosen, one with no wait, or a lead one
+    that fills a gap), or one that waits."""
+    kind, subject = line.pick.kind, line.pick.subject
+    if subject in lane and (kind == TICKET or kind in LANE_KINDS):
+        return LANE
+    if kind != TICKET:
+        return JOBS
+    if chosen or line.waits is None or line.waits.startswith(GAP):
+        return GO
+    return WAITS
+
+
 def pick(
     queued: Sequence[Queued],
     tickets: Sequence[Ticket],
@@ -223,9 +272,7 @@ def _ticket_line(t: Ticket, windows: Windows, now: datetime, *, lane: bool = Fal
         if allowance.lead_hold(CLAUDE, [w], COST, now, reserves=windows.reserves)
     ]
     if pace:  # over its pace line or a mark: developers first, and it fills a gap
-        return Line(
-            job, f"goes when nothing else can (Claude's {' and '.join(pace)} over its pace)"
-        )
+        return Line(job, f"{GAP} (Claude's {' and '.join(pace)} over its pace)")
     return Line(job, None)
 
 

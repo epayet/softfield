@@ -11,9 +11,13 @@ import json
 import re
 import sqlite3
 from collections.abc import Collection, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from runner.dispatch import FactoryPlan
 
 _V1 = """
 CREATE TABLE projects (
@@ -299,6 +303,17 @@ _V16 = """
 ALTER TABLE milestones DROP COLUMN priority;
 """
 
+# F279 D1: the runner's plan of the whole factory at its last pick, one row replaced each time:
+# when it was worked out (UTC), the index of the line it picked, and the plan as JSON.
+_V17 = """
+CREATE TABLE queue_plan (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    at TEXT NOT NULL,
+    picked INTEGER,
+    body TEXT NOT NULL
+);
+"""
+
 UTC_STEP = "f187 utc"  # F187 D5: old local times become UTC, once
 ONCE_STEPS = ("f55 clear-out", UTC_STEP)  # one-off steps an older database still owes (F55 D3)
 
@@ -324,6 +339,7 @@ MIGRATIONS: list[str] = [
     _V14,
     _V15,
     _V16,
+    _V17,
 ]
 
 type Value = str | int | float | Sequence[object] | Mapping[str, object] | None
@@ -449,6 +465,27 @@ def set_board_order(conn: sqlite3.Connection, project_id: int, keys: Sequence[st
     except BaseException:
         conn.execute("ROLLBACK")
         raise
+
+
+def store_queue_plan(conn: sqlite3.Connection, plan: "FactoryPlan") -> None:
+    """The factory's plan (F279 D1), replacing the one stored before."""
+    at = plan.at.astimezone(UTC).isoformat()
+    body = {**asdict(plan), "at": at}
+    conn.execute(
+        "INSERT INTO queue_plan (id, at, picked, body) VALUES (1, ?, ?, ?)"
+        " ON CONFLICT (id) DO UPDATE SET at = excluded.at, picked = excluded.picked,"
+        " body = excluded.body",
+        (at, plan.picked, json.dumps(body)),
+    )
+
+
+def latest_queue_plan(conn: sqlite3.Connection) -> dict[str, Any] | None:
+    """The plan the runner stored last, with its ``at`` and ``picked``; None before the first."""
+    row = conn.execute("SELECT at, picked, body FROM queue_plan WHERE id = 1").fetchone()
+    if row is None:
+        return None
+    body: dict[str, Any] = json.loads(row["body"])
+    return {**body, "at": row["at"], "picked": row["picked"]}
 
 
 def board_order(conn: sqlite3.Connection, project_id: int) -> list[str]:
