@@ -1,4 +1,4 @@
-# Milestone F293: A lot of conversation points are things that I already…
+# Milestone F293: The planner stops telling the owner what they already know
 
 > **State:** idea · **Area:** factory
 > Planted by the owner on 2026-11-24.
