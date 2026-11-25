@@ -211,7 +211,7 @@ def draft(repo: Path, thread: str, path: str) -> bytes | None:
     return _git(repo, "cat-file", "blob", f"{ref}:{path}")
 
 
-_MAIN = "refs/heads/main"  # loop.MAIN; loop imports this module
+_MAIN = "refs/heads/main"  # session.MAIN as a ref: this module imports no runner job
 _LATER_DIR = ".softfield/tasks/later/"
 _WORDS = {"A": "added", "D": "removed"}  # any other status is "changed"
 

@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
-from runner import checks, config, metrics, prompts
+from runner import checks, config, metrics, planner, prompts
 from runner.config import PROJECT_TOML, ConfigError, load_config
 from runner.gitops import Git, GitError
 from runner.tasks import TaskError, milestone_key
@@ -362,8 +362,6 @@ def start_project(
     is, before anything is written. Returns (the folder, the project's name)."""
     if not idea.strip():
         raise SetupError(NO_IDEA)
-    from runner import planner  # runner.planner imports the loop
-
     base = _slug(name) or _slug(idea, _IDEA_WORDS) or "project"
     project = _free_folder(root, db, base)
     folder = root / project
@@ -466,8 +464,6 @@ def plan_first_card(name: str, card: str, db: Path, at: str, *, begun: bool = Fa
     owner wrote to it). Not when a message waits for it, nor when the card's thread has begun,
     unless ``begun`` says it has and asks all the same: a project set up from the Projects page
     talked on it (F122 D4). Whether it asked."""
-    from runner import planner
-
     thread = planner.thread_key(card)
     conn = metrics.open_db(db)
     try:

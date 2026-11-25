@@ -3,7 +3,7 @@
 For anyone, with any agent or none. You don't need the factory to work here.
 
 ## Code
-5. Keep rules as plain functions without side effects where practical: time and paths are parameters; git, SQLite, subprocesses and HTTP stay at the edges (`runner/loop.py`, `runner/gitops.py`, `runner/metrics.py`, the dashboard's routes).
+5. Keep rules as plain functions without side effects where practical: time and paths are parameters; git, SQLite, subprocesses and HTTP stay at the edges (`runner/session.py`, the `runner/*_job.py` modules, `runner/loop.py`, `runner/gitops.py`, `runner/metrics.py`, the dashboard's routes). A new job kind gets its own `runner/<kind>_job.py`; `runner/loop.py` only schedules.
 6. Type-hint everything. Code must pass ruff (lint + format) and mypy.
 7. No third-party network calls, CDNs, fonts, analytics or trackers in the dashboard. Every asset is self-hosted (`factory_dashboard/static/vendor/`).
 8. The dashboard writes only through `POST /requests` (ADR 18); the runner is git's one writer.

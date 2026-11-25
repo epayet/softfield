@@ -40,8 +40,8 @@ from factory_dashboard.overview import Running, running_jobs
 from factory_dashboard.queries import board_places, depends_on, local, place
 from runner import metrics
 from runner.config import read_protected
-from runner.loop import ticket_minutes
 from runner.milestone import card as milestone_header
+from runner.planner_job import ticket_minutes
 from runner.requests import REORDER, RESERVE
 from runner.router import lead_only
 from runner.tasks import BUGS, milestone_file, short_key

@@ -6,6 +6,7 @@ depends_on: [f59-01-reports-week-numbers]
 agent: lead
 files:
   - runner/loop.py
+  - runner/planner_job.py
   - runner/prompts.py
   - runner/claude.py
   - factory_dashboard/reports.py
@@ -21,7 +22,7 @@ Once a week, at the first pick after Claude's seven-day allowance comes back, th
 
 ### Context
 Read `.softfield/cards/f59-periodic-review-of-the-factory.md` (D5, D6, D7). Write the tests first.
-- Follow the planner job: `run_planner` and `run_queued` in `runner/loop.py`, `PLANNER` in `runner/prompts.py`, and how `runner/claude.py` scopes a job's tools.
+- Follow the planner job: `run_planner` in `runner/planner_job.py` and `run_queued` in `runner/loop.py`, `PLANNER` in `runner/prompts.py`, and how `runner/claude.py` scopes a job's tools.
 - The reset is read from `usage_events` (`seven_day`, `resets_at`); the week before has a file or it doesn't, so the job runs once per week even across restarts.
 - The brief, `REPORT`, gets the numbers of `week` in `factory_dashboard/reports.py` for the whole factory and for each project with jobs that week, as text, and asks for D6's sections and D7's quoted ideas.
 - The agent is `[roles] report`'s, else the first `[roles] review` names.

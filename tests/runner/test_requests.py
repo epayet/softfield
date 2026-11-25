@@ -11,7 +11,18 @@ from typing import Any, cast
 
 import pytest
 
-from runner import cli, dispatch, loop, metrics, milestone, planner, requests, session, setup
+from runner import (
+    cli,
+    dispatch,
+    loop,
+    metrics,
+    milestone,
+    planner,
+    planner_job,
+    requests,
+    session,
+    setup,
+)
 from runner.gitops import Git, GitError
 from runner.state import State, load_state, save_state
 from runner.tasks import append_footer, load_dir
@@ -1282,9 +1293,9 @@ def clashing_plan(repo: Path, *, replayable: bool = True) -> None:
 
 
 def _planner_job_starts(repo: Path) -> list[str]:
-    """``loop._plan_branch``, as a planner job on F7 starts; its session report's notes."""
+    """``planner_job._plan_branch``, as a planner job on F7 starts; its session report's notes."""
     report = SimpleNamespace(notes=[])
-    loop._plan_branch(
+    planner_job._plan_branch(
         cast(session.Session, SimpleNamespace(git=Git(repo), report=report)), "plan/f7"
     )
     git(repo, "checkout", "-q", "main")

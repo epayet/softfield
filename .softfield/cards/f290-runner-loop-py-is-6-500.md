@@ -57,3 +57,10 @@ Checked against `runner/session.py` (1,728 lines), `runner/waits.py` (515), `tes
 - **f290-07 (review job):** changed. `runner/bench.py` added (imports `_answer_json`, `_merge_files`); `checkpoint_reason` is in session already, so only `_name_checkpoint` and `review_reason` remain to move; Context names its imports (`block` from developer_job, `_written_tickets`, `_repair_ticket` from lead_job, `_record_refusal` from session).
 - **f290-08 (planner job):** changed. `max_diff` 6,000 → 8,000; `tests/runner/test_requests.py` added (`loop._plan_branch`); the setup/planner import note corrected (`runner/planner.py` imports neither loop nor session; `MAIN` is `session.MAIN`); the `test_planner.py` patch is already on `session`.
 - **Also found:** `_queue_look` has one caller (`_look_at_block`), so it moves with `block`. Not changed: f290-06's `files:` already named `runner/milestone.py`, `runner/cli.py` and `runner/bench.py`.
+
+## As built (f290-08)
+- `runner/planner_job.py`: 661 lines (the planner and setup jobs, plan branches, drafts, the auto-merge, where the work stands, naming a card, `setting_up`).
+- `tests/runner/test_planner_job.py`: 135 lines (where the work stands, a merged ticket's minutes, `both_added`); the planner and setup tests that drive the queue stay in `tests/runner/test_loop.py` (D6).
+- `runner/loop.py`: 1,487 lines, the scheduler only; `tests/runner/test_loop.py`: 7,578.
+- `setting_up` moved with `run_setup` (the scheduler imports it from `runner/planner_job.py`); `project_pause`, `project_archived` and `paused_by_you_since` stay (the scheduler and `runner/cli.py`). `_dispatch_tickets` stays (the dry run uses it): `work_stands` imports it inside the function.
+- `runner/setup.py` imports `runner.planner` at the top now, and `runner/planner_job.py` imports `runner.setup` at the top: neither path reaches the loop. `factory_dashboard/board.py` imports `ticket_minutes` from `runner/planner_job.py`.

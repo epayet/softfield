@@ -5,7 +5,7 @@ agent: lead
 difficulty: 2
 depends_on: []
 files:
-  - runner/loop.py
+  - runner/planner_job.py
   - runner/prompts.py
 tests:
   - tests/runner/test_loop.py
@@ -16,7 +16,7 @@ tests:
 Every planner reply starts a fresh Claude session holding the thread's history; none resumes the thread's session. (The id keeps its first name, from before D2 was revised.)
 
 ### Context
-Read D2 and "What was found" in `.softfield/cards/f177-planner-replies-cost-half-of-claude.md`, then `run_planner` in `runner/loop.py` (the `if not found["session_id"]:` block and `resume=`) and `planner.history` in `runner/planner.py`.
+Read D2 and "What was found" in `.softfield/cards/f177-planner-replies-cost-half-of-claude.md`, then `run_planner` in `runner/planner_job.py` (the `if not found["session_id"]:` block and `resume=`) and `planner.history` in `runner/planner.py`.
 - Why: a resume hours later first writes the whole old session back into the prompt cache. Since 2026-10-13, 57 such replies cost $1.62 each; a fresh session starts from the brief and the thread's history. The owner chose one rule with no timer, so nothing depends on how long the cache lives.
 - `earlier` is always the thread's history, built as for a thread with no session today (the `while said and said[-1]["author"] != "lead"` trim included), then the merged threads' histories (F49 D4) as today. `resume` is None.
 - The thread still records the session it got (`set_thread_session` after the job): leave it.

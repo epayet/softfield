@@ -5,6 +5,7 @@ difficulty: 4
 depends_on: []
 files:
   - runner/loop.py
+  - runner/planner_job.py
   - runner/planner.py
 tests:
   - tests/runner/test_loop.py
@@ -18,7 +19,7 @@ One planner job answers every owner message waiting on its thread, so notes the 
 
 ## Context
 - Read `.softfield/cards/f267-being-able-to-comment-on-a.md`, D2 and D3.
-- `run_planner` in `runner/loop.py` answers one queued row (`row.subject` is `<thread>#<request id>`, `planner.request_of`); `planner.look_of` tells a runner's look at a blocked ticket, which never joins.
+- `run_planner` in `runner/planner_job.py` answers one queued row (`row.subject` is `<thread>#<request id>`, `planner.request_of`); `planner.look_of` tells a runner's look at a blocked ticket, which never joins.
 - The thread's open rows: `metrics.open_jobs` (kind `planner`, `started_job` empty when not started); close the joined ones with `metrics.finish_queued`, as the job's own row is closed.
 - The prompt: `prompt` in `runner/planner.py` takes one text and its comments today; give it the messages in the order sent, each with its comments, and keep a single message's prompt as it is now.
 

@@ -30,6 +30,7 @@ from runner import (
     order,
     owner,
     planner,
+    planner_job,
     session,
     setup,
     stacks,
@@ -904,7 +905,9 @@ def _approve_plan(
     drafted: list[tuple[str, str]] = []
     if planned and branch is not None:
         # a note main merged into the card while the plan was drafted is kept with it, not refused
-        if planner.merged_tree(repo, branch) is None and loop.catch_up_plan(git, branch, thread):
+        if planner.merged_tree(repo, branch) is None and planner_job.catch_up_plan(
+            git, branch, thread
+        ):
             git.checkout(session.MAIN)
         changes = _drafts(git, branch)
         if replan:

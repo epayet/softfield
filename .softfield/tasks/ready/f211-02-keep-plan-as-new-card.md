@@ -7,6 +7,7 @@ depends_on: []
 files:
   - runner/requests.py
   - runner/planner.py
+  - runner/planner_job.py
   - factory_dashboard/requests.py
 tests:
   - tests/runner/test_requests.py
@@ -33,7 +34,7 @@ Read `.softfield/cards/f211-a-plan-must-not-get-lost.md`: D3, D5, D6 and D8 are 
 - with every proposal of the list settled, an unarchived thread archives as `approved`; one the owner archived before stays archived, with reason `approved`
 - a `keep_plan` on a thread with no open draft changes nothing and says why
 - pressing Keep twice plants one card
-- `_approve_plan` with drafts on a card whose doc on main is done returns "F51 is signed off: keep its plan as a new card" and leaves main and the branch unchanged; it says so before `loop.catch_up_plan` and the clash check (`clash_words`), so a done card's branch is never caught up or sent to Refresh; a merge-only approval on it still works
+- `_approve_plan` with drafts on a card whose doc on main is done returns "F51 is signed off: keep its plan as a new card" and leaves main and the branch unchanged; it says so before `planner_job.catch_up_plan` (`runner/planner_job.py`) and the clash check (`clash_words`), so a done card's branch is never caught up or sent to Refresh; a merge-only approval on it still works
 - an approval with `value` "first" (F224) is refused the same way
 - `POST /requests` takes `keep_plan`
 - the listed `tests:` pass, and fail without the change
