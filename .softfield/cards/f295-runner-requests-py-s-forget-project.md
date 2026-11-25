@@ -1,4 +1,4 @@
-# Milestone F295: runner/requests.py's _forget_project lists the app's "up"…
+# Milestone F295: One list of an app's up states, for the Forget guard and the Stop button
 
 > **State:** idea · **Area:** factory
 > Planted by the owner on 2026-11-24.
