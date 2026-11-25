@@ -32,3 +32,10 @@ Read `.softfield/cards/f132-the-overview-shows-the-whole-factory.md` (D2–D4, D
 - one project only: no plate, and the floor reads as today
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
