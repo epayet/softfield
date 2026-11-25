@@ -19,15 +19,11 @@ from runner.gates import GateResult
 from runner.gitops import Git, GitError, parse_trailers, with_trailers
 from runner.loop import (
     NO_E2E,
-    _passed_over,
-    _windows_now,
-    park_review,
     rate_verdicts,
     record_findings,
     review_reason,
     run_e2e,
     starting_ratings,
-    wait_for_room,
     work_queue,
 )
 from runner.review import (
@@ -76,6 +72,7 @@ from runner.tasks import (
     task_ids,
 )
 from runner.usage import claude_tokens, transcripts_dir, work_summary
+from runner.waits import _passed_over, _windows_now, park_review, wait_for_room
 
 _FOOTER_RE = re.compile(r"# --- runner ---\n(.*?)```", re.DOTALL)
 _TOKENS_RE = re.compile(r"^tokens: (\d+)\b", re.MULTILINE)

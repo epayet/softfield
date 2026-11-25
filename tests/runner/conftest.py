@@ -1,8 +1,12 @@
 import subprocess
 import time
+import types
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
+
+from runner import session
 
 
 @pytest.fixture(autouse=True)
@@ -163,3 +167,43 @@ def repo(tmp_path: Path) -> Path:
     git(tmp_path, "add", "-A")
     git(tmp_path, "commit", "-q", "-m", "init")
     return tmp_path
+
+
+THURSDAY = datetime(2026, 10, 1, 12, 0, tzinfo=UTC)
+
+
+@pytest.fixture
+def fake_clock(monkeypatch) -> list[datetime]:
+    """``session.now`` reads the clock; a sleep moves it on, so a reset can pass in a test."""
+    clock = [THURSDAY]
+    slept: list[float] = []
+
+    def sleep(seconds: float) -> None:
+        slept.append(seconds)
+        clock[0] += timedelta(seconds=seconds)
+
+    real_sleep = time.sleep
+    monkeypatch.setattr(session, "now", lambda: clock[0])
+    monkeypatch.setattr("time.sleep", sleep)
+    monkeypatch.setattr("subprocess.time", types.SimpleNamespace(sleep=real_sleep))
+    return clock
+
+
+class _Terminal:
+    """The owner at the keyboard, ready to type y: the runner must never read it."""
+
+    def isatty(self) -> bool:
+        return True
+
+    def readline(self, *args: object) -> str:
+        pytest.fail("the runner read the console")
+
+    def read(self, *args: object) -> str:
+        pytest.fail("the runner read the console")
+
+
+@pytest.fixture
+def at_the_keyboard(monkeypatch) -> None:
+    """ADR 22 item 4: no command asks y/N, so nothing reads the console or waits on it."""
+    monkeypatch.setattr("sys.stdin", _Terminal())
+    monkeypatch.setattr("select.select", lambda *a: pytest.fail("the runner waited on stdin"))

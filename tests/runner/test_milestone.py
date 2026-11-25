@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from runner import claude, cli, loop, metrics, milestone, owner, session, shots
+from runner import claude, cli, loop, metrics, milestone, owner, session, shots, waits
 from runner.agents import JobResult, Refusal
 from runner.gates import GateResult
 from runner.milestone import (
@@ -24,8 +24,8 @@ from runner.report import TaskRecord
 from runner.session import close_session, open_session
 from runner.state import State, load_state, save_state
 from runner.tasks import append_footer
-from tests.runner.conftest import git, write_task
-from tests.runner.test_loop import FIVE_RESETS, THURSDAY, _claude_at, _config
+from tests.runner.conftest import THURSDAY, git, write_task
+from tests.runner.test_loop import FIVE_RESETS, _claude_at, _config
 
 
 def test_footer_fields_reads_the_last_footer(tmp_path):
@@ -949,7 +949,7 @@ def clock(monkeypatch) -> list[datetime]:
     at = [THURSDAY]
     monkeypatch.setattr(session, "now", lambda: at[0])
     monkeypatch.setattr("time.sleep", lambda s: at.__setitem__(0, at[0] + timedelta(seconds=s)))
-    monkeypatch.setattr(loop, "fresh_reading", lambda s: None)  # no real `claude -p`
+    monkeypatch.setattr(waits, "fresh_reading", lambda s: None)  # no real `claude -p`
     return at
 
 
@@ -1378,9 +1378,9 @@ def test_a_review_stopped_mid_round_parks_its_row_and_goes_on_from_that_round(
     assert row["not_before"] == (THURSDAY + until).isoformat()
     assert bool(state.queued["review:m1"].get(session.LOGIN_HELD)) is login
     if login:  # the next check finds the owner logged in again
-        monkeypatch.setattr(loop, "probe", lambda *a: JobResult(ok=True, text="", duration_s=0))
+        monkeypatch.setattr(waits, "probe", lambda *a: JobResult(ok=True, text="", duration_s=0))
         s = open_session(cfg, None)
-        loop.check_login(s)
+        waits.check_login(s)
         close_session(s)
     else:
         clock[0] += timedelta(seconds=2)

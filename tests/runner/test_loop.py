@@ -6,7 +6,6 @@ import sqlite3
 import subprocess
 import tempfile
 import time
-import types
 import urllib.error
 from collections.abc import Callable
 from dataclasses import replace
@@ -30,6 +29,7 @@ from runner import (
     prompts,
     ratings,
     session,
+    waits,
 )
 from runner.agents import Agent, JobResult, JobSpec, Reading, Refusal
 from runner.claude import ClaudeJob, LoginExpired, TransientError, UsageLimited
@@ -40,7 +40,7 @@ from runner.report import SessionReport, TaskRecord
 from runner.review import Finding
 from runner.state import State, load_state, save_state
 from runner.tasks import load_dir, milestone_order, parse_task
-from tests.runner.conftest import git, write_task
+from tests.runner.conftest import THURSDAY, git, write_task
 from tests.runner.test_requests import clashing_plan
 
 
@@ -91,14 +91,14 @@ def _new_command(monkeypatch):
     monkeypatch.setattr(session, "OPEN_RUNS", [])
 
 
-REAL_FRESH_READING = loop.fresh_reading
+REAL_FRESH_READING = waits.fresh_reading
 
 
 @pytest.fixture(autouse=True)
 def _no_probe(monkeypatch):
     """No fresh reading of Claude's windows (f4-07), unless a test asks for one: the stored
     readings decide, and no real `claude -p` runs."""
-    monkeypatch.setattr(loop, "fresh_reading", lambda s: None)
+    monkeypatch.setattr(waits, "fresh_reading", lambda s: None)
 
 
 class Script(list[Callable[[Path, str], object]]):
@@ -434,7 +434,7 @@ def _claude_limited(monkeypatch, limited: bool) -> None:
         def ahead(s: session.Session, at: datetime) -> dispatch.Windows:
             return dispatch.Windows(limited_until=at + timedelta(hours=1))
 
-        monkeypatch.setattr(loop, "_windows_now", ahead)
+        monkeypatch.setattr(waits, "_windows_now", ahead)
 
 
 def _regate_session(repo: Path, monkeypatch, *, limited: bool = False, **tickets: str):
@@ -563,7 +563,7 @@ def test_a_reviews_lead_fix_is_held_by_the_weeks_pace_line_as_any(repo, monkeypa
     rest = [t for t in ready if t.id in {"f1-01-first", "f30-05-fix"}]
     task = loop._next_task(s, rest, set(), set())
     assert task is not None and task.id == "f30-05-fix"
-    monkeypatch.setattr(loop, "_passed_over", lambda *a: "over the week's pace line")
+    monkeypatch.setattr(waits, "_passed_over", lambda *a: "over the week's pace line")
     task = loop._next_task(s, rest, set(), set())
     assert task is not None and task.id == "f1-01-first"
     session.close_session(s)
@@ -3354,25 +3354,7 @@ def test_an_interrupted_local_attempt_counts_as_timed_out(repo, fake_model, caps
 # --- parking and the reserve (ADR 15 items 4, 5 and 10) ------------------------------------
 
 
-THURSDAY = datetime(2026, 10, 1, 12, 0, tzinfo=UTC)
 MONDAY = datetime(2026, 10, 5, 16, 0, tzinfo=UTC)  # the week's reset in `_readings_at`
-
-
-@pytest.fixture
-def fake_clock(monkeypatch) -> list[datetime]:
-    """``session.now`` reads the clock; a sleep moves it on, so a reset can pass in a test."""
-    clock = [THURSDAY]
-    slept: list[float] = []
-
-    def sleep(seconds: float) -> None:
-        slept.append(seconds)
-        clock[0] += timedelta(seconds=seconds)
-
-    real_sleep = time.sleep
-    monkeypatch.setattr(session, "now", lambda: clock[0])
-    monkeypatch.setattr("time.sleep", sleep)
-    monkeypatch.setattr("subprocess.time", types.SimpleNamespace(sleep=real_sleep))
-    return clock
 
 
 def test_fake_clock_stands_during_subprocess(fake_clock):
@@ -3483,26 +3465,6 @@ def _readings_at(repo: Path, week_used: float) -> None:
             conn, "claude-sonnet", at, "reading", window=window, value=value, resets_at=resets
         )
     conn.close()
-
-
-class _Terminal:
-    """The owner at the keyboard, ready to type y: the runner must never read it."""
-
-    def isatty(self) -> bool:
-        return True
-
-    def readline(self, *args: object) -> str:
-        pytest.fail("the runner read the console")
-
-    def read(self, *args: object) -> str:
-        pytest.fail("the runner read the console")
-
-
-@pytest.fixture
-def at_the_keyboard(monkeypatch) -> None:
-    """ADR 22 item 4: no command asks y/N, so nothing reads the console or waits on it."""
-    monkeypatch.setattr("sys.stdin", _Terminal())
-    monkeypatch.setattr("select.select", lambda *a: pytest.fail("the runner waited on stdin"))
 
 
 def _switch_on(repo: Path, *switches: str, at: datetime = THURSDAY) -> None:
@@ -3784,14 +3746,6 @@ def test_a_protected_developer_ticket_is_held_as_the_lead_ticket_it_is(repo, fak
     (repo / ".softfield" / "protected-paths.txt").write_text("runner/**\n")
     _on_card(repo, "f2-01-thing", 2)
     assert _both_choose(repo, capsys) == ("f2-01-thing", "f2-01-thing")
-
-
-def test_over_the_line_a_planner_job_a_review_and_a_checkpoint_may_start(repo, fake_clock):
-    """ADR 44 items 4 and 5: `claude_hold` is what holds them as they start."""
-    _week_read(repo, 0.65, LINE_33)
-    s = session.open_session(_config(repo))
-    assert loop.claude_hold(s, THURSDAY) is None
-    session.close_session(s)
 
 
 def test_a_five_hour_park_is_dropped_at_the_start_of_a_run(repo, fake_clock):
@@ -4863,20 +4817,6 @@ def test_a_reserve_request_lets_a_lead_ticket_past_75_percent_or_parks_it(
     assert ran_at[0] == THURSDAY
     [request] = _rows(repo, "owner_requests")
     assert request["done"] is not None
-
-
-def test_at_80_percent_claude_holds_no_support_job_but_at_100_or_resting_it_does(repo, fake_clock):
-    """ADR 50 items 3 and 4: a review, a direction, an escalation and a checkpoint all start
-    through `claude_hold`; the 5-hour mark doesn't hold them, the real limit does."""
-    _claude_at(repo, 0.80)
-    s = session.open_session(_config(repo))
-    assert loop.claude_hold(s, THURSDAY) is None
-    session.close_session(s)
-    _claude_at(repo, 1.0, age=timedelta(minutes=1))
-    s = session.open_session(_config(repo))
-    hold = loop.claude_hold(s, THURSDAY)
-    assert hold is not None and not hold.five_hour and hold.until >= FIVE_RESETS
-    session.close_session(s)
 
 
 def test_the_week_switch_leaves_the_5_hour_mark_no_park_either(
@@ -6282,16 +6222,6 @@ def test_a_cards_out_of_the_lane_review_keeps_the_old_rule(repo):
     session.close_session(s)
 
 
-def test_at_the_5_hour_mark_no_cards_review_parks(repo, fake_clock):
-    """ADR 50 item 3 (it replaces F242 D3's two reserves for the lane card only)."""
-    _claude_at(repo, 0.80)
-    _f9_review_due(repo, fast_lane=True)
-    s = session.open_session(_config(repo), None)
-    assert loop.park_review(s, "f9") is False
-    assert loop.park_review(s, "f10") is False
-    session.close_session(s)
-
-
 def test_dry_run_lists_a_lane_cards_review_first_in_the_lane(repo, capsys):
     _f9_review_due(repo, fast_lane=True)
     out = _dry_run(repo, capsys)
@@ -6584,7 +6514,7 @@ def _merge_of(repo: Path, ticket: str) -> None:
 
 
 def _pick(s, passed, *, limited: bool = True, monkeypatch=None):
-    monkeypatch.setattr(loop, "_held_at_the_limit", lambda w, at: "out" if limited else None)
+    monkeypatch.setattr(waits, "_held_at_the_limit", lambda w, at: "out" if limited else None)
     return loop.pre_review_pick(s.repo, s.state, dispatch.Windows(), session.now(), passed)
 
 
@@ -6636,7 +6566,7 @@ def test_the_dry_run_names_a_pre_review_as_next_when_nothing_else_runs(capsys):
 
 def test_the_idle_turn_runs_the_pre_review_the_pick_names(repo, fake_clock, monkeypatch):
     s = _pre_review_session(repo)
-    monkeypatch.setattr(loop, "_held_at_the_limit", lambda w, at: "out")
+    monkeypatch.setattr(waits, "_held_at_the_limit", lambda w, at: "out")
     ran: list[str] = []
 
     def fake(answer: bool) -> Callable[[session.Session, str], bool]:
@@ -6835,7 +6765,7 @@ def test_a_review_at_100_percent_parks_and_a_developer_ticket_runs_meanwhile(
     _claude_at(repo, 1.0)
     ran: list[str] = []
     monkeypatch.setattr(loop, "run_task", _merge_any(repo, ran))
-    monkeypatch.setattr(loop, "wait_for_room", lambda *a: pytest.fail("the runner slept"))
+    monkeypatch.setattr(waits, "wait_for_room", lambda *a: pytest.fail("the runner slept"))
     s = session.open_session(_config(repo))
     assert loop.work_queue(s, reviews=True, once=True) is False
     assert ran == ["f10-01-next"] and s.report.review is None
@@ -6872,20 +6802,6 @@ def test_with_no_ticket_left_the_queue_sleeps_to_the_parked_reviews_reset(
     assert loop.work_queue(s, reviews=True) is False
     assert ran == [("f10-01-next", True), ("f10-02-after", True)]
     assert s.report.review == "f9" and fake_clock[0] > FIVE_RESETS
-
-
-def test_the_5_hour_switch_lets_the_review_go_at_once(repo, fake_clock, at_the_keyboard):
-    _claude_at(repo, 0.80)
-    _switch_on(repo, "five_hour")
-    loop.wait_for_room(session.open_session(_config(repo)), "the review")
-    assert fake_clock[0] == THURSDAY
-
-
-def test_at_80_percent_a_named_milestones_review_doesnt_wait(repo, fake_clock, at_the_keyboard):
-    """ADR 50 item 3: `runner milestone`'s `wait_for_room` returns at once, switch off."""
-    _claude_at(repo, 0.80)
-    loop.wait_for_room(session.open_session(_config(repo)), "the review")
-    assert fake_clock[0] == THURSDAY
 
 
 # --- ADR 38: no checkpoint on merges the milestone's review reads ---------------------------
@@ -7053,17 +6969,6 @@ def test_a_queued_checkpoint_whose_merges_the_review_reads_runs_no_job(repo, fak
     session.close_session(s)
 
 
-def test_a_review_parked_for_a_real_limit_keeps_lead_work_from_claude(repo, fake_clock):
-    """A review parked at the window's real limit is a limit, as a parked checkpoint is."""
-    _claude_at(repo, 1.0)
-    s = session.open_session(_config(repo))
-    assert loop.park_review(s, "f9") is True
-    assert loop._limits_ahead(s, session.now(), five_hour=False) == [FIVE_RESETS]
-    assert loop._limits_ahead(s, session.now()) == [FIVE_RESETS]
-    session.park_row(s, "review", "f9", FIVE_RESETS)
-    assert loop._limits_ahead(s, session.now(), five_hour=False) == [FIVE_RESETS]
-
-
 def _source_ticket(repo: Path) -> None:
     write_task(repo / ".softfield" / "tasks" / "done", "m1-01-thing")
 
@@ -7117,7 +7022,7 @@ def _fresh_claude(
 ) -> tuple[list[ClaudeJob], list[datetime]]:
     """Headless Claude faked: the probe answers with ``probe()``; a lead ticket implements and
     takes 20 minutes. Returns the jobs, and when the probes ran."""
-    monkeypatch.setattr(loop, "fresh_reading", REAL_FRESH_READING)
+    monkeypatch.setattr(waits, "fresh_reading", REAL_FRESH_READING)
     jobs: list[ClaudeJob] = []
     probed: list[datetime] = []
 
@@ -7296,7 +7201,7 @@ def test_a_lead_ticket_on_an_expired_login_waits_and_goes_once_the_login_works(
     ready = load_dir(s.tasks_dir("ready"), 150)
     line = loop._idle_line(s, ready, set(), {})
     assert "1 ticket waits for Claude's login" in line and "1 expired Claude login" in line
-    assert loop._wait_for_reset(s, ready, session.open_rows(s)) is False
+    assert waits._wait_for_reset(s, ready, session.open_rows(s)) is False
 
     fake_clock[0] += timedelta(minutes=4, seconds=59)
     _picks(s)
@@ -7362,17 +7267,17 @@ def test_a_review_parked_while_the_login_is_out_goes_when_it_works(
     login = _Login(monkeypatch)
     s = session.open_session(_config(repo))
     _picks(s)
-    assert loop.park_review(s, "m1") is True
+    assert waits.park_review(s, "m1") is True
     [row] = [r for r in session.open_rows(s) if r.kind == session.REVIEW]
     assert s.state.queued[session.row_key(row)][session.LOGIN_HELD] is True
-    hold = loop.claude_hold(s, session.now())
+    hold = waits.claude_hold(s, session.now())
     assert hold is not None and hold.reason == "Claude's login has expired"
     login.works = True
     fake_clock[0] += timedelta(minutes=5)
-    loop.check_login(s)
+    waits.check_login(s)
     [row] = [r for r in session.open_rows(s) if r.kind == session.REVIEW]
     assert row.not_before is None and session.LOGIN_HELD not in s.state.queued[session.row_key(row)]
-    assert loop.claude_hold(s, session.now()) is None
+    assert waits.claude_hold(s, session.now()) is None
 
 
 def test_a_restart_on_a_login_still_out_holds_the_ticket_again_and_says_nothing_new(
@@ -7426,7 +7331,7 @@ def test_the_login_is_the_machines_so_another_projects_item_stands_for_this_one(
     conn.close()
     s = session.open_session(_config(repo))
     assert s.db is not None
-    loop.check_login(s)  # the first pick asks: the other project's item says it's out
+    waits.check_login(s)  # the first pick asks: the other project's item says it's out
     assert login.jobs == ["probe"]
     fake_clock[0] += timedelta(minutes=5)
     _picks(s)
@@ -7437,7 +7342,7 @@ def test_the_login_is_the_machines_so_another_projects_item_stands_for_this_one(
 
     login.works = True
     fake_clock[0] += timedelta(minutes=5)
-    loop.check_login(s)
+    waits.check_login(s)
     [item] = _login_items(repo)
     assert item["resolved"] is not None  # whichever project's probe passes clears it
 

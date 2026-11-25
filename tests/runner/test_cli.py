@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from runner import cli, loop, metrics, owner, procs, session
+from runner import cli, loop, metrics, owner, procs, session, waits
 from runner.config import load_config
 from runner.milestone import PARKED, RESTART
 from runner.report import SessionReport
@@ -242,7 +242,7 @@ def test_runner_run_reviews_a_finished_milestone_then_goes_on(in_repo, monkeypat
         return record(repo, text)
 
     monkeypatch.setattr(cli, "load_config", lambda repo: cfg)
-    monkeypatch.setattr(loop, "fresh_reading", lambda s: None)
+    monkeypatch.setattr(waits, "fresh_reading", lambda s: None)
     monkeypatch.setattr(loop, "run_task", run_task)
     monkeypatch.setattr(cli, "run_due_review", review)
     monkeypatch.setattr(owner, "record_verdict", record_verdict)

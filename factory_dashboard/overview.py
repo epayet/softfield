@@ -27,7 +27,7 @@ from factory_dashboard.app import (
     factory_wide_status,
     render,
 )
-from runner import allowance, loop, metrics, session
+from runner import allowance, loop, metrics, session, waits
 from runner.requests import CHANGE, PLANT, RESERVE, owners_words
 from runner.state import State, load_state
 from runner.tasks import milestone_order, short_key
@@ -936,15 +936,15 @@ def claude_pace(conn: sqlite3.Connection, project: str, now: datetime) -> Claude
     }
     refusals = metrics.refusals(conn, queries.LEAD_PREFIX)
     windows = [
-        loop._rested(replace(w, reserve=kept.get(w.name, 0.0)), refusals, now)
-        for w in loop._windows_from(metrics.latest_readings(conn, queries.LEAD_PREFIX), now)
+        waits._rested(replace(w, reserve=kept.get(w.name, 0.0)), refusals, now)
+        for w in waits._windows_from(metrics.latest_readings(conn, queries.LEAD_PREFIX), now)
     ]
     reserves = {
         name
         for name, switch in (("seven_day", session.WEEK), ("five_hour", session.FIVE_HOUR))
         if state is not None and session.switch_on(state, switch, now)
     }
-    cost = loop.LEAD_COST
+    cost = waits.LEAD_COST
     week = next((w for w in windows if w.name == "seven_day"), None)
     pace: WeekPace | None = None
     if week is not None and week.name not in reserves and not allowance.resting(week, now):
@@ -976,13 +976,15 @@ def claude_pace(conn: sqlite3.Connection, project: str, now: datetime) -> Claude
     # The pick's own two questions (ADR 50 items 2, 3 and 7): the real limit holds, the pace
     # line and the marks only order.
     row = None
-    if loop._held_at_the_limit(dispatch_windows(windows, reserves), now) is not None:
+    if waits._held_at_the_limit(dispatch_windows(windows, reserves), now) is not None:
         full = [
             w
             for w in windows
-            if allowance.lead_hold(session.CLAUDE, [w], loop.FULL, now, reserves=loop.AT_THE_LIMIT)
+            if allowance.lead_hold(
+                session.CLAUDE, [w], waits.FULL, now, reserves=waits.AT_THE_LIMIT
+            )
         ]
-        known = [e for w in full if (e := allowance.lead_goes_at(w, loop.FULL, now)) is not None]
+        known = [e for w in full if (e := allowance.lead_goes_at(w, waits.FULL, now)) is not None]
         until = f" until about {max(known).astimezone():%a %H:%M}" if known else ""
         row = f"waits for Claude{until}"
     elif allowance.lead_hold(session.CLAUDE, windows, cost, now, reserves=reserves) is not None:
@@ -991,7 +993,7 @@ def claude_pace(conn: sqlite3.Connection, project: str, now: datetime) -> Claude
 
 
 def dispatch_windows(windows: list[allowance.Window], reserves: Collection[str]) -> Any:
-    """The runner's `Windows` for what `loop._held_at_the_limit` reads."""
+    """The runner's `Windows` for what `waits._held_at_the_limit` reads."""
     from runner import dispatch
 
     return dispatch.Windows(windows, None, reserves)

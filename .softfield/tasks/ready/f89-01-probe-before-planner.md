@@ -7,6 +7,7 @@ depends_on: []
 files:
   - runner/loop.py
   - runner/session.py
+  - runner/waits.py
 tests:
   - tests/runner/test_loop.py
 ---
@@ -15,7 +16,7 @@ tests:
 Before any Claude job, a planner reply included, the runner takes a fresh reading of Claude's windows whenever the stored one is over 10 minutes old, not only once per runner session.
 
 ### Context
-Read `.softfield/cards/f89-does-allowance-refresh-at-the-beginning.md` (Notes, D2), then `fresh_reading` and `STALE_READING` in `runner/loop.py`, `lead_work_ready` and `Session.probed` in `runner/session.py`, and the probe tests near `test_no_probe_when_the_reading_is_under_ten_minutes_old` in `tests/runner/test_loop.py`.
+Read `.softfield/cards/f89-does-allowance-refresh-at-the-beginning.md` (Notes, D2), then `fresh_reading` and `STALE_READING` in `runner/waits.py`, `lead_work_ready` and `Session.probed` in `runner/session.py`, and the probe tests near `test_no_probe_when_the_reading_is_under_ten_minutes_old` in `tests/runner/test_loop.py`.
 - Today `fresh_reading` returns early when `s.probed` is set (once per session) and when `lead_work_ready` is false, which leaves out queued planner rows (`PLANNER`, `dispatch.PLANNER`).
 - Make a queued planner row count as Claude work for the probe. Prefer a guard of `fresh_reading`'s own over widening `lead_work_ready`, which other callers use for the lead's holds.
 - Drop the once-per-session limit: the 10-minute test on the stored reading's `at` is the only limit. A probe that reads nothing is still logged and leaves the stored reading to decide; it records its own reading time only if it read something, so a failing probe could repeat each pick: after a failed probe, wait `STALE_READING` before the next one (keep the time on the session).
