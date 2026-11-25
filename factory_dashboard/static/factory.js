@@ -525,21 +525,328 @@
     morph(floor, svg);
   }
 
+  // --- the map (F199): the whole factory from above on a 20-unit grid, one screen ------------
+  // D3: geometry lives in these two tables and only here; a shape as wide as tall or wider takes
+  // WIDE, else TALL. A zone is [x, y, w, h, name], a box [x, y, w, h], a belt [path, its
+  // number's x and y, back]. D5: belts carry no words, only today's number when above zero.
+
+  const WIDE = {
+    w: 960, h: 540, statusY: 22,
+    zones: { field: [16, 36, 228, 360, "THE FIELD"], lead: [452, 36, 214, 168, "THE LEAD"],
+      reviewers: [716, 210, 88, 118, "REVIEWERS"], developers: [452, 300, 214, 168, "DEVELOPER BAY"] },
+    seeds: [28, 66, 98, 76], planting: [134, 66, 98, 76],
+    rows: { x: 28, y: 178, w: 204, h: 210, tile: 16, pitch: 18, head: 18, first: true },
+    queue: { x: 284, y: 170, w: 124, h: 236, cols: 3, most: 15, crate: 28, pitch: 32, rise: 20 },
+    machines: { lead: [460, 64, 198, 130], reviewers: [722, 236, 76, 86], developers: [460, 328, 198, 130] },
+    most: 130,
+    checks: [694, 56, 78, 104], merged: [812, 36, 132, 112], ripe: [812, 196, 132, 116], stash: [812, 360, 132, 164],
+    legend: [16, 408, 228, 116],
+    belts: {
+      "seeds→planting": ["M126 104 H134"], "planting→rows": ["M183 142 V178"], "rows→queue": ["M232 290 H284"],
+      "queue→lead": ["M408 230 H430 V120 H452", 430, 180], "queue→developers": ["M408 350 H452", 430, 350],
+      "lead→checks": ["M666 90 H694", 680, 80], "checks→lead": ["M694 130 H666", 680, 120, true],
+      "developers→checks": ["M666 400 H706 V160", 706, 300], "checks→developers": ["M694 150 H682 V350 H666", 682, 250, true],
+      "checks→merged": ["M772 100 H812", 792, 100], "merged→ripe": ["M878 148 V196", 878, 172], "ripe→stash": ["M878 312 V360", 878, 336],
+      "merged→reviewers": ["M830 148 V180 H760 V210", 790, 180, true],
+    },
+  };
+
+  const TALL = {
+    w: 360, h: 640, statusY: 14,
+    zones: { field: [6, 22, 348, 106, "THE FIELD"], lead: [116, 136, 236, 106, "THE LEAD"],
+      reviewers: [272, 262, 80, 112, "REVIEWERS"], developers: [116, 262, 136, 112, "DEVELOPER BAY"] },
+    seeds: [12, 42, 58, 80], planting: [76, 42, 58, 80],
+    rows: { x: 140, y: 42, w: 208, h: 82, tile: 10, pitch: 11.4, head: 14, first: false },
+    queue: { x: 12, y: 146, w: 88, h: 92, cols: 3, most: 6, crate: 19, pitch: 20, rise: 17 },
+    machines: { lead: [122, 158, 224, 78], reviewers: [277, 284, 70, 84], developers: [122, 284, 124, 84] },
+    most: 124,
+    checks: [134, 402, 100, 58], merged: [8, 500, 108, 124], ripe: [126, 500, 108, 124], stash: [244, 500, 108, 124],
+    legend: null,  // f199-05: the key behind a "?"
+    belts: {
+      "seeds→planting": ["M70 82 H76"], "planting→rows": ["M134 82 H140"], "rows→queue": ["M56 128 V146"],
+      "queue→lead": ["M100 190 H116", 108, 190], "queue→developers": ["M56 238 V318 H116", 56, 280],
+      "lead→checks": ["M257 242 V425 H234", 257, 330], "checks→lead": ["M234 440 H267 V242", 267, 390, true],
+      "developers→checks": ["M165 374 V402", 150, 388], "checks→developers": ["M205 402 V374", 220, 388, true],
+      "checks→merged": ["M134 432 H62 V500", 62, 470], "merged→ripe": ["M116 562 H126", 121, 562], "ripe→stash": ["M234 562 H244", 239, 546],
+      "merged→reviewers": ["M96 500 V480 H312 V374", 200, 480, true],
+    },
+  };
+
+  const table = () => (window.innerWidth >= window.innerHeight ? WIDE : TALL);
+  const CHAR = 6;  // a character's width at the map's 10 px mono, a little over for 9.5 px
+  const mapStation = (svg, id, cls = "station") => add(svg, "g", { class: cls, "data-station": id });
+  const cardKey = (key) => key.split("-")[0].toUpperCase();  // f7-line-polish → F7
+
+  // The corner ticks: an ornament in the ink, never a status
+  function ticks(g, x, y, w, h) {
+    const s = 7;
+    add(g, "path", { class: "tick", d: `M${x} ${y + s}V${y}H${x + s}M${x + w - s} ${y}H${x + w}V${y + s}M${x + w} ${y + h - s}V${y + h}H${x + w - s}M${x + s} ${y + h}H${x}V${y + h - s}` });
+  }
+
+  // A zone: a bay with ticks and a hazard plate naming it; the machines' zones are their stations
+  function mapZone(svg, key, [x, y, w, h, name]) {
+    const g = key === "field" ? add(svg, "g", { "data-zone": key }) : mapStation(svg, key);
+    add(g, "rect", { x, y, width: w, height: h, class: "zone" });
+    ticks(g, x, y, w, h);
+    add(g, "path", { class: "plate-b", d: `M${x} ${y}H${x + name.length * 6.6 + 12}l-6 13H${x}Z` });
+    text(g, x + 4, y + 10, name, "plate-t");
+  }
+
+  function mapBelt(svg, b, L) {
+    const where = L.belts[b.id];
+    if (!where) return;
+    const cls = ["belt", where[3] ? "back" : "", b.today > 0 ? "today" : "", b.carrying ? "carrying" : ""].join(" ").trim();
+    const g = add(svg, "g", { class: cls, "data-belt": b.id });
+    add(g, "title", {}, b.label);
+    add(g, "path", { d: where[0], class: "bed" });
+    add(g, "path", { d: where[0], class: "rollers" });
+  }
+
+  // Today's numbers, over everything they sit by, so no unit covers one
+  function chips(svg, doc, L) {
+    const g = add(svg, "g", { "data-chips": "" });
+    for (const b of doc.belts) {
+      const where = L.belts[b.id];
+      if (!where || where[1] === undefined || !(b.today > 0)) continue;
+      const chip = add(g, "g", { "data-chip": b.id });
+      const words = String(b.today), w = words.length * 6 + 6;
+      add(chip, "rect", { x: where[1] - w / 2, y: where[2] - 6.5, width: w, height: 13, class: "chip" });
+      text(chip, where[1], where[2] + 3, words, "chip-t", { "text-anchor": "middle" });
+    }
+  }
+
+  // Seed and sprouting: a big number on a plot
+  function plot(svg, id, [x, y, w, h], count, name) {
+    const g = mapStation(svg, id);
+    add(g, "rect", { x, y, width: w, height: h, class: "seedplot" });
+    text(g, x + w / 2, y + h / 2 + 4, String(count), "num", { "text-anchor": "middle" });
+    text(g, x + w / 2, y + h - 7, name, "dim", { "text-anchor": "middle" });
+  }
+
+  // D4: the planted cards, live; a replay's document has none, so its rows stand in
+  function plantedCards(doc) {
+    if (doc.field.planted) return doc.field.planted;
+    return doc.field.rows.map((r) => ({ key: r.key, project: r.project, title: r.title, done: r.done,
+      total: r.total, growing: r.running > 0 || r.done > 0, bug: r.key === "bugs" }));
+  }
+
+  // One tile per planted card, first top left: its merged tickets fill it from the bottom, a
+  // ticket started edges it orange, a bug's edge is dashed. Tiles shrink when the cards outgrow P.
+  function planted(svg, doc, count, P) {
+    const g = mapStation(svg, "rows");
+    add(g, "rect", { x: P.x, y: P.y, width: P.w, height: P.h, class: "plot" });
+    text(g, P.x, P.y + 10, `PLANTED · ${count.rows}`, "title");
+    const cards = plantedCards(doc);
+    const room = P.h - P.head - (P.first ? 16 : 0);
+    const height = (pitch) => Math.ceil(cards.length / Math.max(1, Math.floor(P.w / pitch))) * pitch;
+    let pitch = P.pitch;
+    while (pitch > 4 && height(pitch) > room) pitch -= 0.5;
+    const size = (pitch * P.tile) / P.pitch, cols = Math.max(1, Math.floor(P.w / pitch));
+    cards.forEach((card, i) => {
+      const x = P.x + (i % cols) * pitch, y = P.y + P.head + Math.floor(i / cols) * pitch;
+      const tile = add(g, "g", { "data-tile": `${card.project || ""}/${card.key}` });
+      add(tile, "title", {}, `${plate(card)}${cardKey(card.key)}${card.title ? ` · ${card.title}` : ""} · ${card.done} of ${card.total} merged`);
+      add(tile, "rect", { x, y, width: size, height: size, class: "tilebg" });
+      const fill = card.total ? (size * card.done) / card.total : 0;
+      if (fill) add(tile, "rect", { x, y: y + size - fill, width: size, height: fill, class: "tilefill" });
+      add(tile, "rect", { x, y, width: size, height: size, class: `tileedge${card.growing ? " growing" : ""}${card.bug ? " bug" : ""}` });
+    });
+    if (P.first && cards.length) {
+      const first = cards[0], at = P.y + P.head + Math.ceil(cards.length / cols) * pitch + 10;
+      text(g, P.x, at, cut(`first in line: ${cardKey(first.key)}${first.title ? `, ${first.title}` : ""}`, Math.floor(P.w / CHAR)), "dim");
+    }
+  }
+
+  // The queue's hopper, its count and its first crates in run order, from the bottom up; a wait
+  // at the queue clogs it and signs it
+  function mapQueue(svg, doc, Q, tall) {
+    const wait = doc.wait && doc.wait.station === "queue";
+    const g = mapStation(svg, "queue", wait ? "station clogged" : "station");
+    add(g, "path", { class: "hopper", d: `M${Q.x} ${Q.y}H${Q.x + Q.w}L${Q.x + Q.w - 12} ${Q.y + Q.h}H${Q.x + 12}Z` });
+    const mid = Q.x + Q.w / 2;
+    text(g, mid, Q.y + (tall ? 12 : 16), "QUEUE", "title", { "text-anchor": "middle" });
+    if (wait) add(g, "path", { class: "sign", d: `M${Q.x + 14} ${Q.y + (tall ? 4 : 7)} l6 11 h-12 Z` });
+    text(g, mid, Q.y + (tall ? 34 : 46), String(doc.queue.length), tall ? "num small" : "num", { "text-anchor": "middle" });
+    const left = Q.x + (Q.w - (Q.cols * Q.pitch - (Q.pitch - Q.crate))) / 2;
+    doc.queue.slice(0, Q.most).forEach((crate, i) => {
+      const cx = left + (i % Q.cols) * Q.pitch, cy = Q.y + Q.h - 4 - Q.rise * (Math.floor(i / Q.cols) + 1);
+      const c = add(g, "g", { "data-key": `${crateKey(crate)}/${crate.milestone || ""}` });
+      const what = crate.ticket ? `${crate.ticket}: ${crate.title || ""}` : crate.title;
+      add(c, "title", {}, `${plate(crate)}${crate.number} ${what}${crate.waits.length ? ` (after ${crate.waits.join(", ")})` : ""}`);
+      add(c, "rect", { x: cx, y: cy, width: Q.crate, height: Q.rise - 4, class: `crate ${crate.kind}${crate.waits.length ? " waits" : ""}` });
+      text(c, cx + Q.crate / 2, cy + Q.rise - 8, String(crate.number), "on", { "text-anchor": "middle" });
+    });
+  }
+
+  // A machine from above: its plate, a light, a vent where there's room; then what it does. Under
+  // 56 units tall it keeps one line under its name. `wait`: the runner waits here, so it's clogged.
+  function mapMachine(svg, m, x, y, w, h, wait) {
+    const working = m.state === "working" && !wait;
+    const cls = ["machine", m.station, wait ? "clogged" : m.state, m.stand_in ? "stand-in" : ""].filter(Boolean).join(" ");
+    const g = add(svg, "g", { class: cls, "data-machine": m.id });
+    add(g, "title", {}, `${m.name} · ${m.where} · ${wait ? wait.words : m.state}${m.rating !== "" ? ` · rated ${m.rating}` : ""}`);
+    add(g, "path", { class: "unit", d: `M${x} ${y}H${x + w - 8}l8 8V${y + h}H${x}Z` });
+    add(g, "rect", { x: x + 5, y: y + 5, width: 5, height: 5, class: "led" });
+    const full = h >= 56, vent = full && w >= 90;
+    if (vent) add(g, "circle", { cx: x + w - 15, cy: y + 19, r: Math.min(9, 6 + m.scale * 2), class: "vent" });
+    const fits = (words, from) => cut(words, Math.floor((w - from - 4) / CHAR));
+    text(g, x + 14, y + 11, cut(m.name.toUpperCase(), Math.floor((w - 14 - (vent ? 26 : 4)) / CHAR)), "nm");
+    let line = y + Math.min(26, h - 6);
+    if (full) {
+      text(g, x + 5, y + 24, fits(`${m.local ? "local" : "cloud"}${m.rating !== "" ? ` · ${m.rating}` : ""}`, 5), "dim");
+      line = y + (h < 100 ? 44 : 50);
+    }
+    const second = full && line + 16 <= y + h - 3;  // room for a line under it
+    if (wait) {
+      add(g, "path", { d: `M${x + 11} ${line - 9} l6 11 h-12 Z`, class: "sign" });
+      const who = { claude: " Claude", owner: " you" }[wait.kind] || "";
+      text(g, x + 22, line, fits(`waits for${who}`, 22), "nm");
+      if (second && m.reset) text(g, x + 5, line + 16, fits(`reset ${m.reset}`, 5), "dim");
+    } else if (working && m.crate) {
+      const c = m.crate, what = c.ticket ? short(c.ticket) : "job";
+      if (full) {
+        add(g, "rect", { x: x + 5, y: line - 10, width: 40, height: 15, class: `crate ${c.kind}` });
+        text(g, x + 25, line + 1, what, "on", { "text-anchor": "middle" });
+        text(g, x + 49, line + 1, fits(`${c.minutes} min`, 49), "nm");
+        if (second) text(g, x + 5, line + 16, fits(`${plate(c)}attempt ${c.attempt}`, 5), "dim");
+      } else {
+        add(g, "rect", { x: x + 5, y: line - 8, width: 8, height: 9, class: `crate ${c.kind}` });
+        text(g, x + 17, line, fits(`${plate(c)}${what} · ${c.minutes} min`, 17), "nm");
+      }
+    } else {
+      const words = m.state === "waiting" ? `limit · reset ${m.reset}` : m.state === "off" ? "off: no role" : m.stand_in ? "standby" : "idle";
+      text(g, x + 5, line, fits(words, 5), "dim");
+    }
+  }
+
+  // Each station's machines side by side while each is 90 wide, else one above the other
+  function mapMachines(svg, doc, L) {
+    for (const [name, [x, y, w, h]] of Object.entries(L.machines)) {
+      const own = doc.machines.filter((m) => m.station === name);
+      const n = own.length, gap = 6;
+      const across = Math.min(L.most, (w - gap * (n - 1)) / n), down = (h - gap * (n - 1)) / n;
+      own.forEach((m, i) => {
+        const wait = doc.wait && doc.wait.machine === m.id ? doc.wait : null;
+        if (n === 1 || across >= 90) mapMachine(svg, m, x + i * (across + gap), y, across, h, wait);
+        else mapMachine(svg, m, x, y + i * (down + gap), w, down, wait);
+      });
+    }
+  }
+
+  // The checks: a gate with the light that flashes for each result
+  function mapChecks(svg, [x, y, w, h], tall) {
+    const g = mapStation(svg, "checks");
+    add(g, "path", { class: "gate", d: `M${x} ${y + 8}l8 -8H${x + w - 8}l8 8V${y + h - 8}l-8 8H${x + 8}l-8 -8Z` });
+    add(g, "circle", { cx: x + w / 2, cy: y + (tall ? 18 : 30), r: tall ? 8 : 11, class: "light" });
+    text(g, x + w / 2, y + h - (tall ? 12 : 20), "CHECKS", "title", { "text-anchor": "middle" });
+  }
+
+  // Merged today, ripe and harvested: a box with its name and number, then what it holds
+  function box(svg, id, [x, y, w, h], name, count, cls, draw = null) {
+    const g = mapStation(svg, id);
+    add(g, "rect", { x, y, width: w, height: h, class: cls });
+    ticks(g, x, y, w, h);
+    text(g, x + 7, y + 15, name, "title");
+    text(g, x + 7, y + 42, String(count), "num");
+    if (draw) draw(g, x, y, w, h, x + 7 + String(count).length * 15 + 8);
+  }
+
+  function boxes(svg, doc, count, L, tall) {
+    box(svg, "merged", L.merged, "MERGED TODAY", count.merged, "unit");
+    box(svg, "ripe", L.ripe, "RIPE", count.ripe, "ripebox", (g, x, y, w, h, after) => {
+      text(g, after, y + 42, cut(tall ? "sign off" : "yours to sign off", Math.floor((x + w - after - 4) / CHAR)), "dim");
+      doc.field.ripe.slice(0, Math.floor((h - 64) / 15)).forEach((m, i) =>
+        text(g, x + 7, y + 60 + i * 15, cut(`${plate(m)}${cardKey(m.key)}${m.title ? ` · ${m.title}` : ""}`, Math.floor((w - 14) / CHAR)), "nm"));
+    });
+    box(svg, "stash", L.stash, "HARVESTED", count.stash, "unit", (g, x, y, w, h) => {
+      const cols = 3, tw = (w - 14 - (cols - 1) * 3) / cols;
+      doc.field.stash.slice(0, cols * Math.floor((h - 56) / 20)).forEach((m, i) => {
+        const tx = x + 7 + (i % cols) * (tw + 3), ty = y + 52 + Math.floor(i / cols) * 20;
+        add(g, "rect", { x: tx, y: ty, width: tw, height: 17, class: "seedplot" });
+        text(g, tx + tw / 2, ty + 12, cut(cardKey(m.key), Math.floor(tw / 5.5)), "chip-t", { "text-anchor": "middle" });
+      });
+    });
+  }
+
+  // The key, on the wide map (a phone's comes behind a "?", f199-05)
+  function legend(svg, [x, y, w, h]) {
+    const g = add(svg, "g", { "data-legend": "" });
+    add(g, "rect", { x, y, width: w, height: h, class: "zone" });
+    ticks(g, x, y, w, h);
+    text(g, x + 8, y + 16, "HOW TO READ IT", "title");
+    [["lead", "lead ticket"], ["developer", "developer ticket"], ["batch", "review or planner job"]].forEach(([kind, words], i) => {
+      add(g, "rect", { x: x + 8, y: y + 24 + i * 15, width: 14, height: 10, class: `crate ${kind}` });
+      text(g, x + 28, y + 33 + i * 15, words);
+    });
+    add(g, "path", { d: `M${x + 8} ${y + 74}h14`, class: "swatch-line", stroke: "var(--roller)" });
+    text(g, x + 28, y + 77, "belt carrying now");
+    add(g, "path", { d: `M${x + 8} ${y + 89}h14`, class: "swatch-line", stroke: "var(--critical)", opacity: ".5" });
+    text(g, x + 28, y + 92, "failed work coming back");
+    text(g, x + 8, y + 107, "numbers: how many went that way today", "dim");
+  }
+
+  // What runs now, always at the top: the working machine, its crate and minutes; or the wait's
+  // sign and words
+  function mapStatus(svg, doc, L) {
+    const g = add(svg, "g", { "data-status": doc.wait ? doc.wait.kind : "" });
+    const most = Math.floor((L.w - 26) / 6.6);  // at 11 px
+    if (doc.wait) {
+      add(g, "path", { d: `M12 ${L.statusY - 9} l6 11 h-12 Z`, class: "sign" });
+      text(g, 22, L.statusY, cut(doc.wait.words, most), "status");
+      return;
+    }
+    const m = doc.machines.find((one) => one.state === "working" && one.crate);
+    const c = m ? m.crate : null;
+    const words = c ? `${m.name} · ${plate(c)}${c.ticket ? short(c.ticket) : c.title || c.role} · ${c.minutes} min` : "nothing is running";
+    text(g, 8, L.statusY, cut(`NOW · ${words}`, most), "status");
+  }
+
+  function drawMap(map, doc, L) {
+    map.setAttribute("viewBox", `0 0 ${L.w} ${L.h}`);
+    const svg = document.createElementNS(NS, "svg");  // drawn aside, then morphed into `map`
+    const tall = L === TALL;
+    const count = Object.fromEntries(doc.stations.map((s) => [s.id, s.count]));
+    const grid = add(add(svg, "defs"), "pattern", { id: "map-grid", width: 20, height: 20, patternUnits: "userSpaceOnUse" });
+    add(grid, "path", { d: "M20 0V20H0", class: "gridline" });
+    add(svg, "rect", { x: 0, y: 0, width: L.w, height: L.h, class: "ground" });
+    add(svg, "rect", { x: 0, y: 0, width: L.w, height: L.h, fill: "url(#map-grid)" });
+    for (const [key, zone] of Object.entries(L.zones)) mapZone(svg, key, zone);
+    doc.belts.forEach((b) => mapBelt(svg, b, L));
+    plot(svg, "seeds", L.seeds, count.seeds, "SEED");
+    plot(svg, "planting", L.planting, count.planting, "SPROUTING");
+    planted(svg, doc, count, L.rows);
+    mapQueue(svg, doc, L.queue, tall);
+    mapMachines(svg, doc, L);
+    mapChecks(svg, L.checks, tall);
+    boxes(svg, doc, count, L, tall);
+    if (L.legend) legend(svg, L.legend);
+    chips(svg, doc, L);
+    mapStatus(svg, doc, L);
+    morph(map, svg);
+  }
+
   const narrow = () => window.innerWidth < 640;
-  const shown = () => document.getElementById(narrow() ? "floor-phone" : "floor");
+  // the floor drawn: the map, on its page; else the Overview's phone or wide floor
+  const shown = () => document.getElementById("map") || document.getElementById(narrow() ? "floor-phone" : "floor");
 
   let shownDoc = null;  // the document the floor last drew, live or replayed: the card's
   let cardCrate = null;  // the crate the card shows; null: closed. A redraw shows it again
   const SEEDS = Symbol("seeds");  // as `cardCrate`: the card lists the set-aside tickets
 
+  // svg#map when the page has one (F199); else the Overview's two floors, one shown
   function drawFloor(doc) {
-    const svg = document.getElementById("floor");
-    const phone = document.getElementById("floor-phone");
-    svg.style.display = narrow() ? "none" : "block";
-    phone.style.display = narrow() ? "block" : "none";
     manyProjects = Boolean(doc.many_projects);
-    if (narrow()) drawPhone(phone, doc);
-    else draw(svg, doc);
+    const map = document.getElementById("map");
+    if (map) {
+      drawMap(map, doc, table());
+    } else {
+      const svg = document.getElementById("floor");
+      const phone = document.getElementById("floor-phone");
+      svg.style.display = narrow() ? "none" : "block";
+      phone.style.display = narrow() ? "block" : "none";
+      if (narrow()) drawPhone(phone, doc);
+      else draw(svg, doc);
+    }
     shownDoc = doc;
     if (cardCrate === SEEDS) showSeeds();
     else if (cardCrate) showCard(cardCrate.key, cardCrate.project);
@@ -555,11 +862,13 @@
 
   function drawAll(root) {
     const block = root.querySelector ? root.querySelector("#factory-line") : null;
-    const svg = document.getElementById("floor");
-    const phone = document.getElementById("floor-phone");
-    if (replaying || !(block && svg && phone)) return;  // a replay holds the floor
+    const map = document.getElementById("map");
+    const floors = document.getElementById("floor") && document.getElementById("floor-phone");
+    if (replaying || !(block && (map || floors))) return;  // a replay holds the floor
     const doc = JSON.parse(block.textContent);
-    const now = JSON.stringify([narrow(), rowsOpen, { ...doc, at: null }]);  // `at` alone draws nothing
+    // `at` alone draws nothing; a phone turned draws the other floor, or the map's other table
+    const shape = map ? table() === WIDE : narrow();
+    const now = JSON.stringify([Boolean(map), shape, rowsOpen, { ...doc, at: null }]);
     if (now === drawn) return;
     drawn = now;
     drawFloor(doc);

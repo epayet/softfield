@@ -486,6 +486,30 @@ def test_at_a_past_moment_the_field_stations_count_the_field_s_lists(board_db):
     assert field_counts(doc) != board_counts(board_db, NOW)
 
 
+def test_the_planted_tiles_are_the_boards_planted_cards_in_its_order(board_db):
+    """F199 D4: one tile per planted card, as the board lists them; a past moment has none."""
+    conn = connect(board_db)
+    try:
+        cards = board(conn, PROJECT, NOW).stages["planted"]
+        past = live_line(conn, PROJECT, NOW, at=NOW - timedelta(hours=1))
+    finally:
+        conn.close()
+    assert cards
+    assert document(board_db, NOW)["field"]["planted"] == [
+        {
+            "key": card.key,
+            "project": PROJECT,
+            "title": card.title,
+            "done": card.done,
+            "total": card.total,
+            "growing": card.started,
+            "bug": card.bug,
+        }
+        for card in cards
+    ]
+    assert "planted" not in past["field"]
+
+
 def planning_cards(db: Path, cards: list[tuple[str, str | None, bool, str | None]]) -> None:
     """Each card as (key, state, a thread about it, a ticket of its own in that state)."""
     conn = metrics.open_db(db)
@@ -986,6 +1010,19 @@ def test_line_redirects_to_overview_keeping_query(line_client):
     assert resp.headers["location"] == "/?project=coucou"
 
 
+def test_the_map_page_carries_the_document_and_one_map(line_db, line_client):
+    """F199 D2: ``/floor`` draws ``svg#map`` from the same document, refreshed as the
+    Overview's floor is, and none of the old floors."""
+    html = line_client.get("/floor").text
+    assert (
+        block(html) == line_client.get("/line/live", headers={"Accept": "application/json"}).json()
+    )
+    assert '<svg id="map"' in html
+    assert 'id="floor"' not in html and 'id="floor-phone"' not in html
+    assert 'hx-get="/line/live?project=coucou" hx-trigger="every 5s [window.liveIdle()]"' in html
+    assert 'hx-swap="none"' in html and "factory.js" in html
+
+
 # --- replay (f3-06) -------------------------------------------------------------------------
 
 TZ = timezone(timedelta(hours=2))
@@ -1286,19 +1323,21 @@ def open_line(
     size: dict[str, int] | None = None,
     live: list[dict[str, Any]] | None = None,
     query: str = "",
+    at: str = "/",
 ) -> dict[str, Any]:
-    """``/`` as the dashboard renders it, opened in Chromium with ``/static/`` from disk and
-    ``/line/replay`` and ``/line/live`` from ``client``; or ``/line/live`` answers ``live``'s
-    documents in turn, the last one again. Returns its document.``query`` is appended to the
-    initial ``page.goto`` so that ``window.location.search`` contains it when factory.js runs."""
-    html = client.get(f"/?{query}").text
+    """``/`` (or the page ``at``) as the dashboard renders it, opened in Chromium with
+    ``/static/`` from disk and ``/line/replay`` and ``/line/live`` from ``client``; or
+    ``/line/live`` answers ``live``'s documents in turn, the last one again. Returns its
+    document.``query`` is appended to the initial ``page.goto`` so that
+    ``window.location.search`` contains it when factory.js runs."""
+    html = client.get(f"{at}?{query}").text
 
     def serve(route) -> None:
         url = route.request.url.removeprefix(ORIGIN)
         path = url.split("?", 1)[0]
         if path.startswith("/static/"):
             route.fulfill(path=str(STATIC / path.removeprefix("/static/")))
-        elif path == "/":
+        elif path == at:
             route.fulfill(body=html, content_type="text/html; charset=utf-8")
         elif path == "/line/live" and live:
             body = json.dumps(live.pop(0) if len(live) > 1 else live[0])
@@ -1316,7 +1355,7 @@ def open_line(
     page.set_default_timeout(5000)
     page.set_viewport_size(size or {"width": 1360, "height": 900})
     page.route(f"{ORIGIN}/**", serve)
-    page.goto(ORIGIN + "/" + ("?" + query if query else ""))
+    page.goto(ORIGIN + at + ("?" + query if query else ""))
     page.evaluate(
         """() => {
             window.refreshes = 0;
@@ -3135,3 +3174,201 @@ def test_allowance_rows_side_by_side_at_desktop_and_stacked_at_phone(page, allow
         assert row.is_visible()
         text = row.text_content()
         assert text is not None and len(text) > 0
+
+
+# --- the map (F199) -----------------------------------------------------------------------------
+
+MAP = "svg#map"
+STATUS = f"{MAP} [data-status]"
+UPRIGHT, SIDEWAYS = {"width": 390, "height": 700}, {"width": 844, "height": 390}
+WIDE_SCREEN = {"width": 1440, "height": 900}
+TALL_BOX, WIDE_BOX = "0 0 360 640", "0 0 960 540"  # D3's two tables
+SHAPES = {
+    "upright": (UPRIGHT, TALL_BOX),
+    "sideways": (SIDEWAYS, WIDE_BOX),
+    "wide": (WIDE_SCREEN, WIDE_BOX),
+}
+OPUS_INK = "rgb(255, 150, 64)"  # --opus, dark
+
+
+def screen_of(size: dict[str, int]) -> list[float]:
+    return [0.0, 0.0, float(size["width"]), float(size["height"])]
+
+
+def open_map(page, client: TestClient, size: dict[str, int], **kw: Any) -> dict[str, Any]:
+    doc = open_line(page, client, size, at="/floor", **kw)
+    page.wait_for_selector(f"{MAP} [data-machine]")
+    return doc
+
+
+def redraw(page, doc: dict[str, Any]) -> None:
+    """The map drawn again from ``doc``, as a refresh draws it."""
+    page.evaluate(
+        """doc => {
+            document.getElementById("factory-line").textContent = JSON.stringify(doc);
+            document.dispatchEvent(new CustomEvent("htmx:load", { detail: { elt: document } }));
+        }""",
+        doc,
+    )
+
+
+ON_SCREEN = """svg => {
+    const box = (e) => ((r) => [r.left, r.top, r.right, r.bottom])(e.getBoundingClientRect());
+    const of = (sel, key) => [...svg.querySelectorAll(sel)].map((e) => [e.dataset[key], box(e)]);
+    const page = document.scrollingElement;
+    return {
+        stations: of("[data-station]", "station"),
+        machines: of("[data-machine]", "machine"),
+        scroll: [page.scrollWidth, page.scrollHeight],
+        viewBox: svg.getAttribute("viewBox"),
+    };
+}"""
+
+
+@pytest.mark.parametrize("scheme", ["light", "dark"])
+@pytest.mark.parametrize("shape", list(SHAPES))
+def test_the_map_holds_every_station_and_machine_on_one_screen(page, line_client, shape, scheme):
+    size, box = SHAPES[shape]
+    page.emulate_media(color_scheme=scheme)
+    doc = open_map(page, line_client, size)
+    found = page.eval_on_selector(MAP, ON_SCREEN)
+    assert found["viewBox"] == box  # upright: the tall table; else the wide one
+    assert found["scroll"][0] <= size["width"] and found["scroll"][1] <= size["height"]
+    assert sorted(s for s, _ in found["stations"]) == sorted(s["id"] for s in doc["stations"])
+    assert sorted(m for m, _ in found["machines"]) == sorted(m["id"] for m in doc["machines"])
+    screen = screen_of(size)
+    for name, where in found["stations"] + found["machines"]:
+        assert inside(where, screen), (name, where)
+
+
+def test_turning_the_phone_draws_the_other_table(page, line_client):
+    doc = open_map(page, line_client, UPRIGHT)
+    assert page.locator(MAP).get_attribute("viewBox") == TALL_BOX
+    page.set_viewport_size(SIDEWAYS)
+    page.wait_for_function(
+        f"() => document.querySelector('{MAP}').getAttribute('viewBox') === '{WIDE_BOX}'"
+    )
+    found = page.eval_on_selector(MAP, ON_SCREEN)
+    assert sorted(m for m, _ in found["machines"]) == sorted(m["id"] for m in doc["machines"])
+    for name, where in found["machines"]:
+        assert inside(where, screen_of(SIDEWAYS)), (name, where)
+
+
+@pytest.mark.parametrize("scheme", ["light", "dark"])
+@pytest.mark.parametrize("shape", ["upright", "wide"])
+def test_no_map_label_overlaps_another_or_leaves_its_station(page, line_client, shape, scheme):
+    """As the phone floor's own test: every belt with a number today, every word in place."""
+    page.emulate_media(color_scheme=scheme, reduced_motion="reduce")
+    doc = open_map(page, line_client, SHAPES[shape][0])
+    for b in doc["belts"]:
+        if b["today"] is not None:
+            b["today"] = 12
+    redraw(page, doc)
+    found = page.eval_on_selector(MAP, LABELS)
+    labels = found["labels"]
+    assert len(labels) > 25
+    assert sum(label["words"] == "12" for label in labels) == 10  # one number per counted belt
+    for n, label in enumerate(labels):
+        assert inside(label["box"], found["floor"]), label
+        if label["frame"] is not None:
+            assert inside(label["box"], label["frame"]), label
+        for other in labels[n + 1 :]:
+            assert not overlaps(label["box"], other["box"]), (label, other)
+        for shape_ in found["machines"]:
+            if shape_["machine"] != label["machine"]:
+                assert not overlaps(label["box"], shape_["box"]), (label, shape_)
+
+
+TILES = """svg => [...svg.querySelectorAll("[data-tile]")].map((t) => ({
+    key: t.dataset.tile,
+    size: Number(t.querySelector(".tilebg").getAttribute("height")),
+    fill: Number(t.querySelector(".tilefill")?.getAttribute("height") ?? 0),
+    edge: getComputedStyle(t.querySelector(".tileedge")).stroke,
+    box: ((r) => [r.left, r.top, r.right, r.bottom])(t.getBoundingClientRect()),
+}))"""
+
+
+def planted_cards(n: int) -> list[dict[str, Any]]:
+    return [
+        {"key": f"F{100 + i}", "project": PROJECT, "title": f"Card {i}", "done": 0,
+         "total": 3, "growing": False, "bug": False}
+        for i in range(n)
+    ]  # fmt: skip
+
+
+@pytest.mark.parametrize("shape", ["upright", "wide"])
+def test_every_planted_card_is_one_tile_in_the_boards_order(page, line_client, shape):
+    """D4: 57 cards, 57 tiles; its merged tickets fill a tile, a ticket started edges it orange."""
+    page.emulate_media(color_scheme="dark")
+    size = SHAPES[shape][0]
+    doc = open_map(page, line_client, size)
+    cards = planted_cards(57)
+    cards[0].update(done=2, total=4)
+    cards[1]["growing"] = True
+    doc["field"]["planted"] = cards
+    redraw(page, doc)
+    tiles = page.eval_on_selector(MAP, TILES)
+    assert [t["key"] for t in tiles] == [f"{PROJECT}/{c['key']}" for c in cards]
+    assert tiles[0]["fill"] == pytest.approx(tiles[0]["size"] / 2)
+    assert tiles[2]["fill"] == 0
+    assert tiles[1]["edge"] == OPUS_INK and tiles[0]["edge"] != OPUS_INK
+    assert all(inside(t["box"], screen_of(size)) for t in tiles)
+    for one, two in pairwise(tiles):
+        assert not overlaps(one["box"], two["box"])
+
+
+def test_a_replays_document_draws_its_rows_as_tiles(page, line_client):
+    """A replay has no board: ``field.rows`` are the tiles, in their own order."""
+    doc = open_map(page, line_client, WIDE_SCREEN)
+    assert doc["field"]["planted"]
+    del doc["field"]["planted"]
+    redraw(page, doc)
+    tiles = page.eval_on_selector(MAP, TILES)
+    assert [t["key"] for t in tiles] == [f"{r['project']}/{r['key']}" for r in doc["field"]["rows"]]
+
+
+def test_the_top_line_names_the_working_machine_its_crate_and_minutes(page, line_client):
+    doc = open_map(page, line_client, UPRIGHT)
+    working = machines(doc)[LOCAL]
+    crate = working["crate"]
+    words = page.locator(f"{STATUS} text").text_content() or ""
+    assert working["name"] in words
+    assert "-".join(crate["ticket"].split("-")[:2]) in words
+    assert f"{crate['minutes']} min" in words
+    assert page.locator(f"{MAP} .sign, {MAP} .clogged").count() == 0
+
+
+@pytest.mark.parametrize("shape", ["upright", "wide"])
+@pytest.mark.parametrize("kind", list(WAITS))
+def test_a_wait_signs_the_top_line_with_its_words_and_clogs_its_unit(
+    page, line_db, line_client, kind, shape
+):
+    activity, unit = WAITS[kind]
+    waiting(line_db, activity, RESET if kind == "claude" else None)
+    page.emulate_media(reduced_motion="reduce")
+    doc = open_map(page, line_client, SHAPES[shape][0])
+    assert doc["wait"]["kind"] == kind
+    assert page.locator(f"{STATUS} .sign").count() == 1
+    assert page.locator(f"{STATUS} text").text_content() == doc["wait"]["words"]
+    assert page.locator(f"{MAP} .clogged").count() == 1
+    assert page.locator(f"{MAP} {unit}.clogged .sign").count() == 1
+
+
+def test_an_unchanged_document_leaves_every_node_of_the_map_in_place(page, line_client):
+    page.clock.install()
+    open_map(page, line_client, UPRIGHT)
+    assert page.evaluate(MARK.replace('"floor"', '"map"')) > 100
+    refresh(page)
+    refresh(page)
+    assert page.evaluate(MARKED.replace('"floor"', '"map"')) == 0
+
+
+def test_a_merge_flashes_the_maps_checks_light(page, line_client):
+    page.clock.install()
+    page.add_init_script(FLASHES)
+    live = [later(line_client, merged=0), later(line_client, 1)]
+    open_map(page, line_client, UPRIGHT, live=live)
+    refresh(page)
+    assert page.evaluate("() => window.flashes") == []
+    refresh(page)
+    assert set(page.evaluate("() => window.flashes")) == {"light flash-green"}

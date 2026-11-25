@@ -503,19 +503,19 @@ tr.few .gauge { opacity: .35; }
     0% { opacity: .55; transform: translateY(0) scale(.6); }
     100% { opacity: 0; transform: translateY(-34px) scale(1.6); }
   }
-  .floor .light.flash-green, .floor-phone .light.flash-green { animation: flash-green 1.2s ease-out; }
+  .floor .light.flash-green, .floor-phone .light.flash-green, .map .light.flash-green { animation: flash-green 1.2s ease-out; }
   @keyframes flash-green {
     0% { fill: var(--good); }
     50% { fill: #4cff4c; }
     100% { fill: var(--good); }
   }
-  .floor .light.flash-red, .floor-phone .light.flash-red { animation: flash-red 1.2s ease-out; }
+  .floor .light.flash-red, .floor-phone .light.flash-red, .map .light.flash-red { animation: flash-red 1.2s ease-out; }
   @keyframes flash-red {
     0% { fill: var(--good); }
     50% { fill: var(--critical); }
     100% { fill: var(--good); }
   }
-  .floor .light.flash-orange, .floor-phone .light.flash-orange { animation: flash-orange 1.2s ease-out; }
+  .floor .light.flash-orange, .floor-phone .light.flash-orange, .map .light.flash-orange { animation: flash-orange 1.2s ease-out; }
   @keyframes flash-orange {
     0% { fill: var(--good); }
     50% { fill: var(--warn); }
@@ -647,6 +647,74 @@ tr.few .gauge { opacity: .35; }
 .floor [data-station="ripe"] .unit { stroke-width: 2.5; }
 .floor [data-station="stash"] .unit { stroke-dasharray: 6 4; }
 .floor .tile { fill: var(--bg); stroke: var(--a3); stroke-width: 1.5; }
+
+/* The map (F199 D2, after .softfield/cards/f199-mockup/floor.html): its own page, one screen with
+   no scrolling; the top bar, the tabs and the crumbs give way to a thin bar of its own */
+body:has(.map-page) { overflow: hidden; }
+body:has(.map-page) > header.bar, body:has(.map-page) main > nav.crumbs { display: none; }
+.map-page { position: fixed; inset: 0; z-index: 5; background: var(--floor); }
+.map-live { display: flex; flex-direction: column; height: 100%; }
+.map-bar { display: flex; align-items: center; gap: 12px; flex: 0 0 auto; min-height: 36px; padding: 0 10px;
+  background: var(--bay); border-bottom: 2px solid var(--hazard); }
+.map-bar h1 { margin: 0; font: 700 14px var(--display); letter-spacing: .1em; text-transform: uppercase; }
+.map-bar .src { font: 12px var(--mono); color: var(--muted); }
+.map-back { display: inline-flex; align-items: center; min-height: 36px; font: 600 12px var(--display);
+  letter-spacing: .06em; text-transform: uppercase; color: var(--ink); text-decoration: none; }
+.map { display: block; flex: 1 1 auto; min-height: 0; width: 100%; height: 100%; font-family: var(--mono); }
+.map .ground { fill: var(--floor); } .map .gridline { stroke: var(--grid); stroke-width: .5; fill: none; }
+.map text { fill: var(--ink-2); font-size: 9.5px; }
+.map text.title { fill: var(--ink); font: 700 10px var(--display); letter-spacing: .1em; }
+.map text.plate-t { fill: var(--hazard-ink); font: 700 9.5px var(--display); letter-spacing: .08em; }
+.map text.num { fill: var(--ink); font: 700 24px var(--display); }
+.map text.num.small { font-size: 17px; }
+.map text.dim { fill: var(--muted); }
+.map text.nm { fill: var(--ink); font-size: 10px; }
+.map text.on { fill: var(--floor); font-weight: 700; font-size: 8.5px; }
+.map text.chip-t { fill: var(--ink); font: 700 9px var(--mono); }
+.map text.status { fill: var(--ink); font-size: 11px; }
+.map .zone { fill: var(--bay); stroke: var(--rule); stroke-width: 1; }
+.map .tick { stroke: var(--tick); stroke-width: 1.2; fill: none; }
+.map .plate-b { fill: var(--hazard); }
+.map .unit { fill: var(--plate); stroke: var(--c, var(--rule)); stroke-width: 1.5; }
+.map .machine { --c: var(--muted); }
+.map .machine.lead.working { --c: var(--a2); } .map .machine.developers.working { --c: var(--dev); }
+.map .machine.reviewers.working { --c: var(--a4); }
+.map .machine.idle, .map .machine.off, .map .machine.waiting { opacity: .62; }
+.map .machine.off .unit { stroke-dasharray: 5 3; }
+.map .machine.clogged, .map .station.clogged { --c: var(--clog); opacity: 1; }
+.map .vent { fill: none; stroke: var(--c); stroke-width: 2; stroke-dasharray: 3 2.2; transform-box: fill-box; transform-origin: center; }
+.map .led { fill: var(--muted); } .map .machine.working .led { fill: var(--good); } .map .machine.clogged .led { fill: var(--clog); }
+.map .sign { fill: var(--clog); }
+.map .crate { stroke: var(--ink); stroke-width: 1; }
+.map .crate.lead { fill: var(--a2); } .map .crate.developer { fill: var(--dev); } .map .crate.batch { fill: var(--a4); }
+.map .crate.waits { fill-opacity: .4; stroke-dasharray: 2.5 2; }
+.map .bed { fill: none; stroke: var(--grid); stroke-width: 11; }
+.map .rollers { fill: none; stroke: var(--rule); stroke-width: 8; stroke-dasharray: 1.6 5; }
+.map .belt.back .bed { stroke-width: 7; } .map .belt.back .rollers { stroke-width: 5; stroke: var(--critical); opacity: .45; }
+.map .belt.today .rollers { stroke: var(--roller); opacity: .5; }
+.map .belt.carrying .rollers { stroke: var(--roller); opacity: 1; }
+.map .chip { fill: var(--floor); stroke: var(--rule); stroke-width: 1; }
+.map .tilebg { fill: var(--grid); } .map .tilefill { fill: var(--hazard); }
+.map .tileedge { fill: none; stroke: var(--rule); stroke-width: .8; }
+.map .tileedge.growing { stroke: var(--opus); stroke-width: 1.2; }
+.map .tileedge.bug { stroke-dasharray: 2 1.5; }
+.map .seedplot { fill: var(--floor); stroke: var(--rule); }
+.map .plot { fill: none; }  /* the planted tiles' frame: their station's bounds, drawn bare */
+.map .hopper { fill: var(--plate); stroke: var(--c, var(--rule)); stroke-width: 1.5; }
+.map .gate { fill: var(--plate); stroke: var(--rule); stroke-width: 1.5; }
+.map .light { fill: var(--good); }
+.map .ripebox { fill: var(--plate); stroke: var(--warn-ink); stroke-width: 2; }
+.map .swatch-line { stroke-width: 6; }
+/* Light: --muted and the hazard fill fall under 3:1 on the pale floor (as the floor's, f9-02) */
+:root[data-theme="light"] .map text.dim { fill: var(--ink-2); }
+:root[data-theme="light"] .map .tilefill { fill: var(--warn-ink); }
+@media (prefers-reduced-motion: no-preference) {
+  .map .belt.carrying .rollers { animation: map-roll .4s linear infinite; }
+  .map .machine.working .vent { animation: map-spin 2.4s linear infinite; }
+  .map .sign { animation: pulse 2s ease-in-out infinite; }
+  @keyframes map-roll { to { stroke-dashoffset: -6.6; } }
+  @keyframes map-spin { to { transform: rotate(360deg); } }
+}
 
 /* The replay bar (f3-07, after f1-factory-mockup's .replay): every control at least 44 px */
 .replay, .replay-controls { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }

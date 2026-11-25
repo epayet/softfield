@@ -16,7 +16,10 @@ draws it (and lays it out), so its tests are on this document, plus one browser 
   tickets set aside (``later``, which lists them), planting counts the cards being planned
   with the owner (``_planting``). Its five stations' counts come from the board's cards
   (``board.py``), one each: seed, sprouting, planted, ripe, harvested; at a past ``at``,
-  which the board doesn't know, from ``field``.
+  which the board doesn't know, from ``field``. Live, ``field.planted`` is the board's planted
+  cards in its order, the map's tiles (F199 D4); a past moment has none.
+- **The map** (F199 D2): ``/floor`` draws the same document as one ``svg#map`` on a grid, from
+  one of two tables in ``static/factory.js`` (wide or tall), sized to the screen.
 - **A wait** (f9-01): while the live run waits instead of working, ``wait`` names the one
   machine or station it waits at and says for what (``_wait``); the floor draws it clogged.
 - **Any moment** (f3-06): ``live_line(..., at=t)`` applies the same rules to the jobs whose
@@ -847,11 +850,25 @@ def live_line(
         boards = cards if isinstance(cards, Mapping) else {project: cards} if cards else {}
         stages: dict[str, int] = {}
         more = 0
+        planted: list[dict[str, Any]] = []  # the map's tiles (F199 D4): the board's order
         for name in names:
             its = boards.get(name) or board(conn, name, now)
             for stage, listed in its.stages.items():
                 stages[stage] = stages.get(stage, 0) + len(listed)
             more += its.more_harvested
+            planted += [
+                {
+                    "key": card.key,
+                    "project": name,
+                    "title": card.title,
+                    "done": card.done,
+                    "total": card.total,
+                    "growing": card.started,
+                    "bug": card.bug,
+                }
+                for card in its.stages["planted"]
+            ]
+        field = {**field, "planted": planted}
         count.update(
             seeds=stages["seed"],
             planting=stages["sprouting"],
@@ -1187,6 +1204,14 @@ def line_redirect(request: Request) -> RedirectResponse:
     query = request.url.query
     target = "/" + ("?" + query if query else "")
     return RedirectResponse(target, status_code=307)
+
+
+@router.get("/floor", response_class=HTMLResponse)
+def floor_map(request: Request, conn: Db, project: Project, now: Now) -> Response:
+    """The map (F199 D2): the whole factory from above on one screen, refreshed as the
+    Overview's floor is, from ``/line/live``."""
+    context = {**_context(conn, project, now), "active": "/floor"}
+    return render(request, conn, project, "floor.html", context, is_factory_wide=True)
 
 
 def _moment(value: str, name: str) -> datetime:

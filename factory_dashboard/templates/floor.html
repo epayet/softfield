@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}The floor · {{ project }}{% endblock %}
+{% block content %}
+{# The map (F199 D2): the whole factory from above, on one screen; the top bar and tabs give way to a thin bar of its own (dashboard.css hides them). Every 5 s htmx fetches only the document from /line/live (f3-17), and static/factory.js draws svg#map from it in place. #}
+<div class="map-page">
+  <section id="line-live" class="map-live" hx-get="/line/live{{ q }}" hx-trigger="every 5s [window.liveIdle()]" hx-swap="none" hx-headers='{"Accept": "application/json"}'>
+    <header class="map-bar">
+      <a class="map-back" href="/{{ q }}">‹ Overview</a>
+      <h1>The floor</h1>
+      <span class="src">live{% if line.many_projects %} · every project{% endif %}</span>
+    </header>
+    <svg id="map" class="map" viewBox="0 0 960 540" preserveAspectRatio="xMidYMid meet" role="img" aria-label="The factory from above: the field, the queue, the lead, the reviewers and the developer bay, the checks, merged today, ripe and harvested."></svg>
+    <script type="application/json" id="factory-line">{{ line | tojson }}</script>
+  </section>
+</div>
+<script src="{{ static('factory.js') }}" defer></script>
+{% endblock %}
