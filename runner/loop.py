@@ -280,9 +280,13 @@ def choose_ticket(
     protected: Collection[str],
     at: datetime,
     reviewing: Collection[str] = (),
+    fill_gap: bool = True,
 ) -> Task | None:
     """The next ticket, for the runner (`_next_task`) and the dry run (`dry_run_plan`) alike (ADR
-    44 item 9); ``waiting`` holds what a pause or a hold keeps from running.
+    44 item 9); ``waiting`` holds what a pause or a hold keeps from running. Without
+    ``fill_gap`` a lead ticket that would only fill the gap is not taken (ADR 50 item 2):
+    `project_round` asks every project that way first, so no project's lead ticket goes
+    before another's developer ticket.
 
     A ticket waiting only for its gates (``regate``) goes first, whatever Claude's state: its
     gates run before main moves on and its work is thrown away. Then the fast lane's (``lane``,
@@ -342,7 +346,7 @@ def choose_ticket(
         return fix
     developers = [t for t in free if not lead(t)]
     task = first(developers if passed_over else free)
-    if task is None and passed_over:
+    if task is None and passed_over and fill_gap:
         task = first(free)  # nothing else can start: the first lead ticket fills the gap (ADR 50)
     if task is None or not lead(task):
         return task
@@ -354,10 +358,12 @@ def choose_ticket(
         is None
     ):
         return task
-    return first(developers) or task
+    return first(developers) or (task if fill_gap else None)
 
 
-def _next_task(s: Session, ready: list[Task], done: set[str], paused: set[str]) -> Task | None:
+def _next_task(
+    s: Session, ready: list[Task], done: set[str], paused: set[str], *, fill_gap: bool = True
+) -> Task | None:
     """`choose_ticket` from the session."""
     at = session.now()
     windows = waits._windows_now(s, at)
@@ -374,6 +380,7 @@ def _next_task(s: Session, ready: list[Task], done: set[str], paused: set[str]) 
         protected=tuple(read_protected(s.repo)),
         at=at,
         reviewing=under_review(s.state),
+        fill_gap=fill_gap,
     )
 
 
@@ -722,6 +729,7 @@ def work_queue(
     take_tickets: bool = True,
     wait: bool = True,
     lane_only: bool = False,
+    fill_gap: bool = True,
     before_job: Callable[[], None] | None = None,
 ) -> bool:
     """Work through .softfield/tasks/ready (one milestone's, if given) and the queued jobs their
@@ -751,6 +759,8 @@ def work_queue(
     the round asks the fast lane again before the next;
     with ``lane_only`` (F235 D1) only the fast lane, its tickets and the directions and
     escalations about them, so the round can run every project's lane before any queued job;
+    without ``fill_gap`` a lead ticket that would only fill the gap over the pace is left
+    (F279 D5);
     without ``wait`` it never holds or sleeps here (for Claude's reset, the owner's pause or
     nothing to run) but returns, so the next project can go; ``before_job`` runs once a job is
     picked, before it starts (the factory's plan is stored then, F279 D1).
@@ -789,7 +799,9 @@ def work_queue(
         behind = waiting_rows(s, ready)
         red = waits_for_main(s, ready)
         task = (
-            _next_task(s, ready, done, paused | held.keys() | behind.keys() | red)
+            _next_task(
+                s, ready, done, paused | held.keys() | behind.keys() | red, fill_gap=fill_gap
+            )
             if take_tickets
             else None
         )
@@ -975,7 +987,8 @@ def project_round(sessions: Sequence[Session], turn: Turn) -> tuple[bool, bool]:
     about them), then one queued job, the first project's that has one (the owner's planning
     replies, directions, checkpoints, escalations: they never wait behind another project's
     ticket, and the lane is asked again before the next), then one ticket
-    from the first project that has one it can run. While the owner pauses, no lane and no
+    from the first project that has one it can run, a lead ticket that only fills the gap over
+    the pace last (F279 D5). While the owner pauses, no lane and no
     ticket (ADR 35 item 5): the planning replies still go. Returns (restart, a job ran)."""
     held = any(s.state.owner_pause is not None for s in sessions)
     for s in [] if held else sessions:
@@ -988,10 +1001,13 @@ def project_round(sessions: Sequence[Session], turn: Turn) -> tuple[bool, bool]:
             return restart, ran
     if held:  # a pause holds every project
         return False, False
-    for s in sessions:
-        restart, ran = turn(s, once=True)
-        if restart or ran:
-            return restart, ran
+    # The gap is the factory's (ADR 50 item 2): a lead ticket fills it only when no project has
+    # anything else that can start, so the second pass lets the first project's fill it.
+    for fill_gap in (False, True):
+        for s in sessions:
+            restart, ran = turn(s, once=True, fill_gap=fill_gap)
+            if restart or ran:
+                return restart, ran
     return False, False
 
 
@@ -1299,6 +1315,7 @@ class _ProjectPlan:
     name: str
     lines: tuple[dispatch.PlanLine, ...]
     chosen: str | None  # `choose_ticket`'s ticket; None while the owner holds the project
+    chosen_first: str | None  # the same without the gap-filling lead ticket (F279 D5)
     windows: dispatch.Windows
     owner_pause: str | None  # the factory's pause, since when
     main_red: bool
@@ -1315,10 +1332,13 @@ def factory_plan(configs: Sequence[Config], at: datetime) -> dispatch.FactoryPla
     writes nothing (f1-33)."""
     projects = [_project_plan(cfg, at) for cfg in configs]
     chosen = {p.name: p.chosen for p in projects}
+    # A project whose only ticket is a lead one filling the gap goes after every other project's
+    # tickets (F279 D5), as `project_round` runs them
+    ordered = sorted(projects, key=lambda p: p.chosen is not None and p.chosen_first is None)
     lines = tuple(
         line
         for group in dispatch.GROUPS
-        for p in projects
+        for p in (ordered if group == dispatch.GO else projects)
         for line in p.lines
         if line.group == group
     )
@@ -1491,20 +1511,27 @@ def _project_plan(cfg: Config, at: datetime) -> _ProjectPlan:
             lines.append(dispatch.Line(row.pick, f"{WOULD_PARK} ({row.waits or out})"))
         else:
             lines.append(row)
-    chosen = choose_ticket(
-        ready,
-        done,
-        paused | _held(cfg.repo, ready).keys() | behind.keys(),
-        cards=_cards(cfg.repo, ready),
-        regate=state.regate,
-        parked=state.parked,
-        windows=windows,
-        lane=lane,
-        protected=tuple(read_protected(cfg.repo)),
-        at=at,
-        reviewing=under_review(state),
-    )
+
+    def choose(fill_gap: bool) -> Task | None:
+        return choose_ticket(
+            ready,
+            done,
+            paused | _held(cfg.repo, ready).keys() | behind.keys(),
+            cards=_cards(cfg.repo, ready),
+            regate=state.regate,
+            parked=state.parked,
+            windows=windows,
+            lane=lane,
+            protected=tuple(read_protected(cfg.repo)),
+            at=at,
+            reviewing=under_review(state),
+            fill_gap=fill_gap,
+        )
+
+    chosen = choose(True)
     next_id = None if chosen is None or by_the_owner else chosen.id
+    first_chosen = choose(False)
+    first_id = None if first_chosen is None or by_the_owner else first_chosen.id
 
     def pre_review_next() -> str | None:  # nothing else can start (ADR 51), as the runner asks
         if by_the_owner or not cfg.metrics_db.is_file() or not cfg.roles.get(STAND_IN):
@@ -1553,6 +1580,7 @@ def _project_plan(cfg: Config, at: datetime) -> _ProjectPlan:
         name,
         tuple(plan_line(line) for line in lines),
         next_id,
+        first_id,
         windows,
         state.owner_pause,
         state.main_red is not None,

@@ -6935,13 +6935,17 @@ def _turns(jobs, restart_on=None):
     one. The lane pass (F235 D1) is recorded in ``turn.lanes``, the others in ``calls``."""
     calls: list[tuple[str, str]] = []
     lanes: list[tuple[str, str]] = []
+    gaps: list[tuple[str, bool]] = []
 
-    def turn(s, take_tickets=True, once=False, lane_only=False):
+    def turn(s, take_tickets=True, once=False, lane_only=False, fill_gap=True):
         kind = "lane" if lane_only else "ticket" if take_tickets else "queued"
         (lanes if lane_only else calls).append((s.name, kind))
+        if kind == "ticket":
+            gaps.append((s.name, fill_gap))
         return (s.name, kind) == restart_on, jobs.get((s.name, kind), False)
 
     turn.lanes = lanes  # type: ignore[attr-defined]
+    turn.gaps = gaps  # type: ignore[attr-defined]
     return turn, calls
 
 
@@ -7183,6 +7187,22 @@ def test_a_ticket_comes_from_the_first_project_that_can_run_one():
     turn, calls = _turns({("softfield", "ticket"): True, ("coucou", "ticket"): True})
     loop.project_round(_projects("softfield", "coucou"), turn)
     assert ("coucou", "ticket") not in calls
+
+
+def test_no_projects_lead_ticket_fills_the_gap_before_another_projects_developer_ticket():
+    """F279 D5 (ADR 50 item 2): every project is asked for a ticket that fills no gap first;
+    the gap-filling pass comes only when none ran."""
+    turn, _ = _turns({("coucou", "ticket"): True})
+    assert loop.project_round(_projects("softfield", "coucou"), turn) == (False, True)
+    assert turn.gaps == [("softfield", False), ("coucou", False)]
+    turn, _ = _turns({})
+    assert loop.project_round(_projects("softfield", "coucou"), turn) == (False, False)
+    assert turn.gaps == [
+        ("softfield", False),
+        ("coucou", False),
+        ("softfield", True),
+        ("coucou", True),
+    ]
 
 
 def test_a_pause_in_any_project_holds_every_ticket_but_not_the_planning():
@@ -7645,6 +7665,51 @@ def test_over_pace_the_plan_says_so_with_the_weeks_reading_and_the_developers_ru
     paused = loop.factory_plan([cfg], THURSDAY)
     assert paused.sentence.startswith("Paused by you since ")
     assert (paused.picked, paused.next_up) == (None, "nothing")
+
+
+def _two_projects_with(
+    repo: Path, tmp_path_factory, first: str, second: str, used: float
+) -> tuple[Config, Config]:
+    """The first project has ``first`` ("lead" or "developer") ticket f1-01, the second
+    ``second``'s f2-01; Claude's week is ``used``."""
+    other = _second_project(repo, tmp_path_factory)
+    _week_read(repo, used, LINE_33)
+    for cfg, task_id, who in ((_config(repo), "f1-01-a", first), (other, "f2-01-b", second)):
+        _on_card(cfg.repo, task_id, 1, agent="lead" if who == "lead" else "")
+        git(cfg.repo, "add", "-A")
+        git(cfg.repo, "commit", "-q", "-m", "cards")
+    return _config(repo), other
+
+
+def _order(plan) -> list[str]:
+    return [ln.subject for ln in plan.lines if ln.kind == "ticket" and ln.group == "go"]
+
+
+def test_over_pace_the_plan_puts_another_projects_developer_ticket_before_the_lead_one(
+    repo, tmp_path_factory, fake_clock
+):
+    """F279 D5: the first project's lead ticket fills the gap after the second's developer
+    ticket, and the plan lists them in the order they run."""
+    first, second = _two_projects_with(repo, tmp_path_factory, "lead", "developer", 0.65)
+    plan = loop.factory_plan([first, second], THURSDAY)
+    assert _order(plan) == ["f2-01-b", "f1-01-a"]
+    assert plan.picked == 0 and plan.lines[0].subject == "f2-01-b"
+
+
+def test_over_pace_with_no_developer_ticket_anywhere_the_first_lead_ticket_goes(
+    repo, tmp_path_factory, fake_clock
+):
+    first, second = _two_projects_with(repo, tmp_path_factory, "lead", "lead", 0.65)
+    plan = loop.factory_plan([first, second], THURSDAY)
+    assert _order(plan)[0] == "f1-01-a"
+    assert plan.picked is not None and plan.lines[plan.picked].subject == "f1-01-a"
+
+
+def test_under_pace_the_first_projects_lead_ticket_goes_first(repo, tmp_path_factory, fake_clock):
+    first, second = _two_projects_with(repo, tmp_path_factory, "lead", "developer", 0.20)
+    plan = loop.factory_plan([first, second], THURSDAY)
+    assert _order(plan) == ["f1-01-a", "f2-01-b"]
+    assert plan.picked == 0 and plan.lines[0].subject == "f1-01-a"
 
 
 def test_the_developers_runway_is_the_median_tickets_minutes():
