@@ -1809,9 +1809,22 @@ def test_overview_queue_panel_falls_back_to_old_rendering_when_no_plan(serve, db
     """f279-07: when no plan is stored, the Overview shows the older queue rendering."""
     html = serve().get("/").text
     queue_section = section(html, "queue")
-    # No plan: shows count + Next in line (older rendering)
-    assert "tickets waiting" in queue_section
-    assert "Next in line" in queue_section
+    # No plan: the exact older count, then the queue's own rows in the queue's order
+    assert list(waits(db_path)) == ["f1-05-first", "f1-06-second"]
+    assert queue_section == (
+        "Queue 3 tickets waiting: coucou 2 · other 1 Next in line "
+        "1 1 f1-05-first Queued first. · a developer · F1 · coucou "
+        "2 2 f1-06-second Queued second. · a developer · F1 · coucou "
+        "3 3 m1-01-elsewhere · a developer · M1 · other"
+    )
+    # Each ticket links to its own page, in its own project, as the older rendering does
+    raw = section_raw(html, "queue")
+    for ticket, project in (
+        ("f1-05-first", PROJECT),
+        ("f1-06-second", PROJECT),
+        ("m1-01-elsewhere", OTHER),
+    ):
+        assert f'<a href="/tickets/{ticket}?project={quote(project)}">{ticket}</a>' in raw
     # The plan-derived sentence does not appear
     assert "Over pace." not in queue_section
 
