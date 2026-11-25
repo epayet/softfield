@@ -582,9 +582,10 @@ def test_a_crashed_app_shows_why_run_logs_and_a_fix_plant(projects_client, docke
     assert f'hx-post="/projects/{APP}/stop"' not in row
     assert "Open" not in row
     assert "Logs" in text
-    plant = plant_of(row, "Plant a card to fix it")
+    plant = plant_of(row, "Plant and ask the lead to fix it")
     assert plant["kind"] == "plant" and plant["project"] == APP
     assert json.loads(plant["value"])["text"].startswith(f"{APP}'s app crashed")
+    assert json.loads(plant["value"])["ask"] is True
 
 
 @pytest.fixture
@@ -666,15 +667,17 @@ def test_a_failed_update_shows_its_commit_and_the_fix_plant(
     assert "App Update failed" in text
     assert "ERROR: no matching distribution for nope==9 · main a8c3fae" in text
     assert "Step 4/9" not in text  # only the build output's last line on the row
-    assert "Plant a card to fix it" in text
+    assert "Plant and ask the lead to fix it" in text
 
 
 def test_the_fix_plant_holds_the_project_the_commit_and_the_last_30_log_lines(
     projects_client, docker, app_repo, update_failed, db_path
 ):
-    plant = plant_of(plate(projects_client.get("/projects").text, APP), "Plant a card to fix it")
+    plant = plant_of(
+        plate(projects_client.get("/projects").text, APP), "Plant and ask the lead to fix it"
+    )
     value = json.loads(plant["value"])
-    assert value["ask"] is False
+    assert value["ask"] is True
     head, detail, logs = value["text"].split("\n\n")
     assert head == (
         f"{APP}'s app didn't update at 2026-11-12T14:02:00+00:00 on main a8c3fae1d2b4c5e6:"
@@ -702,12 +705,12 @@ def test_a_project_without_run_offers_a_stack_plant_and_no_run(
     row = plate(projects_client.get("/projects").text, APP)
     assert "No stack yet: the factory can't run it." in words(row)
     assert f'/projects/{APP}/run"' not in row and "Logs" not in row
-    plant = plant_of(row, "Plant a card for a stack")
+    plant = plant_of(row, "Plant and ask the lead for a stack")
     assert plant["kind"] == "plant" and plant["project"] == APP
     assert json.loads(plant["value"]) == {
         "text": f"Give {APP} a Docker Compose stack the Projects page can run"
         " (ADR 46; what it needs: runner/instructions/run-stack.md)",
-        "ask": False,
+        "ask": True,
     }
     assert docker.calls == []  # no stack, no Docker
 
@@ -718,9 +721,9 @@ def test_a_plant_press_is_its_own_request_not_the_orders(page, projects_client, 
     _register(db_path, APP, _repo(tmp_path / "Coaster Ranker", run=False))
     open_page(page, projects_client, "/projects")
     row = page.locator(f'.proj[data-key="{APP}"]')
-    row.get_by_role("button", name="Plant a card for a stack").click()
+    row.get_by_role("button", name="Plant and ask the lead for a stack").click()
     row.locator(".app-sent").get_by_text("Asked: the runner will do it.").wait_for()
-    assert row.get_by_role("button", name="Plant a card for a stack").is_hidden()
+    assert row.get_by_role("button", name="Plant and ask the lead for a stack").is_hidden()
     assert page.get_by_label("softfield's place").is_enabled()
     assert page.locator("#order-sent").inner_text() == ""
     conn = metrics.open_db(db_path)
@@ -740,7 +743,7 @@ def test_softfields_plate_has_neither_run_nor_a_plant(
     monkeypatch.setattr(config, "HOME", home)
     row = plate(projects_client.get("/projects").text, "softfield")
     assert "app-row" not in row
-    assert "Plant a card" not in row and '/projects/softfield/run"' not in row
+    assert "Plant and ask" not in row and '/projects/softfield/run"' not in row
     assert docker.calls == []
 
 

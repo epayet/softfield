@@ -51,8 +51,8 @@ BROKEN = (stacks.CRASHED, stacks.UPDATE_FAILED)
 
 
 def plant_value(text: str) -> str:
-    """A ``plant`` request's value, in the Plant box's shape: planted, not asked."""
-    return json.dumps({"text": text, "ask": False})
+    """A ``plant`` request's value, in the Plant box's shape: planted and asks the lead."""
+    return json.dumps({"text": text, "ask": True})
 
 
 @dataclass(frozen=True)

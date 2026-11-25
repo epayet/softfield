@@ -20,7 +20,7 @@
     {% if broken %}
     <button type="button" class="btn plain" hx-post="/requests" hx-target="next .app-sent" hx-swap="innerHTML"
       hx-vals='{{ {"kind": "plant", "project": row.name, "value": row.fix} | tojson }}'
-      hx-on::before-request="this.hidden = true; this.nextElementSibling.textContent = 'On its way: the runner plants it at its next pick'">Plant a card to fix it</button>
+      hx-on::before-request="this.hidden = true; this.nextElementSibling.textContent = 'On its way: the runner plants it and asks the lead at its next pick'">Plant and ask the lead to fix it</button>
     <div class="app-sent way"></div>
     {% endif %}
   </div>
