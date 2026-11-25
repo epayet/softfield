@@ -19,8 +19,6 @@ from runner.gates import GateResult
 from runner.gitops import Git, GitError, parse_trailers, with_trailers
 from runner.loop import (
     NO_E2E,
-    record_findings,
-    review_reason,
     run_e2e,
     work_queue,
 )
@@ -33,6 +31,7 @@ from runner.review import (
     stop_reason,
     update_seen,
 )
+from runner.review_job import record_findings, review_reason
 from runner.session import (
     CHECK_TICKETS,
     CLAUDE_HEADLESS_AGENT,
@@ -762,7 +761,7 @@ def review_milestone(cfg: Config, milestone: str, base: str, *, park: bool = Fal
     a round a certain limit or an expired login stops half-way, its session resumed (F191 D4).
     Also with ``park``, a round runs no queue of its own (F191 D7): one that leaves its card
     tickets in ready/ and no stop returns PARKED, its row done, and the main queue runs the
-    fixes first among tickets (`loop.under_review`); a last round's fixes run there in the
+    fixes first among tickets (`review_job.under_review`); a last round's fixes run there in the
     board's order. Without ``park`` (`runner milestone`) there is no queue to go back to: it
     waits for the reset, and runs each round's fixes itself; a round whose lead fix the week
     holds returns PARKED too, its row done (F219 D3)."""

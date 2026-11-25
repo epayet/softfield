@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from runner import claude, cli, loop, metrics, milestone, owner, session, shots, waits
+from runner import claude, cli, loop, metrics, milestone, owner, review_job, session, shots, waits
 from runner.agents import JobResult, Refusal
 from runner.gates import GateResult
 from runner.milestone import (
@@ -1117,9 +1117,9 @@ def test_under_softfield_run_a_round_hands_its_fix_to_the_main_queue(repo, monke
     monkeypatch.setattr(milestone, "work_queue", lambda *a, **k: pytest.fail("a queue ran"))
     cfg = _config(repo)
     assert milestone.review_milestone(cfg, "m1", "m1-start", park=True) == milestone.PARKED
-    assert loop.under_review(load_state(cfg.runs_dir / "state.json")) == {"m1"}
+    assert review_job.under_review(load_state(cfg.runs_dir / "state.json")) == {"m1"}
     _round_2_once_the_fix_is_done(repo, cfg, prompts, park=True)
-    assert loop.under_review(load_state(cfg.runs_dir / "state.json")) == set()
+    assert review_job.under_review(load_state(cfg.runs_dir / "state.json")) == set()
 
 
 def test_under_softfield_run_a_last_rounds_fix_runs_in_the_main_queue(repo, monkeypatch):
@@ -1143,7 +1143,7 @@ def test_under_softfield_run_a_last_rounds_fix_runs_in_the_main_queue(repo, monk
     stop = milestone.review_milestone(cfg, "m1", "m1-start", park=True)
     assert stop == "review round cap (3) reached"
     state = load_state(state_path)
-    assert state.review_stop["m1"] == stop and loop.under_review(state) == set()
+    assert state.review_stop["m1"] == stop and review_job.under_review(state) == set()
     assert (repo / ".softfield" / "tasks" / "ready" / "m1-05-fix.md").is_file()
 
 
