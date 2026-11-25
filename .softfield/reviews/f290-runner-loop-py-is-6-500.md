@@ -1,6 +1,6 @@
 # Review: F290, Split runner/loop.py into one module per job kind, with no change in behaviour
 
-**Status:** round 1 done; one fix ticket (f290-09) runs before your sign-off.
+**Status:** review done after round 2; ready for your sign-off.
 
 ### 1. What changed
 - `runner/loop.py` went from 6,813 lines to 1,487 and now only schedules. Each job kind has its own module: `developer_job`, `lead_job`, `review_job`, `planner_job`, plus `rating_store`, `waits` and `session` under them.
@@ -17,7 +17,7 @@
 - **Met:** no new module is over 1,800 lines (`runner/session.py` is the biggest, at 1,777), and no new test file is over 3,000 (`tests/runner/test_session.py` is the biggest, at 758).
 - **Met:** move only. 94 test definitions left their files and 94 arrived. ruff and mypy are clean, and every patch left on `loop` names something the scheduler calls.
 - **Met:** imports run one way. An upward import sits inside its function, with the `# runner.x imports this module` comment.
-- **Not yet:** D6's "fixtures used by more than one file go to `conftest.py`". The two autouse guards are still imported from `tests/runner/test_loop.py`; f290-09 moves them.
+- **Met:** D6's "fixtures used by more than one file go to `conftest.py`". f290-09 moved the two autouse guards there. The review deleted the copies f290-09 left in `tests/runner/test_loop.py`.
 
 ### 5. Decisions made along the way
 - **The reserve switches stayed in `runner/session.py`, not `runner/waits.py` as D1 listed.** `runner/requests.py` and the dashboard read them, and nothing about them waits. *Lead, f290-01.*
@@ -32,6 +32,7 @@
 ### 8. How the work went
 - The F143 pattern (one lead "own module" ticket per move, using `cp` and `sed -i`, run in a chain) carried over to the runner: eight tickets, every one merged at its first attempt, the last seven at $0.62–$4.01 each.
 - The replan after the first two moves (f290-03, $0.93) corrected five of the later tickets before they ran, and none of those five failed. Keep a replan ticket after the base of any chain of moves.
+- The local model did the fixture move (f290-09) in one attempt, but it kept the originals in `test_loop.py`, so its "defined once" Done when wasn't met. The gates can't catch a duplicate fixture. For a move ticket, a Done when the tests can check (for example, "`grep` finds one definition") is worth writing.
 - f290-01 cost $10.76 for 9 minutes because it resumed a session parked at a Claude limit, after 100 steps and 20M cached tokens. A large lead job may be cheaper started fresh than resumed.
 
 ### 9. What clogged the factory line

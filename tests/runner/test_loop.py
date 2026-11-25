@@ -88,20 +88,7 @@ ROLES = {
 }
 
 
-@pytest.fixture(autouse=True)
-def _new_command(monkeypatch):
-    """Each test is a new command, with the runs its exit ends."""
-    monkeypatch.setattr(session, "OPEN_RUNS", [])
-
-
-REAL_FRESH_READING = waits.fresh_reading
-
-
-@pytest.fixture(autouse=True)
-def _no_probe(monkeypatch):
-    """No fresh reading of Claude's windows (f4-07), unless a test asks for one: the stored
-    readings decide, and no real `claude -p` runs."""
-    monkeypatch.setattr(waits, "fresh_reading", lambda s: None)
+REAL_FRESH_READING = waits.fresh_reading  # conftest's `_no_probe` stubs it for every test
 
 
 class Script(list[Callable[[Path, str], object]]):
