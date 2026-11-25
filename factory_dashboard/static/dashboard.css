@@ -165,7 +165,9 @@ header.bar { background: var(--floor); border-bottom: 1px solid var(--rule); dis
   background: var(--plate); clip-path: var(--notch); }
 .bar-top .filters .key { display: inline-flex; align-items: center; padding: 0 8px; border-right: 1px solid var(--rule);
   font: 600 11px/1 var(--display); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
-.bar-top .filters select { border: 0; height: 100%; padding: 0 18px 0 8px; font: 600 13px var(--display); letter-spacing: .03em; background: transparent; }
+.bar-top .filters select { border: 0; height: 100%; padding: 0 18px 0 8px; font: 600 13px var(--display); letter-spacing: .03em; background: var(--plate); }
+/* The picker's dropdown list follows the theme so it is readable (f291-01) */
+.bar-top .filters select option { background: var(--plate); color: var(--fg); }
 select, input[type=search], button { font: inherit; font-size: 13px; padding: 3px 6px; text-transform: none;
   letter-spacing: 0; border: 1px solid var(--rule); border-radius: 0; background: var(--plate); color: var(--ink); }
 button, summary, select { cursor: pointer; }

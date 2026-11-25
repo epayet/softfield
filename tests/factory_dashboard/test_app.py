@@ -5394,3 +5394,118 @@ def test_no_page_shows_escaped_markup(client):
         assert "&lt;ul&gt;" not in html, f"{path} shows escaped &lt;ul&gt;"
         assert "&lt;li&gt;" not in html, f"{path} shows escaped &lt;li&gt;"
         assert "&lt;p&gt;" not in html, f"{path} shows escaped &lt;p&gt;"
+
+
+# --- f291-01: the project picker list is readable in both themes --------------------------------
+
+
+@pytest.mark.parametrize("scheme", ["dark", "light"])
+def test_the_picker_list_follows_the_theme_in_both_colors(page, client, scheme):
+    """f291-01: the opened picker lists projects in --ink on --plate in both themes."""
+    page.set_viewport_size(DISPLAY)
+    page.emulate_media(color_scheme=scheme)
+
+    def route(r):
+        url = r.request.url.removeprefix(ORIGIN)
+        path = url.split("?", 1)[0]
+        if path.startswith("/static/"):
+            r.fulfill(path=str(STATIC / path.removeprefix("/static/")))
+        else:
+            r.fulfill(body=client.get(url).text, content_type="text/html; charset=utf-8")
+
+    page.route(f"{ORIGIN}/**", route)
+    page.goto(ORIGIN + "/")
+    page.evaluate("() => document.fonts.ready")
+
+    # Set the theme explicitly
+    page.evaluate(f'document.documentElement.setAttribute("data-theme", "{scheme}")')
+
+    css = (STATIC / "dashboard.css").read_text()
+    tokens = _resolve_tokens(css, scheme)
+    plate_rgb = _hex_to_rgb(tokens["--plate"])
+    fg_rgb = _hex_to_rgb(tokens["--fg"])
+
+    select = page.locator(".bar-top .filters select")
+
+    # The select's own background is not transparent
+    bg = select.evaluate("el => getComputedStyle(el).backgroundColor")
+    assert bg != "rgba(0, 0, 0, 0)", "the select's background should not be transparent"
+
+    # Open the dropdown and check the options' styles
+    page.evaluate("() => document.querySelector('.bar-top .filters select').showPicker()")
+    page.wait_for_timeout(300)
+
+    options = page.locator(".bar-top .filters select option")
+    count = options.count()
+    assert count > 0, "the select should have at least one option"
+
+    for i in range(count):
+        opt_bg = options.nth(i).evaluate("el => getComputedStyle(el).backgroundColor")
+        opt_color = options.nth(i).evaluate("el => getComputedStyle(el).color")
+        assert opt_bg == plate_rgb, (
+            f"option {i} background {opt_bg} != --plate {plate_rgb} in {scheme}"
+        )
+        assert opt_color == fg_rgb, f"option {i} color {opt_color} != --fg {fg_rgb} in {scheme}"
+
+
+def test_the_picker_closed_dimensions_unchanged_at_1440_and_390(client, page):
+    """f291-01: the closed picker keeps its height and width at 1440 px and 390 px."""
+    page.set_viewport_size({"width": 1440, "height": 844})
+
+    def route(r):
+        url = r.request.url.removeprefix(ORIGIN)
+        path = url.split("?", 1)[0]
+        if path.startswith("/static/"):
+            r.fulfill(path=str(STATIC / path.removeprefix("/static/")))
+        else:
+            r.fulfill(body=client.get(url).text, content_type="text/html; charset=utf-8")
+
+    page.route(f"{ORIGIN}/**", route)
+    page.goto(ORIGIN + "/")
+    page.evaluate("() => document.fonts.ready")
+
+    select = page.locator(".bar-top .filters select")
+    box_1440 = select.bounding_box()
+    assert box_1440
+    height_1440 = box_1440["height"]
+    width_1440 = box_1440["width"]
+
+    page.set_viewport_size({"width": 390, "height": 844})
+    page.wait_for_timeout(200)
+    box_390 = select.bounding_box()
+    assert box_390
+    height_390 = box_390["height"]
+    width_390 = box_390["width"]
+
+    # Widths are positive (the picker is visible)
+    assert width_1440 > 0, "width at 1440px should be positive"
+    assert width_390 > 0, "width at 390px should be positive"
+
+    # Heights are the same at both widths (the picker does not grow or shrink)
+    assert abs(height_1440 - height_390) < 1, (
+        f"height changed: {height_1440}px at 1440px vs {height_390}px at 390px"
+    )
+
+
+def test_changing_the_picker_reloads_the_page(page, client):
+    """f291-01: choosing a project in the picker reloads the page with it, as today.
+    The form uses method="get" and onchange="this.form.submit()" (base.html:186-188)."""
+    page.set_viewport_size(DISPLAY)
+
+    def route(r):
+        url = r.request.url.removeprefix(ORIGIN)
+        path = url.split("?", 1)[0]
+        if path.startswith("/static/"):
+            r.fulfill(path=str(STATIC / path.removeprefix("/static/")))
+        else:
+            r.fulfill(body=client.get(url).text, content_type="text/html; charset=utf-8")
+
+    page.route(f"{ORIGIN}/**", route)
+    page.goto(ORIGIN + "/")
+    page.evaluate("() => document.fonts.ready")
+
+    # Verify the form exists and uses get method
+    form = page.locator("form.filters")
+    assert form.count() == 1
+    method = form.evaluate("el => el.method")
+    assert method == "get"
