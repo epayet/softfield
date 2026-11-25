@@ -45,7 +45,8 @@
 
 <section id="projects-order" class="panel">
   <h2>Projects <span class="src">the runner works in this order</span></h2>
-  <form id="order-form" hx-post="/requests" hx-target="#order-sent" hx-swap="innerHTML">
+  {# its target is the form's own: a plate's request polls in its own place (f124-04) #}
+  <form id="order-form" hx-post="/requests" hx-target="#order-sent" hx-swap="innerHTML" hx-disinherit="hx-target hx-swap">
     <input type="hidden" name="kind" value="project_order">
     <input type="hidden" name="project" value="{{ project }}">
     <input type="hidden" name="value" value="">
@@ -244,12 +245,13 @@
   // and the numbers show dashed orange, on their way, until the runner takes it (owner, 2026-10-07)
   (() => {
     const form = document.getElementById("order-form");
-    const rows = [...form.querySelectorAll(".proj")];
+    // read each time: a plate redrawn after its pause (f124-04) is a new element
+    const rows = () => [...form.querySelectorAll(".proj")];
     const send = form.querySelector(".send-order");
-    const order = () => rows
+    const order = () => rows()
       .map((row, i) => [Number(row.querySelector("input").value) || i + 1, i, row.dataset.name])
       .sort((a, b) => a[0] - b[0] || a[1] - b[1]).map((r) => r[2]);
-    const sameAsShown = () => order().every((name, i) => name === rows[i].dataset.name);
+    const sameAsShown = () => order().every((name, i) => name === rows()[i].dataset.name);
     form.addEventListener("input", () => { send.disabled = sameAsShown(); });
     // the app rows' buttons post from inside this form too: their events are theirs (f239-05)
     form.addEventListener("htmx:configRequest", (event) => {
@@ -304,6 +306,23 @@
       plate.querySelector(".idea").textContent = field("idea").value;
       document.querySelector("#order-form .rank").prepend(plate);
       for (const input of form.querySelectorAll("textarea, input:not([type=hidden]), button")) input.disabled = true;
+    });
+  })();
+  // A pause or resume the runner has taken (f124-04): once its request's poll swaps in the done
+  // line, redraw that one plate from the page (its class too, for the hazard edge), never the
+  // whole page, which would lose a new order dragged but not sent. htmx fires afterSwap on the
+  // new done line itself, inside its plate's `.pause-sent`.
+  (() => {
+    document.addEventListener("htmx:afterSwap", (event) => {
+      const line = event.target;
+      if (!(line instanceof Element) || !line.matches(".pause-sent p.request.done")) return;
+      const plate = line.closest("li.proj");
+      if (!plate || !line.parentElement.id.startsWith("pause-sent-")) return;
+      htmx.ajax("GET", location.pathname + location.search, {
+        target: plate,
+        swap: "outerHTML",
+        select: `li.proj[data-key="${CSS.escape(plate.dataset.key)}"]`,
+      });
     });
   })();
 </script>

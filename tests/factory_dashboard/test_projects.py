@@ -1041,6 +1041,89 @@ def test_a_project_being_set_up_keeps_its_line_and_has_no_button(
     assert "hold" not in row
 
 
+def _runner_takes(db_path, kind: str, paused: str | None) -> None:
+    """Take the open ``kind`` request as the runner does: set the project's pause, finish it."""
+    conn = metrics.open_db(db_path)
+    try:
+        (request_id,) = conn.execute(
+            "SELECT id FROM owner_requests WHERE kind = ? AND done IS NULL", (kind,)
+        ).fetchone()
+        metrics.set_project_paused(conn, PROJECT, paused)
+        assert metrics.finish_request(conn, request_id, NOW.isoformat(), "taken")
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def test_the_pause_plate_redraws_when_done(page, projects_client, db_path):
+    """After Pause is pressed and the runner finishes the request, the plate shows the pause
+    line, its hazard edge and a Resume button, with no on-its-way line, without a reload."""
+    from playwright.sync_api import expect
+
+    open_page(page, projects_client, "/projects")
+    row = page.locator(f'.proj[data-key="{PROJECT}"]')
+    button = row.locator(".hold")
+    button.click()
+    row.locator("#pause-sent-coucou").get_by_text("Asked").wait_for()
+    _runner_takes(db_path, "pause_project", NOW.isoformat())
+    # the request's own 5 s poll sees it done, and the page's listener redraws the plate
+    expect(row.locator(".held-line")).to_have_text(
+        re.compile(r"Paused by you since \d\d:\d\d\. Its tickets wait"), timeout=15_000
+    )
+    expect(page.locator(f'li.proj.held[data-key="{PROJECT}"]')).to_have_count(1)
+    expect(row.locator(".hold")).to_have_text("Resume")
+    expect(row.locator(".hold")).to_be_enabled()
+    expect(row.locator("#pause-way-coucou")).to_be_hidden()
+    # the new Resume button is htmx's: it posts a resume_project
+    row.locator(".hold").click()
+    row.locator("#pause-sent-coucou").get_by_text("Asked").wait_for()
+    assert _open_requests(db_path) == [("resume_project", PROJECT)]
+
+
+def test_the_resume_plate_redraws_when_done(page, projects_client, db_path):
+    """After Resume is pressed and the runner finishes the request, the plate goes back to a
+    Pause button, without the paused line, without the hazard edge."""
+    from playwright.sync_api import expect
+
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.find_project(conn, PROJECT)
+        assert project is not None
+        metrics.set_project_paused(conn, PROJECT, "2026-10-02T10:00:00+00:00")
+        conn.commit()
+    finally:
+        conn.close()
+    open_page(page, projects_client, "/projects")
+    row = page.locator(f'.proj.held[data-key="{PROJECT}"]')
+    button = row.locator(".hold")
+    button.click()
+    row.locator("#pause-sent-coucou").get_by_text("Asked").wait_for()
+    _runner_takes(db_path, "resume_project", None)
+    plate_now = page.locator(f'li.proj[data-key="{PROJECT}"]')
+    expect(plate_now.locator(".hold")).to_have_text("Pause", timeout=15_000)
+    expect(plate_now.locator(".hold")).to_be_enabled()
+    expect(plate_now.locator(".held-line")).to_have_count(0)
+    expect(page.locator(f'li.proj.held[data-key="{PROJECT}"]')).to_have_count(0)
+    expect(plate_now.locator("#pause-way-coucou")).to_be_hidden()
+
+
+def test_a_drafted_order_on_another_plate_survives_the_redraw(page, projects_client, db_path):
+    """A new place typed on softfield's plate, not sent, stays after coucou's plate redraws."""
+    from playwright.sync_api import expect
+
+    open_page(page, projects_client, "/projects")
+    page.get_by_label("softfield's place").fill("3")
+    send = page.locator(".send-order")
+    expect(send).to_be_enabled()
+    row = page.locator(f'.proj[data-key="{PROJECT}"]')
+    row.locator(".hold").click()
+    row.locator("#pause-sent-coucou").get_by_text("Asked").wait_for()
+    _runner_takes(db_path, "pause_project", NOW.isoformat())
+    expect(row.locator(".held-line")).to_be_visible(timeout=15_000)  # the redraw came
+    expect(page.get_by_label("softfield's place")).to_have_value("3")
+    expect(send).to_be_enabled()
+
+
 # --- archive a project (F262 D5, .softfield/cards/f262-mockup/projects.html) -------------------
 
 
