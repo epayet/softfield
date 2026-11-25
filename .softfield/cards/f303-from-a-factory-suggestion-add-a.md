@@ -1,4 +1,4 @@
-# Milestone F303: from a factory suggestion: "Add a check that fails when a…
+# Milestone F303: A size limit for every Python file, with splits planned, not improvised
 
 > **State:** idea · **Area:** factory
 > Planted by the owner on 2026-11-25.
