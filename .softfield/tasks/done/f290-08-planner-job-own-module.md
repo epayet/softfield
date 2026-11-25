@@ -45,3 +45,10 @@ Read the Decisions in `.softfield/cards/f290-runner-loop-py-is-6-500.md` (D1–D
 - `AGENTS.md` names the job modules and the one-line rule; the card doc has `## As built (f290-08)`
 - no ticket in `.softfield/tasks/ready/` or `.softfield/tasks/later/` names a moved `def` or `class` beside `runner/loop.py`
 - all gates pass (see `docs/workflow.md`), mypy included
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
