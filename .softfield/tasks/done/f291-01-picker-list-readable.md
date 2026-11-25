@@ -24,3 +24,12 @@ The top bar's project picker, opened, lists the projects in the theme's ink on t
 - choosing a project in the picker reloads the page with it, as today
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 1655
+gate_failures: []
+tokens: 2524636
+```
