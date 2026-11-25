@@ -27,3 +27,10 @@ Read `.softfield/cards/f279-i-would-like-to-be-able.md` ("What happens today", l
 - the stored plan lists the tickets in the order they run in each case
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
