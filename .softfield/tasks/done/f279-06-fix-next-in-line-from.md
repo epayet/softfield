@@ -25,3 +25,12 @@ f279-i-would-like-to-be-able-C2757-1: Whole-queue link has extra counts instead 
 - what each finding describes no longer holds, and a test shows it
 - the listed `tests:` pass, and fail without the change
 - all gates pass
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 1088
+gate_failures: []
+tokens: 749014
+```
