@@ -28,3 +28,12 @@ The words and the behaviour: `WHAT` and the click handler at the end of `.softfi
 - a title holding markup shows as text
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 2
+duration_s: 4275
+gate_failures: ['mypy']
+tokens: 7676863
+```
