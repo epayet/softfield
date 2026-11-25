@@ -36,3 +36,10 @@ The picture to build: Proposed in `.softfield/cards/f199-mockup/floor.html`; its
 - the Overview's floor still draws as before
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
