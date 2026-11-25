@@ -22,3 +22,12 @@ Read `.softfield/cards/f279-i-would-like-to-be-able.md` (D8) and `.softfield/car
 - the other stations' taps read as before
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 2
+duration_s: 5142
+gate_failures: ['all-tests']
+tokens: 3865870
+```
