@@ -1765,7 +1765,7 @@ def test_the_queue_panel_has_the_whole_queue_link_text(serve, db_path):
                         "go",
                         None,
                         "",
-                        "F1",
+                        "f1",  # the runner stores the card's key, lower case
                     ),
                     PlanLine(
                         PROJECT,
@@ -1776,7 +1776,7 @@ def test_the_queue_panel_has_the_whole_queue_link_text(serve, db_path):
                         "go",
                         None,
                         "",
-                        "F1",
+                        "f1",
                     ),
                 ),
             ),

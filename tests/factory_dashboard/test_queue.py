@@ -32,7 +32,7 @@ LINES = (
     PlanLine(
         PROJECT,
         "review",
-        "f279",
+        "f279-i-would-like-to-be-able",
         "would park or go to a stand-in (claude: 5-hour window 89% used, over its cap of 75%)",
         None,
         "jobs",
@@ -144,7 +144,7 @@ def test_the_rows_are_numbered_in_the_plans_order_with_plate_who_card_and_why(
     first = text(row(html, 1)).split(" Why here")[0]
     assert first.startswith(f"1 {PROJECT} checkpoint · f199-let-s-improve-the-factory-floor")
     review = text(row(html, 2))
-    assert review.startswith(f"2 {PROJECT} review · f279 a job · F279")
+    assert review.startswith(f"2 {PROJECT} review · f279-i-would-like-to-be-able a job · F279")
     assert "would park or go to a stand-in" in review
     trip = row(html, 3)
     assert text(trip).startswith(

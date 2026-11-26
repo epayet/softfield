@@ -359,10 +359,8 @@ def queue(
 # --- the stored queue plan (D7) -----------------------------------------------------------
 
 
-# --- the stored queue plan (D7) -----------------------------------------------------------
-
-
 def _queue_plan(conn: sqlite3.Connection) -> Any | None:
+    """The runner's stored plan built for the Overview's Queue panel (D7), or None."""
     plan = metrics.latest_queue_plan(conn)
     if plan is None:
         return None

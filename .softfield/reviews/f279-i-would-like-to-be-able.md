@@ -1,12 +1,12 @@
 # Review: F279, The queue: the whole factory's line on one page, in the runner's order
 
-**Status:** round 1 done, two fix tickets queued (f279-10, f279-11). Score 6/10. One blocking point (the page's order over pace) and the cut-off belt key were fixed by the review.
+**Status:** round 2 done, ready for your sign-off. Score 7/10. Every finding is fixed. f279-10 and f279-11 merged, and the review fixed what was left: the Overview printed the card's key in lower case.
 
 ### 1. What changed
 - A new page, The queue (`/queue`), shows every project's jobs and tickets in the order the runner will take them. One sentence at the top says what drives that order now, and each row opens to show its goal, why it sits there, what it waits for and any pre-flight problem.
 - The runner works this list out at each pick and stores it. The Overview's Next in line and `softfield run --dry-run` now show that same list, and the map's queue station opens the page.
 - While Claude is over pace, a lead ticket that only fills the gap now goes after every project's developer tickets, as ADR 50 says (before, it only had to wait for its own project's).
-- Matches the mock-up, except that on the Overview a job row has no number yet (f279-10). The link reads "The whole queue ›" without the mock-up's counts, as D7 says.
+- Matches the mock-up. The only difference: the link reads "The whole queue ›" without the mock-up's counts, as D7 says.
 
 ### 2. How to test it yourself
 1. On your phone, open the Overview, find the Queue panel and tap "The whole queue ›".
@@ -38,10 +38,12 @@
 ### 8. How the work went
 - f279-02 made the plan follow D5 across projects but kept each project's tickets in board order, so the page contradicted its own heading over pace. Its test had one ticket per project. The review's new test gives a project both a lead ticket and a developer ticket.
 - The checkpoints caught that f279-04 shipped with no test, but missed the card text glued to the who ("the leadF279") in the same diff. f279-08's test then matched `the lead\s*F1`, which accepts the glued text.
+- f279-10's rows passed with a card stored as "F1", but the runner stores "f304", so the Overview still read differently from `/queue`. A fixture copied from a live record (here, the `queue_plan` body) would have caught it.
 
 ### 9. What clogged the factory line
 - f279-03, a new page built from a mock-up (difficulty 5), failed three times on the local model (about 65 min) before the lead built it in 35 min for $2.48. A new page with a mock-up should go to the lead at planning.
 - f279-05 lost 63 min on a failed first attempt (all-tests) before a 22-min pass.
+- f279-11, a test-only fixture change, took 3 attempts and 88 min on the local model. Both failed attempts failed its own tests (task-tests). Adding a row renumbers every later row's assertions, which is easy to miss.
 
 <!-- runner report -->
 <!-- runner report -->
