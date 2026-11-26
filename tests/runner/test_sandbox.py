@@ -12,7 +12,8 @@ pytestmark = pytest.mark.skipif(not sandbox.available(), reason="no Landlock on 
 
 
 def _run(cmd: list[str], writable: list[Path], monkeypatch) -> subprocess.CompletedProcess[str]:
-    monkeypatch.setattr(sandbox, "TOOL_DIRS", (Path("/dev"),))  # /tmp holds the "outside" too
+    # /tmp and /dev (/dev/shm, f305) hold the test's "outside" too
+    monkeypatch.setattr(sandbox, "TOOL_DIRS", (Path("/dev/null"),))
     return subprocess.run(sandbox.wrap(cmd, writable), capture_output=True, text=True, check=False)
 
 

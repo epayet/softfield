@@ -63,13 +63,21 @@ def _watched(args: list[str]) -> list[str]:
 SHM = Path("/dev/shm")  # noqa: S108 - the root is checked as ours before any use
 DISK = Path("/tmp")  # noqa: S108 - the root is checked as ours before any use
 MOUNTS = Path("/proc/mounts")
+MEMINFO = Path("/proc/meminfo")
 SHM_FREE = 4 * 1024**3  # bytes free in memory for the root to go there: a check's ~1 GB, and room
 
 
-def _free(path: Path) -> int:
-    """Bytes a user may still write under ``path``."""
+def _free(path: Path, meminfo: Path = MEMINFO) -> int:
+    """Bytes a user may still write under ``path``, a tmpfs: its own room (half the memory by
+    default, however full the memory is), and no more than ``MemAvailable``, since a tmpfs in a
+    full memory goes to swap, on the disk."""
     st = os.statvfs(path)
-    return st.f_bavail * st.f_frsize
+    room = st.f_bavail * st.f_frsize
+    with contextlib.suppress(OSError, ValueError, IndexError):
+        for line in meminfo.read_text(encoding="utf-8").splitlines():
+            if line.startswith("MemAvailable:"):
+                return min(room, int(line.split()[1]) * 1024)
+    return room
 
 
 def _base(mounts: Path = MOUNTS, free: Callable[[Path], int] = _free) -> Path:
@@ -83,7 +91,17 @@ def _base(mounts: Path = MOUNTS, free: Callable[[Path], int] = _free) -> Path:
         return DISK
 
 
-TMP_BASE = _base()  # chosen once, at the start: the jobs and the sweep read the same root
+def _inherited(tmpdir: str) -> Path | None:
+    """The root a job's ``TMPDIR`` is under: a command run inside a job (its ``check-all``)
+    keeps its runner's root, whatever the memory says now, so it nests in the job's folder."""
+    for base in (SHM, DISK):
+        if base / f"softfield-{os.getuid()}" in Path(tmpdir).parents:
+            return base
+    return None
+
+
+# chosen once, at the start: the jobs and the sweep read the same root
+TMP_BASE = _inherited(os.environ.get("TMPDIR", "/")) or _base()
 
 
 def _tmp_root() -> Path | None:

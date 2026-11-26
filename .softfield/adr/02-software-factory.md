@@ -998,6 +998,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** 03 passed with green gates because its tests' paused project had no tickets: a "leaves X out" test needs X in its fixture. The fifth Projects-page button ticket to escalate this month (see F273): 02 kept changing the protected `ask` response; `.softfield/developer.md` now names the pattern.
 - **Decisions affected:** none.
 
+### F305 (2026-11-26): find what writes terabytes to the SSD, and keep test temp files in memory ([review](../reviews/f305-i-am-a-bit-concerned-looking.md))
+
+- **Q1:** two lead tickets (01 measure on Sonnet, $0.42; 02 move the temp root on Opus, $1.16), each passed on attempt 1. No developer work, no checkpoint. Review round 1: one blocking finding: two sandbox tests fail once the temp root is in `/dev/shm`. 02's gate ran on the old runner and so never ran there. Three should-fix findings: the free check read the tmpfs quota, not the memory; a nested command could re-choose the root; `look disk` didn't show the new root. All four were fixed by the review, and one nit is left for later. Score 8.
+- **Q3:** Claude only. The measured gain: a check wrote 7.4 GB before and 0.0 to 0.1 GB after.
+- **Q5:** see the review's numbers.
+- **Anything else:** a runner change only takes effect at the runner's next start, so a ticket that changes where or how checks run is gated under the old behaviour. Here that let a red suite merge. A ticket like that needs one check on the new code inside its own job, not only the gate.
+- **Decisions affected:** none.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.

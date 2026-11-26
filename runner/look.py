@@ -231,6 +231,7 @@ def disk(
     runs: Path,
     *,
     tmp: Path = Path("/tmp"),  # noqa: S108 - the place being measured, never written to
+    shm: Path = Path("/dev/shm"),  # noqa: S108 - the same
     proc: Path = Path("/proc"),
     block: Path = Path("/sys/class/block"),
     uid: int | None = None,
@@ -274,7 +275,9 @@ def disk(
     for group, (nbytes, files, folders) in groups.items():
         label = f"  {group}" + (f" ({folders})" if folders > 1 else "")
         lines.append(f"{label:32} {_amount((nbytes, files))}")
+    root = shm / f"{_TMP_ROOT}{uid}"  # the factory's temp root when it is in memory (f305 D3)
     lines += [
+        f"{str(root) + ' (memory)':32} {_amount(_size(root))}",
         f"{'the bench folder':32} {_amount(_size(bench))}",
         f"{'.softfield/var/runs/':32} {_amount(_size(runs))}",
         f"{'the metrics database':32} {_amount(_size(db))}",

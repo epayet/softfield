@@ -670,8 +670,8 @@ def _sandboxed_bench(repo, copies, tmp_path_factory, monkeypatch, script: str):
     fake.write_text(script)
     fake.chmod(0o755)
     monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
-    # The test's main checkout is under /tmp, which the sandbox lets tools write
-    monkeypatch.setattr(sandbox, "TOOL_DIRS", (Path("/dev"),))
+    # The test's main checkout is under /tmp or /dev/shm (f305), which the sandbox lets tools write
+    monkeypatch.setattr(sandbox, "TOOL_DIRS", (Path("/dev/null"),))
     monkeypatch.setattr(session, "call_claude", lambda *a, **k: pytest.fail("bench called Claude"))
     file_gates = tuple(g for g in gates.GATES if g.__name__ in {"gate_protected", "gate_diff_size"})
     monkeypatch.setattr(gates, "GATES", file_gates)

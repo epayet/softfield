@@ -268,11 +268,14 @@ def test_disk_sizes_each_place_and_the_factorys_parts_of_tmp(tmp_path):
     _fill(tmp_path / "runs" / "f", 20_000)
     db = _fill(tmp_path / "m.sqlite", 30_000)
     _fill(tmp_path / "m.sqlite-wal", 40_000)
+    _fill(tmp_path / "shm" / "softfield-1000" / "1-2" / "g", 3_000_000)
     out = look.disk(
-        db, tmp_path / "bench", tmp_path / "runs", tmp=tmp, proc=tmp_path / "noproc",
-        uid=1000, user="sam",
+        db, tmp_path / "bench", tmp_path / "runs", tmp=tmp, shm=tmp_path / "shm",
+        proc=tmp_path / "noproc", uid=1000, user="sam",
     )  # fmt: skip
     lines = {line[:32].strip(): line for line in out.splitlines()}
+    in_memory = f"{tmp_path / 'shm' / 'softfield-1000'} (memory) 3.0 MB, 1 files"
+    assert in_memory in out.splitlines()
     assert "7.8 MB, 5 files" in lines[look.TMP_LABEL]
     assert "2.0 MB, 1 files" in lines["softfield-1000"]
     assert "1.0 MB, 1 files" in lines["pytest-of-sam"]

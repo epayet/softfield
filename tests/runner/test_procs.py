@@ -8,6 +8,7 @@ import tempfile
 import threading
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -451,15 +452,38 @@ def test_an_unreadable_mounts_file_or_free_space_keeps_the_disk(tmp_path: Path):
     assert procs._base(_mounts(tmp_path, SHM_LINE), fails) == Path("/tmp")  # noqa: S108
 
 
-def test_free_space_is_what_the_user_may_still_write(tmp_path: Path):
-    st = os.statvfs(tmp_path)
-    assert procs._free(tmp_path) == st.f_bavail * st.f_frsize
+def _statvfs(path: object) -> SimpleNamespace:
+    return SimpleNamespace(f_bavail=1000, f_frsize=4096)  # 4,096,000 bytes the user may write
+
+
+def test_free_space_is_what_the_user_may_still_write(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(os, "statvfs", _statvfs)
+    assert procs._free(tmp_path, tmp_path / "no-meminfo") == 4_096_000
+
+
+def test_free_space_in_memory_is_no_more_than_the_memory_available(tmp_path: Path, monkeypatch):
+    """A tmpfs reports half the memory free however full the memory is: past what is
+    available, its files go to swap, on the disk."""
+    monkeypatch.setattr(os, "statvfs", _statvfs)
+    meminfo = tmp_path / "meminfo"
+    meminfo.write_text("MemTotal:       65764880 kB\nMemAvailable:    1000 kB\n")
+    assert procs._free(tmp_path, meminfo) == 1000 * 1024
+    meminfo.write_text("MemAvailable:   24990144 kB\n")
+    assert procs._free(tmp_path, meminfo) == 4_096_000
+
+
+def test_a_command_inside_a_job_keeps_its_runners_root():
+    uid = os.getuid()
+    assert procs._inherited(f"/dev/shm/softfield-{uid}/12-abc") == procs.SHM  # noqa: S108
+    assert procs._inherited(f"/tmp/softfield-{uid}/12-abc/x") == procs.DISK  # noqa: S108
+    assert procs._inherited("/") is None
+    assert procs._inherited("/tmp/elsewhere") is None  # noqa: S108
 
 
 def test_the_root_in_use_is_the_one_chosen_and_the_sweep_reads_it(tmp_path: Path, monkeypatch):
     """Whichever root the runner chose at its start, its jobs and the sweep at `softfield run`
     use the same one."""
-    assert procs._base() == procs.TMP_BASE
+    assert procs.TMP_BASE in (procs.SHM, procs.DISK)
     monkeypatch.setattr(procs, "TMP_BASE", tmp_path)
     root = tmp_path / f"softfield-{os.getuid()}"
     root.mkdir(mode=0o700)
