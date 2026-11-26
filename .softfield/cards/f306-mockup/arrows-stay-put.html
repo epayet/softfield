@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F306 mock-up: the arrows stay put, the headline comes first</title>
+<style>
+  /* The dashboard's own tokens and rules (factory_dashboard/static/dashboard.css), dark mode */
+  :root {
+    color-scheme: dark;
+    --floor: #12161b; --bay: #181e25; --plate: #1f2730; --grid: #222b34; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+    --hazard: #f2b10a; --hazard-ink: #1a1405; --opus: #ff9640; --sonnet: #ffc48a; --good: #5fd17a;
+    --accent: var(--sonnet); --ink: var(--fg);
+    --display: "Chakra Petch", "Bahnschrift", "DIN Alternate", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+    --stripe: repeating-linear-gradient(-45deg, var(--hazard) 0 6px, transparent 6px 12px);
+    --notch: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 20px; color: var(--ink); font: 15px/1.5 var(--body); background-color: var(--floor);
+    background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 32px 32px; }
+  [hidden] { display: none !important; }
+
+  /* ---- the mock-up's own frame: not part of the pages ---- */
+  .sheet-title { font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 4px; }
+  .sheet-lede { color: var(--ink-2); max-width: 820px; margin: 0 0 8px; }
+  .version-name { font: 600 12px var(--mono); color: var(--muted); margin: 0 0 8px; }
+  .switch { display: inline-flex; margin: 12px 0 14px; border: 1px solid var(--rule); }
+  .switch button { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 10px 18px; min-height: 44px;
+    background: var(--bay); color: var(--muted); border: 0; cursor: pointer; }
+  .switch button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+  .new { outline: 1px dashed var(--good); outline-offset: 3px; }
+  .note { display: block; font: 12.5px/1.4 var(--mono); color: var(--good); }
+  .why { margin: 8px 0 0; font-size: 13px; color: var(--ink-2); max-width: 390px; }
+  .compare { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; justify-items: start; }
+  @media (min-width: 900px) {
+    .switch { display: none; }
+    .compare { grid-template-columns: repeat(2, max-content); align-items: start; gap: 40px; }
+    .compare > [data-version][hidden] { display: block !important; }
+  }
+  /* a phone's screen: 390 px wide, scrolls inside, the top bar and Send dock pinned as on the page */
+  .phone { width: min(390px, calc(100vw - 24px)); height: 700px; overflow-y: auto; border: 1px solid var(--rule);
+    background: var(--floor); position: relative; }
+  .phone-bar { position: sticky; top: 0; z-index: 5; background: var(--floor); border-bottom: 1px solid var(--rule);
+    padding: 10px 12px; font: 700 15px var(--display); letter-spacing: .06em; text-transform: uppercase; }
+  .phone-bar::after { content: ""; display: block; height: 4px; margin-top: 8px; background: var(--stripe); }
+  .phone-body { padding: 12px; display: flex; flex-direction: column; gap: 12px; }
+  .ruler { position: absolute; left: 0; right: 0; height: 0; border-top: 1px dashed var(--good); pointer-events: none; z-index: 6; }
+
+  /* ---- copied: the thread page (dashboard.css), phone rules always on ---- */
+  .message { border: 1px solid var(--rule); padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+  .message.lead-message { background: var(--bay); border-color: var(--opus); }
+  .stamp { font: 600 12px var(--mono); color: var(--muted); }
+  .stamp.lead { color: var(--opus); }
+  .in-short { position: relative; background: var(--plate); clip-path: var(--notch); padding: 10px 14px 12px 20px; display: flex; flex-direction: column; gap: 4px; }
+  .in-short::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 8px; background: var(--stripe); }
+  .in-short > b { font: 700 12px var(--display); letter-spacing: .12em; text-transform: uppercase; color: var(--ink-2); }
+  .in-short > p { margin: 0; font-size: 16px; line-height: 1.45; color: var(--fg); }
+  .deck { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+  .deck > .off { display: none !important; }
+  .point { background: var(--plate); border: 1px solid var(--rule); padding: 10px 12px; display: flex; gap: 10px; align-items: baseline; }
+  .point > b { font: 700 13px var(--mono); color: var(--muted); min-width: 22px; }
+  .point > div { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
+  .point > div > b { font-size: 15px; }
+  .point .answer { font-size: 14px; color: var(--ink-2); }
+  .point .action { font-size: 14px; }
+  .point .action > i { font-style: normal; color: var(--opus); font-weight: 600; }
+  .fold { font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--hazard); min-height: 44px; display: flex; align-items: center; }
+  .deck-nav { display: flex; flex-direction: column; gap: 8px; }
+  .deck-dots { display: flex; gap: 4px; }
+  .deck-dots span { flex: 1; height: 6px; background: var(--rule); }
+  .deck-dots .at { outline: 2px solid var(--fg); outline-offset: 1px; }
+  .deck-arrows { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .deck-arrows button { font: 600 15px var(--display); color: var(--fg); background: var(--plate); border: 1px solid var(--rule); min-height: 44px; }
+  .deck-arrows button:disabled { color: var(--muted); }
+  .dock { position: sticky; bottom: 0; z-index: 5; background: var(--bay); border: 1px solid var(--rule); padding: 10px 12px;
+    display: flex; flex-direction: column; gap: 6px; box-shadow: 0 -6px 16px rgba(0,0,0,.25); }
+  .dock textarea { font: 15px var(--body); color: var(--fg); background: var(--floor); border: 1px solid var(--rule); padding: 8px; width: 100%; }
+  .btn { font: 600 14px var(--display); letter-spacing: .04em; min-height: 44px; padding: 0 16px; border: 1px solid var(--hazard); background: var(--hazard); color: var(--hazard-ink); align-self: flex-start; }
+
+  /* ---- proposed: the nav is a plate above the points; the headline leads the point ---- */
+  .proposed .deck-nav { position: relative; background: var(--plate); clip-path: var(--notch); padding: 8px 10px 10px 18px; }
+  .proposed .deck-nav::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 6px; background: var(--stripe); }
+  .proposed .deck-count { font: 600 12px var(--mono); color: var(--ink-2); letter-spacing: .06em; text-transform: uppercase; }
+  .proposed .deck-arrows button { background: var(--bay); border-bottom: 2px solid var(--hazard); }
+  .proposed .point > div > b { font: 700 18px/1.3 var(--display); letter-spacing: .01em; color: var(--fg); margin-bottom: 4px; }
+</style>
+</head>
+<body>
+<h1 class="sheet-title">F306: the arrows stay put</h1>
+<p class="sheet-lede">The lead's reply on F305, Find what writes terabytes to the SSD, as a phone shows it: six real points of very different lengths. Press ▶ on each side and watch where the arrows go. The dashed green line marks where the arrows sit on point 1; the green marks and notes are this mock-up's, not the page's.</p>
+<div class="switch" role="group" aria-label="Which version">
+  <button type="button" data-show="today" aria-pressed="false">Today</button>
+  <button type="button" data-show="proposed" aria-pressed="true">Proposed</button>
+</div>
+
+<div class="compare">
+  <!-- Today: copied from factory_dashboard/templates/thread.html and _partials/deck_nav.html -->
+  <div data-version="today" hidden>
+    <p class="version-name">Today</p>
+    <div class="phone">
+      <div class="phone-bar">Softfield · Planning</div>
+      <div class="phone-body">
+        <article class="message lead-message">
+          <span class="stamp lead">The lead · 2026-11-26 00:52</span>
+          <div class="in-short"><b>In short</b><p>I couldn't measure the writes from here, so this plan measures first and then fixes the most likely cause.</p></div>
+          <ol class="deck">
+  <li class="point"><b>1</b><div><b>Is it bad for the SSD?</b><span class="answer">It depends on how much is written per day. A typical consumer 1 TB SSD is guaranteed for about 600 TB written; depending on the model that is anywhere from about 150 to over 1,000 TB. A few TB in total is under 1% of that, which is nothing to worry about. A few TB every week would wear out a 600 TB drive in a few years, which is worth fixing. The drive keeps its own wear figures, and those settle it.</span><span class="action"><i>→ </i>Open the Disks app, pick the SSD, open its menu and choose 'SMART Data &amp; Self-Tests'. Send me 'Percentage used' (or 'Data units written') and say what period your system monitor's terabytes cover.</span><span class="fold">Comment…</span></div></li>
+  <li class="point"><b>2</b><div><b>Space is fine; it's the writes</b><span class="answer">I checked the space today. /tmp holds 19.8 MB, the factory's temp folders 0.5 MB, the run logs 1.5 GB and the metrics database 14 MB. But free space doesn't show what was written and then deleted again, and that is what wears an SSD.</span><span class="action"><i>→ </i>Ticket f305-01: 'softfield look disk' shows GB written since boot and GB per day.</span><span class="fold">Comment…</span></div></li>
+  <li class="point"><b>3</b><div><b>The likely cause: the tests the factory runs again and again</b><span class="answer">Since 12 November the line has run 20 to 24 hours on most days, with 65 to 116 jobs a day. Every check, by the gate or a developer, runs the whole test suite. That creates thousands of small git repos, databases and browser profiles and deletes them minutes later. On Ubuntu /tmp sits on the SSD, so all of it really gets written. Before F175's fix one run left about 2 GB behind. Run that many times a day and it plausibly adds up to terabytes a month. Other possible writers I'll check: Docker rebuilding a project's app each time main moves, the review's pictures, and swap.</span><span class="action"><i>→ </i>f305-02 starts by measuring how much of each day's writes come from the checks.</span><span class="fold">Comment…</span></div></li>
+  <li class="point"><b>4</b><div><b>Is it needed? Mostly not.</b><span class="answer">The tests have to run, but their temporary files don't have to touch the SSD. They live for minutes and are deleted at the end of each job, so they can sit in memory. If the measurement confirms the checks are the main writer, the factory's temp folder moves to /dev/shm, only when there are at least 4 GB free there.</span><span class="action"><i>→ </i>Ticket f305-02, after f305-01.</span><span class="fold">Comment…</span></div></li>
+  <li class="point"><b>5</b><div><b>Better than making all of /tmp memory</b><span class="answer">You could also switch the whole of /tmp to memory, as newer Ubuntu releases do. That is a system change for you to make, and with LM Studio loaded a large /tmp could push the machine into swap, which writes to the SSD again.</span><span class="action"><i>→ </i>Nothing, unless you'd rather make all of /tmp memory yourself.</span><span class="fold">Comment…</span></div></li>
+  <li class="point"><b>6</b><div><b>No mock-up</b><span class="answer">Nothing on a page changes.</span><span class="action"><i>→ </i>Nothing.</span><span class="fold">Comment…</span></div></li>
+</ol>
+          <div class="deck-nav"><div class="deck-dots"></div><div class="deck-arrows"><button type="button" data-go="-1">◀</button><button type="button" data-go="1">▶</button></div></div>
+        </article>
+        <form class="dock" onsubmit="return false"><span class="stamp">6 points · 0 comments</span><textarea rows="2" aria-label="Anything else?"></textarea><button type="button" class="btn">Send</button></form>
+      </div>
+    </div>
+    <p class="why">◀ ▶ sit under the point, so they jump with its length: on point 3 they fall under the Send dock and you scroll to find them; on point 6 they come up again. The headline is a 15 px line like the rest.</p>
+  </div>
+
+  <!-- Proposed -->
+  <div data-version="proposed" class="proposed">
+    <p class="version-name">Proposed</p>
+    <div class="phone">
+      <div class="phone-bar">Softfield · Planning</div>
+      <div class="phone-body">
+        <article class="message lead-message">
+          <span class="stamp lead">The lead · 2026-11-26 00:52</span>
+          <div class="in-short"><b>In short</b><p>I couldn't measure the writes from here, so this plan measures first and then fixes the most likely cause.</p></div>
+          <div class="deck-nav new"><span class="deck-count">Point <span data-at>1</span> of 6</span><div class="deck-dots"></div><div class="deck-arrows"><button type="button" data-go="-1">◀</button><button type="button" data-go="1">▶</button></div></div>
+          <span class="note">Moved: above the points, so the arrows stay where they are for every point of this reply. "Point 2 of 6" is new. If you had scrolled down a long point, ◀ ▶ bring the arrows back into view.</span>
+          <ol class="deck">
+  <li class="point"><b>1</b><div><b>Is it bad for the SSD?</b><span class="answer">It depends on how much is written per day. A typical consumer 1 TB SSD is guaranteed for about 600 TB written; depending on the model that is anywhere from about 150 to over 1,000 TB. A few TB in total is under 1% of that, which is nothing to worry about. A few TB every week would wear out a 600 TB drive in a few years, which is worth fixing. The drive keeps its own wear figures, and those settle it.</span><span class="action"><i>→ </i>Open the Disks app, pick the SSD, open its menu and choose 'SMART Data &amp; Self-Tests'. Send me 'Percentage used' (or 'Data units written') and say what period your system monitor's terabytes cover.</span><span class="fold">Comment…</span></div></li>
+  <li class="point"><b>2</b><div><b>Space is fine; it's the writes</b><span class="answer">I checked the space today. /tmp holds 19.8 MB, the factory's temp folders 0.5 MB, the run logs 1.5 GB and the metrics database 14 MB. But free space doesn't show what was written and then deleted again, and that is what wears an SSD.</span><span class="action"><i>→ </i>Ticket f305-01: 'softfield look disk' shows GB written since boot and GB per day.</span><span class="fold">Comment…</span></div></li>
+  <li class="point"><b>3</b><div><b>The likely cause: the tests the factory runs again and again</b><span class="answer">Since 12 November the line has run 20 to 24 hours on most days, with 65 to 116 jobs a day. Every check, by the gate or a developer, runs the whole test suite. That creates thousands of small git repos, databases and browser profiles and deletes them minutes later. On Ubuntu /tmp sits on the SSD, so all of it really gets written. Before F175's fix one run left about 2 GB behind. Run that many times a day and it plausibly adds up to terabytes a month. Other possible writers I'll check: Docker rebuilding a project's app each time main moves, the review's pictures, and swap.</span><span class="action"><i>→ </i>f305-02 starts by measuring how much of each day's writes come from the checks.</span><span class="fold">Comment…</span></div></li>
+  <li class="point"><b>4</b><div><b>Is it needed? Mostly not.</b><span class="answer">The tests have to run, but their temporary files don't have to touch the SSD. They live for minutes and are deleted at the end of each job, so they can sit in memory. If the measurement confirms the checks are the main writer, the factory's temp folder moves to /dev/shm, only when there are at least 4 GB free there.</span><span class="action"><i>→ </i>Ticket f305-02, after f305-01.</span><span class="fold">Comment…</span></div></li>
+  <li class="point"><b>5</b><div><b>Better than making all of /tmp memory</b><span class="answer">You could also switch the whole of /tmp to memory, as newer Ubuntu releases do. That is a system change for you to make, and with LM Studio loaded a large /tmp could push the machine into swap, which writes to the SSD again.</span><span class="action"><i>→ </i>Nothing, unless you'd rather make all of /tmp memory yourself.</span><span class="fold">Comment…</span></div></li>
+  <li class="point"><b>6</b><div><b>No mock-up</b><span class="answer">Nothing on a page changes.</span><span class="action"><i>→ </i>Nothing.</span><span class="fold">Comment…</span></div></li>
+</ol>
+          <span class="note">The headline leads: larger, in the page's display type, right under the arrows; the answer and the action follow.</span>
+        </article>
+        <form class="dock" onsubmit="return false"><span class="stamp">6 points · 0 comments</span><textarea rows="2" aria-label="Anything else?"></textarea><button type="button" class="btn">Send</button></form>
+      </div>
+    </div>
+    <p class="why">A review's key points get the same: the arrows above the first key point, under "Every key point, in plain words". On a wide screen nothing changes: every point shows and there are no arrows.</p>
+  </div>
+</div>
+
+<script>
+  document.querySelectorAll(".switch button").forEach((button) => {
+    button.addEventListener("click", () => {
+      document.querySelectorAll(".switch button").forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
+      document.querySelectorAll("[data-version]").forEach((v) => { v.hidden = v.dataset.version !== button.dataset.show; });
+    });
+  });
+  // The phone's deck, as deck.js draws it: one point at a time, a dot per point, ◀ ▶
+  function deckUp(phone) {
+    const deck = phone.querySelector(".deck");
+    const nav = phone.querySelector(".deck-nav");
+    const items = Array.from(deck.children);
+    const dots = nav.querySelector(".deck-dots");
+    items.forEach(() => dots.appendChild(document.createElement("span")));
+    const count = nav.querySelector("[data-at]");
+    const ruler = document.createElement("div");
+    ruler.className = "ruler";
+    phone.append(ruler);
+    let at = 0;
+    const draw = () => {
+      items.forEach((item, i) => item.classList.toggle("off", i !== at));
+      Array.from(dots.children).forEach((dot, i) => dot.classList.toggle("at", i === at));
+      nav.querySelector('[data-go="-1"]').disabled = at === 0;
+      nav.querySelector('[data-go="1"]').disabled = at === items.length - 1;
+      if (count) count.textContent = String(at + 1);
+    };
+    nav.querySelectorAll("[data-go]").forEach((button) => {
+      button.addEventListener("click", () => {
+        at += Number(button.dataset.go);
+        draw();
+        if (count) { // proposed: bring the arrows back into view when they were scrolled off
+          const top = nav.getBoundingClientRect().top - phone.getBoundingClientRect().top;
+          if (top < 60) phone.scrollTop += top - 60;
+        }
+      });
+    });
+    draw();
+    // the dashed line: where the arrows sit on point 1, before any scrolling
+    const arrows = nav.querySelector(".deck-arrows");
+    ruler.style.top = (arrows.getBoundingClientRect().top - phone.getBoundingClientRect().top + phone.scrollTop) + "px";
+  }
+  function upAll() {
+    document.querySelectorAll(".phone").forEach((phone) => {
+      if (phone.dataset.up) return;
+      if (!phone.offsetParent) return; // hidden: bring it up when shown
+      phone.dataset.up = "1";
+      deckUp(phone);
+    });
+  }
+  upAll();
+  document.querySelectorAll(".switch button").forEach((b) => b.addEventListener("click", upAll));
+  window.addEventListener("resize", upAll);
+</script>
+</body>
+</html>
