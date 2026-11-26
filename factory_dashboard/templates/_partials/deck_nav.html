@@ -1,5 +1,6 @@
 {% if deck %}
 <div class="deck-nav">
+  <span class="deck-count">Point <span data-at>1</span> of {{ deck | length }}</span>
   <div class="deck-dots" aria-hidden="true">{% for _ in deck %}<span></span>{% endfor %}</div>
   <div class="deck-arrows">
     <button type="button" aria-label="Previous point">&#9664;</button>

@@ -1,13 +1,14 @@
 // One point at a time on a phone (f6-10). Each .deck's children are its points; the .deck-nav
-// right after it holds a dot per point and the ◀ ▶ buttons. dashboard.css hides the .off points
+// above it holds a dot per point, a count, and the ◀ ▶ buttons. dashboard.css hides the .off points
 // and shows the nav only under 640 px, so on wider screens this changes nothing you see.
 const deckUp = (deck) => {
   if (deck.dataset.up) return; // bound once per deck drawn
   deck.dataset.up = "1";
   const points = Array.from(deck.children);
-  const nav = deck.nextElementSibling;
+  const nav = deck.previousElementSibling;
   if (!nav || !nav.classList.contains("deck-nav")) return; // no points, no nav
   const dots = Array.from(nav.querySelectorAll(".deck-dots span"));
+  const count = nav.querySelector("[data-at]");
   const [previous, next] = nav.querySelectorAll(".deck-arrows button");
   let at = 0;
   const show = () => {
@@ -19,9 +20,14 @@ const deckUp = (deck) => {
     });
     previous.disabled = at === 0;
     next.disabled = at === points.length - 1;
+    if (count) count.textContent = String(at + 1);
+  };
+  const scrollNavIntoView = () => {
+    const top = nav.getBoundingClientRect().top;
+    if (top < 60) window.scrollBy(0, top - 60);
   };
   previous.addEventListener("click", () => { at -= 1; show(); });
-  next.addEventListener("click", () => { at += 1; show(); });
+  next.addEventListener("click", () => { at += 1; show(); scrollNavIntoView(); });
   // typing marks the dot; the review's Comment… button clears its box on a second tap
   deck.addEventListener("input", show);
   deck.addEventListener("click", show);

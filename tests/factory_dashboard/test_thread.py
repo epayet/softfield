@@ -947,8 +947,16 @@ def test_on_a_phone_one_point_shows_at_a_time(
     page.set_viewport_size(PHONE)
     _open(page, serve(), path)
     previous, following = page.locator(".deck-arrows button").all()
+    # the nav comes before the first point
+    nav = page.locator(".deck-nav").first
+    first_point = page.locator(f"{points}:visible").first
+    assert nav.bounding_box()["y"] < first_point.bounding_box()["y"]
+    # the count says "Point 1 of M"
+    count_text = page.locator(".deck-count").first.inner_text()
+    assert "POINT 1 OF" in count_text
     assert _shown(page, points) == ["1"]
     following.click()
+    assert "POINT 2 OF" in page.locator(".deck-count").first.inner_text()
     assert _shown(page, points) == ["2"]
     page.locator(f"{points}:visible {comment}").click()
     page.locator(f"{points}:visible textarea.comment").fill("Say how it stops.")
@@ -958,8 +966,17 @@ def test_on_a_phone_one_point_shows_at_a_time(
         True,
         False,
     ]
-    previous.click()
-    assert _shown(page, points) == ["1"]
+    # the arrows' position doesn't change when stepping through points of different lengths
+    arrows_box = page.locator(".deck-arrows").first.bounding_box()
+    for _ in range(3):
+        following.click()
+        new_box = page.locator(".deck-arrows").first.bounding_box()
+        assert abs(new_box["y"] - arrows_box["y"]) < 2
+        if following.is_disabled():
+            previous.click()
+    # go back to point 1 to continue the test
+    while _shown(page, points) != ["1"]:
+        previous.click()
     page.evaluate("() => window.scrollTo(0, 0)")
     box = page.locator(send).bounding_box()
     assert box and PHONE["height"] - 120 < box["y"] + box["height"] <= PHONE["height"]

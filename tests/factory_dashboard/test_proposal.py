@@ -1023,6 +1023,13 @@ def test_the_proposal_plate_stays_in_place_on_a_phone(page, planning, db_path, s
     _open(page, serve(), "/planning/f6/proposals/adr-20")
     plate = page.locator(".in-short")
     assert plate.inner_text().split() == f"IN SHORT {_TLDR}".split()
+    # the nav comes before the first key point
+    nav = page.locator(".deck-nav").first
+    first_point = page.locator(".key-point:visible").first
+    assert nav.bounding_box()["y"] < first_point.bounding_box()["y"]
+    # the count says "Point 1 of M"
+    count_text = page.locator(".deck-count").first.inner_text()
+    assert "POINT 1 OF" in count_text
 
     def on_the_page() -> list[float]:
         # where the plate sits on the page, not in the viewport: pressing ▶ under the fold
@@ -1039,6 +1046,7 @@ def test_the_proposal_plate_stays_in_place_on_a_phone(page, planning, db_path, s
     first = shown.inner_text()
     page.locator(".deck-arrows button").all()[1].click()
     assert shown.count() == 1 and shown.inner_text() != first
+    assert "POINT 2 OF" in page.locator(".deck-count").first.inner_text()
     assert plate.is_visible() and on_the_page() == before
 
 

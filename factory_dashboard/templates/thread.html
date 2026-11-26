@@ -130,6 +130,7 @@
       <p class="said">{{ msg.text_html | safe }}</p>
       {% endif %}
       {% if msg.points %}
+      {% with deck = msg.points %}{% include "_partials/deck_nav.html" %}{% endwith %}
       <ol class="deck">
       {% for p in msg.points %}
         <li class="point" data-point="{{ p.n }}">
@@ -148,7 +149,6 @@
         </li>
       {% endfor %}
       </ol>
-      {% with deck = msg.points %}{% include "_partials/deck_nav.html" %}{% endwith %}
       {% endif %}
     </article>
     {% endif %}
