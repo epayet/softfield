@@ -40,3 +40,9 @@ attempts: 3
 tokens: 1494192
 logs: .softfield/var/runs/20261126-001843/f199-05-full-screen-and-key
 ```
+
+```yaml
+# --- runner ---
+result: done
+finished_by: lead
+```
