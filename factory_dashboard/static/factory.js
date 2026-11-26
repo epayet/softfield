@@ -598,6 +598,7 @@
     if (!where) return;
     const cls = ["belt", where[3] ? "back" : "", b.today > 0 ? "today" : "", b.carrying ? "carrying" : ""].join(" ").trim();
     const g = add(svg, "g", { class: cls, "data-belt": b.id });
+    what(g, b.id);
     add(g, "title", {}, b.label);
     add(g, "path", { d: where[0], class: "bed" });
     add(g, "path", { d: where[0], class: "rollers" });
@@ -688,7 +689,7 @@
     const working = m.state === "working" && !wait;
     const cls = ["machine", m.station, wait ? "clogged" : m.state, m.stand_in ? "stand-in" : ""].filter(Boolean).join(" ");
     const g = add(svg, "g", { class: cls, "data-machine": m.id });
-    g.classList.add("tap");
+    what(g, m.id);
     add(g, "title", {}, `${m.name} · ${m.where} · ${wait ? wait.words : m.state}${m.rating !== "" ? ` · rated ${m.rating}` : ""}`);
     add(g, "path", { class: "unit", d: `M${x} ${y}H${x + w - 8}l8 8V${y + h}H${x}Z` });
     add(g, "rect", { x: x + 5, y: y + 5, width: 5, height: 5, class: "led" });
@@ -851,7 +852,7 @@
   };
 
   // A zone, station or plot that a tap opens the card for: marks it and records what to show.
-  function what(g, key) { g.setAttribute("data-what", key); g.classList.add("tap"); }
+  function what(g, key) { g.setAttribute("data-what", key); g.classList.add("tap"); g.setAttribute("tabindex", "0"); g.setAttribute("role", "button"); }
 
   function drawMap(map, doc, L) {
     map.setAttribute("viewBox", `0 0 ${L.w} ${L.h}`);
@@ -1220,12 +1221,28 @@
     mapCardKey = key;
     const parts = [];
     if (key === "queue") {
-      const [title, words] = ["Queue", `${doc.queue.length} tickets in run order. Faded, dashed crates wait for another ticket.`];
+      const words = `${doc.queue.length} tickets in run order. Faded, dashed crates wait for another ticket.`;
+      const head = el("div", "card-head", `Queue · ${doc.queue.length}`);
+      parts.push(head, el("div", "card-words", words));
+      const first10 = doc.queue.slice(0, 10);
+      if (first10.length) {
+        const list = el("ul", "card-list");
+        for (const crate of first10) {
+          const item = el("li");
+          if (plate(crate)) item.append(el("span", "proj", crate.project));
+          const link = el("a", "card-ticket", crate.ticket || crate.role);
+          link.setAttribute("href", `/tickets${own_query(crate.project)}`);
+          item.append(link);
+          if (crate.title) item.append(el("span", "card-title", crate.title));
+          list.append(item);
+        }
+        parts.push(list);
+      }
       const a = document.createElement("a");
       a.className = "card-all";
-      a.href = "/queue";
+      a.href = `/tickets${project_query()}`;
       a.textContent = "The whole queue ›";
-      parts.push(el("div", "card-head", title), el("div", "card-words", words), a);
+      parts.push(a);
     } else if (key === "planted") {
       const cards = doc.field.planted || [];
       const head = el("div", "card-head", `${plural(cards.length, "card", "cards")} planted`);
@@ -1241,10 +1258,9 @@
         list.append(item);
       }
       parts.push(list);
-    } else if (key in WHAT) {
-      const [title, words] = WHAT[key];
-      parts.push(el("div", "card-head", title));
-      parts.push(el("div", "card-words", words));
+    } else if (key in BELT_LABELS) {
+      const [label, desc] = BELT_LABELS[key];
+      parts.push(el("div", "card-head", `Belt: ${label}`), el("div", "card-words", desc));
     } else if (key === "checks") {
       const [title, words] = ["Checks", "The runner's checks on each ticket's work: the light flashes green for a pass, red for a fail."];
       parts.push(el("div", "card-head", title), el("div", "card-words", words));
@@ -1252,14 +1268,52 @@
       const [title, words] = ["Merged today", "Tickets whose work reached main today."];
       parts.push(el("div", "card-head", title), el("div", "card-words", words));
     } else if (key === "ripe") {
-      const [title, words] = ["Ripe", "Every ticket done and the review written: yours to sign off."];
-      parts.push(el("div", "card-head", title), el("div", "card-words", words));
+      const items = doc.field.ripe || [];
+      const head = el("div", "card-head", `Ripe · ${items.length}`);
+      parts.push(head, el("div", "card-words", "Every ticket done and the review written: yours to sign off."));
+      const first10 = items.slice(0, 10);
+      if (first10.length) {
+        const list = el("ul", "card-list");
+        for (const m of first10) {
+          const item = el("li");
+          if (plate(m)) item.append(el("span", "proj", m.project));
+          const link = el("a", "card-ticket", m.key);
+          link.setAttribute("href", `/milestones/${encodeURIComponent(m.key)}${own_query(m.project)}`);
+          item.append(link);
+          if (m.title) item.append(el("span", "card-title", m.title));
+          list.append(item);
+        }
+        parts.push(list);
+      }
     } else if (key === "stash") {
-      const [title, words] = ["Harvested", "Cards signed off, the latest first."];
-      parts.push(el("div", "card-head", title), el("div", "card-words", words));
+      const items = doc.field.stash || [];
+      const head = el("div", "card-head", `Harvested · ${items.length}`);
+      parts.push(head, el("div", "card-words", "Cards signed off, the latest first."));
+      const first10 = items.slice(0, 10);
+      if (first10.length) {
+        const list = el("ul", "card-list");
+        for (const m of first10) {
+          const item = el("li");
+          if (plate(m)) item.append(el("span", "proj", m.project));
+          const link = el("a", "card-ticket", m.key);
+          link.setAttribute("href", `/milestones/${encodeURIComponent(m.key)}${own_query(m.project)}`);
+          item.append(link);
+          if (m.title) item.append(el("span", "card-title", m.title));
+          list.append(item);
+        }
+        parts.push(list);
+      }
     } else if (key === "legend") {
-      const [title, words] = ["How to read the map", "Orange crate: a lead ticket. Blue crate: a developer ticket.\nA tile is a planted card: yellow fill its merged tickets; orange edge a ticket started."];
-      parts.push(el("div", "card-head", title), el("div", "card-words", words));
+      const words = "Orange crate: a lead ticket. Blue crate: a developer ticket.\nA tile is a planted card: yellow fill its merged tickets; orange edge a ticket started; dashed, a bug.";
+      parts.push(el("div", "card-head", "How to read the map"), el("div", "card-words", words));
+    } else if (key === "sprouting" || key === "planting") {
+      const count = doc.field.planted ? doc.field.planted.length : 0;
+      const words = count ? `${count} cards being planned with the lead. On the page: opens the Planning room.` : "Cards being planned with the lead. On the page: opens the Planning room.";
+      const a = document.createElement("a");
+      a.className = "card-all";
+      a.href = `/planning${project_query()}`;
+      a.textContent = "Planning ›";
+      parts.push(el("div", "card-head", "Sprouting"), el("div", "card-words", words), a);
     } else {
       const m = doc.machines.find((one) => one.id === key);
       if (!m) return;
@@ -1272,6 +1326,11 @@
       if (working) {
         parts2.push(meta([["on", on], ["station", station]]));
       }
+      const agentsLink = document.createElement("a");
+      agentsLink.className = "card-all";
+      agentsLink.href = `/agents#${m.station}`;
+      agentsLink.textContent = "Agents ›";
+      parts2.push(agentsLink);
       parts.push(...parts2);
     }
     fillMapCard(card, parts);

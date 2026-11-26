@@ -3470,7 +3470,7 @@ def test_the_planted_card_lists_cards_with_their_links(line_db):
 
 
 def test_tapping_the_queue_station_shows_a_link_to_queue(page, line_client):
-    """F279-05: on the map, the queue station's tap says its count and opens /queue."""
+    """F279-05: on the map, the queue station's tap says its count and opens /tickets."""
     open_map(page, line_client, WIDE_SCREEN)
     page.wait_for_selector(f"{MAP} [data-what]")
     queue_station = page.locator(f"{MAP} [data-what='queue']")
@@ -3483,10 +3483,10 @@ def test_tapping_the_queue_station_shows_a_link_to_queue(page, line_client):
     assert link.count() >= 1
     href = link.first.get_attribute("href")
     assert href is not None
-    assert href == "/queue"
+    assert href.startswith("/tickets")
     with page.expect_navigation():
         page.evaluate("el => el.click()", link.first.element_handle())
-    assert page.url.endswith("/queue")
+    assert "/tickets" in page.url
 
 
 @pytest.mark.parametrize("size", [UPRIGHT, WIDE_SCREEN], ids=["upright", "wide"])
@@ -3580,3 +3580,137 @@ def test_the_wide_key_shows_every_belt_and_the_tile_with_its_words(page, line_cl
     assert edges[2][0] == "tileedge bug" and edges[2][1] != "none"
     bottom = key.evaluate("g => g.getBBox().y + g.getBBox().height")
     assert bottom <= 540  # the key stays inside the wide table
+
+
+def test_map_machines_have_data_what_attribute(page, line_client):
+    """Machines on the map carry data-what so a tap opens their card."""
+    open_map(page, line_client, WIDE_SCREEN)
+    machines = page.evaluate(
+        """() => {
+            return [...document.querySelectorAll('[data-machine]')].map(m => ({
+                id: m.dataset.machine,
+                what: m.dataset.what,
+            }));
+        }"""
+    )
+    assert len(machines) > 0
+    for m in machines:
+        assert m["what"] is not None and m["what"] != ""
+
+
+def test_map_belts_have_data_what_attribute(page, line_client):
+    """Belts on the map carry data-what so a tap opens their card."""
+    open_map(page, line_client, WIDE_SCREEN)
+    belts = page.evaluate(
+        """() => {
+            return [...document.querySelectorAll('[data-belt]')].map(b => ({
+                id: b.dataset.belt,
+                what: b.dataset.what,
+            }));
+        }"""
+    )
+    assert len(belts) > 0
+    for b in belts:
+        assert b["what"] is not None and b["what"] != ""
+
+
+def test_every_data_what_has_keyboard_markup(page, line_client):
+    """Every [data-what] element has tabindex=0 and role=button for keyboard access."""
+    open_map(page, line_client, WIDE_SCREEN)
+    result = page.evaluate(
+        """() => {
+            return [...document.querySelectorAll('[data-what]')].map(el => ({
+                what: el.dataset.what,
+                tabindex: el.getAttribute('tabindex'),
+                role: el.getAttribute('role'),
+            }));
+        }"""
+    )
+    assert len(result) > 0
+    for item in result:
+        assert item["tabindex"] == "0", f"{item['what']} missing tabindex"
+        assert item["role"] == "button", f"{item['what']} missing role"
+
+
+def test_queue_card_shows_first_10_crates_with_links(page, line_client):
+    """The queue card lists the first 10 crates with links to their milestones or tickets."""
+    open_map(page, line_client, WIDE_SCREEN)
+    page.wait_for_selector(f"{MAP} [data-what='queue']")
+    page.locator(f"{MAP} [data-what='queue']").click()
+    card = page.locator("#map-card")
+    assert not card.is_hidden()
+    card_text = card.text_content() or ""
+    assert "Queue" in card_text
+    list_items = card.locator("ul.card-list li")
+    count = list_items.count()
+    assert count > 0 and count <= 10
+
+
+def test_ripe_card_shows_first_10_milestones_with_links(page, line_client):
+    """The ripe card lists the first 10 ripe milestones with links to their pages."""
+    open_map(page, line_client, WIDE_SCREEN)
+    page.wait_for_selector(f"{MAP} [data-what='ripe']")
+    page.locator(f"{MAP} [data-what='ripe']").click()
+    card = page.locator("#map-card")
+    assert not card.is_hidden()
+    card_text = card.text_content() or ""
+    assert "Ripe" in card_text
+    list_items = card.locator("ul.card-list li a")
+    for link in list_items.all():
+        href = link.get_attribute("href")
+        assert href is not None
+        assert "/milestones/" in href
+
+
+def test_stash_card_shows_first_10_items_with_links(page, line_client):
+    """The harvested card lists the first 10 items with links to their pages."""
+    open_map(page, line_client, WIDE_SCREEN)
+    page.wait_for_selector(f"{MAP} [data-what='stash']")
+    page.locator(f"{MAP} [data-what='stash']").click()
+    card = page.locator("#map-card")
+    assert not card.is_hidden()
+    card_text = card.text_content() or ""
+    assert "Harvested" in card_text
+    list_items = card.locator("ul.card-list li a")
+    for link in list_items.all():
+        href = link.get_attribute("href")
+        assert href is not None
+        assert "/milestones/" in href
+
+
+def test_machine_card_has_agents_link(page, line_client):
+    """The machine card includes a link to the agents page."""
+    open_map(page, line_client, WIDE_SCREEN)
+    machines = page.evaluate(
+        """() => {
+            return [...document.querySelectorAll('[data-machine]')].map(m => m.dataset.machine);
+        }"""
+    )
+    first_machine = machines[0]
+    page.locator(f"{MAP} [data-machine='{first_machine}']").click()
+    card = page.locator("#map-card")
+    assert not card.is_hidden()
+    agents_link = card.locator("a.card-all")
+    assert agents_link.count() >= 1
+    href = agents_link.first.get_attribute("href")
+    assert href is not None
+    assert "/agents#" in href
+
+
+def test_belt_card_uses_belt_labels_not_generic_what(page, line_client):
+    """A tap on a belt shows the belt's own description from BELT_LABELS,
+    not a generic WHAT entry."""
+    open_map(page, line_client, WIDE_SCREEN)
+    belts = page.evaluate(
+        """() => {
+            return [...document.querySelectorAll('[data-belt]')].map(b => b.dataset.belt);
+        }"""
+    )
+    target = "checks→merged"
+    if target not in belts:
+        target = belts[0]
+    locator = page.locator(f"{MAP} [data-belt='{target}'] path").first
+    locator.dispatch_event("click")
+    card = page.locator("#map-card")
+    assert not card.is_hidden()
+    assert "Belt:" in (card.text_content() or "")
