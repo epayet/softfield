@@ -28,3 +28,10 @@ Read the Plan and D1, D2 and D4 in `.softfield/cards/f305-i-am-a-bit-concerned-l
 - the card doc gets a dated "Measured" section with `look disk`'s new lines and one `check-all`'s figure from this ticket's own gate
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
