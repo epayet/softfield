@@ -1,4 +1,4 @@
-# Milestone F180: How does one mould their taste in the factory
+# Milestone F180: The factory's memory: what it learns, where it keeps it, how you shape it
 
 > **State:** idea · **Area:** factory
 > Planted by the owner on 2026-10-28.
