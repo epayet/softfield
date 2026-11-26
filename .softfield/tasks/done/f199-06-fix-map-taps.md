@@ -31,3 +31,12 @@ f279-i-would-like-to-be-able-C2784-1: Map taps only partially implement the tick
 - what each finding describes no longer holds, and a test shows it
 - the listed `tests:` pass, and fail without the change
 - all gates pass
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 3678
+gate_failures: []
+tokens: 4514292
+```
