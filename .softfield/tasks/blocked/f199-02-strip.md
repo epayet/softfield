@@ -43,3 +43,9 @@ attempts: 3
 tokens: 456358
 logs: .softfield/var/runs/20261126-001843/f199-02-strip
 ```
+
+```yaml
+# --- runner ---
+result: blocked
+reason: the escalation ended with no decision; its work is on escalation/f199-02-strip
+```
