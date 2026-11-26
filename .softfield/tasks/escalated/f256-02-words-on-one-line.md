@@ -28,3 +28,12 @@ Read `.softfield/cards/f256-the-alignments-of-the-top-bar.md` ("Round 2", D6 to 
 - at 390 px the top bar is no taller than before, and the project's name shows without its key
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: stopped)
+attempts: 3
+tokens: 4090447
+logs: .softfield/var/runs/20261125-034732/f256-02-words-on-one-line
+```
