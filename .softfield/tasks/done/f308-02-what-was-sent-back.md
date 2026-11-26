@@ -38,3 +38,9 @@ attempts: 3
 tokens: 5330290
 logs: .softfield/var/runs/20261126-115035/f308-02-what-was-sent-back
 ```
+
+```yaml
+# --- runner ---
+result: done
+finished_by: lead
+```
