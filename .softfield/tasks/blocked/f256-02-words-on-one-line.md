@@ -37,3 +37,9 @@ attempts: 3
 tokens: 4090447
 logs: .softfield/var/runs/20261125-034732/f256-02-words-on-one-line
 ```
+
+```yaml
+# --- runner ---
+result: blocked
+reason: the escalation answered nothing on task/f256-02-words-on-one-line, not finish on task/f256-02-words-on-one-line; its work is on task/f256-02-words-on-one-line
+```
