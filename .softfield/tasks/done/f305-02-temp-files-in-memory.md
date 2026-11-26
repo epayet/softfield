@@ -29,3 +29,10 @@ Read the Plan, D3 and D4 and the "Measured" section f305-01 wrote in `.softfield
 - if the checks are not most of it: nothing in `runner/` changes, and the card doc names the writer and the fix, drafted as a planted-card text or a ticket in `.softfield/tasks/later/`
 - the listed `tests:` pass
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
