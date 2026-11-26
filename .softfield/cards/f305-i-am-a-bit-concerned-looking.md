@@ -1,4 +1,4 @@
-# Milestone F305: I am a bit concerned looking at system monitoring that I'm…
+# Milestone F305: Find what writes terabytes to the SSD, and keep test temp files in memory
 
 > **State:** idea · **Area:** factory
 > Planted by the owner on 2026-11-25.
