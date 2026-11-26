@@ -1,4 +1,4 @@
-# Milestone F311: I can't really comment on a merge. If it merged something…
+# Milestone F311: Undo a wrong merge in one press, and the lead merges less
 
 > **State:** idea · **Area:** factory
 > Planted by the owner on 2026-11-26.
