@@ -1,4 +1,4 @@
-# Milestone F312: Looking at how commits are made, i'd like to tidy a bit…
+# Milestone F312: Tidier commit messages, with the owner as author and true co-authors
 
 > **State:** idea · **Area:** factory
 > Planted by the owner on 2026-11-26.
