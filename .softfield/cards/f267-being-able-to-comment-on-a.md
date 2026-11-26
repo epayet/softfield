@@ -6,6 +6,12 @@
 ## Notes
 Being able to comment on a thread even though the lead is replying right now would be helpful even if it looks at it after it finishes what it's doing. In normal Claude chats you can steer it while it's doing something. It might not be up to that point but at least if I forgot something I can keep adding notes in the same thread that will be looked at at some point
 
+### From F310: On this thread:… (merged by the lead on 2026-11-26)
+On this thread: http://192.168.178.34:8765/planning/m14?project=travel-companion
+
+I asked something and then added a note. I thought I would get one response that combines my 2 asks but I had to click earlier threads to see the response of one of them. 
+Also, does that mean it did 2 rounds of planning or was it combined but formatted as two answers? 2 separate rounds sounds badly innfficiient
+
 ## What happens today (from the code, 2026-11-18)
 - The thread page hides its message box whenever the lead owes a reply: `{% if not next_reply … %}` around `#reply` in `factory_dashboard/templates/thread.html`. While F267's first reply was written (job 2369), `/planning/f267` showed "Next for the lead · the lead is writing this reply" and no box at all.
 - The runner already takes a second message: each `plan_message` becomes its own `planner` row (`_plan_message` in `runner/requests.py`), and a note sent during a job waits as a request until the runner's next pick, editable and cancellable meanwhile (F14). Only the page stops it.
