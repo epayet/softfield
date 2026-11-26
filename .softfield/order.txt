@@ -145,7 +145,6 @@ f293
 bug-66-a-pause-holds-planning
 bug-67-a-resume-starts-a-new-round
 bug-68-the-plan-reads-the-pause-from-the-database
-f300
 f303
 f305
 f299
@@ -153,3 +152,5 @@ f304
 f302
 f306
 f301
+f307
+f300

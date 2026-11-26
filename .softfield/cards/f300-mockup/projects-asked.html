@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F300 mock-up: a plate that already asked the lead</title>
+<style>
+  /* The dashboard's own tokens (factory_dashboard/static/dashboard.css), dark theme */
+  :root {
+    --floor: #12161b; --bay: #181e25; --plate: #1f2730; --grid: #222b34; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+    --hazard: #f2b10a; --hazard-ink: #1a1405; --fail: #ec5458; --opus: #ff9640; --opus-ink: #ff9640;
+    --sonnet: #ffc48a; --good: #5fd17a; --accent: var(--sonnet);
+    --display: "Chakra Petch", "Bahnschrift", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+    --stripe: repeating-linear-gradient(-45deg, var(--hazard) 0 6px, transparent 6px 12px);
+    --notch: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--floor); color: var(--fg); font: 15px/1.5 var(--body); padding: 20px; }
+  h1 { font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 4px; }
+  h3 { font: 600 13px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 18px 0 8px; }
+  p.lede { color: var(--ink-2); max-width: 780px; margin: 0 0 8px; }
+  a { color: var(--accent); text-decoration: none; }
+  .switch { display: inline-flex; margin: 12px 0 0; border: 1px solid var(--rule); }
+  .switch button { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 10px 18px;
+    background: var(--bay); color: var(--muted); border: 0; cursor: pointer; }
+  .switch button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+  .pair { display: grid; gap: 20px; }
+  .version.off { display: none; }
+  @media (min-width: 960px) {
+    .pair { grid-template-columns: 1fr 1fr; }
+    .version.off { display: block; }
+    .switch { display: none; }
+  }
+  .mark { outline: 2px solid var(--hazard); outline-offset: 3px; position: relative; }
+  .note { display: block; margin: 8px 0 2px; font: 600 11px/1.4 var(--mono); color: var(--hazard); }
+  .note::before { content: "▲ "; }
+  .eg { font: 500 10.5px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted);
+    border: 1px solid var(--rule); padding: 0 5px; margin-left: 6px; }
+
+  /* ---- the page as drawn (dashboard.css) ---- */
+  .panel { background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; min-width: 0; margin-bottom: 14px; }
+  .panel h2 { font: 600 14px var(--display); text-transform: uppercase; letter-spacing: .08em; margin: 0 0 8px; }
+  .panel h2 .src { font: 400 12px var(--body); text-transform: none; letter-spacing: 0; color: var(--muted); margin-left: 6px; }
+  .steps { list-style: none; margin: 0; padding: 0; }
+  .steps li { padding: 7px 0; border-bottom: 1px solid var(--grid); }
+  .needs li.app-broken { color: var(--fail); }
+  .muted { color: var(--muted); }
+  .rank { list-style: none; margin: 0; padding: 0; }
+  .proj { display: grid; grid-template-columns: 52px 1fr; gap: 4px 12px; padding: 12px 0; border-bottom: 1px solid var(--grid); }
+  .proj:last-child { border-bottom: 0; }
+  .place { grid-row: 1 / 5; display: flex; flex-direction: column; align-items: center; }
+  .place input { width: 44px; text-align: center; font: 700 18px var(--display); background: var(--plate);
+    color: var(--fg); border: 1px solid var(--rule); padding: 4px 0; }
+  .place small { font: 500 11px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .proj .plate { display: grid; gap: 3px; min-width: 0; }
+  .proj .head { display: flex; align-items: baseline; gap: 10px; }
+  .proj .rankno { font: 700 20px var(--display); color: var(--hazard); min-width: 30px; }
+  .name { font: 700 17px var(--display); letter-spacing: .03em; }
+  .what { color: var(--ink-2); font-size: 13.5px; }
+  .facts { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13.5px; }
+  .facts b { font-family: var(--display); }
+  .links { display: flex; flex-wrap: wrap; gap: 6px 14px; font: 600 13px var(--display); letter-spacing: .04em; text-transform: uppercase; }
+  .hold { font: 700 12px var(--display); letter-spacing: .08em; text-transform: uppercase; padding: 7px 12px;
+    background: var(--plate); color: var(--fg); border: 1px solid var(--rule); margin-left: auto; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; font: 600 13px var(--display); letter-spacing: .06em;
+    text-transform: uppercase; min-height: 44px; padding: 0 16px; border: 0; cursor: pointer; text-decoration: none; }
+  .btn.go { background: var(--hazard); color: var(--hazard-ink); clip-path: var(--notch); }
+  .btn.plain { background: transparent; color: var(--fg); border: 1px solid var(--rule); }
+  .app-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-top: 6px;
+    padding: 6px 8px 6px 12px; background: var(--plate); border: 1px solid var(--rule); position: relative; }
+  .app-row::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--stripe); }
+  .app-row .app-tag { font: 600 10.5px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  .app-row .app-state { display: inline-flex; align-items: center; gap: 7px; font: 700 13px var(--display); letter-spacing: .06em; text-transform: uppercase; }
+  .app-row .app-lamp { width: 10px; height: 10px; border: 1px solid var(--rule); background: var(--floor); }
+  .app-row.broken { border-color: var(--fail); }
+  .app-row.broken .app-lamp { background: var(--fail); box-shadow: 0 0 6px var(--fail); }
+  .app-row.broken .app-state { color: var(--fail); }
+  .app-row .app-detail { font: 12px var(--mono); color: var(--ink-2); flex-basis: 100%; overflow-wrap: anywhere; }
+  .app-row .app-acts { display: flex; gap: 8px; margin-left: auto; flex-wrap: wrap; align-items: center; }
+  .app-row.none { background: transparent; border-style: dashed; }
+  .app-row.none::before { display: none; }
+
+  /* ---- proposed: the work order the plate already sent (new tokens: none) ---- */
+  .order { display: flex; align-items: stretch; margin-left: auto; min-width: 0; max-width: 100%;
+    background: var(--bay); border: 1px solid var(--rule); clip-path: var(--notch); }
+  .order .tab { flex: none; width: 8px; background: var(--stripe); }
+  .order .body { display: grid; gap: 1px; padding: 5px 14px 6px 10px; min-width: 0; }
+  .order .lbl { font: 600 10.5px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+  .order .line { display: flex; gap: 8px; align-items: baseline; min-width: 0; }
+  .order .key { font: 700 15px var(--display); letter-spacing: .04em; }
+  .order .t { color: var(--ink-2); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .order .st { flex: none; font: 600 10.5px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--fg);
+    border: 1px solid var(--rule); padding: 0 5px; }
+  .app-row.way-row { border: 1px dashed var(--opus); }
+  .app-row .way-words { font: 12px var(--mono); color: var(--opus-ink); margin-left: auto; }
+</style>
+</head>
+<body>
+<h1>F300: a plate that already asked the lead</h1>
+<p class="lede">The project plates on <code>/projects</code>. coaster-ranker and coucou are as they are tonight: coaster-ranker's stack was planted on 24 November and became M13, ready, yet its plate still offers the plant. wardrobe-teller's crash is an <b>example</b>: its app is only stopped tonight.</p>
+<div class="switch" role="group" aria-label="Which version">
+  <button type="button" data-show="today" aria-pressed="false">Today</button>
+  <button type="button" data-show="proposed" aria-pressed="true">Proposed</button>
+</div>
+
+<div class="pair">
+
+<!-- Today: copied from factory_dashboard/templates/projects.html and _partials/app_row.html -->
+<div class="version off" data-version="today">
+  <h3>Today</h3>
+  <section class="panel needs">
+    <h2>Needs you <span class="src">1 in all</span></h2>
+    <ul class="steps">
+      <li class="app-broken"><a href="#">wardrobe-teller</a>'s app crashed · exited with code 1 · <a href="#">Logs</a> ·
+        <button type="button" class="btn plain">Plant and ask the lead to fix it</button></li>
+    </ul>
+  </section>
+  <section class="panel">
+    <h2>Projects <span class="src">the runner works in this order</span></h2>
+    <ol class="rank">
+      <li class="proj">
+        <label class="place"><input type="number" value="1" aria-label="place"><small>place</small></label>
+        <div class="plate">
+          <div class="head"><span class="rankno">#1</span><span class="name">wardrobe-teller</span><span class="eg">example</span><button type="button" class="hold">Pause</button></div>
+          <div class="what">What to wear today in London, from the day's weather, learning what she likes.</div>
+          <div class="facts"><span><b>4</b> ready</span><span><b>2</b> done</span><span class="muted">nothing for you</span></div>
+          <div class="links"><a href="#">Planning</a><a href="#">Board</a><a href="#">Overview</a></div>
+          <div class="app-row broken">
+            <span class="app-tag">App</span>
+            <span class="app-state"><span class="app-lamp"></span>Crashed</span>
+            <div class="app-acts">
+              <button type="button" class="btn go">Run</button>
+              <a class="btn plain" href="#">Logs</a>
+              <button type="button" class="btn plain">Plant and ask the lead to fix it</button>
+            </div>
+            <span class="app-detail">exited with code 1 · main 3e1c9a0</span>
+          </div>
+        </div>
+      </li>
+      <li class="proj">
+        <label class="place"><input type="number" value="2" aria-label="place"><small>place</small></label>
+        <div class="plate">
+          <div class="head"><span class="rankno">#2</span><span class="name">coaster-ranker</span><button type="button" class="hold">Pause</button></div>
+          <div class="what">Rank the Universal Orlando coasters you've ridden by dragging them into order, and compare your list with your partner's.</div>
+          <div class="facts"><span><b>3</b> ready</span><span><b>12</b> done</span><span class="muted">nothing for you</span></div>
+          <div class="links"><a href="#">Planning</a><a href="#">Board</a><a href="#">Overview</a></div>
+          <div class="app-row none">
+            <span class="app-tag">App</span><span class="muted">No stack yet: the factory can't run it.</span>
+            <div class="app-acts"><button type="button" class="btn plain">Plant and ask the lead for a stack</button></div>
+          </div>
+        </div>
+      </li>
+      <li class="proj">
+        <label class="place"><input type="number" value="5" aria-label="place"><small>place</small></label>
+        <div class="plate">
+          <div class="head"><span class="rankno">#5</span><span class="name">coucou</span><button type="button" class="hold">Pause</button></div>
+          <div class="what">A small, private way to send a photo or a note to an always-on screen in someone's home.</div>
+          <div class="facts"><span><b>1</b> ready</span><span><b>5</b> done</span><span class="muted">nothing for you</span></div>
+          <div class="links"><a href="#">Planning</a><a href="#">Board</a><a href="#">Overview</a></div>
+          <div class="app-row none">
+            <span class="app-tag">App</span><span class="muted">No stack yet: the factory can't run it.</span>
+            <div class="app-acts"><button type="button" class="btn plain">Plant and ask the lead for a stack</button></div>
+          </div>
+          <span class="note" style="color:var(--muted)">After a press, a reload brings the button back.</span>
+        </div>
+      </li>
+    </ol>
+  </section>
+</div>
+
+<!-- Proposed -->
+<div class="version" data-version="proposed">
+  <h3>Proposed</h3>
+  <span class="note">Needs you is gone: you already asked the lead to fix wardrobe-teller's app (the panel shows only when something needs you).</span>
+  <section class="panel">
+    <h2>Projects <span class="src">the runner works in this order</span></h2>
+    <ol class="rank">
+      <li class="proj">
+        <label class="place"><input type="number" value="1" aria-label="place"><small>place</small></label>
+        <div class="plate">
+          <div class="head"><span class="rankno">#1</span><span class="name">wardrobe-teller</span><span class="eg">example</span><button type="button" class="hold">Pause</button></div>
+          <div class="what">What to wear today in London, from the day's weather, learning what she likes.</div>
+          <div class="facts"><span><b>4</b> ready</span><span><b>2</b> done</span><span class="muted">nothing for you</span></div>
+          <div class="links"><a href="#">Planning</a><a href="#">Board</a><a href="#">Overview</a></div>
+          <div class="app-row broken">
+            <span class="app-tag">App</span>
+            <span class="app-state"><span class="app-lamp"></span>Crashed</span>
+            <div class="app-acts">
+              <button type="button" class="btn go">Run</button>
+              <a class="btn plain" href="#">Logs</a>
+              <a class="order mark" href="#">
+                <span class="tab"></span>
+                <span class="body"><span class="lbl">You asked the lead</span>
+                  <span class="line"><span class="key">M7</span><span class="t">wardrobe-teller's app crashed: find out why and fix it</span><span class="st">being planned</span></span></span>
+              </a>
+            </div>
+            <span class="app-detail">exited with code 1 · main 3e1c9a0</span>
+          </div>
+          <span class="note">The fix card in place of the button: tap it for its thread. The lamp stays red: the app is still down.</span>
+        </div>
+      </li>
+      <li class="proj">
+        <label class="place"><input type="number" value="2" aria-label="place"><small>place</small></label>
+        <div class="plate">
+          <div class="head"><span class="rankno">#2</span><span class="name">coaster-ranker</span><button type="button" class="hold">Pause</button></div>
+          <div class="what">Rank the Universal Orlando coasters you've ridden by dragging them into order, and compare your list with your partner's.</div>
+          <div class="facts"><span><b>3</b> ready</span><span><b>12</b> done</span><span class="muted">nothing for you</span></div>
+          <div class="links"><a href="#">Planning</a><a href="#">Board</a><a href="#">Overview</a></div>
+          <div class="app-row none">
+            <span class="app-tag">App</span><span class="muted">No stack yet.</span>
+            <a class="order mark" href="#">
+              <span class="tab"></span>
+              <span class="body"><span class="lbl">You asked the lead</span>
+                <span class="line"><span class="key">M13</span><span class="t">Run coaster-ranker from the Projects page in Docker, retiring bin/live</span><span class="st">ready</span></span></span>
+            </a>
+          </div>
+          <span class="note">Its stack card, its title and where it is (being planned, ready, building). The button comes back only if the card is done or removed and there is still no stack.</span>
+        </div>
+      </li>
+      <li class="proj">
+        <label class="place"><input type="number" value="5" aria-label="place"><small>place</small></label>
+        <div class="plate">
+          <div class="head"><span class="rankno">#5</span><span class="name">coucou</span><button type="button" class="hold">Pause</button></div>
+          <div class="what">A small, private way to send a photo or a note to an always-on screen in someone's home.</div>
+          <div class="facts"><span><b>1</b> ready</span><span><b>5</b> done</span><span class="muted">nothing for you</span></div>
+          <div class="links"><a href="#">Planning</a><a href="#">Board</a><a href="#">Overview</a></div>
+          <div class="app-row none">
+            <span class="app-tag">App</span><span class="muted">No stack yet: the factory can't run it.</span>
+            <div class="app-acts"><button type="button" class="btn plain">Plant and ask the lead for a stack</button></div>
+          </div>
+          <span class="note" style="color:var(--muted)">Never asked: unchanged. After a press, until the runner's next pick, even after a reload:</span>
+          <div class="app-row none way-row mark">
+            <span class="app-tag">App</span><span class="muted">No stack yet.</span>
+            <span class="way-words">On its way: the runner plants it and asks the lead at its next pick</span>
+          </div>
+        </div>
+      </li>
+    </ol>
+  </section>
+</div>
+
+</div>
+
+<script>
+  function wireSwitch() {
+    const buttons = document.querySelectorAll(".switch button");
+    buttons.forEach((button) => {
+      button.addEventListener("click", () => {
+        buttons.forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
+        document.querySelectorAll("[data-version]").forEach((v) => v.classList.toggle("off", v.dataset.version !== button.dataset.show));
+      });
+    });
+  }
+  wireSwitch();
+</script>
+</body>
+</html>
