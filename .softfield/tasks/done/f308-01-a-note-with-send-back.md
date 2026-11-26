@@ -30,3 +30,12 @@ A proposal's review page has a note box for the whole proposal, and Send back se
 - Refresh against main still sends its own words.
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 3821
+gate_failures: []
+tokens: 3610563
+```
