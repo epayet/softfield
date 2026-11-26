@@ -1,4 +1,4 @@
-# Milestone F306: The arrows to move between points in planning on mobile…
+# Milestone F306: On a phone, the arrows to step through points stay put and headlines come first
 
 > **State:** idea · **Area:** factory
 > Planted by the owner on 2026-11-26.
