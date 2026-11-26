@@ -2,7 +2,7 @@
 id: f308-03-add-a-note-while-it-waits
 milestone: f308-when-an-adr-is-being-sent
 difficulty: 3
-depends_on: [f308-02-what-was-sent-back, f267-01-waiting-notes-one-reply]
+depends_on: [f308-02-what-was-sent-back, f267-01-waiting-notes-one-reply, f308-06-fix-note-box-on-a-phone]
 files:
   - factory_dashboard/templates/proposal.html
   - factory_dashboard/static/dashboard.css
