@@ -26,3 +26,12 @@ f279-i-would-like-to-be-able-C2857-1: The note box is hidden on every mobile pro
 - what each finding describes no longer holds, and a test shows it
 - the listed `tests:` pass, and fail without the change
 - all gates pass
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 3815
+gate_failures: []
+tokens: 9233583
+```
