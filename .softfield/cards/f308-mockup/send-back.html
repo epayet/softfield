@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F308 mock-up: what a sent-back proposal was sent back with</title>
+<style>
+  /* The dashboard's own tokens (factory_dashboard/static/dashboard.css), dark theme */
+  :root {
+    --floor: #12161b; --bay: #181e25; --plate: #1f2730; --grid: #222b34; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+    --hazard: #f2b10a; --hazard-ink: #1a1405; --sonnet: #ffc48a; --good: #5fd17a; --a7: #9085e9;
+    --tick: var(--ink-2);
+    --stripe: repeating-linear-gradient(-45deg, var(--hazard) 0 6px, transparent 6px 12px);
+    --notch: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
+    --display: "Chakra Petch", "Bahnschrift", "DIN Alternate", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--floor); color: var(--fg); font: 15px/1.5 var(--body); padding: 16px; }
+  h1.page { font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 4px; }
+  p.intro { color: var(--ink-2); max-width: 900px; margin: 0 0 8px; }
+  .switch { display: inline-flex; margin: 8px 0 14px; border: 1px solid var(--rule); }
+  .switch button { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 10px 18px; min-height: 44px;
+    background: var(--bay); color: var(--muted); border: 0; cursor: pointer; }
+  .switch button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+  .versions { display: flex; gap: 20px; align-items: flex-start; }
+  .version { flex: 1 1 0; min-width: 0; max-width: 520px; }
+  .version > h2 { font: 700 15px var(--display); letter-spacing: .1em; text-transform: uppercase; margin: 0 0 8px; color: var(--hazard); }
+  .moment { font: 600 12px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 18px 0 6px; }
+  [hidden] { display: none !important; }
+  @media (min-width: 1000px) {
+    .switch { display: none; }
+    .version[hidden] { display: block !important; }
+  }
+
+  /* ---- copied from dashboard.css: the review page's pieces ---- */
+  .panel { background: var(--bay); border: 1px solid var(--rule); padding: 0 14px 12px; position: relative; display: flex; flex-direction: column; gap: 8px; }
+  .panel::before, .panel::after { content: ""; position: absolute; width: 10px; height: 10px; border: 0 solid var(--tick); }
+  .panel::before { top: -1px; left: -1px; border-top-width: 2px; border-left-width: 2px; }
+  .panel::after { bottom: -1px; right: -1px; border-bottom-width: 2px; border-right-width: 2px; }
+  .panel > h2 { display: flex; align-items: center; gap: 10px; margin: 0 -14px 2px; padding: 7px 14px;
+    background: var(--plate); border-bottom: 1px solid var(--rule);
+    font: 600 14px var(--display); text-transform: uppercase; letter-spacing: .1em; }
+  .panel > h2::after { content: ""; order: 1; flex: 1; height: 8px; background: var(--stripe); opacity: .5; }
+  .lede { margin: 0 0 6px; color: var(--ink-2); font-size: 14px; }
+  .deck { display: flex; flex-direction: column; gap: 8px; }
+  .key-point { background: var(--plate); border: 1px solid var(--rule); padding: 10px 12px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .key-point > b { font: 700 13px var(--mono); color: var(--muted); min-width: 26px; }
+  .key-point > div { flex: 1 1 260px; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .key-point > div > span { font-size: 14px; color: var(--ink-2); }
+  .flag { color: var(--hazard); }
+  .comment-box { flex-basis: 100%; display: flex; flex-direction: column; gap: 3px; font-size: 13px; color: var(--muted); }
+  textarea { width: 100%; background: var(--floor); color: var(--fg); border: 1px solid var(--rule); font: 14px/1.4 var(--body); padding: 6px 8px; resize: vertical; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; min-height: 44px; padding: 0 16px; border: 0; cursor: pointer; }
+  .btn.go { background: var(--hazard); color: var(--hazard-ink); clip-path: var(--notch); }
+  .btn.plain { background: transparent; color: var(--fg); border: 1px solid var(--rule); }
+  .fold { font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); min-height: 44px; display: flex; align-items: center; }
+  .aside { font-size: 13px; color: var(--muted); }
+  .mono { font: 12.5px var(--mono); }
+  .dock { margin-top: 12px; }
+  .actions { display: flex; flex-direction: column; gap: 8px; }
+  .actions.on-its-way { border: 1px dashed var(--hazard); padding: 10px 12px; }
+  .way-title { margin: 0; font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--hazard); }
+
+  /* ---- proposed: what the owner sent, kept in sight ---- */
+  .said { flex-basis: 100%; border-left: 3px solid var(--hazard); background: var(--floor); padding: 6px 10px; display: flex; flex-direction: column; gap: 2px; }
+  .said.way { border: 1px dashed var(--hazard); border-left-width: 3px; }
+  .said .stamp { font: 600 11px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--hazard); }
+  .said.lead .stamp { color: var(--ink-2); }
+  .said.lead { border-left-color: var(--ink-2); }
+  .said p { margin: 0; font-size: 14px; }
+  .sent-list { display: flex; flex-direction: column; gap: 6px; }
+  .note-plate { display: flex; align-items: center; gap: 10px; margin: 0 -12px; padding: 6px 12px; background: var(--plate); border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); }
+  .note-plate b { font: 700 12px var(--display); letter-spacing: .12em; text-transform: uppercase; }
+  .note-plate i { flex: 1; height: 8px; background: var(--stripe); opacity: .5; }
+  .note-plate span { font: 11px var(--mono); color: var(--muted); }
+  .change { outline: 2px dashed var(--good); outline-offset: 3px; position: relative; }
+  .tag { display: block; margin-top: 6px; font: 600 11px var(--mono); color: var(--good); }
+  .legend { color: var(--ink-2); font-size: 13px; margin: 14px 0 0; }
+  .legend b { color: var(--good); }
+</style>
+</head>
+<body>
+<h1 class="page">F308: what a send-back was sent with</h1>
+<p class="intro">The review page of ADR 55 on F303, as it was sent back on 25 Nov at 23:03 with two comments; the runner took it at 00:19, 76 minutes later. Points 4 to 7 are left out to save room. The note in Proposed is an example; the comments are the owner's own.</p>
+<div class="switch" role="group" aria-label="Which version">
+  <button type="button" data-show="today" aria-pressed="false">Today</button>
+  <button type="button" data-show="proposed" aria-pressed="true">Proposed</button>
+</div>
+
+<div class="versions">
+
+<!-- ============ TODAY: from factory_dashboard/templates/proposal.html ============ -->
+<section class="version" data-version="today" hidden>
+  <h2>Today</h2>
+
+  <p class="moment">1 · Before you press</p>
+  <div class="panel">
+    <h2>Review ADR 55</h2>
+    <p class="lede">Every key point, in plain words. Comment on what you'd change; the rest counts as agreed when you send.</p>
+    <div class="deck">
+      <div class="key-point"><b>1</b><div><b><span class="flag">&#9873;</span> A size check for every Python file</b><span>Added to check-all and to the developer gates, next to the test layout check.</span></div><button class="btn plain" type="button">Comment&hellip;</button></div>
+      <div class="key-point"><b>2</b><div><b>Code lines only</b><span>Blank lines and comment-only lines don't count, so deleting comments never helps a file pass.</span></div><button class="btn plain" type="button">Comment&hellip;</button>
+        <label class="comment-box">What would you change?<textarea rows="2">Disagree comments should count too</textarea></label></div>
+      <div class="key-point"><b>8</b><div><b>No import-order check</b><span>Allowing an import of a higher module inside a function only hides the circular dependency.</span></div><button class="btn plain" type="button">Comment&hellip;</button>
+        <label class="comment-box">What would you change?<textarea rows="2">Does that you're suggesting we don't allow imports in a function? I agree</textarea></label></div>
+    </div>
+  </div>
+  <div class="panel dock">
+    <h2>Your review</h2>
+    <div class="actions">
+      <span class="aside mono">7 agreed · 2 to change</span>
+      <button class="btn go" type="button">Send 2 changes back</button>
+      <span class="fold">Reject…</span>
+    </div>
+    <span class="aside">Every point is agreed unless you comment on it.</span>
+  </div>
+
+  <p class="moment">2 · On its way, after a reload</p>
+  <div class="panel">
+    <h2>Review ADR 55</h2>
+    <p class="lede">Every key point, in plain words. Comment on what you'd change; the rest counts as agreed when you send.</p>
+    <div class="deck">
+      <div class="key-point"><b>1</b><div><b><span class="flag">&#9873;</span> A size check for every Python file</b><span>Added to check-all and to the developer gates, next to the test layout check.</span></div></div>
+      <div class="key-point"><b>2</b><div><b>Code lines only</b><span>Blank lines and comment-only lines don't count, so deleting comments never helps a file pass.</span></div></div>
+      <div class="key-point"><b>8</b><div><b>No import-order check</b><span>Allowing an import of a higher module inside a function only hides the circular dependency.</span></div></div>
+    </div>
+  </div>
+  <div class="panel dock">
+    <h2>Your review</h2>
+    <div class="actions on-its-way">
+      <p class="way-title">On its way · the runner applies it at its next pick</p>
+    </div>
+    <span class="aside">Asked: the runner will do it.</span>
+  </div>
+  <p class="legend">Your two comments are gone from the page, there is nowhere to write a note beside them, and nothing to add while it waits.</p>
+</section>
+
+<!-- ============ PROPOSED ============ -->
+<section class="version" data-version="proposed">
+  <h2>Proposed</h2>
+
+  <p class="moment">1 · Before you press</p>
+  <div class="panel">
+    <h2>Review ADR 55</h2>
+    <p class="lede">Every key point, in plain words. Comment on what you'd change; the rest counts as agreed when you send.</p>
+    <div class="deck">
+      <div class="key-point"><b>1</b><div><b><span class="flag">&#9873;</span> A size check for every Python file</b><span>Added to check-all and to the developer gates, next to the test layout check.</span></div><button class="btn plain" type="button">Comment&hellip;</button></div>
+      <div class="key-point"><b>2</b><div><b>Code lines only</b><span>Blank lines and comment-only lines don't count, so deleting comments never helps a file pass.</span></div><button class="btn plain" type="button">Comment&hellip;</button>
+        <label class="comment-box">What would you change?<textarea rows="2">Disagree comments should count too</textarea></label></div>
+      <div class="key-point"><b>8</b><div><b>No import-order check</b><span>Allowing an import of a higher module inside a function only hides the circular dependency.</span></div><button class="btn plain" type="button">Comment&hellip;</button>
+        <label class="comment-box">What would you change?<textarea rows="2">Does that you're suggesting we don't allow imports in a function? I agree</textarea></label></div>
+    </div>
+  </div>
+  <div class="panel dock">
+    <h2>Your review</h2>
+    <div class="actions">
+      <span class="aside mono">7 agreed · 2 to change</span>
+      <label class="comment-box change">A note for the lead, on the whole proposal
+        <textarea rows="2">Look at how ruff counts lines before picking the limits.</textarea>
+        <span class="tag">D2 · new: goes with Send back</span>
+      </label>
+      <button class="btn go" type="button">Send 2 changes and a note back</button>
+      <span class="fold">Reject…</span>
+    </div>
+    <span class="aside">Every point is agreed unless you comment on it.</span>
+  </div>
+
+  <p class="moment">2 · On its way, after a reload</p>
+  <div class="panel">
+    <h2>Review ADR 55</h2>
+    <p class="lede">Every key point, in plain words. Comment on what you'd change; the rest counts as agreed when you send.</p>
+    <div class="deck">
+      <div class="key-point"><b>1</b><div><b><span class="flag">&#9873;</span> A size check for every Python file</b><span>Added to check-all and to the developer gates, next to the test layout check.</span></div></div>
+      <div class="key-point"><b>2</b><div><b>Code lines only</b><span>Blank lines and comment-only lines don't count, so deleting comments never helps a file pass.</span></div>
+        <div class="said way change"><span class="stamp">You said · on its way</span><p>Disagree comments should count too</p><span class="tag">D1 · new: your comment stays under its point</span></div></div>
+      <div class="key-point"><b>8</b><div><b>No import-order check</b><span>Allowing an import of a higher module inside a function only hides the circular dependency.</span></div>
+        <div class="said way"><span class="stamp">You said · on its way</span><p>Does that you're suggesting we don't allow imports in a function? I agree</p></div></div>
+    </div>
+  </div>
+  <div class="panel dock">
+    <h2>Your review</h2>
+    <div class="actions on-its-way">
+      <p class="way-title">On its way · the runner applies it at its next pick</p>
+      <div class="sent-list change">
+        <span class="aside mono">Sent back 23:03 · 2 comments and a note</span>
+        <div class="said way"><span class="stamp">Your note · 23:03</span><p>Look at how ruff counts lines before picking the limits.</p></div>
+        <div class="said way"><span class="stamp">Your note · 23:20</span><p>And keep the test limit well above the code one.</p></div>
+        <span class="tag">D1, D3 · new: what you sent, notes in the order sent</span>
+      </div>
+      <div class="note-plate change"><b>Add a note</b><i></i><span>the lead reads it with this</span></div>
+      <label class="comment-box">Anything you forgot? It goes with this send-back, in the same reply.
+        <textarea rows="2"></textarea>
+      </label>
+      <button class="btn go" type="button">Add note</button>
+      <span class="tag">D3 · new: notes while it waits, and while the lead writes</span>
+    </div>
+    <span class="aside">Asked: the runner will do it.</span>
+  </div>
+
+  <p class="moment">3 · Taken: the lead is writing</p>
+  <div class="panel">
+    <h2>Review ADR 55</h2>
+    <div class="deck">
+      <div class="key-point"><b>2</b><div><b>Code lines only</b><span>Blank lines and comment-only lines don't count, so deleting comments never helps a file pass.</span></div>
+        <div class="said lead change"><span class="stamp">You said · with the lead</span><p>Disagree comments should count too</p><span class="tag">D1 · solid once the runner has taken it</span></div></div>
+    </div>
+  </div>
+  <div class="panel dock">
+    <h2>Your review</h2>
+    <p class="way-title" style="color: var(--ink-2)">Sent back · the lead is revising it</p>
+    <div class="note-plate"><b>Add a note</b><i></i><span>after this reply</span></div>
+    <label class="comment-box"><textarea rows="2"></textarea></label>
+    <button class="btn go" type="button">Add note</button>
+  </div>
+
+  <p class="legend"><b>Dashed green</b> marks what F308 adds. Your words wait where you wrote them, dashed hazard while on their way and solid once the lead has them, until the lead's next reply replaces the proposal.</p>
+</section>
+
+</div>
+
+<script>
+function wireSwitch() {
+  document.querySelectorAll(".switch button").forEach(function (button) {
+    button.addEventListener("click", function () {
+      document.querySelectorAll(".switch button").forEach(function (b) { b.setAttribute("aria-pressed", String(b === button)); });
+      document.querySelectorAll("[data-version]").forEach(function (v) { v.hidden = v.dataset.version !== button.dataset.show; });
+    });
+  });
+}
+wireSwitch();
+</script>
+</body>
+</html>
