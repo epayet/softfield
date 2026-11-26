@@ -27,3 +27,12 @@ The picture to build is `.softfield/cards/f306-mockup/arrows-stay-put.html`, Pro
 - with the page scrolled so the nav is under the top bar, pressing ▶ shows the nav fully below the top bar; with the nav in view, pressing ▶ doesn't scroll
 - on a phone a point's title is 18 px in the display font; on a wide screen the pages look as before, with no nav
 - the listed `tests:` pass, and fail without the change
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 2676
+gate_failures: []
+tokens: 2769993
+```
