@@ -1315,7 +1315,6 @@ class _ProjectPlan:
     name: str
     lines: tuple[dispatch.PlanLine, ...]
     chosen: str | None  # `choose_ticket`'s ticket; None while the owner holds the project
-    chosen_first: str | None  # the same without the gap-filling lead ticket (F279 D5)
     windows: dispatch.Windows
     owner_pause: str | None  # the factory's pause, since when
     main_red: bool
@@ -1332,16 +1331,14 @@ def factory_plan(configs: Sequence[Config], at: datetime) -> dispatch.FactoryPla
     writes nothing (f1-33)."""
     projects = [_project_plan(cfg, at) for cfg in configs]
     chosen = {p.name: p.chosen for p in projects}
-    # A project whose only ticket is a lead one filling the gap goes after every other project's
-    # tickets (F279 D5), as `project_round` runs them
-    ordered = sorted(projects, key=lambda p: p.chosen is not None and p.chosen_first is None)
-    lines = tuple(
-        line
-        for group in dispatch.GROUPS
-        for p in (ordered if group == dispatch.GO else projects)
-        for line in p.lines
-        if line.group == group
-    )
+
+    def place(line: dispatch.PlanLine) -> tuple[int, bool]:
+        # A lead ticket that only fills the gap goes after every project's tickets that can
+        # start (F279 D5), as `project_round`'s second pass runs it; else project by project
+        gap = line.group == dispatch.GO and (line.waits or "").startswith(dispatch.GAP)
+        return dispatch.GROUPS.index(line.group), gap
+
+    lines = tuple(sorted((line for p in projects for line in p.lines), key=place))
 
     def goes(line: dispatch.PlanLine) -> bool:
         if line.kind == dispatch.TICKET:
@@ -1512,26 +1509,20 @@ def _project_plan(cfg: Config, at: datetime) -> _ProjectPlan:
         else:
             lines.append(row)
 
-    def choose(fill_gap: bool) -> Task | None:
-        return choose_ticket(
-            ready,
-            done,
-            paused | _held(cfg.repo, ready).keys() | behind.keys(),
-            cards=_cards(cfg.repo, ready),
-            regate=state.regate,
-            parked=state.parked,
-            windows=windows,
-            lane=lane,
-            protected=tuple(read_protected(cfg.repo)),
-            at=at,
-            reviewing=under_review(state),
-            fill_gap=fill_gap,
-        )
-
-    chosen = choose(True)
+    chosen = choose_ticket(
+        ready,
+        done,
+        paused | _held(cfg.repo, ready).keys() | behind.keys(),
+        cards=_cards(cfg.repo, ready),
+        regate=state.regate,
+        parked=state.parked,
+        windows=windows,
+        lane=lane,
+        protected=tuple(read_protected(cfg.repo)),
+        at=at,
+        reviewing=under_review(state),
+    )
     next_id = None if chosen is None or by_the_owner else chosen.id
-    first_chosen = choose(False)
-    first_id = None if first_chosen is None or by_the_owner else first_chosen.id
 
     def pre_review_next() -> str | None:  # nothing else can start (ADR 51), as the runner asks
         if by_the_owner or not cfg.metrics_db.is_file() or not cfg.roles.get(STAND_IN):
@@ -1580,7 +1571,6 @@ def _project_plan(cfg: Config, at: datetime) -> _ProjectPlan:
         name,
         tuple(plan_line(line) for line in lines),
         next_id,
-        first_id,
         windows,
         state.owner_pause,
         state.main_red is not None,

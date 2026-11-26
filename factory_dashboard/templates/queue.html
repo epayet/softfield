@@ -49,15 +49,15 @@
 
 {% if plan is not none %}
 {% if plan.belt %}
-<svg class="conveyor" viewBox="0 0 360 86" role="img" aria-label="The next {{ plan.belt | length }} on the belt">
+<svg class="conveyor" viewBox="0 0 360 70" role="img" aria-label="The next {{ plan.belt | length }} on the belt">
   <text class="belt-label" x="0" y="10">NEXT ON THE BELT →</text>
   <rect class="belt-bed" x="0" y="58" width="360" height="8"/>
   {% for x in range(20, 360, 40) %}<line class="belt-roll" x1="{{ x }}" y1="58" x2="{{ x }}" y2="66"/>{% endfor %}
   {% for r in plan.belt %}{% set x = 306 - 54 * loop.index0 %}
   <a href="#row-{{ r.n }}"><title>{{ r.n }}: {{ r.subject }} ({{ r.who_words }})</title><rect class="crate {{ r.css }}" x="{{ x }}" y="22" width="44" height="34"/><text class="crate-n" x="{{ x + 22 }}" y="44">{{ r.n }}</text></a>
   {% endfor %}
-  <text class="belt-label" x="0" y="84">dashed: a job · blue: a developer · orange: the lead · tap a crate for its row</text>
 </svg>
+<p class="belt-key" id="q-belt-key">dashed: a job · blue: a developer · orange: the lead · tap a crate for its row</p>
 {% endif %}
 
 <div class="q-cols">

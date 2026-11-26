@@ -145,6 +145,21 @@ def test_the_rows_are_numbered_in_the_plans_order_with_plate_who_card_and_why(
     assert "f132-05-floor" not in go
 
 
+def test_the_belts_key_is_text_under_the_picture_so_a_phone_never_clips_it(
+    db_path: Path, serve: Callable[..., TestClient]
+) -> None:
+    """Review: inside the 360-wide picture the key was cut at "the lea"."""
+    store(db_path)
+    html = serve().get("/queue").text
+    svg = re.search(r'<svg class="conveyor".*?</svg>', html, re.S)
+    assert svg and "orange: the lead" not in svg.group(0)
+    key = re.search(r'</svg>\s*<p class="belt-key" id="q-belt-key">(.*?)</p>', html, re.S)
+    assert key
+    assert text(key.group(1)) == (
+        "dashed: a job · blue: a developer · orange: the lead · tap a crate for its row"
+    )
+
+
 def test_a_ticket_row_opens_its_goal_waits_reason_and_preflight_with_its_projects_links(
     db_path: Path, serve: Callable[..., TestClient]
 ) -> None:

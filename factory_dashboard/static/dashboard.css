@@ -1807,6 +1807,7 @@ textarea { max-height: 60vh; overflow-y: auto; }
 .queue-page .way b { font: 600 11.5px var(--mono); color: var(--warn-ink); }
 .queue-page svg.conveyor { display: block; width: 100%; max-width: 520px; height: auto; margin: 0 0 6px; }
 .queue-page .conveyor .belt-label { font: 9px var(--mono); fill: var(--muted); letter-spacing: 1.5px; }
+.queue-page .belt-key { font: 11px var(--mono); color: var(--muted); margin: 2px 0 12px; }
 .queue-page .conveyor .belt-bed { fill: var(--plate); stroke: var(--rule); }
 .queue-page .conveyor .belt-roll { stroke: var(--rule); }
 .queue-page .conveyor .crate { fill: var(--plate); stroke-width: 2; stroke: var(--ink-2); stroke-dasharray: 4 2; }

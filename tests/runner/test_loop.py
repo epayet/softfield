@@ -7696,6 +7696,21 @@ def test_over_pace_the_plan_puts_another_projects_developer_ticket_before_the_le
     assert plan.picked == 0 and plan.lines[0].subject == "f2-01-b"
 
 
+def test_over_pace_a_projects_own_lead_tickets_list_after_every_developer_ticket(
+    repo, tmp_path_factory, fake_clock
+):
+    """F279 D5, review: the first project's lead ticket sits above its own developer ticket on
+    the board, yet over the pace both projects' developer tickets are listed before it, as
+    `project_round`'s two passes run them."""
+    first, second = _two_projects_with(repo, tmp_path_factory, "lead", "developer", 0.65)
+    _on_card(first.repo, "f3-01-c", 2)
+    git(first.repo, "add", "-A")
+    git(first.repo, "commit", "-q", "-m", "a developer ticket")
+    plan = loop.factory_plan([first, second], THURSDAY)
+    assert _order(plan) == ["f3-01-c", "f2-01-b", "f1-01-a"]
+    assert plan.picked == 0 and plan.lines[0].subject == "f3-01-c"
+
+
 def test_over_pace_with_no_developer_ticket_anywhere_the_first_lead_ticket_goes(
     repo, tmp_path_factory, fake_clock
 ):
