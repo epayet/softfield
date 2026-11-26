@@ -13,6 +13,7 @@ from typing import Any
 import pytest
 
 from factory_dashboard.planning import desk, waiting_for_you
+from factory_dashboard.queries import local
 from runner import metrics
 from tests.factory_dashboard.conftest import (
     NOW,
@@ -1385,3 +1386,143 @@ def test_refresh_against_main_still_sends_its_own_words(page, planning, db_path,
         "f6/plan",
         {"text": REFRESH, "comments": {}},
     )
+
+
+# --- what was sent back stays on the page (F308 D1, f308-02) -------------------------------
+
+# the message ``runner.requests._send_back`` writes at the runner's pick
+_SENT_BACK_MESSAGE = "I sent back your proposal “ADR 20: the planning room” (adr-20).\n- On it"
+
+
+def _ask(db_path: Path, project_id: int, kind: str, subject: str, value: object, ago: int) -> int:
+    """A request ``ago`` minutes before ``NOW``, waiting for the runner's pick; its id."""
+    found: list[int] = []
+    words = json.dumps(value)
+    _write(
+        db_path,
+        lambda conn: found.append(
+            metrics.add_request(conn, project_id, kind, subject, words, _at(timedelta(minutes=ago)))
+        ),
+    )
+    return found[0]
+
+
+def _taken(db_path: Path, request_id: int) -> None:
+    _write(
+        db_path,
+        lambda conn: metrics.finish_request(
+            conn, request_id, NOW.isoformat(), "queued for the lead"
+        ),
+    )
+
+
+def _said(html: str) -> dict[str, tuple[str, str, str]]:
+    """What each key point shows under it: (dashed ``way`` or solid ``lead``, stamp, words)."""
+    return {
+        n: (look, stamp, unescape(words))
+        for n, look, stamp, words in re.findall(
+            r'<label class="comment-box" data-point="(\d+)"(?:(?!</label>).)*</label>\s*'
+            r'<div class="said (\w+)">'
+            r'<span class="stamp">([^<]*)</span><p>([^<]*)</p></div>',
+            html,
+            re.S,
+        )
+    }
+
+
+def _dock_notes(html: str) -> list[tuple[str, str, str]]:
+    """The notes in the dock's Sent back list, in the page's order: (look, stamp, words)."""
+    sent = html.split('id="sent"', 1)[1].split('id="review-status"', 1)[0]
+    found = re.findall(
+        r'<div class="said (\w+)"><span class="stamp">([^<]*)</span><p>([^<]*)</p></div>', sent
+    )
+    return [(look, stamp, unescape(words)) for look, stamp, words in found]
+
+
+def _hhmm(ago: int) -> str:
+    return local(_at(timedelta(minutes=ago))).strftime("%H:%M")
+
+
+def test_a_send_back_on_its_way_shows_each_comment_and_every_note_dashed(planning, db_path, serve):
+    """Comments on points 1 and 3 and a note, waiting for the pick: each comment under its own
+    point, point 2 bare; the dock's heading counts what was sent, and lists the send-back's
+    note and the card's other notes since the lead's reply (not the one before it, not
+    another card's, not a cancelled one), oldest first, each with its time."""
+    _write(db_path, lambda conn: _review(conn, planning, "f6", _REVIEW_ADR, _REVIEW_PLAN))
+    _ask(db_path, planning, "plan_message", "f6", {"text": "Before the reply.", "comments": {}}, 40)
+    _ask(db_path, planning, "plan_message", "f6", {"text": "First, early.", "comments": {}}, 25)
+    sent = {"text": "Look at the limits.", "comments": {"1": "Say when.", "3": "Too much."}}
+    _ask(db_path, planning, "send_back", "f6/adr-20", sent, 20)
+    _ask(db_path, planning, "plan_message", "f9", {"text": "Another card.", "comments": {}}, 15)
+    gone = _ask(db_path, planning, "plan_message", "f6", {"text": "Cancelled.", "comments": {}}, 12)
+    _write(db_path, lambda c: metrics.finish_request(c, gone, NOW.isoformat(), "cancelled by you"))
+    _ask(db_path, planning, "plan_message", "f6", {"text": "And the tests.", "comments": {}}, 10)
+    html = _review_page(serve(), "/planning/f6/proposals/adr-20")
+    assert _said(html) == {
+        "1": ("way", "You said · on its way", "Say when."),
+        "3": ("way", "You said · on its way", "Too much."),
+    }
+    assert f"Sent back {_hhmm(20)} · 2 comments and a note" in _text(html)
+    assert _dock_notes(html) == [
+        ("way", f"Your note · {_hhmm(25)}", "First, early."),
+        ("way", f"Your note · {_hhmm(20)}", "Look at the limits."),
+        ("way", f"Your note · {_hhmm(10)}", "And the tests."),
+    ]
+    assert re.search(r'id="actions" class="on-its-way"', html)
+
+
+def test_a_taken_send_back_shows_the_same_words_solid_without_its_own_message(
+    planning, db_path, serve
+):
+    """Taken: the comment stamped "with the lead", solid; a note sent since and still waiting
+    stays dashed; the message the send-back became never shows as a note; no note, so the
+    heading counts the one comment alone."""
+    _write(db_path, lambda conn: _review(conn, planning, "f6", _REVIEW_ADR, _REVIEW_PLAN))
+    sent = {"text": "", "comments": {"2": "One process is too few."}}
+    _taken(db_path, _ask(db_path, planning, "send_back", "f6/adr-20", sent, 20))
+    became = {"text": _SENT_BACK_MESSAGE, "comments": {}}
+    _taken(db_path, _ask(db_path, planning, "plan_message", "f6", became, 19))
+    _ask(db_path, planning, "plan_message", "f6", {"text": "Also: the tests.", "comments": {}}, 5)
+    html = _review_page(serve(), "/planning/f6/proposals/adr-20")
+    assert _said(html) == {"2": ("lead", "You said · with the lead", "One process is too few.")}
+    assert re.findall(r'<span class="aside mono">(Sent back [^<]*)</span>', html) == [
+        f"Sent back {_hhmm(20)} · 1 comment"
+    ]
+    assert _dock_notes(html) == [("way", f"Your note · {_hhmm(5)}", "Also: the tests.")]
+    assert re.search(r'id="actions" class=""', html)
+    assert "I sent back your proposal" not in html
+
+
+def test_nothing_shows_with_no_send_back_or_once_the_lead_has_written_since(
+    planning, db_path, serve
+):
+    """Open with only a note: none of it. A send-back the lead's plain reply has answered:
+    none of it. One whose proposal a newer reply replaced: none of it either."""
+    _write(db_path, lambda conn: _review(conn, planning, "f6", _REVIEW_ADR, _REVIEW_PLAN))
+    _ask(db_path, planning, "plan_message", "f6", {"text": "A thought.", "comments": {}}, 25)
+    client = serve()
+    html = _review_page(client, "/planning/f6/proposals/adr-20")
+    assert 'class="said' not in html and 'id="sent"' not in html
+    sent = {"text": "Look again.", "comments": {"1": "Say when."}}
+    _taken(db_path, _ask(db_path, planning, "send_back", "f6/adr-20", sent, 20))
+    assert 'id="sent"' in _review_page(client, "/planning/f6/proposals/adr-20")  # the check bites
+    _lead_says(db_path, planning, "f6", "Reading it now.")  # one minute ago, no proposals
+    plain = _review_page(client, "/planning/f6/proposals/adr-20")
+    assert 'class="said' not in plain and 'id="sent"' not in plain
+    assert re.search(r'id="settled">Sent back<', plain)  # still sent back, only not shown
+
+    _write(db_path, lambda conn: _review(conn, planning, "f9", _REVIEW_MERGE))
+    keep = {"text": "", "comments": {"1": "Keep both."}}
+    _ask(db_path, planning, "send_back", "f9/merge-f9", keep, 20)
+    assert 'id="sent"' in _review_page(client, "/planning/f9/proposals/merge-f9")
+
+    def newer(conn: sqlite3.Connection) -> None:
+        found = metrics.planner_thread(conn, planning, "f9", _at(timedelta(hours=5)))["id"]
+        metrics.add_planner_message(
+            conn, found, "lead", _at(timedelta(minutes=1)), "New.", proposals=[_REVIEW_SEED]
+        )
+
+    _write(db_path, newer)
+    replaced = _review_page(client, "/planning/f9/proposals/merge-f9")
+    assert 'class="said' not in replaced and 'id="sent"' not in replaced
+    assert "Replaced by a newer reply" in _text(replaced)

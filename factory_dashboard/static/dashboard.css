@@ -918,6 +918,14 @@ body:has(.map-page) > header.bar, body:has(.map-page) main > nav.crumbs { displa
 .proposal-page #stale { color: var(--warn-ink); }
 .proposal-page #setting-aside { border: 1px dashed var(--hazard); padding: 4px 8px; font-size: 12.5px; align-self: flex-start; }
 .proposal-page #settled { margin: 0; font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-2); }
+/* F308 D1: the owner's words after Send back, dashed hazard on their way, solid once taken */
+.proposal-page .said { flex-basis: 100%; border-left: 3px solid var(--hazard); background: var(--floor); padding: 6px 10px; display: flex; flex-direction: column; gap: 2px; }
+.proposal-page .said.way { border: 1px dashed var(--hazard); border-left-width: 3px; }
+.proposal-page .said.lead { border-left-color: var(--ink-2); }
+.proposal-page .said .stamp { font: 600 11px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--hazard); }
+.proposal-page .said.lead .stamp { color: var(--ink-2); }
+.proposal-page .said p { margin: 0; font-size: 14px; white-space: pre-wrap; }
+.proposal-page .sent-list { display: flex; flex-direction: column; gap: 6px; }
 .proposal-page #next-steps ol { margin: 0; padding-left: 18px; font-size: 14px; display: flex; flex-direction: column; gap: 4px; }
 
 /* "In short" plate (F207): above the points on a thread, under the header on a proposal page */

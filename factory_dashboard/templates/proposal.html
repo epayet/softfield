@@ -47,6 +47,10 @@
         <label class="comment-box" data-point="{{ point.n }}" hidden>What would you change?
           <textarea class="comment" data-point="{{ point.n }}" rows="2"></textarea>
         </label>
+        {# F308 D1: what the owner said on this point, dashed until the runner takes it #}
+        {% if standing.sent and point.n in standing.sent.comments %}
+        <div class="said {{ 'lead' if standing.sent.taken else 'way' }}"><span class="stamp">You said · {{ "with the lead" if standing.sent.taken else "on its way" }}</span><p>{{ standing.sent.comments[point.n] }}</p></div>
+        {% endif %}
       </div>
       {% endfor %}
     </div>
@@ -87,8 +91,17 @@
          the dashed orange "on its way" box (and a reload shows the same); settled: its word
          and the runner's result, no button #}
       {% set open = standing.state == "open" %}
-      <div id="actions" class="{% if standing.state == 'on its way' %}on-its-way{% endif %}">
+      <div id="actions" class="{% if standing.state == 'on its way' or (standing.sent and not standing.sent.taken) %}on-its-way{% endif %}">
       <p class="way-title">On its way · the runner applies it at its next pick</p>
+      {% if standing.sent %}
+      {# F308 D1: what was sent, as sent; each note dashed until the runner takes it #}
+      <div id="sent" class="sent-list">
+        <span class="aside mono">Sent back {{ standing.sent.at | local("%H:%M") }} · {{ standing.sent.counts }}</span>
+        {% for note in standing.sent.notes %}
+        <div class="said {{ 'lead' if note.taken else 'way' }}"><span class="stamp">Your note · {{ note.at | local("%H:%M") }}</span><p>{{ note.text }}</p></div>
+        {% endfor %}
+      </div>
+      {% endif %}
       {% if open %}
       {% if standing.revising %}
       {# F100: the owner's message waits for the lead, who may change this draft; the buttons stay #}

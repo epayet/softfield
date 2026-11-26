@@ -57,6 +57,8 @@ from runner.planner import (
     APPROVED,
     ON_ITS_WAY,
     OPEN,
+    SENT_BACK,
+    WORKED,
     PlannerError,
     message,
     proposal_requests,
@@ -68,6 +70,7 @@ from runner.tasks import full_key, milestone_file, short_key
 router = APIRouter()
 
 REVISING = "being revised"  # F100: an open proposal while the owner's message waits for the lead
+SENT_BACK_WORDS = "I sent back your proposal “"  # how ``planner.sent_back`` starts (F308 D1)
 IN_SHORT_MAX = 400  # F207 D4: a lead's text with points up to this long opens in the plate
 
 # Each proposal kind's colour, a token from dashboard.css
@@ -274,15 +277,98 @@ REPLACED = "replaced by a newer reply"
 
 
 @dataclass(frozen=True)
+class Note:
+    """A note the owner sent the lead (F308 D1): its words, when, and whether the runner has
+    taken it (solid) or it waits for its pick (dashed)."""
+
+    text: str
+    at: str
+    taken: bool
+
+
+@dataclass(frozen=True)
+class Sent:
+    """What a proposal's latest send-back sent (F308 D1): the comments by point number, and
+    the notes for the dock, the send-back's own words among them, oldest first."""
+
+    at: str
+    taken: bool
+    comments: dict[int, str]
+    notes: list[Note]
+    with_note: bool  # the send-back carried words of its own
+
+    @property
+    def counts(self) -> str:
+        """The heading's count, as sent: "2 comments and a note"."""
+        n = len(self.comments)
+        comments = f"{n} comment{'' if n == 1 else 's'}" if n else ""
+        note = "a note" if self.with_note else ""
+        return " and ".join(part for part in (comments, note) if part)
+
+
+@dataclass(frozen=True)
 class Standing:
     """Where a proposal stands on its review page (F31 D3): its state; the request on its
     way (its status polls); the runner's word on the latest request about it (a refusal's
-    reason while it is open again)."""
+    reason while it is open again); what its send-back sent (F308 D1)."""
 
     state: str
     pending: sqlite3.Row | Mapping[str, Any] | None
     said: str
     revising: bool = False  # F100: open, but the owner's message waits for the lead
+    sent: Sent | None = None
+
+
+def _worked(row: sqlite3.Row | Mapping[str, Any]) -> bool:
+    """Whether a request is waiting or went through: not refused, not cancelled."""
+    return row["done"] is None or str(row["result"] or "").startswith(WORKED)
+
+
+def _lead_since(conn: sqlite3.Connection, project_id: int, thread: str, at: str) -> bool:
+    """Whether the lead wrote on the card's thread after ``at``, a reply of any kind."""
+    rows = conn.execute(
+        "SELECT m.at FROM planner_messages m JOIN planner_threads t ON t.id = m.thread_id"
+        " WHERE t.project_id = ? AND t.card = ? AND m.author = 'lead'",
+        (project_id, thread),
+    ).fetchall()
+    return any(_when(r["at"]) > _when(at) for r in rows)
+
+
+def _sent(
+    conn: sqlite3.Connection,
+    project_id: int,
+    thread: str,
+    about: list[sqlite3.Row | Mapping[str, Any]],
+    requests: list[sqlite3.Row],
+) -> Sent | None:
+    """The proposal's latest send-back that went through, unless the lead has written since
+    (F308 D1); its notes are its own words and the card's ``plan_message`` requests since the
+    lead's last message, oldest first, without the one the send-back itself became."""
+    back = [r for r in about if r["kind"] == "send_back" and _worked(r)]
+    if not back or _lead_since(conn, project_id, thread, back[-1]["created"]):
+        return None
+    row = back[-1]
+    try:
+        text, comments = message(row["value"])
+    except PlannerError:
+        return None
+    taken = row["done"] is not None
+    notes = [Note(text, row["created"], taken)] if text else []
+    later = []
+    for r in requests:
+        if r["kind"] != "plan_message" or r["subject"] != thread or not _worked(r):
+            continue
+        if _lead_since(conn, project_id, thread, r["created"]):
+            continue  # answered already
+        try:
+            words, _ = message(r["value"])
+        except PlannerError:
+            continue
+        if words.startswith(SENT_BACK_WORDS):
+            continue  # the send-back's own message, at the runner's pick
+        later.append(Note(words, r["created"], r["done"] is not None))
+    notes = sorted(notes + later, key=lambda note: _when(note.at))
+    return Sent(row["created"], taken, comments, notes, bool(text))
 
 
 def _standing(
@@ -305,7 +391,10 @@ def _standing(
     done = [r for r in about if r["done"] is not None]
     said = str(done[-1]["result"] or "") if done else ""
     revising = state == OPEN and thread in _waiting_for_lead(conn, project_id)
-    return Standing(state, pending if state == ON_ITS_WAY else None, said, revising)
+    sent = None
+    if state in (ON_ITS_WAY, SENT_BACK):
+        sent = _sent(conn, project_id, thread, about, requests)
+    return Standing(state, pending if state == ON_ITS_WAY else None, said, revising, sent)
 
 
 def _again(conn: sqlite3.Connection, project_id: int | None, thread: str, again: str) -> str:
