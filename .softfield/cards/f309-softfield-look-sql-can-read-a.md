@@ -1,4 +1,4 @@
-# Milestone F309: softfield look sql can read a project's app database too,…
+# Milestone F309: Planning and review jobs can read a project's app database, read-only
 
 > **State:** idea · **Area:** factory
 > Planted by the owner on 2026-11-26.
