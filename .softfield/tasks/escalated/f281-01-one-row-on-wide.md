@@ -30,3 +30,12 @@ Read `.softfield/cards/f281-on-desktop-for-the-new-menu.md` (D1 to D4) and build
 - on a 390 px and a 360 px phone the bar is exactly F194's four slots and sub menu, and their existing tests still pass
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: stopped)
+attempts: 3
+tokens: 604841
+logs: .softfield/var/runs/20261125-034732/f281-01-one-row-on-wide
+```
