@@ -48,7 +48,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from factory_dashboard import queries
 from factory_dashboard.app import Db, Now, Project, render
 from factory_dashboard.jobs import _failed_gate
-from factory_dashboard.overview import LIVE, every_project, live_runs
+from factory_dashboard.overview import LIVE, every_project, live_runs, on_the_floor
 from runner import dispatch, loop, metrics, session
 from runner.config import Config, load_config
 from runner.tasks import BUGS, milestone_order, short_key
@@ -1193,7 +1193,8 @@ def overnight(now: datetime, seen: str | None) -> datetime:
 
 def _context(conn: sqlite3.Connection, project: str, now: datetime) -> dict[str, Any]:
     # the server's local time: the counts start at its midnight; the whole factory's (D9)
-    line = live_line(conn, project, now.astimezone(), projects=every_project(conn, project))
+    # F262 D4: an archived project leaves the floor once its last job ends
+    line = live_line(conn, project, now.astimezone(), projects=on_the_floor(conn, project, now))
     return {"active": "/line", "line": line}
 
 

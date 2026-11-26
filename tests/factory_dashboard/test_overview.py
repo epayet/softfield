@@ -5281,6 +5281,66 @@ def test_next_in_line_is_the_runners_order_across_projects(tmp_path):
     assert 'href="/tickets/f1-01-softfield?project=softfield"' in html
 
 
+def _floor_projects(client: Any) -> set[str]:
+    """The projects with a row in the floor's queue, from ``/line/live``'s document."""
+    doc = client.get("/line/live", headers={"accept": "application/json"}).json()
+    return {row["project"] for row in doc["queue"]}
+
+
+def test_an_archived_project_leaves_the_lanes_and_the_floor(tmp_path):
+    """f262-03 (F262 D4): coucou archived, the Queue and the floor have no coucou and the two
+    others as before; Needs you still lists coucou's ADR item."""
+    path = _factory(tmp_path)
+    client = _client(path)
+    assert _floor_projects(client) == {TRAVEL, SOFTFIELD, PROJECT}  # before: all three
+    conn = metrics.open_db(path)
+    try:
+        metrics.set_project_paused(conn, PROJECT, metrics.ARCHIVED)
+    finally:
+        conn.close()
+    assert _floor_projects(client) == {TRAVEL, SOFTFIELD}
+    for name in (TRAVEL, SOFTFIELD, PROJECT):
+        html = client.get(f"/?project={name}").text
+        queue_section = section(html, "queue")
+        assert queue_section.startswith(
+            "Queue 2 tickets waiting: travel-companion 1 · softfield 1 Next in line"
+        ), queue_section
+        assert "coucou" not in queue_section
+        first = "1 1 f1-01-softfield softfield's next · a developer · F1 · softfield"
+        assert first in queue_section
+        assert "coucou Coucou's decision." in section(html, "needs-you")
+
+
+def test_an_archived_projects_running_job_shows_until_it_ends(tmp_path):
+    """f262-03: softfield archived while its planner job runs: Now still shows the job and the
+    floor still has softfield, but its ticket leaves the Queue; once the job ends, softfield
+    leaves the floor."""
+    from factory_dashboard.overview import every_project, on_the_floor
+
+    path = _factory(tmp_path)
+    conn = metrics.open_db(path)
+    try:
+        metrics.set_project_paused(conn, SOFTFIELD, metrics.ARCHIVED)
+        assert on_the_floor(conn, TRAVEL, NOW) == [TRAVEL, SOFTFIELD, PROJECT]
+    finally:
+        conn.close()
+    client = _client(path)
+    html = client.get(f"/?project={TRAVEL}").text
+    now = section(html, "now")
+    assert now.startswith("Now refreshes every 5 s softfield F1 claude-opus planner"), now
+    queue_section = section(html, "queue")
+    assert "f1-01-softfield" not in queue_section and "f1-01-coucou" in queue_section
+    conn = metrics.open_db(path)
+    try:
+        (job,) = conn.execute("SELECT id FROM jobs WHERE outcome = 'running'").fetchall()
+        metrics.finish_job(conn, job["id"], ended=NOW.isoformat(), outcome="answered")
+        assert on_the_floor(conn, TRAVEL, NOW) == [TRAVEL, PROJECT]
+        assert every_project(conn, TRAVEL) == [TRAVEL, SOFTFIELD, PROJECT]  # Needs you's list
+    finally:
+        conn.close()
+    assert _floor_projects(client) == {TRAVEL, PROJECT}
+
+
 # --- F132-03: away every project ----------------------------------------------------------------
 
 

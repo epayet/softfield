@@ -66,6 +66,18 @@ def every_project(conn: sqlite3.Connection, project: str) -> list[str]:
     return [p.name for p in metrics.projects_in_order(conn)] or [project]
 
 
+def on_the_floor(conn: sqlite3.Connection, project: str, now: datetime) -> list[str]:
+    """F262 D4: the projects the live lanes and the floor draw: ``every_project``'s, less an
+    archived one, which stays only while a job of it still runs (it shows until it ends).
+    Needs you, the timeline and the history keep ``every_project``."""
+    shelved = {p.name for p in metrics.projects_in_order(conn) if metrics.is_archived(p)}
+    return [
+        name
+        for name in every_project(conn, project)
+        if name not in shelved or any(job.live for job in running_jobs(conn, name, now))
+    ]
+
+
 # --- Running now and the runner's heartbeat (D3) ------------------------------------------
 
 
@@ -1079,12 +1091,15 @@ def _live_context(
     from runner import metrics
 
     names = every_project(conn, project)
+    # F262 D4: an archived project's needs and its running job still show; its lanes don't
+    floor = on_the_floor(conn, project, now)
+    shelved = {p.name for p in metrics.projects_in_order(conn) if metrics.is_archived(p)}
     boards = dict(cards or {})
     for name in names:
         if name not in boards:
             boards[name] = board(conn, name, now)
     if line is None:
-        line = live_line(conn, project, now.astimezone(), cards=boards, projects=names)
+        line = live_line(conn, project, now.astimezone(), cards=boards, projects=floor)
     found = {name: _project_live(conn, name, now, line=line, cards=boards[name]) for name in names}
     # the picked project's own: the Planning tab's count, its notices, the reserve's cards
     own = found.get(project) or _project_live(conn, project, now, line=line)
@@ -1109,7 +1124,7 @@ def _live_context(
     # F124-03: a project paused by you gets one line; its tickets and reviews wait, so none of
     # them is next (its planning replies, in `jobs_queued`, still go)
     paused = [{"project": p.name, "paused_since": p.paused} for p in every if p.paused]
-    running = [p for p in every if not p.paused]
+    running = [p for p in every if not p.paused and p.name not in shelved]
 
     # Next in line, in the runner's order (D5): every project's lane, its queued jobs, then the
     # tickets that can run project by project, then the waiting ones
@@ -1203,7 +1218,13 @@ def _live_context(
         "next": upcoming[len(lane) :],
         "passed": passed,
         "paused": paused,
-        "queued_jobs": [j for p in every for j in p.jobs_queued],
+        # an archived project's checkpoints and reviews wait; its replies to you still go (F262 D2)
+        "queued_jobs": [
+            j
+            for p in every
+            for j in p.jobs_queued
+            if p.name not in shelved or j.kind in ("Planning", "Plant")
+        ],
         # Claude's allowance and its reserve switches, below Now (f8-06)
         "allowance": agent_allowances(conn, now),
         "switches": reserve_switches(conn, project, now),
@@ -1325,7 +1346,7 @@ def overview(request: Request, conn: Db, project: Project, now: Now) -> HTMLResp
     # each project's board once, and the floor once: the whole factory's (F132 D9, F228)
     names = every_project(conn, project)
     cards = {name: board(conn, name, now) for name in names}
-    line = live_line(conn, project, local, cards=cards, projects=names)
+    line = live_line(conn, project, local, cards=cards, projects=on_the_floor(conn, project, now))
 
     def url(path: str, since: datetime) -> str:
         from urllib.parse import urlencode
