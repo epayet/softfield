@@ -288,6 +288,9 @@ main { max-width: 1240px; margin: 0 auto; padding: 14px 16px 48px; }
   font: 600 14px var(--display); text-transform: uppercase; letter-spacing: .1em; }
 .panel > h2::after { content: ""; order: 1; flex: 1; height: 8px; background: var(--stripe); opacity: .5; }
 .panel > h2 .src { order: 2; font: 11px var(--mono); text-transform: none; letter-spacing: 0; color: var(--muted); }
+/* The queue panel's sentence and link (f279-10) */
+#queue .queue-sentence { font: 600 14px var(--display); }
+#queue .queue-link { margin: 8px 0 0; }
 .panel.needs > h2 { background: var(--hazard); color: var(--hazard-ink); }
 .panel.needs > h2::after { background: repeating-linear-gradient(-45deg, var(--hazard-ink) 0 6px, transparent 6px 12px); opacity: .35; }
 .panel.needs > h2 .src { color: var(--hazard-ink); }

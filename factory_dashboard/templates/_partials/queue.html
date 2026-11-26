@@ -5,21 +5,19 @@
     {% with name_count = plan.by_project %}
     <p><span class="count">{{ plan.tickets }} <small>{{ "ticket" if plan.tickets == 1 else "tickets" }} waiting{% if name_count %}: {% for name, n in name_count %}{% with name=name %}{% include "_partials/project_plate.html" %}{% endwith %} {{ n }}{% if not loop.last %} · {% endif %}{% endfor %}{% endif %}</small></span></p>
     {% endwith %}
-    <p style="font: 600 14px var(--display)">{{ plan.sentence }}</p>
+    <p class="queue-sentence">{{ plan.sentence }}</p>
     <h3>Next in line</h3>
     <ol class="belt">
       {% for r in plan.belt %}
       {% set plate %}{% with name=r.project %}{% if many_projects %} · {% endif %}{% include "_partials/project_plate.html" %}{% endwith %}{% endset %}
       {% if r.is_ticket and r.subject %}
-      <li class="{{ r.css }}"><span class="n">{{ r.n }}</span><span><b class="mono"><a href="/tickets/{{ r.subject }}?project={{ r.project | urlencode }}">{{ r.subject }}</a></b> {{ r.title or "" }} · {{ "the lead" if r.who == "lead" else "a developer" }}{% if r.waits %} · {{ r.waits }}{% endif %}{% if r.early_for %} · early: {{ r.early_for }} waits for it{% else %}{{ r.card or "" }}{% endif %}{{ plate }}</span></li>
-      {% elif r.kind == "Planning" %}
-      <li><span><b class="mono">{{ r.kind }}: <a href="/planning/{{ r.subject | upper }}?project={{ r.project | urlencode }}">{{ r.subject | upper }}</a></b> · {{ r.reason }}{{ plate }}</span></li>
+      <li class="{{ r.css }}"><span class="n">{{ r.n }}</span><span><b class="mono"><a href="/tickets/{{ r.subject }}?project={{ r.project | urlencode }}">{{ r.subject }}</a></b> {{ r.title or "" }} · {{ "the lead" if r.who == "lead" else "a developer" }}{% if r.waits %} · {{ r.waits }}{% endif %}{% if r.early_for %} · early: {{ r.early_for }} waits for it{% else %} · {{ r.card or "" }}{% endif %}{{ plate }}</span></li>
       {% else %}
-      <li><span><b class="mono">{{ r.kind }}: {{ r.subject }}</b> · {{ r.reason }}{{ plate }}</span></li>
+      <li><span class="n">{{ r.n }}</span><span><b class="mono">{{ r.kind }}: {{ r.subject }}</b> · {{ r.reason }}{{ plate }}</span></li>
       {% endif %}
       {% endfor %}
     </ol>
-    <p style="margin:8px 0 0"><a href="/queue">The whole queue ›</a></p>
+    <p class="queue-link"><a href="/queue">The whole queue ›</a></p>
   {% elif queue or queued_jobs or lane or next or paused %}
     {# Before the plan (today's behaviour) #}
     {% if queue %}

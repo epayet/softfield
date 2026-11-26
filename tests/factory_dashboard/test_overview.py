@@ -1791,8 +1791,8 @@ def test_the_queue_panel_has_the_whole_queue_link_text(serve, db_path):
     assert "2 tickets waiting" in queue_section
     # Ordered Next in line rows: number, id, title, who, card
     next_in_line = queue_section.split("Next in line", 1)[1]
-    first = re.search(r"1 f1-01-alpha Alpha title · the lead\s*F1", next_in_line)
-    second = re.search(r"2 f1-02-beta Beta title · a developer\s*F1", next_in_line)
+    first = re.search(r"1 f1-01-alpha Alpha title · the lead · F1", next_in_line)
+    second = re.search(r"2 f1-02-beta Beta title · a developer · F1", next_in_line)
     assert first and second and first.start() < second.start()
     # Each ticket links to its own page, in its project
     raw = section_raw(html, "queue")
