@@ -1219,3 +1219,78 @@ def test_a_comment_typed_keeps_approve_hidden_across_the_approval_redraw(
     assert page.locator("#send-back").inner_text().lower() == "send 1 change back"
     assert not page.locator("#approve-plan").is_visible()
     assert not page.locator("#approve-first").is_visible()
+
+
+# --- a note box above Send back (F308 D2, f308-01) ------------------------------------------
+
+
+def test_the_dock_has_a_note_box_above_send_back(page, planning, db_path, serve):
+    """The dock has a box labelled "A note for the lead, on the whole proposal" above Send back,
+    as in the mock-up. Send back is hidden until there is a comment or a note."""
+    _write(db_path, lambda conn: _points_and_plan(conn, planning))
+    _open(page, serve(), "/planning/f6/proposals/plan")
+    note_box = page.locator("#proposal-note").locator("..")
+    assert note_box.is_visible()
+    assert "A note for the lead, on the whole proposal" in note_box.inner_text()
+    assert not page.locator("#send-back").is_visible()
+    assert page.locator("#approve-plan").is_visible()
+
+
+def test_send_back_posts_the_note_text_alongside_comments(page, planning, db_path, serve):
+    """Send back's value carries the note's trimmed words as text, beside comments."""
+    _write(db_path, lambda conn: _points_and_plan(conn, planning))
+    _open(page, serve(), "/planning/f6/proposals/plan")
+    page.click('.change-btn[data-point="1"]')
+    page.fill('textarea.comment[data-point="1"]', "Disagree.")
+    page.fill("#proposal-note", "Look at the limits.")
+    assert page.locator("#send-back").is_visible()
+    assert page.locator("#send-back").inner_text().lower() == "send 1 change and a note back"
+    assert not page.locator("#approve-plan").is_visible()
+    page.click("#send-back")
+    page.wait_for_selector("#review-status >> text=Asked")
+    [(kind, subject, value)] = _asked(db_path, planning)
+    assert (kind, subject, json.loads(value)) == (
+        "send_back",
+        "f6/plan",
+        {"text": "Look at the limits.", "comments": {"1": "Disagree."}},
+    )
+
+
+def test_a_note_typed_comes_back_after_a_reload_and_goes_after_send(page, planning, db_path, serve):
+    """A note typed and not sent comes back after a reload, and is gone after a successful Send
+    back."""
+    _write(db_path, lambda conn: _points_and_plan(conn, planning))
+    _open(page, serve(), "/planning/f6/proposals/plan")
+    page.fill("#proposal-note", "A note only.")
+    # Verify the note is saved to sessionStorage (deck.js keeps it like comments)
+    saved = page.evaluate("() => JSON.parse(sessionStorage.getItem('softfield-comments') || '{}')")
+    assert saved.get("/planning/f6/proposals/plan", {}).get("note") == "A note only."
+    assert page.locator("#send-back").is_visible()
+    assert page.locator("#send-back").inner_text().lower() == "send a note back"
+    assert not page.locator("#approve-plan").is_visible()
+    page.reload()
+    note = page.locator("#proposal-note")
+    assert note.is_visible() and note.input_value() == "A note only."
+    assert page.locator("#send-back").is_visible()
+    # Verify sessionStorage is cleared after a successful send
+    page.click("#send-back")
+    page.wait_for_selector("#review-status >> text=Asked")
+    cleared = page.evaluate(
+        "() => JSON.parse(sessionStorage.getItem('softfield-comments') || '{}')"
+    )
+    assert "/planning/f6/proposals/plan" not in cleared
+
+
+def test_refresh_against_main_still_sends_its_own_words(page, planning, db_path, serve):
+    """Refresh against main still sends its own words."""
+    _write(db_path, lambda conn: _points_and_plan(conn, planning))
+    _open(page, serve(), "/planning/f6/proposals/plan")
+    page.fill("#proposal-note", "My refresh note.")
+    page.click("#refresh-button")
+    page.wait_for_selector("#review-status >> text=Asked")
+    [(kind, subject, value)] = _asked(db_path, planning)
+    assert (kind, subject, json.loads(value)) == (
+        "send_back",
+        "f6/plan",
+        {"text": REFRESH, "comments": {}},
+    )

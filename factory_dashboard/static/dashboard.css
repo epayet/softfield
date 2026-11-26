@@ -446,9 +446,11 @@ span.proj::after, a.proj::after { bottom: -1px; right: -1px; border-width: 0 1px
   #allowance h2 { display: none; }
   #allowance .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font: 12px var(--mono);
     color: var(--ink-2); margin: 6px 0 0; }
-  #allowance .line { font-size: 12px; }
-  #allowance .line small { color: var(--muted); }
-}
+   #allowance .line { font-size: 12px; }
+   #allowance .line small { color: var(--muted); }
+   /* F308: the proposal note box only shows on wide screens */
+   .proposal-page .action-buttons .comment-box.change { display: none; }
+ }
 .running-card { display: grid; gap: 8px; }
 .running-card + .running-card { border-top: 1px solid var(--grid); padding-top: 10px; margin-top: 10px; }
 .running-head { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }

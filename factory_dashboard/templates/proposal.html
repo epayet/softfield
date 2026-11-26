@@ -96,10 +96,13 @@
       {% endif %}
       <div class="action-buttons">
       <span id="review-count" class="aside">{{ key_points | length }} agreed · 0 to change</span>
+      <label class="comment-box change">A note for the lead, on the whole proposal
+        <textarea id="proposal-note" rows="2"></textarea>
+      </label>
       <button type="button" id="send-back" class="btn go"
           hx-on::before-request="document.getElementById('actions').classList.add('on-its-way')" hidden
         hx-post="/requests" hx-target="#review-status" hx-swap="innerHTML"
-        hx-vals='js:{kind: "send_back", project: {{ project | tojson }}, subject: {{ (thread ~ "/" ~ proposal.id) | tojson }}, value: JSON.stringify({text: "", comments: Object.fromEntries(Array.from(document.querySelectorAll("textarea.comment"), t => [t.dataset.point, t.value.trim()]).filter(c => c[1]))})}'>Send back</button>
+        hx-vals='js:{kind: "send_back", project: {{ project | tojson }}, subject: {{ (thread ~ "/" ~ proposal.id) | tojson }}, value: JSON.stringify({text: document.getElementById("proposal-note").value.trim(), comments: Object.fromEntries(Array.from(document.querySelectorAll("textarea.comment"), t => [t.dataset.point, t.value.trim()]).filter(c => c[1]))})}'>Send back</button>
       {# F210 D7: #primary and the Approve first fold, redrawn together. While the card's ADR
          waits they poll their page; the box is always drawn, so the last poll finds it, and the
          redrawn one has no poll. The page's script keeps the fold's state and its hidden rule #}
@@ -220,10 +223,15 @@
     var first = document.getElementById('approve-first');
     if (!primary) return;  // settled: no buttons
     var n = Array.from(document.querySelectorAll('textarea.comment')).filter(function (t) { return t.value.trim(); }).length;
-    sendBack.hidden = n === 0;
-    primary.hidden = n > 0;
-    if (first) first.hidden = n > 0;  // F224: going first is an approval too
-    sendBack.textContent = n ? 'Send ' + n + (n === 1 ? ' change' : ' changes') + ' back' : 'Send back';
+    var note = document.getElementById('proposal-note').value.trim();
+    var hasNote = note.length > 0;
+    sendBack.hidden = n === 0 && !hasNote;
+    primary.hidden = n > 0 || hasNote;
+    if (first) first.hidden = n > 0 || hasNote;  // F224: going first is an approval too
+    if (n > 0 && hasNote) sendBack.textContent = 'Send ' + n + (n === 1 ? ' change' : ' changes') + ' and a note back';
+    else if (n > 0) sendBack.textContent = 'Send ' + n + (n === 1 ? ' change' : ' changes') + ' back';
+    else if (hasNote) sendBack.textContent = 'Send a note back';
+    else sendBack.textContent = 'Send back';
     count.textContent = (total - n) + ' agreed · ' + n + ' to change';
   }
 
@@ -241,6 +249,7 @@
     });
   });
   document.querySelectorAll('textarea.comment').forEach(function (t) { t.addEventListener('input', update); });
+  document.getElementById('proposal-note').addEventListener('input', update);
   // F210 D5: comments that waited in the tab come back into their boxes (deck.js): open
   // them, and Send back takes Approve's place
   document.addEventListener('comments-restored', function () {
@@ -250,6 +259,11 @@
       box.hidden = false;
       box.style.display = 'flex';
     });
+    var note = document.getElementById('proposal-note');
+    if (note.value.trim()) {
+      note.closest('.comment-box').hidden = false;
+      note.closest('.comment-box').style.display = 'flex';
+    }
     update();
   });
   // a successful Send back sent them: nothing waits in the tab any more; a failed one keeps them

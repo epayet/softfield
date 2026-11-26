@@ -65,7 +65,9 @@ document.addEventListener("htmx:afterSettle", () => document.querySelectorAll(".
   const keep = () => {
     const all = load();
     const comments = boxes().filter((t) => t.value.trim()).map((t) => [t.dataset.point, t.value]);
-    if (comments.length) all[location.pathname] = { latest: latest(), comments };
+    const noteEl = document.getElementById("proposal-note");
+    const note = noteEl && noteEl.value.trim();
+    if (comments.length || note) all[location.pathname] = { latest: latest(), comments, note: note || "" };
     else delete all[location.pathname];
     save(all);
     strip();
@@ -86,6 +88,11 @@ document.addEventListener("htmx:afterSettle", () => document.querySelectorAll(".
         if (details) details.open = true;
         filled.push(box);
       }
+      const noteEl = document.getElementById("proposal-note");
+      if (noteEl && entry.note && !noteEl.value.trim()) {
+        noteEl.value = entry.note;
+        filled.push(noteEl);
+      }
     }
     // the page's own counters (the thread's progress, the deck's dots, the review's buttons)
     filled.forEach((box) => box.dispatchEvent(new Event("input", { bubbles: true })));
@@ -101,10 +108,15 @@ document.addEventListener("htmx:afterSettle", () => document.querySelectorAll(".
       box.value = "";
       box.dispatchEvent(new Event("input", { bubbles: true }));
     });
+    const noteEl = document.getElementById("proposal-note");
+    if (noteEl) {
+      noteEl.value = "";
+      noteEl.dispatchEvent(new Event("input", { bubbles: true }));
+    }
     strip();
   };
   document.addEventListener("input", (e) => {
-    if (e.target.matches && e.target.matches("textarea.comment")) keep();
+    if (e.target.matches && (e.target.matches("textarea.comment") || e.target.id === "proposal-note")) keep();
   });
   document.addEventListener("htmx:afterSettle", restore);
   restore();
