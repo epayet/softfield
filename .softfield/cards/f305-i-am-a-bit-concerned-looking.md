@@ -1,6 +1,6 @@
 # Milestone F305: Find what writes terabytes to the SSD, and keep test temp files in memory
 
-> **State:** ready · **Area:** factory
+> **State:** ready · **Area:** factory · **Fast lane:** yes
 > Planted by the owner on 2026-11-25.
 
 ## Notes
