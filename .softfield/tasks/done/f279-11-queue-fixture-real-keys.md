@@ -25,3 +25,12 @@ Read `LINES` in `tests/factory_dashboard/test_queue.py` and `_project_plan` in `
 - the tests assert those rows' exact text: "<n> softfield checkpoint · <full key>", the card in capitals, and the held job's waits under "Waits for"
 - the listed `tests:` pass, with no change outside `tests/`
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 3
+duration_s: 5254
+gate_failures: ['task-tests', 'task-tests']
+tokens: 1759460
+```
