@@ -199,14 +199,19 @@
   <div class="bar-stripe"><div class="hazard" aria-hidden="true"></div>{{ version_poll | safe }}</div>
   <nav class="tabs slots" aria-label="Pages">
     <a href="/{{ q }}"{% if active == "/" %} aria-current="page"{% endif %}>Overview</a><a href="/planning{{ q }}"{% if active == "/planning" %} aria-current="page"{% endif %} id="planning-tab">Planning{% if planning_count %} · {{ planning_count }}{% endif %}</a><a href="/board{{ q }}"{% if active == "/board" %} aria-current="page"{% endif %}>Board</a>
-    {# F194: four slots that never move; the other pages hang from the fourth, which names the page it's on (D4) #}
+    {# F194: three slots that never move, the sub menu in the fourth, which names the page it's on (D4).
+       F281: from 640 px a seam, then as many of the seven as the window fits; dashboard.css's steps
+       show the row's links up to an index (data-i) and the sub menu's past it, and choose the
+       fourth slot's label: its page's name only while that page is in the sub menu #}
     {% set more_pages = [("/projects", "Projects", "every project, and the order the runner works in"), ("/tickets", "Tickets", "this project's tickets, latest work first"), ("/jobs", "Jobs", "every job an agent ran, newest first"), ("/runs", "Runs", "every runner command, newest first"), ("/timeline", "Timeline", "the jobs along the day"), ("/agents", "Agents", "who did what, and how well"), ("/bench", "Bench", "finished tickets replayed by chosen agents")] %}
     {% set here = more_pages | selectattr(0, "equalto", active) | list | first %}
+    <span class="seam" aria-hidden="true"></span>
+    {%- for path, label, words in more_pages %}<a class="also" href="{{ path }}{{ q }}"{% if path == active %} aria-current="page"{% endif %} data-i="{{ loop.index }}" title="{{ words }}">{{ label }}</a>{% endfor %}
     <details class="more">
-      <summary{% if here %} class="here"{% endif %}><span class="slot-name">{{ here[1] if here else "More" }}</span> <span class="caret">▾</span></summary>
+      <summary{% if here %} class="here" data-i="{{ more_pages.index(here) + 1 }}"{% endif %}><span class="slot-name">{{ here[1] if here else "More" }}</span>{% if here %}<span class="slot-more">More</span>{% endif %} <span class="caret">▾</span></summary>
       <div class="more-panel"><div class="more-head">More pages</div>
         {% for path, label, words in more_pages %}
-        <a href="{{ path }}{{ q }}"{% if path == active %} aria-current="page"{% endif %}><b>{{ label }}</b><span>{{ words }}</span></a>
+        <a data-i="{{ loop.index }}" href="{{ path }}{{ q }}"{% if path == active %} aria-current="page"{% endif %}><b>{{ label }}</b><span>{{ words }}</span></a>
         {% endfor %}
       </div>
     </details>

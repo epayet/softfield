@@ -187,8 +187,8 @@ button:disabled { cursor: default; }
 /* ---- four slots of a fixed size, so nothing ever moves ---- */
 /* F194: four slots of a fixed size (Overview, Planning, Board, More), so neither the page nor the
    Planning count moves them; the other pages hang from the fourth (.softfield/cards/f194-mockup) */
-nav.tabs.slots { display: grid; grid-template-columns: 120px 150px 92px 130px; justify-self: start; position: relative;
-  border-top: 1px solid var(--rule); border-left: 1px solid var(--rule); }
+nav.tabs.slots { display: grid; grid-template-columns: 120px 150px 92px; grid-auto-flow: column; grid-auto-columns: auto;
+  justify-self: start; position: relative; border-top: 1px solid var(--rule); border-left: 1px solid var(--rule); }
 nav.tabs.slots > a, details.more > summary { display: flex; align-items: center; justify-content: center; gap: 5px;
   min-width: 0; min-height: 38px; height: 100%; font: 600 13px var(--display); letter-spacing: .06em;
   text-transform: uppercase; color: var(--muted); padding: 8px 10px; border: solid var(--rule);
@@ -196,8 +196,60 @@ nav.tabs.slots > a, details.more > summary { display: flex; align-items: center;
 nav.tabs.slots > a[aria-current="page"], details.more > summary.here { background: var(--hazard); color: var(--hazard-ink); }
 nav.tabs.slots > a:hover, details.more > summary:hover { text-decoration: none; color: var(--ink); background: var(--plate); }
 nav.tabs.slots > a[aria-current="page"]:hover, details.more > summary.here:hover { color: var(--hazard-ink); background: var(--hazard); }
-details.more { min-width: 0; }
+details.more { min-width: 0; width: 130px; }
 details.more > summary { list-style: none; }
+details.more > summary .slot-more { display: none; }
+/* F281: from 640 px a seam after Board, then the seven at fixed widths (card D1), shown by the
+   steps below; under 640 px neither shows and More is the fourth slot (F194) */
+nav.tabs.slots > .seam, nav.tabs.slots > a.also { display: none; }
+nav.tabs.slots > .seam { width: 14px; border: solid var(--rule); border-width: 0 1px 1px 0; background: var(--stripe); opacity: .7; }
+nav.tabs.slots > a.also { font-size: 12.5px; }
+a.also[data-i="1"] { width: 110px; } a.also[data-i="2"] { width: 100px; } a.also[data-i="3"] { width: 76px; }
+a.also[data-i="4"] { width: 76px; } a.also[data-i="5"] { width: 110px; } a.also[data-i="6"] { width: 96px; }
+a.also[data-i="7"] { width: 86px; }
+/* each step (card D2, D4: 362 + 14 + the pages shown + 130 + 32 px) puts one more page in the row,
+   takes it out of the sub menu, and, when it is the page shown, More stops naming and lighting it */
+@media (min-width: 640px) { nav.tabs.slots > .seam { display: block; } }
+@media (min-width: 650px) {
+  nav.tabs.slots > a.also[data-i="1"] { display: flex; }
+  .more-panel a[data-i="1"], details.more > summary[data-i="1"] .slot-name { display: none; }
+  details.more > summary[data-i="1"] .slot-more { display: inline; }
+  details.more > summary.here[data-i="1"] { background: none; color: var(--muted); }
+  details.more > summary.here[data-i="1"]:hover, details.more[open] > summary.here[data-i="1"] { background: var(--plate); color: var(--ink); }
+}
+@media (min-width: 750px) {
+  nav.tabs.slots > a.also[data-i="2"] { display: flex; }
+  .more-panel a[data-i="2"], details.more > summary[data-i="2"] .slot-name { display: none; }
+  details.more > summary[data-i="2"] .slot-more { display: inline; }
+  details.more > summary.here[data-i="2"] { background: none; color: var(--muted); }
+  details.more > summary.here[data-i="2"]:hover, details.more[open] > summary.here[data-i="2"] { background: var(--plate); color: var(--ink); }
+}
+@media (min-width: 830px) {
+  nav.tabs.slots > a.also[data-i="3"] { display: flex; }
+  .more-panel a[data-i="3"], details.more > summary[data-i="3"] .slot-name { display: none; }
+  details.more > summary[data-i="3"] .slot-more { display: inline; }
+  details.more > summary.here[data-i="3"] { background: none; color: var(--muted); }
+  details.more > summary.here[data-i="3"]:hover, details.more[open] > summary.here[data-i="3"] { background: var(--plate); color: var(--ink); }
+}
+@media (min-width: 900px) {
+  nav.tabs.slots > a.also[data-i="4"] { display: flex; }
+  .more-panel a[data-i="4"], details.more > summary[data-i="4"] .slot-name { display: none; }
+  details.more > summary[data-i="4"] .slot-more { display: inline; }
+  details.more > summary.here[data-i="4"] { background: none; color: var(--muted); }
+  details.more > summary.here[data-i="4"]:hover, details.more[open] > summary.here[data-i="4"] { background: var(--plate); color: var(--ink); }
+}
+@media (min-width: 1010px) {
+  nav.tabs.slots > a.also[data-i="5"] { display: flex; }
+  .more-panel a[data-i="5"], details.more > summary[data-i="5"] .slot-name { display: none; }
+  details.more > summary[data-i="5"] .slot-more { display: inline; }
+  details.more > summary.here[data-i="5"] { background: none; color: var(--muted); }
+  details.more > summary.here[data-i="5"]:hover, details.more[open] > summary.here[data-i="5"] { background: var(--plate); color: var(--ink); }
+}
+/* all seven fit: More goes */
+@media (min-width: 1070px) {
+  nav.tabs.slots > a.also[data-i="6"], nav.tabs.slots > a.also[data-i="7"] { display: flex; }
+  nav.tabs.slots > details.more { display: none; }
+}
 details.more > summary::-webkit-details-marker { display: none; }
 details.more > summary .caret { font-size: 10px; }
 details.more[open] > summary:not(.here) { color: var(--ink); background: var(--plate); }
@@ -567,6 +619,7 @@ tr.few .gauge { opacity: .35; }
     grid-template-columns: 1fr 1.4fr .75fr 1fr; }
   nav.tabs.slots > a, details.more > summary { min-height: 44px; padding: 0 4px; font-size: 12px; letter-spacing: .04em; }
   .more-panel { left: 0; right: 0; width: auto; }
+  details.more { width: auto; }
   header.bar.steps-aside { transform: translateY(-100%); }
 }
 /* F272: under 1200 px the Job plate hides; the words' hover title carries it (a phone's tapped words too) */

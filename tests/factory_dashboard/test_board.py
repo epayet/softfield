@@ -1418,11 +1418,11 @@ def test_the_top_bar_has_a_board_tab_right_after_planning(board_client):
     html = board_client.get("/").text
     tabs = re.findall(r'<nav class="tabs slots"[^>]*>(.*?)</nav>', html, re.S)[0]
     paths = re.findall(r'href="([^"?]*)\?', tabs)
-    # the three slots, then the sub menu, Projects first (F194 D1, D2: it replaces ADR 30's order)
+    # the three slots, then the seam and the other pages, Projects first (F194 D1, D2: it replaces
+    # ADR 30's order; F281 D3 draws them in the row as well as in the sub menu)
     assert paths[:4] == ["/", "/planning", "/board", "/projects"]
-    assert tabs.index("<details") > tabs.index("/board?") and tabs.index("<details") < tabs.index(
-        "/projects?"
-    )
+    seam = tabs.index('class="seam"')
+    assert tabs.index("/board?") < seam < tabs.index("/projects?") < tabs.index("<details")
     assert re.search(r'<a href="/board\?project=coucou">Board</a>', tabs)
     assert re.search(
         r'<a href="/board\?project=coucou" aria-current="page">Board</a>', _page(board_client)

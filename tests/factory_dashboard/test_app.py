@@ -86,7 +86,9 @@ def test_the_app_refuses_to_write(db_path):
 def test_the_top_bar_has_a_tab_per_page_that_keeps_the_project(client):
     html = client.get(f"/?project={OTHER}").text
     tabs = re.findall(r'<nav class="tabs slots"[^>]*>(.*?)</nav>', html, re.S)[0]
-    assert re.findall(r'href="([^"]*)"', tabs) == [f"{path}?project=other" for path in TABS]
+    # the three, then the seven in the row (F281 D3), then the same seven in the sub menu
+    rows = [*TABS, *TABS[3:]]
+    assert re.findall(r'href="([^"]*)"', tabs) == [f"{path}?project=other" for path in rows]
     assert 'href="/?project=other" aria-current="page"' in tabs
     # the filter lists every project, the one shown selected
     assert re.search(r'<option value="other" selected>', html)
@@ -140,7 +142,9 @@ def test_the_fourth_slot_names_a_sub_menu_page_and_lights_it(client, path, slot,
     summary = re.search(r"<summary([^>]*)><span class=\"slot-name\">([^<]*)</span>", tabs[1])
     assert summary and summary[2] == slot
     assert ('class="here"' in summary[1]) == (slot != "More")
-    assert re.findall(r'<a href="([^"?]*)\?[^"]*" aria-current="page"', tabs[1]) == [lit]
+    # the three and the sub menu's links (the row's are F281's, tested below)
+    lit_links = r'<a (?:data-i="\d" )?href="([^"?]*)\?[^"]*" aria-current="page"'
+    assert re.findall(lit_links, tabs[1]) == [lit]
 
 
 def test_the_sub_menu_lists_the_seven_pages_with_their_words(client):
@@ -149,7 +153,9 @@ def test_the_sub_menu_lists_the_seven_pages_with_their_words(client):
     html = client.get(f"/?project={OTHER}").text
     panel = re.search(r'<div class="more-panel">(.*?)</details>', html, re.S)
     assert panel
-    links = re.findall(r'<a href="([^"]*)"><b>([^<]*)</b><span>([^<]*)</span></a>', panel[1])
+    links = re.findall(
+        r'<a data-i="\d" href="([^"]*)"><b>([^<]*)</b><span>([^<]*)</span></a>', panel[1]
+    )
     assert [(href, name) for href, name, _ in links] == [
         ("/projects?project=other", "Projects"),
         ("/tickets?project=other", "Tickets"),
@@ -163,6 +169,32 @@ def test_the_sub_menu_lists_the_seven_pages_with_their_words(client):
     assert links[4][2] == "the jobs along the day"
     assert links[6][2] == "finished tickets replayed by chosen agents"
     assert "Scroll the active tab" not in html  # the f3-30 script that moved the strip went (D1)
+
+
+def test_the_row_draws_the_seven_from_the_sub_menu_s_list_with_their_words(client):
+    """F281 D3: after Board a seam, then the seven as row links in the sub menu's order, each
+    keeping ?project=, its few words as its title and its index; only the page shown is current."""
+    html = client.get(f"/jobs?project={OTHER}").text
+    tabs = re.search(r'<nav class="tabs slots"[^>]*>(.*?)<details', html, re.S)
+    assert tabs
+    seam = r'>Board</a>\s*<span class="seam" aria-hidden="true"></span>\s*<a class="also"'
+    assert re.search(seam, tabs[1])
+    row = re.findall(r'<a class="also" href="([^"]*)"([^>]*)>([^<]*)</a>', tabs[1])
+    assert [(href, name) for href, _, name in row] == [
+        ("/projects?project=other", "Projects"),
+        ("/tickets?project=other", "Tickets"),
+        ("/jobs?project=other", "Jobs"),
+        ("/runs?project=other", "Runs"),
+        ("/timeline?project=other", "Timeline"),
+        ("/agents?project=other", "Agents"),
+        ("/bench?project=other", "Bench"),
+    ]
+    titles = [re.findall(r'title="([^"]*)"', attrs) for _, attrs, _ in row]
+    assert titles[0] == ["every project, and the order the runner works in"]
+    assert titles[2] == ["every job an agent ran, newest first"]
+    assert titles[6] == ["finished tickets replayed by chosen agents"]
+    assert [re.findall(r'data-i="(\d)"', attrs) for _, attrs, _ in row] == [[i] for i in "1234567"]
+    assert [name for _, attrs, name in row if 'aria-current="page"' in attrs] == ["Jobs"]
 
 
 def test_factory_wide_pages_crumbs_start_the_whole_factory(client):
@@ -3508,10 +3540,15 @@ def test_on_a_wide_screen_the_words_show_beside_the_dot(page, serve):
 
 # --- the four slots (F194) -----------------------------------------------------------------------
 
-SLOTS = "nav.tabs.slots > a, nav.tabs.slots > details > summary"
-_SLOT_BOXES = f"""() => [...document.querySelectorAll({SLOTS!r})].map((el) => {{
+SLOTS = "nav.tabs.slots > a, nav.tabs.slots > .seam, nav.tabs.slots > details > summary"
+# only the slots drawn at this width (F281: the row's links and the seam come and go by steps),
+# each with the words it shows (the summary carries both its labels, one hidden)
+_WORDS = """(el) => [...el.childNodes].filter((n) => n.nodeType === 3 || n.getClientRects().length)
+  .map((n) => n.textContent).join("").replace(/\\s+/g, " ").trim()"""
+_SLOT_BOXES = f"""() => [...document.querySelectorAll({SLOTS!r})]
+  .filter((el) => el.getClientRects().length).map((el) => {{
     const r = el.getBoundingClientRect();
-    return {{text: el.textContent.replace(/\\s+/g, " ").trim(), left: r.left, right: r.right,
+    return {{text: ({_WORDS})(el), left: r.left, right: r.right,
              width: r.width, height: r.height, cut: el.scrollWidth > el.clientWidth + 1}};
 }})"""
 _COUNT = "n => { document.getElementById('planning-tab').textContent = 'Planning · ' + n; }"
@@ -3558,17 +3595,26 @@ def test_the_four_slots_fill_a_phone_s_row_and_cut_no_word(page, serve, width):
     assert plate and plate["x"] >= 0 and plate["x"] + plate["width"] <= width + 1, plate
 
 
-@pytest.mark.parametrize("size", [PHONE, DISPLAY], ids=["phone", "wide"])
-def test_each_slot_keeps_its_place_on_every_page_and_whatever_the_count(page, serve, size):
-    """F194 D1: the slots' left edges are the same on Overview, Planning, Board and Timeline,
-    and when the Planning count goes from 1 to 12 (the live poll rewrites #planning-tab)."""
+# F281: from 640 to 649 px the row is F194's four slots and the seam
+FOUR = {"width": 645, "height": 800}
+
+
+@pytest.mark.parametrize(
+    ("size", "count"),
+    [(PHONE, 4), (FOUR, 5), ({"width": 900, "height": 800}, 9), (DISPLAY, 11)],
+    ids=["phone", "four", "900", "wide"],
+)
+def test_each_slot_keeps_its_place_on_every_page_and_whatever_the_count(page, serve, size, count):
+    """F194 D1, F281 D1: the slots' left edges are the same on Overview, Planning, Board and
+    Timeline, and when the Planning count goes from 1 to 12 (the live poll rewrites #planning-tab),
+    at every width: a phone, the four slots, 900 px and 1280 px."""
     client = serve()
     edges = {}
     for path in ["/", "/planning", "/board", "/timeline"]:
         _open_page(page, client, path, size)
         page.evaluate(_COUNT, 1)
         edges[path] = [round(s["left"]) for s in page.evaluate(_SLOT_BOXES)]
-    assert len(edges["/"]) == 4
+    assert len(edges["/"]) == count
     assert all(lefts == edges["/"] for lefts in edges.values()), edges
     page.evaluate(_COUNT, 12)
     slots = page.evaluate(_SLOT_BOXES)
@@ -3583,7 +3629,7 @@ def test_the_sub_menu_closes_on_a_tap_outside_or_escape_and_stays_open_through_a
     _open_page(page, serve(), "/tickets", PHONE)
     more = page.locator("details.more")
     summary = more.locator("summary")
-    assert summary.text_content().split() == ["Tickets", "▾"]
+    assert summary.evaluate(_WORDS).split() == ["Tickets", "▾"]
     jobs = page.locator(".more-panel a[href^='/jobs?']")
     assert not jobs.is_visible()
     summary.click()
@@ -3602,15 +3648,102 @@ def test_the_sub_menu_closes_on_a_tap_outside_or_escape_and_stays_open_through_a
 
 def test_on_a_wide_screen_the_sub_menu_hangs_from_the_fourth_slot(page, serve):
     """F194 D2: on a wide screen the plate hangs under the fourth slot, its right edge on the
-    slot's, and the slots keep their fixed widths (the mock-up's 120, 150, 92, 130 px)."""
-    _open_page(page, serve(), "/", DISPLAY)
+    slot's, and the slots keep their fixed widths (the mock-up's 120, 150, 92, 130 px, and
+    F281's 14 px seam)."""
+    _open_page(page, serve(), "/", FOUR)
     slots = page.evaluate(_SLOT_BOXES)
-    assert [round(s["width"]) for s in slots] == [120, 150, 92, 130]
+    assert [round(s["width"]) for s in slots] == [120, 150, 92, 14, 130]
     assert slots[-1]["text"] == "More ▾"
     page.locator("details.more summary").click()
     plate = page.locator(".more-panel").bounding_box()
     assert plate and plate["x"] + plate["width"] == pytest.approx(slots[-1]["right"], abs=2)
     assert plate["y"] >= page.locator("details.more summary").bounding_box()["y"] + 38
+
+
+# --- every page in one row on a wide screen (F281) -----------------------------------------------
+
+_PLATE_PAGES = """() => [...document.querySelectorAll('.more-panel a')]
+  .filter((el) => el.getClientRects().length).map((el) => el.querySelector('b').textContent)"""
+_HAZARD = """() => { const d = document.createElement('div'); d.style.background = 'var(--hazard)';
+  document.body.append(d); const c = getComputedStyle(d).backgroundColor; d.remove(); return c; }"""
+_BG = "el => getComputedStyle(el).backgroundColor"
+SEVEN = ["Projects", "Tickets", "Jobs", "Runs", "Timeline", "Agents", "Bench"]
+
+
+def test_at_full_width_every_page_is_in_the_row_and_more_goes(page, serve):
+    """F281 D1: at 1280 px the three, a striped seam, then the seven at fixed widths; no More."""
+    _open_page(page, serve(), "/", DISPLAY)
+    slots = page.evaluate(_SLOT_BOXES)
+    assert [s["text"] for s in slots] == ["Overview", "Planning · 1", "Board", "", *SEVEN]
+    assert [round(s["width"]) for s in slots] == [120, 150, 92, 14, 110, 100, 76, 76, 110, 96, 86]
+    for before, after in itertools.pairwise(slots):
+        assert after["left"] == pytest.approx(before["right"], abs=1), (before, after)
+    assert "repeating-linear-gradient" in page.locator("nav.tabs.slots > .seam").evaluate(
+        "el => getComputedStyle(el).backgroundImage"
+    )
+    assert not page.locator("details.more").is_visible()
+
+
+@pytest.mark.parametrize(
+    ("width", "row", "plate"),
+    [(645, [], SEVEN), (900, SEVEN[:4], SEVEN[4:])],
+)
+def test_more_holds_only_the_pages_the_row_has_no_room_for(page, serve, width, row, plate):
+    """F281 D2: at 900 px the row ends Runs, More, and More's plate lists Timeline, Agents,
+    Bench; at 645 px the row is the three and More, with all seven in the plate."""
+    _open_page(page, serve(), "/", {"width": width, "height": 800})
+    texts = [s["text"] for s in page.evaluate(_SLOT_BOXES)]
+    assert texts == ["Overview", "Planning · 1", "Board", "", *row, "More ▾"]
+    page.locator("details.more summary").click()
+    assert page.evaluate(_PLATE_PAGES) == plate
+
+
+@pytest.mark.parametrize("step", [650, 750, 830, 900, 1010, 1070])
+def test_at_each_step_and_just_below_it_nothing_in_the_bar_reaches_past_the_window(
+    page, serve, step
+):
+    """F281 D2, D4: at each step's width, and 1 px below it, the bar fits the window, with
+    "Planning · 99" (the widest count) in its slot."""
+    client = serve()
+    for width in (step - 1, step):
+        _open_page(page, client, "/", {"width": width, "height": 800})
+        page.evaluate(_COUNT, 99)
+        past = page.evaluate(
+            """w => [...document.querySelectorAll('header.bar *')]
+              .filter((el) => el.getBoundingClientRect().right > w + 1).map((e) => e.outerHTML)""",
+            width,
+        )
+        assert past == [], width
+        assert [s for s in page.evaluate(_SLOT_BOXES) if s["cut"]] == [], width
+
+
+@pytest.mark.parametrize(
+    ("path", "width", "lit", "more"),
+    [
+        ("/timeline", 1280, "Timeline", None),
+        ("/timeline", 900, "Timeline ▾", "Timeline ▾"),
+        ("/projects", 900, "Projects", "More ▾"),
+    ],
+)
+def test_the_page_shown_lights_its_own_slot_and_more_names_it_only_when_it_holds_it(
+    page, serve, path, width, lit, more
+):
+    """F281 D3 (F194 D4): the page shown is hazard yellow in the row when it's there; when it's
+    in the sub menu More is yellow and reads its name, otherwise More reads "More", unlit."""
+    _open_page(page, serve(), path, {"width": width, "height": 800})
+    hazard = page.evaluate(_HAZARD)
+    slots = page.locator(SLOTS)
+    yellow = [
+        slots.nth(i).evaluate(_WORDS)
+        for i in range(slots.count())
+        if slots.nth(i).is_visible() and slots.nth(i).evaluate(_BG) == hazard
+    ]
+    assert yellow == [lit]
+    summary = page.locator("details.more summary")
+    if more is None:
+        assert not summary.is_visible()
+    else:
+        assert summary.evaluate(_WORDS) == more
 
 
 # --- how long the computer has been on (F251) ---------------------------------------------------
