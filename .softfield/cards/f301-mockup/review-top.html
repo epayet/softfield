@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F301 mock-up: a reviewed card's page opens on What changed</title>
+<style>
+  /* The dashboard's own tokens (factory_dashboard/static/dashboard.css), dark theme */
+  :root {
+    --floor: #12161b; --bay: #181e25; --plate: #1f2730; --grid: #222b34; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+    --hazard: #f2b10a; --hazard-ink: #1a1405; --sonnet: #ffc48a; --good: #5fd17a;
+    --tick: var(--ink-2);
+    --stripe: repeating-linear-gradient(-45deg, var(--hazard) 0 6px, transparent 6px 12px);
+    --display: "Chakra Petch", "Bahnschrift", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+  body { margin: 0; background: var(--floor); color: var(--fg); font: 15px/1.5 var(--body); padding: 20px; }
+  h1 { font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 4px; }
+  p.lede { color: var(--ink-2); max-width: 760px; margin: 0 0 8px; }
+  a { color: var(--sonnet); text-decoration: none; }
+  .switch { display: inline-flex; margin: 12px 0 16px; border: 1px solid var(--rule); }
+  .switch button { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 10px 18px;
+    background: var(--bay); color: var(--muted); border: 0; cursor: pointer; }
+  .switch button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+  .versions { display: grid; gap: 24px; grid-template-columns: minmax(0, 1fr); }
+  .version { width: 390px; max-width: 100%; display: grid; gap: 14px; align-content: start; }
+  .version > h3 { font: 600 13px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 0; }
+  @media (min-width: 900px) {
+    .switch { display: none; }
+    .versions { grid-template-columns: repeat(2, 390px); }
+    .version[hidden] { display: grid !important; }
+  }
+  [hidden] { display: none !important; }
+  .new { outline: 1px dashed var(--good); outline-offset: 3px; }
+  .gone { outline: 1px dashed var(--muted); outline-offset: 3px; opacity: .55; }
+  .mark { font: 12px var(--mono); color: var(--good); margin: 4px 0 0; }
+  .mark.out { color: var(--muted); }
+
+  /* ---- the card page's head, as drawn ---- */
+  .card-head { background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; }
+  .card-meta { font: 11px var(--mono); color: var(--muted); }
+  .card-head h2 { font: 600 17px var(--display); margin: 2px 0 8px; }
+  .card-head dl { display: grid; grid-template-columns: max-content 1fr; gap: 2px 10px; margin: 0 0 8px; font-size: 13.5px; }
+  .card-head dt { color: var(--muted); }
+  .card-head dd { margin: 0; }
+  .card-thread { font-size: 13.5px; }
+
+  /* ---- the plates (dashboard.css, "The card page's plates") ---- */
+  .about, .card-plate { background: var(--bay); border: 1px solid var(--rule); position: relative; }
+  .about::before, .about::after, .card-plate::before, .card-plate::after { content: ""; position: absolute; width: 10px; height: 10px; border: 0 solid var(--tick); }
+  .about::before, .card-plate::before { top: -1px; left: -1px; border-top-width: 2px; border-left-width: 2px; }
+  .about::after, .card-plate::after { bottom: -1px; right: -1px; border-bottom-width: 2px; border-right-width: 2px; }
+  .about > header, .card-plate > header { display: flex; align-items: center; gap: 10px; padding: 8px 14px; background: var(--plate); border-bottom: 1px solid var(--rule); }
+  .about > header h2, .card-plate > header h2 { font: 600 14px var(--display); text-transform: uppercase; letter-spacing: .1em; margin: 0; }
+  .about > header .stripe, .card-plate > header .stripe { flex: 1; min-width: 12px; height: 8px; background: var(--stripe); opacity: .55; }
+  .about .body, .card-plate .body { padding: 10px 14px 12px; overflow-wrap: anywhere; }
+  .card-plate .body > p { margin: 0 0 6px; }
+  .card-plate .label { font: 600 11px var(--mono); color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin: 10px 0 4px; }
+  .card-plate .label:first-child { margin-top: 0; }
+  .card-plate ul { margin: 0; padding-left: 18px; }
+  .card-plate li { margin: 0 0 6px; }
+  .folds details { border-bottom: 1px solid var(--grid); }
+  .folds details:last-child { border-bottom: 0; }
+  .folds summary { min-height: 48px; padding: 6px 14px; display: flex; flex-wrap: wrap; gap: 0 10px; align-items: center; cursor: pointer; list-style: none; }
+  .folds summary::-webkit-details-marker { display: none; }
+  .folds summary b { font: 600 12.5px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); }
+  .folds summary b::before { content: "› "; color: var(--muted); }
+  .folds details[open] summary b::before { content: "⌄ "; }
+  .folds summary span { font: 12px var(--mono); color: var(--muted); }
+  .folds .inside { padding: 2px 14px 12px; }
+
+  /* ---- proposed: a Not yet line at the head of What changed (the .asks edge) ---- */
+  .not-yet { border-left: 3px solid var(--hazard); background: var(--plate); padding: 6px 10px; margin: 0 0 10px; font-size: 14px; }
+  .not-yet b { font: 600 11px var(--mono); text-transform: uppercase; letter-spacing: .08em; color: var(--ink-2); display: block; }
+</style>
+</head>
+<body>
+<h1>F301: a reviewed card opens on What changed</h1>
+<p class="lede">F286's page as it is on main today (Reviews look for complexity and leave the code simpler), and the same page proposed. Only the top of the page and Behind it are drawn; How to test, Sign off and What next don't change.</p>
+<div class="switch" role="group" aria-label="Which version">
+  <button type="button" data-show="today" aria-pressed="false">Today</button>
+  <button type="button" data-show="proposed" aria-pressed="true">Proposed</button>
+</div>
+
+<div class="versions">
+<!-- Today: copied from factory_dashboard/templates/milestone.html, F286's live page -->
+<div class="version" data-version="today" hidden>
+  <h3>Today</h3>
+  <header class="card-head">
+    <span class="card-meta">F286 · f286-i-want-code-reviews-to-highlight</span>
+    <h2>Reviews look for complexity and leave the code simpler (Boy Scout rule)</h2>
+    <dl><dt>Stage</dt><dd>Harvested: signed off or fixed</dd><dt>Tickets</dt><dd>2 of 2 done</dd></dl>
+    <a class="card-thread" href="#">Its planning thread: talk it through, sign it off ›</a>
+  </header>
+  <section class="card-plate about">
+    <header><h2>What it's about</h2><span class="stripe"></span></header>
+    <div class="body">
+      <p class="label">What it will do</p>
+      <p>Every review looks for complexity and says it: the milestone's own as a fix, older complexity in the files it touched as at most two "Simpler:" lines to plant, and its numbers show the code lines it added and removed, beside every earlier milestone's.</p>
+      <p class="label">Done when, as of now</p>
+      <ul>
+        <li><strong>Your check:</strong> the "Code lines" row and the "Net code lines" trend: the runner writes them into this review's numbers; this milestone's merged tickets come to +92 −13 lines of code.</li>
+        <li><strong>Met:</strong> a duplicate the milestone added is graded should-fix and routed: this review found commit_code_lines repeating commit_size's parsing and merged them.</li>
+        <li><strong>Your check:</strong> older complexity as at most two "Simpler:" lines: the brief asks for it; this review found none in the touched files worth a run.</li>
+        <li><strong>Met:</strong> the planner's brief asks a new mechanism to name what it builds on and what it makes removable; <strong>Your check:</strong> the next plan that adds one shows it.</li>
+        <li><strong>Met:</strong> this review's brief and sheet have no Product bullet; its ideas are under Factory.</li>
+        <li><strong>Met:</strong> neither the review brief nor the workflow's review loop mentions French.</li>
+      </ul>
+    </div>
+  </section>
+  <section class="card-plate">
+    <header><h2>What changed</h2><span class="stripe"></span></header>
+    <div class="body">
+      <p>Every review now looks for complexity after bugs: what the milestone itself added (a repeated helper, dead code, a second way of doing one thing) is a should-fix; older tangles in the files it touched come to you as at most two quoted lines starting "Simpler:" to plant.</p>
+      <p>The numbers below gain a "Code lines" row (added and removed, leaving out tests, docs, .softfield/ and Markdown) and a "Net code lines" column for every milestone, so you can see whether the code grew or shrank.</p>
+      <p>…</p>
+    </div>
+  </section>
+  <p class="mark out">On a phone, What changed starts below the first screen.</p>
+  <section class="card-plate folds">
+    <header><h2>Behind it</h2><span class="stripe"></span></header>
+    <details><summary><b>What the review caught</b><span>5: 3 fixed, 2 left as they are</span></summary></details>
+    <details><summary><b>Lessons</b><span>1</span></summary></details>
+    <details><summary><b>What it cost</b><span>$5.12, of which the review $1.35</span></summary></details>
+    <details><summary><b>Your note and how it grew</b><span>Harvested · 25 Nov 07:18</span></summary></details>
+    <details><summary><b>Tickets</b><span>2 of 2 done</span></summary></details>
+    <details><summary><b>Runs</b><span>5</span></summary></details>
+  </section>
+</div>
+
+<!-- Proposed -->
+<div class="version" data-version="proposed">
+  <h3>Proposed</h3>
+  <header class="card-head">
+    <span class="card-meta">F286 · f286-i-want-code-reviews-to-highlight</span>
+    <h2>Reviews look for complexity and leave the code simpler (Boy Scout rule)</h2>
+    <dl><dt>Stage</dt><dd>Harvested: signed off or fixed</dd><dt>Tickets</dt><dd>2 of 2 done</dd></dl>
+    <a class="card-thread" href="#">Its planning thread: talk it through, sign it off ›</a>
+  </header>
+  <p class="mark out">D1: "What it's about" no longer sits here on a reviewed card; it moves into Behind it.</p>
+  <section class="card-plate new">
+    <header><h2>What changed</h2><span class="stripe"></span></header>
+    <div class="body">
+      <div class="not-yet new"><b>Not yet · from Done when</b>Example (F286 has none): the "Simpler:" lines on a review page: no review has written one yet.</div>
+      <p>Every review now looks for complexity after bugs: what the milestone itself added (a repeated helper, dead code, a second way of doing one thing) is a should-fix; older tangles in the files it touched come to you as at most two quoted lines starting "Simpler:" to plant.</p>
+      <p>The numbers below gain a "Code lines" row (added and removed, leaving out tests, docs, .softfield/ and Markdown) and a "Net code lines" column for every milestone, so you can see whether the code grew or shrank.</p>
+      <p>…</p>
+    </div>
+  </section>
+  <p class="mark">D1: What changed comes straight under the head. D2: a Done when line still "Not yet" heads it, only when there is one.</p>
+  <section class="card-plate folds">
+    <header><h2>Behind it</h2><span class="stripe"></span></header>
+    <details class="new" open><summary><b>What it was meant to do</b><span>Done when: 4 met · 2 your check</span></summary>
+      <div class="inside card-plate" style="border:0;background:none">
+        <p class="label">What it will do</p>
+        <p>Every review looks for complexity and says it: the milestone's own as a fix, older complexity in the files it touched as at most two "Simpler:" lines to plant, and its numbers show the code lines it added and removed.</p>
+        <p class="label">Done when, as of now</p>
+        <ul>
+          <li><strong>Your check:</strong> the "Code lines" row and the "Net code lines" trend…</li>
+          <li><strong>Met:</strong> a duplicate the milestone added is graded should-fix and routed…</li>
+          <li>… the four other lines, as today</li>
+        </ul>
+      </div>
+    </details>
+    <details><summary><b>What the review caught</b><span>5: 3 fixed, 2 left as they are</span></summary></details>
+    <details><summary><b>Lessons</b><span>1</span></summary></details>
+    <details><summary><b>What it cost</b><span>$5.12, of which the review $1.35</span></summary></details>
+    <details><summary><b>Your note and how it grew</b><span>Harvested · 25 Nov 07:18</span></summary></details>
+    <details><summary><b>Tickets</b><span>2 of 2 done</span></summary></details>
+    <details><summary><b>Runs</b><span>5</span></summary></details>
+  </section>
+  <p class="mark">D3: the first fold, closed on the page (drawn open here), its gist the Done when tally F261 builds for the thread.</p>
+</div>
+</div>
+
+<script>
+function switchVersions() {
+  const buttons = document.querySelectorAll("[data-show]");
+  buttons.forEach(function (b) {
+    b.addEventListener("click", function () {
+      buttons.forEach(function (o) { o.setAttribute("aria-pressed", String(o === b)); });
+      document.querySelectorAll("[data-version]").forEach(function (v) { v.hidden = v.dataset.version !== b.dataset.show; });
+    });
+  });
+}
+switchVersions();
+</script>
+</body>
+</html>
