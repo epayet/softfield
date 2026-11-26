@@ -707,12 +707,14 @@ body:has(.map-page) { overflow: hidden; }
 body:has(.map-page) > header.bar, body:has(.map-page) main > nav.crumbs { display: none; }
 .map-page { position: fixed; inset: 0; z-index: 5; background: var(--floor); }
 .map-live { display: flex; flex-direction: column; height: 100%; }
-.map-bar { display: flex; align-items: center; gap: 12px; flex: 0 0 auto; min-height: 36px; padding: 0 10px;
+.map-bar { display: flex; align-items: center; gap: 12px; flex: 0 0 auto; min-height: 44px; padding: 0 10px;
   background: var(--bay); border-bottom: 2px solid var(--hazard); }
 .map-bar h1 { margin: 0; font: 700 14px var(--display); letter-spacing: .1em; text-transform: uppercase; }
 .map-bar .src { font: 12px var(--mono); color: var(--muted); }
-.map-back { display: inline-flex; align-items: center; min-height: 36px; font: 600 12px var(--display);
+.map-back { display: inline-flex; align-items: center; min-height: 44px; font: 600 12px var(--display);
   letter-spacing: .06em; text-transform: uppercase; color: var(--ink); text-decoration: none; }
+.map-fullscreen { display: inline-flex; align-items: center; min-height: 44px; padding: 0 8px; font: 600 12px var(--display);
+  letter-spacing: .06em; text-transform: uppercase; color: var(--ink); background: none; border: none; cursor: pointer; }
 .map { display: block; flex: 1 1 auto; min-height: 0; width: 100%; height: 100%; font-family: var(--mono); }
 .map .ground { fill: var(--floor); } .map .gridline { stroke: var(--grid); stroke-width: .5; fill: none; }
 .map text { fill: var(--ink-2); font-size: 9.5px; }

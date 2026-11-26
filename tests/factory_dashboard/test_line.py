@@ -3487,3 +3487,96 @@ def test_tapping_the_queue_station_shows_a_link_to_queue(page, line_client):
     with page.expect_navigation():
         page.evaluate("el => el.click()", link.first.element_handle())
     assert page.url.endswith("/queue")
+
+
+@pytest.mark.parametrize("size", [UPRIGHT, WIDE_SCREEN], ids=["upright", "wide"])
+def test_the_map_bar_holds_overview_and_full_screen_each_44_px_tall(page, line_client, size):
+    """f199-05: the bar's way back keeps the project, and both its items are 44 px tall."""
+    open_map(page, line_client, size)
+    back = page.locator(".map-bar a.map-back")
+    assert "Overview" in (back.text_content() or "")
+    assert back.get_attribute("href") == f"/?project={PROJECT}"
+    full = page.locator(".map-bar button.map-fullscreen")
+    assert full.is_visible() and full.text_content() == "Full screen"
+    for item in (back, full):
+        box = item.bounding_box()
+        assert box is not None and box["height"] >= 44
+
+
+def test_full_screen_goes_in_and_out_and_its_words_follow(page, line_client):
+    """f199-05: one press sets fullscreenElement and says "Exit full screen"; a second clears
+    it and the words go back; the page scrolls neither time."""
+    open_map(page, line_client, WIDE_SCREEN)
+    full = page.locator(".map-fullscreen")
+    scrolled = "() => [scrollX, scrollY, document.scrollingElement.scrollHeight <= innerHeight]"
+    says = "words => document.querySelector('.map-fullscreen').textContent === words"
+    full.click()
+    page.wait_for_function("() => document.fullscreenElement === document.documentElement")
+    page.wait_for_function(says, arg="Exit full screen")
+    assert page.evaluate(scrolled) == [0, 0, True]
+    full.click()
+    page.wait_for_function("() => document.fullscreenElement === null")
+    page.wait_for_function(says, arg="Full screen")
+    assert page.evaluate(scrolled) == [0, 0, True]
+
+
+def test_no_full_screen_button_where_the_browser_has_none(page, line_client):
+    """f199-05: with document.fullscreenEnabled false, the bar shows no Full screen button."""
+    page.add_init_script(
+        "Object.defineProperty(Document.prototype, 'fullscreenEnabled', { get: () => false })"
+    )
+    open_map(page, line_client, WIDE_SCREEN)
+    assert page.evaluate("() => document.fullscreenEnabled") is False
+    assert not page.locator(".map-bar .map-fullscreen").is_visible()
+    assert page.locator(".map-bar a.map-back").is_visible()
+
+
+def test_the_upright_map_draws_a_question_mark_and_a_tap_shows_how_to_read_it(page, line_client):
+    """f199-05: the upright map has no key drawn, only a "?" whose tap shows the key's words."""
+    open_map(page, line_client, UPRIGHT)
+    assert page.locator(f"{MAP} [data-legend]").count() == 0
+    mark = page.locator(f"{MAP} [data-what='legend']")
+    assert mark.count() == 1 and mark.locator("text").text_content() == "?"
+    mark.click()
+    card = page.locator("#map-card")
+    assert card.is_visible()
+    words = card.text_content() or ""
+    assert "How to read the map" in words and "dashed, a bug" in words
+
+
+def test_the_wide_map_draws_the_key_and_no_question_mark(page, line_client):
+    """f199-05: on a wide screen the key is drawn, and nothing carries a "?"."""
+    open_map(page, line_client, WIDE_SCREEN)
+    assert page.locator(f"{MAP} [data-legend]").count() == 1
+    assert page.locator(f"{MAP} [data-what='legend']").count() == 0
+    assert "?" not in [t.text_content() for t in page.locator(f"{MAP} text").all()]
+
+
+def test_the_wide_key_shows_every_belt_and_the_tile_with_its_words(page, line_client):
+    """f199-05: the key draws the faint "today" belt beside the other two, and a tile's fill,
+    its orange edge and its dashed edge, each next to its words."""
+    open_map(page, line_client, WIDE_SCREEN)
+    key = page.locator(f"{MAP} [data-legend]")
+    words = [t.text_content() for t in key.locator("text").all()]
+    for line in (
+        "belt carrying now",
+        "faint: work went this way today",
+        "failed work coming back",
+        "card tile: fill, tickets merged",
+        "started",
+        "dashed: a bug",
+    ):
+        assert line in words
+    opacities = key.locator(".swatch-line").evaluate_all(
+        "ls => ls.map(l => l.getAttribute('opacity'))"
+    )
+    assert opacities == ["1", ".5", ".5"]
+    assert key.locator(".tilefill").count() == 1
+    edges = key.locator(".tileedge").evaluate_all(
+        "es => es.map(e => [e.getAttribute('class'), getComputedStyle(e).strokeDasharray])"
+    )
+    assert edges[0][0] == "tileedge"
+    assert edges[1][0] == "tileedge growing"
+    assert edges[2][0] == "tileedge bug" and edges[2][1] != "none"
+    bottom = key.evaluate("g => g.getBBox().y + g.getBBox().height")
+    assert bottom <= 540  # the key stays inside the wide table

@@ -540,7 +540,7 @@
     machines: { lead: [460, 64, 198, 130], reviewers: [722, 236, 76, 86], developers: [460, 328, 198, 130] },
     most: 130,
     checks: [694, 56, 78, 104], merged: [812, 36, 132, 112], ripe: [812, 196, 132, 116], stash: [812, 360, 132, 164],
-    legend: [16, 408, 228, 116],
+    legend: [16, 400, 228, 138],
     belts: {
       "seeds→planting": ["M126 104 H134"], "planting→rows": ["M183 142 V178"], "rows→queue": ["M232 290 H284"],
       "queue→lead": ["M408 230 H430 V120 H452", 430, 180], "queue→developers": ["M408 350 H452", 430, 350],
@@ -780,16 +780,30 @@
     const g = add(svg, "g", { "data-legend": "" });
     add(g, "rect", { x, y, width: w, height: h, class: "zone" });
     ticks(g, x, y, w, h);
-    text(g, x + 8, y + 16, "HOW TO READ IT", "title");
+    text(g, x + 8, y + 15, "HOW TO READ IT", "title");
+    const row = (i) => y + 29 + i * 13;  // each line's baseline
     [["lead", "lead ticket"], ["developer", "developer ticket"], ["batch", "review or planner job"]].forEach(([kind, words], i) => {
-      add(g, "rect", { x: x + 8, y: y + 24 + i * 15, width: 14, height: 10, class: `crate ${kind}` });
-      text(g, x + 28, y + 33 + i * 15, words);
+      add(g, "rect", { x: x + 8, y: row(i) - 8, width: 14, height: 9, class: `crate ${kind}` });
+      text(g, x + 28, row(i), words);
     });
-    add(g, "path", { d: `M${x + 8} ${y + 74}h14`, class: "swatch-line", stroke: "var(--roller)" });
-    text(g, x + 28, y + 77, "belt carrying now");
-    add(g, "path", { d: `M${x + 8} ${y + 89}h14`, class: "swatch-line", stroke: "var(--critical)", opacity: ".5" });
-    text(g, x + 28, y + 92, "failed work coming back");
-    text(g, x + 8, y + 107, "numbers: how many went that way today", "dim");
+    [["var(--roller)", "1", "belt carrying now"], ["var(--roller)", ".5", "faint: work went this way today"],
+      ["var(--critical)", ".5", "failed work coming back"]].forEach(([stroke, opacity, words], i) => {
+      add(g, "path", { d: `M${x + 8} ${row(3 + i) - 3}h14`, class: "swatch-line", stroke, opacity });
+      text(g, x + 28, row(3 + i), words);
+    });
+    // A planted card's tile: its fill, then its two edges
+    const tile = (tx, ty, edge, fill) => {
+      add(g, "rect", { x: tx, y: ty, width: 9, height: 9, class: "tilebg" });
+      if (fill) add(g, "rect", { x: tx, y: ty + 4, width: 9, height: 5, class: "tilefill" });
+      add(g, "rect", { x: tx, y: ty, width: 9, height: 9, class: `tileedge${edge}` });
+    };
+    tile(x + 10, row(6) - 8, "", true);
+    text(g, x + 28, row(6), "card tile: fill, tickets merged");
+    tile(x + 10, row(7) - 8, " growing", false);
+    text(g, x + 28, row(7), "started");
+    tile(x + 90, row(7) - 8, " bug", false);
+    text(g, x + 108, row(7), "dashed: a bug");
+    text(g, x + 8, row(8), "numbers: how many went that way today", "dim");
   }
 
   // What runs now, always at the top: the working machine, its crate and minutes; or the wait's
@@ -857,7 +871,14 @@
     mapMachines(svg, doc, L);
     mapChecks(svg, L.checks, tall);
     boxes(svg, doc, count, L, tall);
-    if (L.legend) legend(svg, L.legend);
+    if (L.legend) {
+      legend(svg, L.legend);
+    } else {
+      const g = add(svg, "g", {});
+      what(g, "legend");
+      add(g, "rect", { x: 330, y: 2, width: 26, height: 17, class: "seedplot" });
+      text(g, 343, 15, "?", "title", { "text-anchor": "middle" });
+    }
     chips(svg, doc, L);
     mapStatus(svg, doc, L);
     morph(map, svg);
@@ -1295,6 +1316,20 @@
     const w = e.target.closest("[data-what]");
     if (w) { e.preventDefault(); showMapCard(w.dataset.what, shownDoc); }
   });
+
+  // The map's Full screen button (f199-05): only on the map's page, and only where the browser
+  // allows it; its words follow the state, which Escape changes too
+  const fsBtn = document.querySelector(".map-fullscreen");
+  if (fsBtn && document.fullscreenEnabled) {
+    fsBtn.hidden = false;
+    fsBtn.addEventListener("click", () => {
+      if (document.fullscreenElement) document.exitFullscreen();
+      else document.documentElement.requestFullscreen();
+    });
+    document.addEventListener("fullscreenchange", () => {
+      fsBtn.textContent = document.fullscreenElement ? "Exit full screen" : "Full screen";
+    });
+  }
 
   drawAll(document);
   document.addEventListener("htmx:load", (event) => drawAll(event.detail.elt));
