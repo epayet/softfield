@@ -50,7 +50,7 @@ All coordination goes through files in the repo. Run logs go to `.softfield/var/
    5. `max-diff`: under the 1000-line backstop against a rewritten file
    6. `layout`: test files match modules by name, one per module (`tests/runner` ↔ `runner/`, `tests/factory_dashboard` ↔ `factory_dashboard/`, or the project's source folders)
    7. `test-patterns` (ADR 12 item 3): added lines in `tests/browser/` and `tests/e2e/` may not branch on `is_visible()`/`count()`, fire events or set `.value` from JavaScript, sleep, or give `wait_for_function` a bare expression (the real pages' CSP blocks it once it polls); no new empty module anywhere. A line ending in `# pattern-ok: <reason>` passes, and checkpoints read those.
-   8. `translations`: every user-facing string has a compiled French translation
+   8. `translations`: every user-facing string has a compiled translation (only where the project's `[checks] translations` is on)
    9. `ruff check` + `ruff format --check` (Python files only; Markdown is excluded, [ADR 01](../.softfield/adr/01-calibration-fixes.md))
    10. `mypy`
    11. the task's `tests:`

@@ -57,6 +57,14 @@ The rubric's i18n row read: `| i18n (new strings with their French) | | yes | |`
 
 The path example in "Before committing a spec" read: `coucou/static/coucou/js/delivery.js`, not a bare `delivery.js`.
 
+In "Lessons from F94", the end of the first lesson read: "Preact components still get props, not markup (JavaScript tasks above)."
+
+### From `runner/instructions/author/owner.md`, "Factory theme"
+
+```
+    - **The factory only:** the product (`coucou/`) keeps its calm, ambient look.
+```
+
 ### From `runner/instructions/lead.md`, "Review loop"
 
 ```
