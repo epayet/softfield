@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F299 mock-up: a card says when the factory suggested it</title>
+<style>
+  /* The dashboard's own tokens (factory_dashboard/static/dashboard.css, :root), dark theme */
+  :root {
+    --floor: #12161b; --bay: #181e25; --plate: #1f2730; --grid: #222b34; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+    --hazard: #f2b10a; --hazard-ink: #1a1405; --opus: #ff9640; --sonnet: #ffc48a; --qwen: #8ccf62;
+    --factory: #f2b10a; --product: #4fd1a5; --good: #5fd17a;
+    --stripe: repeating-linear-gradient(-45deg, var(--hazard) 0 6px, transparent 6px 12px);
+    --display: "Chakra Petch", "Bahnschrift", "DIN Alternate", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+    /* new token (F299 D3): the factory's mark, in the ink, never a status colour */
+    --suggested: var(--ink-2);
+  }
+  body { margin: 0; background: var(--floor); color: var(--fg); font: 15px/1.5 var(--body); padding: 20px; }
+  h1 { font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 4px; }
+  h3 { font: 600 13px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 20px 0 8px; }
+  p.lede { color: var(--ink-2); max-width: 760px; margin: 0 0 8px; }
+  a { color: var(--sonnet); text-decoration: none; }
+  .switch { display: inline-flex; margin: 12px 0 0; border: 1px solid var(--rule); }
+  .switch button { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 10px 18px;
+    background: var(--bay); color: var(--muted); border: 0; cursor: pointer; }
+  .switch button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+  .versions { display: grid; gap: 24px; }
+  .version > h2 { font: 700 15px var(--display); letter-spacing: .08em; text-transform: uppercase; margin: 16px 0 0; }
+  /* wide screen: Today and Proposed side by side, the switch is not needed */
+  @media (min-width: 900px) {
+    .switch { display: none; }
+    .versions { grid-template-columns: 1fr 1fr; }
+    .version[hidden] { display: block !important; }
+  }
+  .new { outline: 1px dashed var(--good); outline-offset: 2px; }
+  .legend { color: var(--ink-2); font-size: 13px; margin: 10px 0 0; max-width: 520px; }
+  [hidden] { display: none !important; }
+
+  /* ---- the board's column and cards, copied from dashboard.css ---- */
+  .stage { background: var(--bay); border: 1px solid var(--rule); max-width: 420px; }
+  .stage-head { padding: 8px 10px; border-bottom: 1px solid var(--rule); }
+  .stage-head h3 { margin: 0; color: var(--fg); }
+  .stage-head span { color: var(--muted); font-size: 12.5px; }
+  .cards { display: flex; flex-direction: column; gap: 8px; padding: 10px; }
+  .card { display: flex; flex-direction: column; justify-content: center; gap: 5px; min-height: 44px;
+    padding: 9px 10px; background: var(--plate); border: 1px solid var(--rule);
+    border-left: 4px solid var(--c, var(--factory)); color: var(--fg); overflow-wrap: anywhere; }
+  .card-meta { font: 600 11px var(--mono); color: var(--muted); }
+  .card-meta b { color: var(--fg); }
+  .card-title { font: 600 14px/1.25 var(--body); }
+  .card-note { font-size: 12.5px; line-height: 1.35; color: var(--muted); }
+  .card-count { font: 12px var(--mono); color: var(--muted); }
+
+  /* ---- proposed: the "suggested" tag, beside the key, as card-growing sits ---- */
+  .card-suggested { display: inline-flex; align-items: center; gap: 4px; margin-left: 4px; padding: 1px 6px 1px 3px;
+    vertical-align: middle; font: 600 10.5px var(--display); letter-spacing: .08em; text-transform: uppercase;
+    color: var(--suggested); border: 1px dashed var(--suggested); background: var(--floor); }
+  .card-suggested svg { flex: none; }
+
+  /* ---- the card page's "What it's about" plate, copied from dashboard.css ---- */
+  .card-plate { background: var(--bay); border: 1px solid var(--rule); max-width: 520px; margin-top: 8px; }
+  .card-plate header { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--rule); }
+  .card-plate header h2 { font: 600 14px var(--display); text-transform: uppercase; letter-spacing: .08em; margin: 0; }
+  .card-plate .stripe { flex: 1; height: 8px; background: var(--stripe); opacity: .6; }
+  .card-plate .body { padding: 10px 12px; }
+  .label { font: 600 11px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 0 0 4px; }
+  .note { margin: 0 0 8px; }
+  .later { color: var(--muted); font-size: 13px; margin: 0; }
+  .doc { font: 12px/1.5 var(--mono); color: var(--ink-2); background: var(--bay); border: 1px solid var(--rule);
+    padding: 8px 10px; margin: 0; max-width: 520px; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .from-line { display: flex; align-items: center; gap: 6px; font: 600 12px var(--mono); color: var(--suggested); margin: 0 0 6px; }
+</style>
+</head>
+<body>
+<h1>F299: who an idea came from</h1>
+<p class="lede">The board's Sprouting column and F296's card page, on today's cards. F296 and F292 came from a review's "What next" (F286's and F97's); F293 and F297 are the owner's own notes.</p>
+<div class="switch" role="group" aria-label="Which version">
+  <button type="button" data-show="today" aria-pressed="false">Today</button>
+  <button type="button" data-show="proposed" aria-pressed="true">Proposed</button>
+</div>
+
+<div class="versions">
+
+<!-- Today: copied from factory_dashboard/templates/board.html (card_link) and milestone.html (#about) -->
+<div class="version" data-version="today" hidden>
+  <h2>Today</h2>
+  <h3>The board · Sprouting</h3>
+  <section class="stage">
+    <div class="stage-head"><h3>Sprouting</h3><span>being planned with the lead · 5</span></div>
+    <div class="cards">
+      <a class="card" href="#"><span class="card-meta"><b>#1</b> <span>F293</span></span>
+        <span class="card-title">The planner stops telling the owner what they already know</span>
+        <span class="card-note">waits for your answer since 25 Nov</span></a>
+      <a class="card" href="#"><span class="card-meta"><b>#3</b> <span>F296</span></span>
+        <span class="card-title">Show each milestone's net code lines on its card in the…</span>
+        <span class="card-note">waits for your answer since 25 Nov</span></a>
+      <a class="card" href="#"><span class="card-meta"><b>#4</b> <span>F297</span></span>
+        <span class="card-title">Projects page plant buttons also ask the lead</span>
+        <span class="card-note">waits for your answer since 25 Nov</span></a>
+    </div>
+  </section>
+  <h3>The board · Seed</h3>
+  <section class="stage">
+    <div class="cards">
+      <a class="card" href="#"><span class="card-meta"><b>#64</b> <span>F292</span></span>
+        <span class="card-title">No terminal commands on the Overview: plain words and a Start the runner button</span></a>
+      <a class="card" href="#"><span class="card-meta"><b>#65</b> <span>F298</span></span>
+        <span class="card-title">After the queue page, I want a reverse one to see what…</span></a>
+      <a class="card" href="#"><span class="card-meta"><b>#70</b> <span>F303</span></span>
+        <span class="card-title">A size limit for every Python file, with splits planned, not improvised</span></a>
+    </div>
+  </section>
+  <h3>F296's card doc · header</h3>
+  <pre class="doc">&gt; **State:** idea · **Area:** factory
+&gt; Planted by the owner on 2026-11-25.</pre>
+  <h3>F296's page · What it's about</h3>
+  <section class="card-plate">
+    <header><h2>What it's about</h2><span class="stripe" aria-hidden="true"></span></header>
+    <div class="body">
+      <p class="label">Your note</p>
+      <p class="note">Show each milestone's net code lines on its card in the board and on the milestone page beside its cost, so I can see which milestones grew the code without opening the review. From F286's review.</p>
+      <p class="later">The lead writes what it will do when it plans the card.</p>
+    </div>
+  </section>
+  <p class="legend">Every card looks the same. The review's idea is called "Your note", and only its last three words, and the card doc's "Planted by the owner", hint where it came from.</p>
+</div>
+
+<!-- Proposed -->
+<div class="version" data-version="proposed">
+  <h2>Proposed</h2>
+  <h3>The board · Sprouting</h3>
+  <section class="stage">
+    <div class="stage-head"><h3>Sprouting</h3><span>being planned with the lead · 5</span></div>
+    <div class="cards">
+      <a class="card" href="#"><span class="card-meta"><b>#1</b> <span>F293</span></span>
+        <span class="card-title">The planner stops telling the owner what they already know</span>
+        <span class="card-note">waits for your answer since 25 Nov</span></a>
+      <a class="card" href="#"><span class="card-meta"><b>#3</b> <span>F296</span> <span class="card-suggested new" title="Suggested by F286's review, planted by you"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="6" cy="6" r="2.2"/><path d="M6 .8v2M6 9.2v2M.8 6h2M9.2 6h2M2.3 2.3l1.4 1.4M8.3 8.3l1.4 1.4M2.3 9.7l1.4-1.4M8.3 3.7l1.4-1.4"/></g></svg>F286 review</span></span>
+        <span class="card-title">Show each milestone's net code lines on its card in the…</span>
+        <span class="card-note">waits for your answer since 25 Nov</span></a>
+      <a class="card" href="#"><span class="card-meta"><b>#4</b> <span>F297</span></span>
+        <span class="card-title">Projects page plant buttons also ask the lead</span>
+        <span class="card-note">waits for your answer since 25 Nov</span></a>
+    </div>
+  </section>
+  <h3>The board · Seed</h3>
+  <section class="stage">
+    <div class="cards">
+      <a class="card" href="#"><span class="card-meta"><b>#64</b> <span>F292</span> <span class="card-suggested new" title="Suggested by F97's review, planted by you"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="6" cy="6" r="2.2"/><path d="M6 .8v2M6 9.2v2M.8 6h2M9.2 6h2M2.3 2.3l1.4 1.4M8.3 8.3l1.4 1.4M2.3 9.7l1.4-1.4M8.3 3.7l1.4-1.4"/></g></svg>F97 review</span></span>
+        <span class="card-title">No terminal commands on the Overview: plain words and a Start the runner button</span></a>
+      <a class="card" href="#"><span class="card-meta"><b>#65</b> <span>F298</span></span>
+        <span class="card-title">After the queue page, I want a reverse one to see what…</span></a>
+      <a class="card" href="#"><span class="card-meta"><b>#70</b> <span>F303</span> <span class="card-suggested new" title="Suggested by F290's review, edited and planted by you"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="6" cy="6" r="2.2"/><path d="M6 .8v2M6 9.2v2M.8 6h2M9.2 6h2M2.3 2.3l1.4 1.4M8.3 8.3l1.4 1.4M2.3 9.7l1.4-1.4M8.3 3.7l1.4-1.4"/></g></svg>F290 review · edited</span></span>
+        <span class="card-title">A size limit for every Python file, with splits planned, not improvised</span></a>
+    </div>
+  </section>
+  <h3>F296's card doc · header</h3>
+  <pre class="doc">&gt; **State:** idea · **Area:** factory<span class="new"> · **Origin:** review · **From:** F286 · **Edited:** no</span>
+&gt; Planted by the owner on 2026-11-25.</pre>
+  <p class="legend">The fields the pages read. Origin is one of owner, review, lead, projects; From and Edited only on a suggestion. Your own new cards get <code>**Origin:** owner</code>; older cards without it read as yours.</p>
+  <h3>F296's page · What it's about</h3>
+  <section class="card-plate">
+    <header><h2>What it's about</h2><span class="stripe" aria-hidden="true"></span></header>
+    <div class="body">
+      <p class="label new">F286's review suggested</p>
+      <p class="from-line new"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="6" cy="6" r="2.2"/><path d="M6 .8v2M6 9.2v2M.8 6h2M9.2 6h2M2.3 2.3l1.4 1.4M8.3 8.3l1.4 1.4M2.3 9.7l1.4-1.4M8.3 3.7l1.4-1.4"/></g></svg>a factory suggestion · you planted it on 25 Nov · <a href="#">F286's review ›</a></p>
+      <p class="note"><span class="new">Show each milestone's net code lines on its card in the board and on the milestone page beside its cost, so I can see which milestones grew the code without opening the review.</span></p>
+      <p class="later">The lead writes what it will do when it plans the card.</p>
+    </div>
+  </section>
+  <p class="legend"><span class="new">Dashed green</span> marks what is new. A card the factory suggested carries a dashed cog tag naming who suggested it (a review, the lead, the Projects page), and "· edited" when you changed its words before planting (F303); your own cards carry nothing, so no tag means it's yours. On its page and its thread, "Your note" becomes who suggested it, with a link to that review, and the note loses its "From F286's review." tail. The tag is drawn in the ink, never a status colour.</p>
+</div>
+
+</div>
+
+<script>
+  function wireSwitch() {
+    document.querySelectorAll(".switch button").forEach((button) => {
+      button.addEventListener("click", () => {
+        document.querySelectorAll(".switch button").forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
+        document.querySelectorAll("[data-version]").forEach((v) => { v.hidden = v.dataset.version !== button.dataset.show; });
+      });
+    });
+  }
+  wireSwitch();
+</script>
+</body>
+</html>
