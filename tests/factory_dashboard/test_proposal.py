@@ -1256,6 +1256,17 @@ def test_send_back_posts_the_note_text_alongside_comments(page, planning, db_pat
     )
 
 
+def test_the_note_box_shows_on_a_phone(page, planning, db_path, serve):
+    """F308: the note box is visible on mobile (390 px), so a note-only send works on phones."""
+    _write(db_path, lambda conn: _points_and_plan(conn, planning))
+    page.set_viewport_size(PHONE)
+    _open(page, serve(), "/planning/f6/proposals/plan")
+    note_box = page.locator("#proposal-note").locator("..")
+    assert note_box.is_visible()
+    assert page.locator("#proposal-note").is_visible()
+    assert page.locator("#proposal-note").evaluate("e => e.offsetWidth > 0")
+
+
 def test_a_note_typed_comes_back_after_a_reload_and_goes_after_send(page, planning, db_path, serve):
     """A note typed and not sent comes back after a reload, and is gone after a successful Send
     back."""
