@@ -1058,6 +1058,49 @@ def _points_and_plan(conn: sqlite3.Connection, project_id: int) -> None:
     )
 
 
+def _points_and_plan_two(conn: sqlite3.Connection, project_id: int) -> None:
+    """On f6's thread, the lead's reply lists ``_SEVEN_POINTS`` and a plan with 2 key points."""
+    f6 = metrics.planner_thread(conn, project_id, "f6", _at(timedelta(hours=5)))["id"]
+    plan_two = {
+        **_REVIEW_PLAN,
+        "key_points": [
+            {"n": 1, "title": "Desk first", "text": "Then threads.", "flag": False},
+            {"n": 2, "title": "Second point", "text": "Also this.", "flag": False},
+        ],
+    }
+    metrics.add_planner_message(
+        conn,
+        f6,
+        "lead",
+        _at(timedelta(minutes=30)),
+        "Here's each point with my answer.",
+        points=_SEVEN_POINTS,
+        proposals=[plan_two],
+    )
+
+
+def _add_point_comment(db_path: Path, planning: int, point: int, comment: str) -> None:
+    """Add a comment to a specific point on the latest message (for display purposes)."""
+
+    def write(conn: sqlite3.Connection) -> None:
+        msg = conn.execute(
+            "SELECT points FROM planner_messages WHERE id = (SELECT MAX(id) FROM planner_messages)"
+        ).fetchone()
+        if msg and msg["points"]:
+            pts = json.loads(msg["points"])
+            for p in pts:
+                if p["n"] == point:
+                    p["comment"] = comment
+                    break
+            conn.execute(
+                "UPDATE planner_messages SET points = ?"
+                " WHERE id = (SELECT MAX(id) FROM planner_messages)",
+                (json.dumps(pts),),
+            )
+
+    _write(db_path, write)
+
+
 def _hazard(page) -> str:
     """``--hazard`` as the browser computes a colour."""
     colour: str = page.evaluate(
@@ -1238,22 +1281,41 @@ def test_the_dock_has_a_note_box_above_send_back(page, planning, db_path, serve)
 
 def test_send_back_posts_the_note_text_alongside_comments(page, planning, db_path, serve):
     """Send back's value carries the note's trimmed words as text, beside comments."""
-    _write(db_path, lambda conn: _points_and_plan(conn, planning))
+    _write(db_path, lambda conn: _points_and_plan_two(conn, planning))
     _open(page, serve(), "/planning/f6/proposals/plan")
     page.click('.change-btn[data-point="1"]')
     page.fill('textarea.comment[data-point="1"]', "Disagree.")
+    page.click('.change-btn[data-point="2"]')
+    page.fill('textarea.comment[data-point="2"]', "Also this.")
     page.fill("#proposal-note", "Look at the limits.")
     assert page.locator("#send-back").is_visible()
-    assert page.locator("#send-back").inner_text().lower() == "send 1 change and a note back"
+    assert page.locator("#send-back").inner_text().lower() == "send 2 changes and a note back"
     assert not page.locator("#approve-plan").is_visible()
+    assert not page.locator("#approve-first").is_visible()
+    assert not page.locator("#accept-adr").is_visible()
     page.click("#send-back")
     page.wait_for_selector("#review-status >> text=Asked")
     [(kind, subject, value)] = _asked(db_path, planning)
     assert (kind, subject, json.loads(value)) == (
         "send_back",
         "f6/plan",
-        {"text": "Look at the limits.", "comments": {"1": "Disagree."}},
+        {"text": "Look at the limits.", "comments": {"1": "Disagree.", "2": "Also this."}},
     )
+
+
+def test_send_back_says_send_2_changes_back_label(page, planning, db_path, serve):
+    """When there are two changes (no note), Send back says "Send 2 changes back"."""
+    _write(db_path, lambda conn: _points_and_plan_two(conn, planning))
+    _open(page, serve(), "/planning/f6/proposals/plan")
+    page.click('.change-btn[data-point="1"]')
+    page.fill('textarea.comment[data-point="1"]', "Disagree.")
+    page.click('.change-btn[data-point="2"]')
+    page.fill('textarea.comment[data-point="2"]', "Also this.")
+    assert page.locator("#send-back").is_visible()
+    assert page.locator("#send-back").inner_text().lower() == "send 2 changes back"
+    assert not page.locator("#approve-plan").is_visible()
+    assert not page.locator("#approve-first").is_visible()
+    assert not page.locator("#accept-adr").is_visible()
 
 
 def test_the_note_box_shows_on_a_phone(page, planning, db_path, serve):
@@ -1265,6 +1327,17 @@ def test_the_note_box_shows_on_a_phone(page, planning, db_path, serve):
     assert note_box.is_visible()
     assert page.locator("#proposal-note").is_visible()
     assert page.locator("#proposal-note").evaluate("e => e.offsetWidth > 0")
+
+
+def test_note_trims_whitespace_in_posted_text(page, planning, db_path, serve):
+    """Whitespace around a note is trimmed before posting."""
+    _write(db_path, lambda conn: _points_and_plan(conn, planning))
+    _open(page, serve(), "/planning/f6/proposals/plan")
+    page.fill("#proposal-note", "  Look at the limits.  ")
+    page.click("#send-back")
+    page.wait_for_selector("#review-status >> text=Asked")
+    [(_, _, value)] = _asked(db_path, planning)
+    assert json.loads(value)["text"] == "Look at the limits."
 
 
 def test_a_note_typed_comes_back_after_a_reload_and_goes_after_send(page, planning, db_path, serve):
@@ -1290,6 +1363,13 @@ def test_a_note_typed_comes_back_after_a_reload_and_goes_after_send(page, planni
         "() => JSON.parse(sessionStorage.getItem('softfield-comments') || '{}')"
     )
     assert "/planning/f6/proposals/plan" not in cleared
+    # Verify the textarea is emptied after a successful send
+    assert note.input_value() == ""
+    # Verify the textarea stays empty after reload (it may be hidden when no note)
+    page.reload()
+    note_after = page.locator("#proposal-note")
+    if note_after.is_visible():
+        assert note_after.input_value() == ""
 
 
 def test_refresh_against_main_still_sends_its_own_words(page, planning, db_path, serve):
