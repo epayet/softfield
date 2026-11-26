@@ -40,6 +40,8 @@ Picture: `.softfield/cards/f256-mockup/text-line.html` (Today against Proposed, 
 - **D7. One plate style.** `.tag` (a `.key` in 11 px display caps, a `.val` in 600 12 px mono) replaces the copies in `.uptime`, `.job` and the picker; `.uptime` and `.job` keep their own names for their margins and the phone's rules.
 - **D8. The picker's name is the plate's own text.** The label holds the key, a `.val` with the project's name and a drawn caret, and the `select` laid over the whole plate at `opacity: 0`: a click anywhere opens the browser's list; `name`, `onchange`, the `<noscript>` button and keyboard use stay; the plate shows the focus ring (`:focus-within`). On a phone the key still hides and the `.val` names the project.
 
+**As built (f256-02, 2026-11-26):** three developer attempts failed (a leaking bare `.tag` rule, old rules outranking the new, a test mixing element and page coordinates, and a refused `pytest … | head` sent about 40 times). The escalation finished it on `task/f256-02-words-on-one-line`, and check-all passed. Two facts the mock-up missed: `text-box: trim-both` does nothing on a flex container, so each plate's words sit in their own trimmed `<span>`; and the global `.key { margin: 8px 0 0 }` pushed the plate keys 4 px low, so the plate rules are scoped under `.bar-top`. It was blocked only because the runner read the escalation's "finish" from the old run's folder while the resumed session, told by the F97 review fix to use the new run's folder, wrote it there. The replan brings it back as a lead ticket that lands the work from `blocked/f256-02-words-on-one-line`.
+
 ## Before and after
 - `/`
 - `/planning`
@@ -48,4 +50,4 @@ Picture: `.softfield/cards/f256-mockup/text-line.html` (Today against Proposed, 
 | # | Ticket | Who | d | Depends on | What |
 |---|---|---|---|---|---|
 | 01 | top-row-in-line | D | 2 | f194-01 | D1 to D4 |
-| 02 | words-on-one-line | D | 2 | – | D6 to D8 |
+| 02 | words-on-one-line | L | 1 | – | D6 to D8 (blocked, then brought back by the lead to land its finished branch) |

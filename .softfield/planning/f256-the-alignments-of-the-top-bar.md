@@ -51,3 +51,31 @@ The planning thread behind F256's plan, oldest first, as it was when the owner a
 > Proposals:
 > - F256 round 2: the top bar's words on one line (plan)
 > - F256 mock-up: the top bar's words on one line (mockup)
+
+## The lead, 2026-11-24 08:44
+
+> Approved by the owner on 2026-11-24: approved plan/f256: queued f256-02-words-on-one-line
+
+## The runner, 2026-11-26 06:29
+
+> f256-02-words-on-one-line blocked: the escalation answered nothing on task/f256-02-words-on-one-line, not finish on task/f256-02-words-on-one-line; its work is on task/f256-02-words-on-one-line.
+> Its work is on task/f256-02-words-on-one-line; its run's logs are in .softfield/var/runs/20261126-001843.
+> What went wrong, and what is the fix? Propose it as a replan: the ticket reworked, split or set aside.
+
+## The lead, 2026-11-26 06:32
+
+> f256-02's work is finished and good. Only the runner's bookkeeping stopped it from landing, so the replan brings the ticket back to copy that work onto main rather than redo it.
+>
+> 1. **What went wrong: the runner read the answer from the wrong folder**: The work is done. Three developer attempts failed, then the lead's escalation finished the ticket on its branch, checked the whole project there (it passed), and answered "finish". It was cut off once by Claude's limit and resumed in tonight's run. Since the F97 review fix, a resumed job is told to put its files in the new run's folder, so it wrote "finish" there. The runner kept reading the decision from the folder the job had first started in, found nothing, and blocked the ticket as if it had answered nothing.
+>    Action: Bring the ticket back to land its work (point 2), and fix the runner (point 4).
+> 2. **The fix for F256: a short lead ticket that lands the finished branch**: f256-02 comes back as a small lead ticket. Its only job is to copy the finished change (5 files, about 116 lines) from its branch, which the runner keeps as `blocked/f256-02-words-on-one-line` once you approve, onto main as main stands now, and to check it again. A developer can't do this: the change includes two notes in the developers' notes file, which developers aren't allowed to touch, so their checks would refuse it. It has to be the lead, and the lead can't simply switch to the old branch: a lead ticket starts from main and copies the change across with its editor. That costs a short Claude job instead of a full redo.
+>    Action: Approve the replan. The ticket goes back into the queue in F256's place on the board.
+> 3. **Two things the mock-up got wrong, now written into the card**: The rule that centres words by their capitals does nothing on the plates' label and value boxes. It only works on the text inside them, so each word now sits in its own small span. Also, a general rule elsewhere in the stylesheet pushed every plate's label 4 px low, so the plate rules now apply only inside the top bar. The finished branch handles both, and the ticket says to keep them. The F256 page also records what went wrong in each attempt.
+>    Action: Nothing to do. The mock-up stays as the picture; the ticket notes where the built version differs from it.
+> 4. **The runner bug will block other resumed escalations too**: Any escalation cut off by Claude's limit and resumed in a later run will be blocked the same way, however good its work. The fix is small but in the runner's own code, which only the lead touches: the escalation should read its decision from the folder it told the job to use, with a test for a resumed escalation. It doesn't belong to F256, so here it is as a card to plant: "A resumed escalation's decision is lost: since the F97 review fix, a resumed job writes its files in the new run's folder, but the escalation reads decision.json from the folder of the run it started in. f256-02 was blocked after a good finish. Read it from where the job was told to write, and add a test for a resumed escalation."
+>    Action: Paste that into the Plant box with "Plant and ask the lead", and drag the card near the top of the board so it runs before the next limit.
+> 5. **Pause first if you want to look before it runs**: The replan puts a ticket back in the queue. If you want to read it before the runner can pick it up, pause the factory from the top bar first. Approving the replan lifts your pause.
+>    Action: Optional: pause, then approve.
+>
+> Proposals:
+> - F256: land f256-02's finished work from its branch (replan)
