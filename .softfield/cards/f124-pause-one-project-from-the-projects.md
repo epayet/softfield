@@ -1,6 +1,7 @@
 # Milestone F124: Pause one project from the Projects page
 
-> **State:** ready · **Area:** factory
+> **State:** done · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-26. Base: git tag `f124-pause-one-project-from-the-projects-start`. Report: [`.softfield/reviews/f124-pause-one-project-from-the-projects.md`](../reviews/f124-pause-one-project-from-the-projects.md).
 > Planted by the owner on 2026-10-14.
 
 ## Notes

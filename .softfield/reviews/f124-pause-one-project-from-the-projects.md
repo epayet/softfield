@@ -1,5 +1,7 @@
 # Review: F124, Pause one project from the Projects page
 
+- **Status:** done, signed off by the owner on 2026-11-26.
+
 **Status:** round 1 done, ready for your sign-off (one fix ticket, f124-04, is queued).
 
 ### 1. What changed
