@@ -34,3 +34,12 @@ The picture to build: the strip in Proposed of `.softfield/cards/f199-mockup/flo
 - light and dark themes both readable (a browser test reads the colours, as the phone floor test does)
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: stopped)
+attempts: 3
+tokens: 456358
+logs: .softfield/var/runs/20261126-001843/f199-02-strip
+```
