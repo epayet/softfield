@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F302 mock-up: edit a review's idea before planting it</title>
+<style>
+  /* The dashboard's own tokens (factory_dashboard/static/dashboard.css), dark mode */
+  :root {
+    --floor: #12161b; --bay: #181e25; --plate: #1f2730; --grid: #222b34; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+    --hazard: #f2b10a; --hazard-ink: #1a1405; --sonnet: #ffc48a; --good: #5fd17a;
+    --factory: #f2b10a; --product: #4fd1a5;
+    --notch: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
+    --display: "Chakra Petch", "Bahnschrift", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+  body { margin: 0; background: var(--floor); color: var(--fg); font: 15px/1.5 var(--body); padding: 20px;
+    background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 48px 48px; }
+  h1 { font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 4px; }
+  .col > h3 { font: 600 13px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 18px 0 8px; }
+  p.lede { color: var(--ink-2); max-width: 760px; margin: 0 0 8px; }
+  a { color: var(--sonnet); text-decoration: none; }
+  .switch { display: inline-flex; margin: 12px 0 0; border: 1px solid var(--rule); }
+  .switch button { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 10px 18px;
+    background: var(--bay); color: var(--muted); border: 0; cursor: pointer; min-height: 44px; }
+  .switch button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+  .new { outline: 1px dashed var(--good); outline-offset: 3px; }   /* what this card adds */
+  .note { font: 12px var(--mono); color: var(--good); margin: 6px 0 0; }
+  .legend { color: var(--ink-2); font-size: 13px; margin: 14px 0 0; max-width: 560px; }
+  [hidden] { display: none !important; }
+  .versions { display: grid; gap: 28px; }
+  .col { min-width: 0; max-width: 560px; }
+  .col > h2 { font: 700 15px var(--display); letter-spacing: .1em; text-transform: uppercase; margin: 18px 0 0; color: var(--hazard); }
+  @media (min-width: 1000px) {
+    .switch { display: none; }
+    .versions { grid-template-columns: 1fr 1fr; }
+    .versions > [data-version] { display: block !important; }
+  }
+
+  /* ---- Today, copied: the thread's "The review" (thread.html, #review) ---- */
+  .review { background: var(--bay); border: 1px solid var(--rule); border-left: 3px solid var(--hazard); padding: 12px 16px;
+    display: flex; flex-direction: column; gap: 8px; }
+  .review > h2 { margin: 0; font: 600 14px var(--display); letter-spacing: .08em; text-transform: uppercase; }
+  .review > h3 { margin: 4px 0 0; font: 600 12px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  .sheet ul { margin: 0; padding-left: 20px; }
+  .whole { display: inline-flex; align-items: center; min-height: 44px; }
+
+  /* ---- Copied: buttons (dashboard.css, f81-03) and the idea plate (F164) ---- */
+  .btn { display: inline-flex; align-items: center; justify-content: center; font: 600 13px var(--display); letter-spacing: .06em;
+    text-transform: uppercase; min-height: 44px; padding: 0 14px; border: 0; cursor: pointer; text-decoration: none; }
+  .btn.go { background: var(--hazard); color: var(--hazard-ink); clip-path: var(--notch); }
+  .btn.plain { background: transparent; color: var(--fg); border: 1px solid var(--rule); }
+  .btn.go:disabled { color: var(--muted); background: transparent; border: 1px dashed var(--muted); cursor: default; }
+  .ideas-head { display: flex; align-items: baseline; gap: 8px; margin: 6px 0 0; font: 600 12px var(--display);
+    letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  .ideas-head .count { font-family: var(--mono); color: var(--fg); }
+  .idea { position: relative; background: var(--plate); border: 1px solid var(--rule); border-left: 4px solid var(--c, var(--factory));
+    padding: 10px 12px 10px 14px; display: flex; flex-direction: column; gap: 8px; margin: 6px 0; }
+  .idea.factory { --c: var(--factory); }
+  .idea::before, .idea::after { content: ""; position: absolute; width: 8px; height: 8px; border: 0 solid var(--muted); }
+  .idea::before { top: -1px; right: -1px; border-width: 1px 1px 0 0; }
+  .idea::after { bottom: -1px; right: -1px; border-width: 0 1px 1px 0; }
+  .idea .tag { font: 600 11px var(--mono); letter-spacing: .04em; color: var(--muted); text-transform: uppercase; }
+  .idea .tag b { color: var(--ink-2); font-weight: 600; }
+  .idea q { quotes: none; font-size: 15px; color: var(--fg); }
+  .idea .actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .idea .planted { display: inline-flex; align-items: center; min-height: 44px; font: 600 12px var(--display);
+    letter-spacing: .08em; text-transform: uppercase; }
+  .idea .planted .k { font-family: var(--mono); color: var(--fg); margin-right: 6px; }
+  .idea.on-its-way { border-style: dashed; border-color: var(--hazard); border-left-style: solid; }
+  .idea .way { font: 600 12px/1.35 var(--mono); color: var(--hazard); }
+
+  /* ---- Proposed: the plate's editor (new tokens: none; ink, rules and the hazard only) ---- */
+  .idea .yours { color: var(--hazard); }
+  .idea textarea { width: 100%; box-sizing: border-box; min-height: 120px; resize: vertical; background: var(--bay); color: var(--fg);
+    border: 1px solid var(--hazard); font: 15px/1.45 var(--body); padding: 8px 10px; }
+  .idea .lead-words { font-size: 12.5px; color: var(--muted); border-left: 2px solid var(--rule); padding-left: 8px; }
+  .idea .linkish { background: none; border: 0; color: var(--sonnet); font: 600 12px var(--mono); padding: 0 4px; min-height: 44px; cursor: pointer; }
+  .phone { width: 390px; max-width: 100%; box-sizing: border-box; }
+</style>
+</head>
+<body>
+<h1>F302: edit a review's idea before planting it</h1>
+<p class="lede">F290's review (runner/loop.py split), as you read it on its thread. You planted its idea 1 by copying it into the Plant box with your own note (that is F303); idea 2 you planted as it was (F304).</p>
+<div class="switch" role="group" aria-label="Which version">
+  <button type="button" data-show="today" aria-pressed="false">Today</button>
+  <button type="button" data-show="proposed" aria-pressed="true">Proposed</button>
+</div>
+
+<div class="versions">
+
+<!-- Today: copied from factory_dashboard/templates/thread.html (#review) and _partials/idea.html -->
+<div class="col" data-version="today" hidden>
+  <h2>Today</h2>
+  <h3>The card's thread · /planning/f290 · phone width</h3>
+  <section class="review phone">
+    <h2>The review</h2>
+    <h3>What changed</h3>
+    <div class="sheet"><ul>
+      <li>runner/loop.py went from 6,813 lines to 1,487 and now only schedules. Each job kind has its own module.</li>
+    </ul></div>
+    <div class="ideas-head">Ideas from this review · <span class="count">2</span></div>
+    <div class="idea factory">
+      <span class="tag">Idea 1 · factory · <b>for softfield</b></span>
+      <q>Add a check that fails when a module in runner/ passes 1,800 lines, or imports a module above it outside a function, so runner/loop.py can't grow back into one file.</q>
+      <div class="actions">
+        <button type="button" class="btn go">Plant and ask the lead</button>
+        <button type="button" class="btn plain">Plant</button>
+      </div>
+    </div>
+    <div class="idea factory">
+      <span class="tag">Idea 2 · factory · <b>for softfield</b></span>
+      <q>Simpler: tests/runner/test_backup.py keeps its own `fake_clock` fixture and `THURSDAY` constant, which repeat the ones now in tests/runner/conftest.py; drop them for the shared ones (about 12 lines).</q>
+      <a class="planted" href="#"><span class="k">F304</span> Planted · open its thread ›</a>
+    </div>
+    <a class="whole" href="#">The whole review</a>
+  </section>
+  <p class="legend">To change an idea's words you copy it into the Plant box on /planning. The plate never learns: idea 1 still offers both buttons, though F303 holds it.</p>
+</div>
+
+<!-- Proposed -->
+<div class="col" data-version="proposed">
+  <h2>Proposed</h2>
+  <h3>The card's thread · /planning/f290 · phone width</h3>
+  <section class="review phone">
+    <h2>The review</h2>
+    <h3>What changed</h3>
+    <div class="sheet"><ul>
+      <li>runner/loop.py went from 6,813 lines to 1,487 and now only schedules. Each job kind has its own module.</li>
+    </ul></div>
+    <div class="ideas-head">Ideas from this review · <span class="count">2</span></div>
+
+    <div class="idea factory" id="idea-1">
+      <span class="tag">Idea 1 · factory · <b>for softfield</b><span class="yours" data-editing hidden> · your words</span></span>
+      <q data-view>Add a check that fails when a module in runner/ passes 1,800 lines, or imports a module above it outside a function, so runner/loop.py can't grow back into one file.</q>
+      <textarea class="new" data-editing hidden aria-label="Your words for idea 1">Add a check that fails when a Python file passes a set number of lines (in the project's settings, not 1,800 by default), or imports a module above it outside a function, so no file grows back into one big file. From F290's review.
+
+The fix when it fails should make sense in the architecture, not a dumb workaround.</textarea>
+      <span class="lead-words" data-editing hidden>The lead wrote: “Add a check that fails when a module in runner/ passes 1,800 lines, or imports…” <button type="button" class="linkish" data-undo>Put them back</button></span>
+      <div class="actions">
+        <button type="button" class="btn go" data-press>Plant and ask the lead</button>
+        <button type="button" class="btn plain" data-press>Plant</button>
+        <button type="button" class="btn plain new" data-edit>Edit first</button>
+      </div>
+      <span class="way" hidden>On its way · planted at the runner's next pick</span>
+    </div>
+    <p class="note">New: Edit first. Press it: the words become yours to change, and both Plant buttons send your words.</p>
+
+    <div class="idea factory">
+      <span class="tag">Idea 2 · factory · <b>for softfield</b></span>
+      <q>Simpler: tests/runner/test_backup.py keeps its own `fake_clock` fixture and `THURSDAY` constant, which repeat the ones now in tests/runner/conftest.py; drop them for the shared ones (about 12 lines).</q>
+      <a class="planted" href="#"><span class="k">F304</span> Planted · open its thread ›</a>
+    </div>
+    <a class="whole" href="#">The whole review</a>
+  </section>
+  <p class="legend"><span class="new">Dashed green</span> marks what this card adds. Editing opens a box with the lead's words and "From F290's review." (what is planted today), shown here with the note you wrote on F303. Nothing is sent until you press a Plant button; an emptied box greys the Plant buttons out. Once planted the plate links to the new card, as today, because the plant still names its idea. The same plate shows on the milestone page's review and, once F59 is built, on the weekly report.</p>
+</div>
+
+</div>
+
+<script>
+  function wire() {
+    document.querySelectorAll(".switch button").forEach((button) => {
+      button.addEventListener("click", () => {
+        document.querySelectorAll(".switch button").forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
+        document.querySelectorAll("[data-version]").forEach((v) => { v.hidden = v.dataset.version !== button.dataset.show; });
+      });
+    });
+    const plate = document.getElementById("idea-1");
+    const box = plate.querySelector("textarea");
+    const lead = plate.querySelector("q").textContent + " From F290's review.";
+    const editing = (on) => {
+      plate.querySelectorAll("[data-editing]").forEach((el) => { el.hidden = !on; });
+      plate.querySelector("[data-view]").hidden = on;
+      plate.querySelector("[data-edit]").hidden = on;
+    };
+    plate.querySelector("[data-edit]").addEventListener("click", () => { editing(true); box.focus(); });
+    plate.querySelector("[data-undo]").addEventListener("click", () => { box.value = lead; });
+    box.addEventListener("input", () => {
+      plate.querySelectorAll("[data-press]").forEach((b) => { b.disabled = !box.value.trim(); });
+    });
+    plate.querySelectorAll("[data-press]").forEach((button) => {
+      button.addEventListener("click", () => {
+        box.readOnly = true;
+        plate.classList.add("on-its-way");
+        plate.querySelector(".actions").remove();
+        plate.querySelector(".lead-words").hidden = true;
+        plate.querySelector(".way").hidden = false;
+      });
+    });
+  }
+  wire();
+</script>
+</body>
+</html>
