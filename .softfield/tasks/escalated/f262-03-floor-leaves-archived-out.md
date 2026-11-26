@@ -23,3 +23,12 @@ Read D4 in `.softfield/cards/f262-i-want-ability-to-archive-a.md`, then how f132
 - the cross-project notices still list an archived project's open items
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: ruff)
+attempts: 3
+tokens: 7888932
+logs: .softfield/var/runs/20261125-135013/f262-03-floor-leaves-archived-out
+```
