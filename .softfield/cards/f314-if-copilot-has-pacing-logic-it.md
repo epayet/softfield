@@ -1,4 +1,4 @@
-# Milestone F314: if copilot has pacing logic, it should show on the…
+# Milestone F314: Copilot's month meter shows its pace, like Claude's week
 
 > **State:** idea · **Area:** factory
 > Planted by the owner on 2026-11-26.
