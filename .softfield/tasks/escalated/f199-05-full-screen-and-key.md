@@ -31,3 +31,12 @@ Main already holds part of this; build on it, don't redo it:
 - the wide key also draws the faint "today" belt and a tile's fill, orange edge and dashed edge, each with its words
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: task-tests)
+attempts: 3
+tokens: 1494192
+logs: .softfield/var/runs/20261126-001843/f199-05-full-screen-and-key
+```
