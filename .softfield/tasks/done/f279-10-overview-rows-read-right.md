@@ -31,3 +31,12 @@ Read `factory_dashboard/templates/_partials/queue.html` (the `{% if plan %}` bra
 - no `style=` attribute is left in the plan branch
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 1244
+gate_failures: []
+tokens: 3020295
+```
