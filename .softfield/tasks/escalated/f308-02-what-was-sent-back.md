@@ -29,3 +29,12 @@ After Send back, the review page shows what was sent: each comment under its poi
 - An open proposal with no send-back since the lead's last reply shows none of this. Neither does one the lead's newer reply has replaced.
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: stopped)
+attempts: 3
+tokens: 5330290
+logs: .softfield/var/runs/20261126-115035/f308-02-what-was-sent-back
+```
