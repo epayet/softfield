@@ -21,13 +21,24 @@ LINES = (
     PlanLine(
         PROJECT,
         "checkpoint",
-        "f265",
-        "Claude re-checks f265-04",
+        "f199-let-s-improve-the-factory-floor",
+        "after f199-06-fix-map-taps and f199-07-fix-map-taps-tests merged",
         None,
         "jobs",
         None,
-        "Claude re-checks f265-04",
-        "f265",
+        "after f199-06-fix-map-taps and f199-07-fix-map-taps-tests merged",
+        "f199",
+    ),
+    PlanLine(
+        PROJECT,
+        "review",
+        "f279",
+        "would park or go to a stand-in (claude: 5-hour window 89% used, over its cap of 75%)",
+        None,
+        "jobs",
+        "would park or go to a stand-in (claude: 5-hour window 89% used, over its cap of 75%)",
+        "would park or go to a stand-in (claude: 5-hour window 89% used, over its cap of 75%)",
+        "f279",
     ),
     PlanLine(
         OTHER,
@@ -131,14 +142,17 @@ def test_the_rows_are_numbered_in_the_plans_order_with_plate_who_card_and_why(
     store(db_path)
     html = serve().get("/queue").text
     first = text(row(html, 1)).split(" Why here")[0]
-    assert first.startswith(f"1 {PROJECT} checkpoint · f265")
-    trip = row(html, 2)
+    assert first.startswith(f"1 {PROJECT} checkpoint · f199-let-s-improve-the-factory-floor")
+    review = text(row(html, 2))
+    assert review.startswith(f"2 {PROJECT} review · f279 a job · F279")
+    assert "would park or go to a stand-in" in review
+    trip = row(html, 3)
     assert text(trip).startswith(
-        f"2 {OTHER} m8-08-trip-by-hand The owner adds a trip by hand. a developer · M8 · place 1"
+        f"3 {OTHER} m8-08-trip-by-hand The owner adds a trip by hand. a developer · M8 · place 1"
     )
-    assert re.search(r'<li class="developer" id="row-2">', html)
-    lead = text(row(html, 3))
-    assert lead.startswith(f"3 {PROJECT} f132-02-overview-live The Overview's live part. the lead")
+    assert re.search(r'<li class="developer" id="row-3">', html)
+    lead = text(row(html, 4))
+    assert lead.startswith(f"4 {PROJECT} f132-02-overview-live The Overview's live part. the lead")
     # the order: jobs before what can go, in the plan's numbering
     go = text(section(html, "q-go"))
     assert go.index("m8-08-trip-by-hand") < go.index("f132-02-overview-live")
@@ -165,20 +179,30 @@ def test_a_ticket_row_opens_its_goal_waits_reason_and_preflight_with_its_project
 ) -> None:
     store(db_path)
     html = serve(live=False).get("/queue").text
-    lead = row(html, 3)
-    details = text(lead.split('<div class="more-row">')[1])
-    assert "Goal The Overview's live part." in details
-    why = "early for f199-01-the-map, lead ticket; it goes early because f199-01-the-map waits"
-    assert f"Why here {why} for it" in details
-    assert "Waits for goes when nothing else can (Claude's week over its pace)" in details
-    assert "Pre-flight files: factory_dashboard/gone.py doesn't exist" in details
-    assert f'href="/tickets/f132-02-overview-live?project={PROJECT}"' in lead
-    assert f'href="/planning/f132?project={PROJECT}"' in lead
-    trip = row(html, 2)
+    trip = row(html, 3)
     assert "Pre-flight no problem" in text(trip)
     assert f'href="/tickets/m8-08-trip-by-hand?project={OTHER}"' in trip
     assert f'href="/planning/m8?project={OTHER}"' in trip
     assert f"?project={PROJECT}" not in trip
+    lead = text(row(html, 4))
+    assert "Goal The Overview's live part." in lead
+    why = "early for f199-01-the-map, lead ticket; it goes early because f199-01-the-map waits"
+    assert f"Why here {why} for it" in lead
+    assert "Waits for goes when nothing else can (Claude's week over its pace)" in lead
+    assert "Pre-flight files: factory_dashboard/gone.py doesn't exist" in lead
+    assert f'href="/tickets/f132-02-overview-live?project={PROJECT}"' in row(html, 4)
+    assert f'href="/planning/f132?project={PROJECT}"' in row(html, 4)
+
+
+def test_the_review_job_says_why_it_is_held(
+    db_path: Path, serve: Callable[..., TestClient]
+) -> None:
+    store(db_path)
+    html = serve().get("/queue").text
+    review = text(row(html, 2))
+    assert "would park or go to a stand-in" in review
+    assert "5-hour window 89% used" in review
+    assert "over its cap of 75%" in review
 
 
 def test_waiting_tickets_fold_by_the_first_ticket_they_wait_for_with_counts(
@@ -190,7 +214,7 @@ def test_waiting_tickets_fold_by_the_first_ticket_they_wait_for_with_counts(
     fold = r'<li class="group"><details id="[^"]*"><summary>(.*?)</summary>'
     folds = re.findall(fold, waits, re.S)
     assert [text(f) for f in folds] == [
-        f"for f132-02-overview-live (3) {PROJECT} 2",
+        f"for f132-02-overview-live (4) {PROJECT} 2",
         f"waits for f8's sign-off {PROJECT} 1",
     ]
     first = waits.split('<li class="group">')[1]
