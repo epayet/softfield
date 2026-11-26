@@ -39,3 +39,9 @@ attempts: 3
 tokens: 604841
 logs: .softfield/var/runs/20261125-034732/f281-01-one-row-on-wide
 ```
+
+```yaml
+# --- runner ---
+result: done
+finished_by: lead
+```
