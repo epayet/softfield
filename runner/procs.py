@@ -56,12 +56,40 @@ def _watched(args: list[str]) -> list[str]:
 # SIGKILL that ends every group leaves nothing in it the time to remove its own (pytest's
 # folders, Chromium profiles), and Ubuntu empties /tmp only at boot. Not TMPDIR's: inside a
 # job, that is the job's folder.
-TMP_BASE = Path("/tmp")  # noqa: S108 - the root is checked as ours before any use
+#
+# The root is in memory when it can be (f305 D3): a check wrote 4 to 7 GB to the SSD in files
+# that live minutes, most of the 570 GB a day the machine wrote (2026-11-26). `/dev/shm` is
+# shared like `/tmp`, so `_tmp_root`'s checks hold there unchanged.
+SHM = Path("/dev/shm")  # noqa: S108 - the root is checked as ours before any use
+DISK = Path("/tmp")  # noqa: S108 - the root is checked as ours before any use
+MOUNTS = Path("/proc/mounts")
+SHM_FREE = 4 * 1024**3  # bytes free in memory for the root to go there: a check's ~1 GB, and room
+
+
+def _free(path: Path) -> int:
+    """Bytes a user may still write under ``path``."""
+    st = os.statvfs(path)
+    return st.f_bavail * st.f_frsize
+
+
+def _base(mounts: Path = MOUNTS, free: Callable[[Path], int] = _free) -> Path:
+    """``/dev/shm`` when ``mounts`` lists it as a tmpfs with ``SHM_FREE`` bytes free, else
+    ``/tmp``; ``/tmp`` too when either can't be read."""
+    try:
+        lines = mounts.read_text(encoding="utf-8").splitlines()
+        shm = any(line.split()[1:3] == [str(SHM), "tmpfs"] for line in lines)
+        return SHM if shm and free(SHM) >= SHM_FREE else DISK
+    except OSError:
+        return DISK
+
+
+TMP_BASE = _base()  # chosen once, at the start: the jobs and the sweep read the same root
 
 
 def _tmp_root() -> Path | None:
-    """``/tmp/softfield-<uid>``, made private; None when the path there isn't our own folder
-    (another user's, or a link planted in the shared ``/tmp``) or can't be made (a full disk)."""
+    """``<TMP_BASE>/softfield-<uid>``, made private; None when the path there isn't our own
+    folder (another user's, or a link planted in the shared folder) or can't be made (a full
+    disk)."""
     root = TMP_BASE / f"softfield-{os.getuid()}"
     try:
         with contextlib.suppress(FileExistsError):
@@ -90,6 +118,17 @@ def _job_tmp(env: dict[str, str]) -> Path | None:
         return None
     env["TMPDIR"] = str(folder)
     return folder
+
+
+def temp_dir() -> str | None:
+    """Where the runner puts a temp folder of its own that outlives one command (the review's
+    worktree), as ``tempfile``'s ``dir``: the root, named with the runner's pid it is swept if
+    the runner dies; None, ``tempfile``'s default, inside a job (``TMPDIR`` is then the job's
+    folder) or when the root isn't ours."""
+    root = _tmp_root()
+    if root is None or root in Path(os.environ.get("TMPDIR", "/")).parents:
+        return None
+    return str(root)
 
 
 def _remove(folder: Path | None) -> None:

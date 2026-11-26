@@ -282,7 +282,7 @@ def test_a_command_killed_by_a_signal_reports_it(tmp_path: Path):
 
 
 # f175 D1: the runner SIGKILLs every group, so nothing in it can remove its temp files.
-ROOT = Path(f"/tmp/softfield-{os.getuid()}")  # noqa: S108 - the root D1 names
+ROOT = procs.TMP_BASE / f"softfield-{os.getuid()}"
 SAYS_TMP = 'echo "$TMPDIR" > tmpdir.txt; test -d "$TMPDIR"'
 
 
@@ -410,6 +410,86 @@ def test_a_command_that_cannot_start_leaves_no_temp_folder(
     with pytest.raises(FileNotFoundError):
         run_bounded(["true"], tmp_path / "no-such-folder", 10)
     assert list((tmp_path / f"softfield-{os.getuid()}").iterdir()) == []
+
+
+SHM_LINE = "tmpfs /dev/shm tmpfs rw,nosuid,nodev,inode64 0 0\n"
+DISK_LINES = "/dev/sda2 / ext4 rw,relatime 0 0\nproc /proc proc rw 0 0\n"
+GB = 1024**3
+
+
+def _mounts(tmp_path: Path, text: str) -> Path:
+    mounts = tmp_path / "mounts"
+    mounts.write_text(text)
+    return mounts
+
+
+def test_the_temp_root_is_in_memory_when_dev_shm_is_a_tmpfs_with_room(tmp_path: Path):
+    """f305 D3: the checks' temp files were most of the 570 GB a day written to the SSD."""
+    mounts = _mounts(tmp_path, DISK_LINES + SHM_LINE)
+    assert procs._base(mounts, lambda path: 4 * GB) == procs.SHM
+
+
+def test_the_temp_root_stays_on_the_disk_when_memory_has_too_little_room(tmp_path: Path):
+    mounts = _mounts(tmp_path, DISK_LINES + SHM_LINE)
+    assert procs._base(mounts, lambda path: 4 * GB - 1) == Path("/tmp")  # noqa: S108
+
+
+@pytest.mark.parametrize(
+    "text",
+    [DISK_LINES, "/dev/sda3 /dev/shm ext4 rw 0 0\n", "tmpfs /dev/shm/x tmpfs rw 0 0\n", ""],
+)
+def test_the_temp_root_stays_on_the_disk_when_dev_shm_is_no_tmpfs(tmp_path: Path, text: str):
+    mounts = _mounts(tmp_path, text)
+    assert procs._base(mounts, lambda path: 64 * GB) == Path("/tmp")  # noqa: S108
+
+
+def test_an_unreadable_mounts_file_or_free_space_keeps_the_disk(tmp_path: Path):
+    def fails(path: Path) -> int:
+        raise OSError(errno.ENOENT, "gone")
+
+    assert procs._base(tmp_path / "no-mounts", lambda path: 64 * GB) == Path("/tmp")  # noqa: S108
+    assert procs._base(_mounts(tmp_path, SHM_LINE), fails) == Path("/tmp")  # noqa: S108
+
+
+def test_free_space_is_what_the_user_may_still_write(tmp_path: Path):
+    st = os.statvfs(tmp_path)
+    assert procs._free(tmp_path) == st.f_bavail * st.f_frsize
+
+
+def test_the_root_in_use_is_the_one_chosen_and_the_sweep_reads_it(tmp_path: Path, monkeypatch):
+    """Whichever root the runner chose at its start, its jobs and the sweep at `softfield run`
+    use the same one."""
+    assert procs._base() == procs.TMP_BASE
+    monkeypatch.setattr(procs, "TMP_BASE", tmp_path)
+    root = tmp_path / f"softfield-{os.getuid()}"
+    root.mkdir(mode=0o700)
+    dead = root / f"{_dead_pid()}-abc"
+    dead.mkdir()
+    procs.sweep_tmp()
+    assert not dead.exists()
+
+
+def test_a_folder_of_the_runners_own_goes_under_the_root(
+    tmp_path: Path, monkeypatch, outside_a_job
+):
+    """f305: the review's worktree and `.venv` go where the jobs' temp files go, and a runner
+    that dies leaves it to the sweep (its name starts with the runner's pid)."""
+    monkeypatch.setattr(procs, "TMP_BASE", tmp_path)
+    assert procs.temp_dir() == str(tmp_path / f"softfield-{os.getuid()}")
+
+
+def test_a_folder_of_the_runners_own_inside_a_job_goes_in_the_jobs(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(procs, "TMP_BASE", tmp_path)
+    job = tmp_path / f"softfield-{os.getuid()}" / f"{os.getpid()}-job"
+    job.mkdir(mode=0o700, parents=True)
+    (tmp_path / f"softfield-{os.getuid()}").chmod(0o700)
+    monkeypatch.setenv("TMPDIR", str(job))
+    assert procs.temp_dir() is None  # tempfile's own default: the job's folder
+
+
+def test_a_folder_of_the_runners_own_without_a_root_takes_the_default(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(procs, "TMP_BASE", tmp_path / "not-there")
+    assert procs.temp_dir() is None
 
 
 def test_a_root_someone_else_made_is_left_alone(tmp_path: Path, monkeypatch, outside_a_job):

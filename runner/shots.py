@@ -265,7 +265,9 @@ def _round(
     folder: Path,
 ) -> dict[str, Picture]:
     """Everything a round pictures, on one data folder: the only difference is the code (D2)."""
-    with tempfile.TemporaryDirectory(prefix="softfield-shots-", ignore_cleanup_errors=True) as tmp:
+    with tempfile.TemporaryDirectory(  # the worktree and its .venv: in memory when it can (f305)
+        prefix=f"{os.getpid()}-shots-", dir=procs.temp_dir(), ignore_cleanup_errors=True
+    ) as tmp:
         data = Path(tmp) / "data"
         data.mkdir()
         env = {**os.environ, DATA_ENV: str(data)}
