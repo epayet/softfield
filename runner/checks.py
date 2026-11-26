@@ -9,7 +9,7 @@ from collections.abc import Callable, Collection
 from dataclasses import dataclass
 from pathlib import Path
 
-from runner import i18n
+from runner import i18n, look
 from runner.config import project_checks, suite_args
 from runner.gates import layout_problems
 from runner.procs import run_bounded
@@ -49,6 +49,13 @@ class Check:
     output: str = ""
 
 
+class Results(list[Check]):
+    """The checks, and the bytes the whole machine wrote to its disks while they ran (F305
+    D2); None when ``/proc/diskstats`` can't be read."""
+
+    wrote: int | None = None
+
+
 def _exec(repo: Path, args: list[str], timeout: int) -> tuple[int | None, str]:
     code, out, err = run_bounded(args, repo, timeout)
     if code is None:
@@ -84,7 +91,9 @@ def check_all(
 ) -> list[Check]:
     """Run every check, every test file on main included (ADR 21). ``fix`` formats first;
     ``task_id`` names the task, whose checks are the same as any other's. ``only`` runs just
-    the checks it names (the runner's look at main, F106 D5)."""
+    the checks it names (the runner's look at main, F106 D5). The results also carry what the
+    machine wrote to its disks meanwhile (F305 D2)."""
+    before = look.written()
     if fix:
         _exec(repo, ["uv", "run", "ruff", "format", "."], timeout)
         _exec(repo, ["uv", "run", "ruff", "check", "--fix", "."], timeout)
@@ -113,7 +122,11 @@ def check_all(
         ("layout", lambda: _problems("layout", layout_problems(repo))),
         ("tests", lambda: _command(repo, "tests", tests, timeout)),
     ]
-    return [run() for name, run in runs if only is None or name in only]
+    results = Results(run() for name, run in runs if only is None or name in only)
+    after = look.written()
+    if before and after:
+        results.wrote = sum(after[d] - before[d] for d in after if d in before)
+    return results
 
 
 def render(results: list[Check]) -> str:
@@ -127,6 +140,10 @@ def render(results: list[Check]) -> str:
     lines.append(
         f"check-all: {len(failed)} failed ({', '.join(failed)})" if failed else "check-all: OK"
     )
+    if isinstance(results, Results) and results.wrote is not None:
+        lines.append(
+            f"wrote {results.wrote / 1e9:.1f} GB to disk while it ran (the whole machine's writes)"
+        )
     return "\n".join(lines) + "\n"
 
 

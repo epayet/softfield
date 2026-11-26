@@ -387,6 +387,80 @@ def test_disk_writes_nothing(tmp_path):
     assert sorted(p.as_posix() for p in tmp_path.rglob("*")) == before
 
 
+# F305: what is written, not what is left, wears an SSD; /proc/diskstats counts it since boot
+_DISKSTATS = """\
+ 259       0 nvme0n1 100 0 2000 50 300 0 {nvme} 900 0 400 950 0 0 0 0
+ 259       1 nvme0n1p1 10 0 200 5 30 0 999999999 90 0 40 95 0 0 0 0
+   8       0 sda 5 0 100 1 2 0 {sda} 3 0 4 5
+   8       1 sda1 5 0 100 1 2 0 888888888 3 0 4 5
+   7       0 loop0 5 0 100 1 2 0 777777777 3 0 4 5
+ 252       0 zram0 5 0 100 1 2 0 666666666 3 0 4 5
+   1       0 ram0 5 0 100 1 2 0 555555555 3 0 4 5
+ 253       0 dm-0 5 0 100 1 2 0 444444444 3 0 4 5
+"""
+
+
+def _machine(tmp_path: Path, nvme: int, sda: int, hours: float = 48.0) -> tuple[Path, Path]:
+    """A sample /proc (diskstats, uptime) and /sys/class/block, sectors written per disk."""
+    proc, block = tmp_path / "proc", tmp_path / "block"
+    proc.mkdir(exist_ok=True)
+    (proc / "diskstats").write_text(_DISKSTATS.format(nvme=nvme, sda=sda))
+    (proc / "uptime").write_text(f"{hours * 3600:.2f} 1234.56\n")
+    for name in ("nvme0n1", "nvme0n1p1", "sda", "sda1", "loop0", "zram0", "ram0", "dm-0"):
+        (block / name).mkdir(parents=True, exist_ok=True)
+    for name in ("nvme0n1p1", "sda1"):
+        (block / name / "partition").write_text("1\n")
+    return proc, block
+
+
+def test_written_counts_whole_disks_only_in_bytes(tmp_path):
+    proc, block = _machine(tmp_path, nvme=200_000_000, sda=2_000_000)
+    assert look.written(proc, block) == {"nvme0n1": 200_000_000 * 512, "sda": 2_000_000 * 512}
+
+
+def test_written_of_an_unreadable_diskstats_is_nothing(tmp_path):
+    assert look.written(tmp_path / "noproc", tmp_path / "noblock") == {}
+
+
+def test_disk_ends_with_what_each_whole_disk_wrote_since_boot(tmp_path):
+    proc, block = _machine(tmp_path, nvme=200_000_000, sda=2_000_000, hours=48.0)
+    out = look.disk(
+        tmp_path / "m", tmp_path / "b", tmp_path / "r", tmp=tmp_path / "t", proc=proc,
+        block=block, uid=1, user="sam",
+    )  # fmt: skip
+    # 200M sectors × 512 = 102.4 GB in 48 h: 51.2 GB a day
+    assert out.splitlines()[-2:] == [
+        f"{'nvme0n1 written since boot':32} 102.4 GB in 48.0 hours, 51.2 GB a day",
+        f"{'sda written since boot':32} 1.0 GB in 48.0 hours, 0.5 GB a day",
+    ]
+    for skipped in ("nvme0n1p1", "sda1", "loop0", "zram0", "ram0", "dm-0"):
+        assert skipped not in out
+
+
+def test_check_all_ends_with_what_the_machine_wrote_while_it_ran(repo: Path, monkeypatch):
+    from runner import checks
+
+    counters = iter([{"nvme0n1": 1_000_000_000, "sda": 5}, {"nvme0n1": 4_500_000_000, "sda": 5}])
+    monkeypatch.setattr(look, "written", lambda *a, **k: next(counters))
+    monkeypatch.setattr(checks, "_exec", lambda repo, args, timeout: (0, ""))
+    monkeypatch.setattr(checks, "_i18n_problems", lambda repo, timeout: [])
+    text = checks.render(checks.check_all(repo, 60))
+    assert text.rstrip().splitlines()[-2:] == [
+        "check-all: OK",
+        "wrote 3.5 GB to disk while it ran (the whole machine's writes)",
+    ]
+
+
+def test_check_all_without_diskstats_says_nothing_of_writes(repo: Path, monkeypatch):
+    from runner import checks
+
+    monkeypatch.setattr(look, "written", lambda *a, **k: {})
+    monkeypatch.setattr(checks, "_exec", lambda repo, args, timeout: (0, ""))
+    monkeypatch.setattr(checks, "_i18n_problems", lambda repo, timeout: [])
+    text = checks.render(checks.check_all(repo, 60))
+    assert text.rstrip().endswith("check-all: OK")
+
+
 def test_a_test_repo_holds_no_sample_hooks(tmp_path):
     """F175: a run makes thousands of repos; each copied git's template (fifteen sample
     hooks) and /tmp/pytest-of-<user> grew past a million files."""

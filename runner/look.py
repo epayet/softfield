@@ -1,6 +1,7 @@
 """``softfield look``: what a planner or a review job may read (ADR 28). No AI in it.
 
-Three forms, all read-only (``look disk`` says where the disk space went, f175):
+Three forms, all read-only (``look disk`` says where the disk space went, f175, and what each
+disk wrote since boot, f305):
 - ``look sql "<one SELECT>"`` prints rows of the metrics database. The file is opened
   read-only, and SQLite's authorizer allows reads only: a write, an ``ATTACH`` (which makes a
   file even on a read-only connection) or a ``PRAGMA`` that changes anything is refused by
@@ -181,6 +182,49 @@ def _holding(proc: Path, uid: int) -> list[tuple[int, int, str]]:
     return sorted(found, reverse=True)
 
 
+_NOT_DISKS = ("loop", "ram", "zram", "dm-")  # files, memory and mapped devices, not a drive
+SECTOR = 512  # /proc/diskstats counts in 512-byte sectors, whatever the drive's own
+
+
+def written(proc: Path = Path("/proc"), block: Path = Path("/sys/class/block")) -> dict[str, int]:
+    """Bytes written since boot per whole disk, from ``/proc/diskstats`` (its tenth field,
+    sectors written): partitions (a ``partition`` file under ``block/<name>``) and loop, RAM
+    and mapped devices are left out. Nothing when it can't be read (F305 D1)."""
+    try:
+        text = (proc / "diskstats").read_text()
+    except OSError:
+        return {}
+    found: dict[str, int] = {}
+    for line in text.splitlines():
+        fields = line.split()
+        if len(fields) < 10 or not fields[9].isdigit():
+            continue
+        name = fields[2]
+        if name.startswith(_NOT_DISKS) or (block / name / "partition").exists():
+            continue
+        found[name] = int(fields[9]) * SECTOR
+    return found
+
+
+def _hours_up(proc: Path) -> float | None:
+    try:
+        return float((proc / "uptime").read_text().split()[0]) / 3600
+    except (OSError, ValueError, IndexError):
+        return None
+
+
+def _writes(proc: Path, block: Path) -> list[str]:
+    """A line per whole disk: GB written since boot, the hours since and GB a day (F305 D2)."""
+    hours = _hours_up(proc)
+    lines = []
+    for name, nbytes in written(proc, block).items():
+        line = f"{name + ' written since boot':32} {nbytes / 1e9:.1f} GB"
+        if hours:
+            line += f" in {hours:.1f} hours, {nbytes / 1e9 / hours * 24:.1f} GB a day"
+        lines.append(line)
+    return lines
+
+
 def disk(
     db: Path,
     bench: Path,
@@ -188,11 +232,13 @@ def disk(
     *,
     tmp: Path = Path("/tmp"),  # noqa: S108 - the place being measured, never written to
     proc: Path = Path("/proc"),
+    block: Path = Path("/sys/class/block"),
     uid: int | None = None,
     user: str | None = None,
 ) -> str:
     """Where the factory's disk space went, a line a place with its size and file count, then
-    the deleted files still held open, largest first. Read-only; what can't be read is skipped."""
+    the deleted files still held open, largest first, then what each whole disk wrote since
+    boot. Read-only; what can't be read is skipped."""
     uid = os.getuid() if uid is None else uid
     user = user or getpass.getuser()
     try:
@@ -246,7 +292,7 @@ def disk(
         if len(held) > MAX_HELD:
             rest = sum(n for n, _, _ in held[MAX_HELD:])
             lines.append(f"  (and {len(held) - MAX_HELD} more, {_amount((rest, 0)).split(',')[0]})")
-    return "\n".join(lines)
+    return "\n".join(lines + _writes(proc, block))
 
 
 # --- a page as text ---------------------------------------------------------------------------
