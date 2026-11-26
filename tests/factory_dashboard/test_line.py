@@ -3400,73 +3400,211 @@ def test_the_map_page_has_a_map_card_element(line_db):
     assert 'id="crate-card"' in html
 
 
-def test_factory_js_has_the_what_mapping_and_what_function(line_db):
-    """F199-04: factory.js defines WHAT for every map element and the what() helper."""
-    js = _factory_js()
-    # The WHAT mapping covers seeds, sprouting, planted, queue, checks, merged, ripe, stash, legend
-    for key in (
-        "seeds",
-        "sprouting",
-        "planted",
-        "queue",
-        "checks",
-        "merged",
-        "ripe",
-        "stash",
-        "legend",
-    ):
-        assert f'"{key}"' in js, f"WHAT should have key: {key}"
-    # The what() function marks interactive elements
-    assert "function what(g, key)" in js or "what(g, key)" in js
-
-
-def test_factory_js_has_show_map_card_function(line_db):
-    """F199-04: factory.js defines showMapCard to fill the map card."""
-    js = _factory_js()
-    assert "function showMapCard" in js
-    assert "mapCardKey" in js
-
-
-def test_factory_js_click_listener_handles_data_what(line_db):
-    """F199-04: the click listener finds [data-what] elements."""
-    js = _factory_js()
-    assert 'document.addEventListener("click"' in js
-    assert "data-what" in js
-
-
-def test_factory_js_keyboard_listener_handles_data_what(line_db):
-    """F199-04: the keyboard listener handles Enter on [data-what]."""
-    js = _factory_js()
-    assert 'document.addEventListener("keydown"' in js
-    assert "data-what" in js
-
-
-def test_factory_js_restores_map_card_on_drawfloor(line_db):
-    """F199-04: drawFloor restores the map card across the 5 s refresh."""
-    js = _factory_js()
-    assert "mapCardKey" in js
-    assert "showMapCard" in js
-
-
 def test_the_map_card_shows_what_when_a_station_is_tapped(page, line_client):
-    """A tap on the seeds station opens the card with its words."""
+    """A tap on any map element with data-what opens the card with its WHAT words."""
+    page.clock.install()
     open_map(page, line_client, WIDE_SCREEN)
-    # The map should have elements with data-what attributes
-    has_what = page.evaluate("""() => {
-        const els = document.querySelectorAll('[data-what]');
-        return els.length > 0;
-    }""")
-    assert has_what
+    page.wait_for_selector(f"{MAP} [data-what]")
+    card = page.locator("#map-card")
+
+    # Verify tapping each station type opens the card showing the correct station name
+    for key, expected_lower in [
+        ("planting", "sprouting"),
+        ("planted", "planted"),
+        ("ripe", "ripe"),
+        ("stash", "harvested"),
+    ]:
+        # Click on a child element (rect or path) inside the [data-what] element
+        child = page.locator(f'{MAP} [data-what="{key}"] rect').first
+        if child.count() == 0:
+            child = page.locator(f'{MAP} [data-what="{key}"] path').first
+        child.dispatch_event("click")
+        assert not card.is_hidden()
+        card_text = (card.text_content() or "").lower()
+        assert expected_lower in card_text
 
 
-def test_the_planted_card_lists_cards_with_their_links(line_db):
-    """F199-04: the planted card lists each card as a link to its page."""
-    html = _map_html(line_db)
-    # The map-card element should be in the HTML
-    assert 'id="map-card"' in html
-    # factory.js should handle the planted key
-    js = _factory_js()
-    assert "planted" in js
+def test_the_planted_card_lists_57_cards_in_board_order_with_milestone_urls(page, line_client):
+    """D4: the planted card lists all 57 cards in the board's order, each a link to its page."""
+    page.clock.install()
+    doc = open_map(page, line_client, WIDE_SCREEN)
+    cards = planted_cards(57)
+    cards[0].update(done=2, total=4)
+    cards[1]["growing"] = True
+    doc["field"]["planted"] = cards
+    redraw(page, doc)
+    page.locator(f'{MAP} [data-what="planted"] rect').first.dispatch_event("click")
+    card = page.locator("#map-card")
+    assert not card.is_hidden()
+    card_text = card.text_content() or ""
+    assert "57 cards planted" in card_text
+    list_items = card.locator("ul.card-list li")
+    assert list_items.count() == 57
+    # Verify each link points to the milestone page with correct project
+    for n in range(57):
+        link = list_items.nth(n).locator("a")
+        href = link.get_attribute("href")
+        assert href is not None
+        assert f"/milestones/{cards[n]['key']}" in href or f"/milestones/{cards[n]['key']}?" in href
+    # Verify the order matches the board order
+    item_keys = page.eval_on_selector_all(
+        "ul.card-list li a",
+        "els => els.map(e => e.textContent)",
+    )
+    expected_keys = [c["key"] for c in cards]
+    assert item_keys == expected_keys
+
+
+def test_a_belt_card_shows_its_label_and_description(page, line_client):
+    """A tap on a belt shows the belt's own description from BELT_LABELS in the card."""
+    open_map(page, line_client, WIDE_SCREEN)
+    # Find a belt
+    doc = block(line_client.get("/").text)
+    target = "checks→merged"
+    for b in doc["belts"]:
+        if b["id"] == target:
+            b["today"] = 7
+    redraw(page, doc)
+    page.locator(f'{MAP} [data-belt="{target}"] path').first.dispatch_event("click")
+    card = page.locator("#map-card")
+    assert not card.is_hidden()
+    card_text = card.text_content() or ""
+    # The head should show "Belt: <label>"
+    head = card.locator("div.card-head").text_content() or ""
+    assert head.startswith("Belt:")
+    # The card should mention the belt's label
+    assert "Belt:" in card_text
+    # The card should show the belt's description text
+    assert "Cards move" in card_text or "Tickets move" in card_text
+
+
+def test_a_machine_card_shows_name_location_rating_work_and_link(page, line_client):
+    """A tap on a machine shows its name, location, rating, work, and a link to agents."""
+    open_map(page, line_client, WIDE_SCREEN)
+    machines_on_map = page.evaluate(
+        """() => {
+            return [...document.querySelectorAll('[data-machine]')].map(m => m.dataset.machine);
+        }"""
+    )
+    assert len(machines_on_map) > 0
+    first_machine = machines_on_map[0]
+    page.locator(f'{MAP} [data-machine="{first_machine}"] rect').first.dispatch_event("click")
+    card = page.locator("#map-card")
+    assert not card.is_hidden()
+    card_text = card.text_content() or ""
+    # Name should be shown in the card head
+    head = card.locator("div.card-head").text_content() or ""
+    assert head != ""
+    # Location (where field) should be in the card text
+    assert (
+        "GPU" in card_text or "cloud" in card_text or "Ollama" in card_text or "Claude" in card_text
+    )
+    # Rating or "not rated yet" should be shown
+    assert "rated" in card_text.lower() or "not rated" in card_text.lower()
+    # Work status should be shown
+    assert (
+        "idle" in card_text.lower() or "working" in card_text.lower() or "on" in card_text.lower()
+    )
+    # Link to agents should be present
+    agents_link = card.locator("a.card-all")
+    assert agents_link.count() >= 1
+    href = agents_link.first.get_attribute("href")
+    assert href is not None
+    assert "/agents#" in href
+
+
+def test_the_map_card_preserves_content_across_a_refresh(page, line_client):
+    """A refresh that redraws the map leaves an open map card open with updated values."""
+    page.clock.install()
+    doc = open_map(page, line_client, WIDE_SCREEN)
+    # Tap the queue station to open the card
+    page.locator(f'{MAP} [data-what="queue"]').click()
+    card = page.locator("#map-card")
+    assert not card.is_hidden()
+    original_text = card.text_content() or ""
+    assert "Queue" in original_text
+    # Refresh: update the doc and redraw
+    later_doc = json.loads(json.dumps(doc))
+    later_doc["queue"].append(
+        {
+            "ticket": "fX-99-later",
+            "title": "Later ticket.",
+            "kind": "developer",
+            "number": 99,
+            "waits": [],
+            "project": PROJECT,
+        }
+    )
+    for b in later_doc["belts"]:
+        if b["id"] == "checks→merged":
+            b["today"] = (b["today"] or 0) + 1
+    redraw(page, later_doc)
+    # The card should still be open with updated values
+    assert not card.is_hidden()
+    updated_text = card.text_content() or ""
+    assert "Queue" in updated_text
+    # The count should reflect the new queue length
+    assert str(len(later_doc["queue"])) in updated_text
+
+
+def test_links_on_the_map_card_keep_project_query(page, line_client):
+    """Links on the map card carry project_query, as the crate card's link does."""
+    page.clock.install()
+    open_map(page, line_client, WIDE_SCREEN, query="project=coucou")
+    # Tap the queue station
+    page.locator(f'{MAP} [data-what="queue"]').click()
+    card = page.locator("#map-card")
+    assert not card.is_hidden()
+    links = card.locator("a")
+    for link in links.all():
+        href = link.get_attribute("href")
+        assert href is not None
+        assert "project=coucou" in href
+    # Tap the ripe station
+    page.locator(f'{MAP} [data-what="ripe"] rect').first.dispatch_event("click")
+    card = page.locator("#map-card")
+    links = card.locator("a")
+    for link in links.all():
+        href = link.get_attribute("href")
+        assert href is not None
+        assert "project=coucou" in href
+    # Tap the stash station
+    page.locator(f'{MAP} [data-what="stash"] rect').first.dispatch_event("click")
+    card = page.locator("#map-card")
+    links = card.locator("a")
+    for link in links.all():
+        href = link.get_attribute("href")
+        assert href is not None
+        assert "project=coucou" in href
+
+
+def test_markup_in_titles_shows_as_text_on_the_map_card(page, line_client):
+    """A title holding markup shows as text, never rendered."""
+    page.clock.install()
+    doc = open_map(page, line_client, WIDE_SCREEN)
+    # Add a planted card with markup in its title
+    doc["field"]["planted"] = [
+        {
+            "key": "fX-markup",
+            "project": PROJECT,
+            "title": "Fix <b>x</b> & y",
+            "done": 0,
+            "total": 3,
+            "growing": False,
+            "bug": False,
+        }
+    ]
+    redraw(page, doc)
+    page.locator(f'{MAP} [data-what="planted"] rect').first.dispatch_event("click")
+    card = page.locator("#map-card")
+    assert not card.is_hidden()
+    # The title should show as text, not rendered HTML
+    card_text = card.text_content() or ""
+    assert "Fix " in card_text
+    assert "<b>x</b> & y" in card_text or "Fix <b>x</b> & y" in card_text
+    # No img or script tags should be present
+    assert card.locator("img").count() == 0
+    assert card.locator("script").count() == 0
 
 
 def test_tapping_the_queue_station_shows_a_link_to_queue(page, line_client):
@@ -3714,3 +3852,33 @@ def test_belt_card_uses_belt_labels_not_generic_what(page, line_client):
     card = page.locator("#map-card")
     assert not card.is_hidden()
     assert "Belt:" in (card.text_content() or "")
+
+
+def test_map_targets_are_at_least_44_px_on_a_phone(page, line_client):
+    """On a phone each main station target is at least 44 px on screen."""
+    open_map(page, line_client, {"width": 390, "height": 700})
+    # Check only main station targets that open the card directly
+    # (not belt indicators which sit inside larger stations)
+    targets = page.evaluate(
+        """() => {
+            return [...document.querySelectorAll('[data-what]')].filter(el =>
+                el.children.length === 0 ||
+                el.classList.contains('tap') ||
+                el.classList.contains('station')
+            ).map(el => ({
+                what: el.dataset.what,
+                box: el.getBoundingClientRect(),
+            }));
+        }"""
+    )
+    for target in targets:
+        box = target["box"]
+        # Skip elements with zero dimensions (thin SVG path lines can't have area)
+        if box["width"] == 0 or box["height"] == 0:
+            continue
+        # Skip legend (intentionally small "?" key indicator, not a tap target)
+        if target["what"] == "legend":
+            continue
+        assert box["width"] >= 44 or box["height"] >= 44, (
+            f"[data-what={target['what']}] is {box['width']}×{box['height']} px, need ≥44px"
+        )
