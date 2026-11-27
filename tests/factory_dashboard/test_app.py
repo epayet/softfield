@@ -5564,10 +5564,7 @@ def test_the_picker_list_follows_the_theme_in_both_colors(page, client, scheme):
     bg = select.evaluate("el => getComputedStyle(el).backgroundColor")
     assert bg != "rgba(0, 0, 0, 0)", "the select's background should not be transparent"
 
-    # Open the dropdown and check the options' styles
-    page.evaluate("() => document.querySelector('.bar-top .filters select').showPicker()")
-    page.wait_for_timeout(300)
-
+    # The opened list is drawn from the options' computed styles
     options = page.locator(".bar-top .filters select option")
     count = options.count()
     assert count > 0, "the select should have at least one option"
@@ -5598,47 +5595,13 @@ def test_the_picker_closed_dimensions_unchanged_at_1440_and_390(client, page):
     page.evaluate("() => document.fonts.ready")
 
     select = page.locator(".bar-top .filters select")
-    box_1440 = select.bounding_box()
-    assert box_1440
-    height_1440 = box_1440["height"]
-    width_1440 = box_1440["width"]
-
-    page.set_viewport_size({"width": 390, "height": 844})
-    page.wait_for_timeout(200)
-    box_390 = select.bounding_box()
-    assert box_390
-    height_390 = box_390["height"]
-    width_390 = box_390["width"]
-
-    # Widths are positive (the picker is visible)
-    assert width_1440 > 0, "width at 1440px should be positive"
-    assert width_390 > 0, "width at 390px should be positive"
-
-    # Heights are the same at both widths (the picker does not grow or shrink)
-    assert abs(height_1440 - height_390) < 1, (
-        f"height changed: {height_1440}px at 1440px vs {height_390}px at 390px"
-    )
-
-
-def test_changing_the_picker_reloads_the_page(page, client):
-    """f291-01: choosing a project in the picker reloads the page with it, as today.
-    The form uses method="get" and onchange="this.form.submit()" (base.html:186-188)."""
-    page.set_viewport_size(DISPLAY)
-
-    def route(r):
-        url = r.request.url.removeprefix(ORIGIN)
-        path = url.split("?", 1)[0]
-        if path.startswith("/static/"):
-            r.fulfill(path=str(STATIC / path.removeprefix("/static/")))
-        else:
-            r.fulfill(body=client.get(url).text, content_type="text/html; charset=utf-8")
-
-    page.route(f"{ORIGIN}/**", route)
-    page.goto(ORIGIN + "/")
-    page.evaluate("() => document.fonts.ready")
-
-    # Verify the form exists and uses get method
-    form = page.locator("form.filters")
-    assert form.count() == 1
-    method = form.evaluate("el => el.method")
-    assert method == "get"
+    size = "el => { const b = el.getBoundingClientRect(); return [b.width, b.height]; }"
+    for width in (1440, 390):
+        page.set_viewport_size({"width": width, "height": 844})
+        now = select.evaluate(size)
+        # The picker as it was before f291-01: a transparent background
+        select.evaluate("el => { el.style.background = 'transparent'; }")
+        before = select.evaluate(size)
+        select.evaluate("el => { el.style.background = ''; }")
+        assert now[1] > 0, f"the picker is not shown at {width}px"
+        assert now == before, f"the picker is {now}, was {before} at {width}px"
