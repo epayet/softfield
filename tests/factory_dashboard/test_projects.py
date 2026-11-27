@@ -1290,6 +1290,79 @@ def test_pressing_unarchive_turns_it_unarchiving_and_asks_the_runner(
     assert _open_requests(db_path) == [("unarchive_project", "softfield")]
 
 
+def test_archive_redraws_the_bay_when_done(page, projects_client, db_path):
+    """After Archive is pressed and the runner finishes, coucou has no plate in #order-form and
+    a crate in #projects-archived (closed, "Archived · 1"), without a reload."""
+    from playwright.sync_api import expect
+
+    open_page(page, projects_client, "/projects")
+    row = page.locator(f'.proj[data-key="{PROJECT}"]')
+    row.locator(".shelve").click()
+    row.locator(f"#archive-sent-{PROJECT}").get_by_text("Asked").wait_for()
+    _runner_takes(db_path, "archive_project", metrics.ARCHIVED)
+    expect(row).to_be_hidden(timeout=15_000)
+    bay = page.locator("#projects-archived")
+    expect(bay).to_be_visible(timeout=15_000)
+    expect(bay.locator("summary")).to_have_text(re.compile(r"Archived · 1"), timeout=15_000)
+    assert bay.evaluate("el => el.open") is False
+    crate = bay.locator(".crate")
+    expect(crate).to_have_count(1)
+    expect(crate.locator(".name")).to_have_text(PROJECT)
+    form = page.locator("#order-form")
+    assert PROJECT not in form.inner_text()
+
+
+def test_unarchive_redraws_the_plate_when_done(page, projects_client, db_path):
+    """After Unarchive is pressed and the runner finishes, the project's plate is back in
+    #order-form with an enabled Archive button, and with no other archived project there is
+    no bay."""
+    from playwright.sync_api import expect
+
+    _archive(db_path, "softfield")
+    open_page(page, projects_client, "/projects")
+    page.locator("#projects-archived > summary").click()
+    crate = page.locator('#projects-archived .crate[data-key="softfield"]')
+    crate.locator(".unshelve").click()
+    crate.locator("#unarchive-sent-softfield").get_by_text("Asked").wait_for()
+    conn = metrics.open_db(db_path)
+    try:
+        (request_id,) = conn.execute(
+            "SELECT id FROM owner_requests WHERE kind = ? AND done IS NULL",
+            ("unarchive_project",),
+        ).fetchone()
+        metrics.set_project_paused(conn, "softfield", None)
+        assert metrics.finish_request(conn, request_id, NOW.isoformat(), "taken")
+        conn.commit()
+    finally:
+        conn.close()
+    plate = page.locator(f'li.proj[data-key="{PROJECT}"]')
+    expect(plate).to_be_visible(timeout=15_000)
+    expect(plate.locator(".shelve")).to_have_text("Archive", timeout=15_000)
+    expect(plate.locator(".shelve")).to_be_enabled(timeout=15_000)
+    bay = page.locator("#projects-archived")
+    expect(bay).to_be_hidden(timeout=15_000)
+
+
+def test_a_drafted_order_on_another_plate_survives_the_archive_redraw(
+    page, projects_client, db_path
+):
+    """With a place typed on another plate and not sent, the archive's done line shows and the
+    typed place and the enabled Send new order stay."""
+    from playwright.sync_api import expect
+
+    open_page(page, projects_client, "/projects")
+    page.get_by_label("softfield's place").fill("3")
+    send = page.locator(".send-order")
+    expect(send).to_be_enabled()
+    row = page.locator(f'.proj[data-key="{PROJECT}"]')
+    row.locator(".shelve").click()
+    row.locator(f"#archive-sent-{PROJECT}").get_by_text("Asked").wait_for()
+    _runner_takes(db_path, "archive_project", metrics.ARCHIVED)
+    row.locator(f"#archive-sent-{PROJECT} p.request.done").wait_for(timeout=15_000)
+    expect(page.get_by_label("softfield's place")).to_have_value("3")
+    expect(send).to_be_enabled()
+
+
 # --- forget a project from the Archived bay (F273 D5, f273-02) -------------------------------
 
 

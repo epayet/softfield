@@ -325,5 +325,25 @@
       });
     });
   })();
+  // Archive or unarchive the runner has taken: once its request's poll swaps in the done
+  // line, redraw the whole projects section (the form and the bay), unless a place is typed
+  // on another plate and not sent, because a reload would lose it. htmx fires afterSwap on
+  // the new done line itself, inside its plate's or crate's `.pause-sent`.
+  (() => {
+    document.addEventListener("htmx:afterSwap", (event) => {
+      const line = event.target;
+      if (!(line instanceof Element) || !line.matches(".pause-sent p.request.done")) return;
+      const id = line.parentElement.id;
+      if (!id.startsWith("archive-sent-") && !id.startsWith("unarchive-sent-")) return;
+      const section = line.closest("section");
+      if (!section) return;
+      const send = document.querySelector("#order-form .send-order");
+      if (send && !send.disabled) return;
+      htmx.ajax("GET", location.pathname + location.search, {
+        target: "#projects-order",
+        swap: "outerHTML",
+      });
+    });
+  })();
 </script>
 {% endblock %}
