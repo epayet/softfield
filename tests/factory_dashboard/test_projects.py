@@ -550,7 +550,7 @@ def test_a_running_app_shows_running_stop_open_and_logs(projects_client, docker,
     # the page's host, the main service's published port, `[run]`'s path ("/" by default)
     assert '<a class="btn go" href="http://127.0.0.1:8123/" target="_blank" rel="noopener">' in row
     assert f'href="/projects/{APP}/logs">Logs</a>' in row
-    assert "Plant a card" not in row
+    assert "Plant and ask" not in row
 
 
 def test_open_follows_the_run_tables_path(projects_client, docker, app_repo):
@@ -568,7 +568,7 @@ def test_a_stopped_app_shows_stopped_and_run_without_open(projects_client, docke
     assert f'hx-post="/projects/{APP}/run"' in row
     assert f'hx-post="/projects/{APP}/stop"' not in row
     assert "Open" not in row
-    assert "Plant a card" not in row
+    assert "Plant and ask" not in row
 
 
 def test_a_crashed_app_shows_why_run_logs_and_a_fix_plant(projects_client, docker, app_repo):
@@ -759,7 +759,7 @@ def test_docker_missing_shows_its_reason_and_the_page_still_draws(
     text = words(plate(response.text, APP))
     assert "App Docker isn't available docker is not installed on this machine" in text
     assert "Run" not in text and "Stop" not in text and "starting" not in text
-    assert "Plant a card" not in text
+    assert "Plant and ask" not in text
 
 
 # --- savings on the project page (f132-04) ---------------------------------------------------

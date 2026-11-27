@@ -63,7 +63,7 @@ class AppRow:
     app: stacks.StackState
     path: str  # the app's URL path, from ``[run]``: Open is the page's host, ``url_port`` and it
     commit: str = ""  # main's commit the app is on (an update failed: the one it failed on)
-    fix: str = ""  # the "Plant a card to fix it" value, for a crashed app or a failed update
+    fix: str = ""  # the "Plant and ask the lead to fix it" value, for a crash or a failed update
     error: str = ""  # why a press failed
 
     @property

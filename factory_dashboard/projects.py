@@ -129,7 +129,7 @@ class ProjectCard:
     archive_on_its_way: str | None = None  # "archive_project" or "unarchive_project" while waiting
     app: AppRow | None = None  # its app (F239 D6); None without `[run]`, and for Softfield
     softfield: bool = False  # Softfield's own repo: it runs from `live`, with no app row
-    stack_plant: str = ""  # the "Plant a card for a stack" value, for a project without one
+    stack_plant: str = ""  # the "Plant and ask the lead for a stack" value, when it has none
     setup_job: bool = False  # an open `setup` job: "Set up by the lead" is lit (F122 D6)
     archived: bool = False  # `metrics.is_archived` says the project is archived
     forget_on_its_way: bool = False  # a `forget_project` waits for the runner (F273 D5)
