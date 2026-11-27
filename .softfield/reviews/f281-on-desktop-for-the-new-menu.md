@@ -1,5 +1,7 @@
 # Review: F281, every page in one row on a wide screen
 
+- **Status:** done, signed off by the owner on 2026-11-27.
+
 **Status:** round 1 passed, no fixes needed; ready for your sign-off.
 
 ### 1. What changed

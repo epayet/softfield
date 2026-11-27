@@ -1,6 +1,7 @@
 # Milestone F281: Every page in one row on a wide screen, no More
 
-> **State:** ready · **Area:** factory
+> **State:** done · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-27. Base: git tag `f281-on-desktop-for-the-new-menu-start`. Report: [`.softfield/reviews/f281-on-desktop-for-the-new-menu.md`](../reviews/f281-on-desktop-for-the-new-menu.md).
 > Planted by the owner on 2026-11-20.
 
 ## Notes
