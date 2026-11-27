@@ -1,5 +1,7 @@
 # Review: F306, on a phone the arrows to step through points stay put and headlines come first
 
+- **Status:** done, signed off by the owner on 2026-11-27.
+
 **Status:** round 1 passed. The review fixed two bugs and the missing tests itself. Ready for your sign-off.
 
 ### 1. What changed

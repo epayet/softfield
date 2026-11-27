@@ -1,6 +1,7 @@
 # Milestone F306: On a phone, the arrows to step through points stay put and headlines come first
 
-> **State:** ready · **Area:** factory
+> **State:** done · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-27. Base: git tag `f306-the-arrows-to-move-between-points-start`. Report: [`.softfield/reviews/f306-the-arrows-to-move-between-points.md`](../reviews/f306-the-arrows-to-move-between-points.md).
 > Planted by the owner on 2026-11-26.
 
 ## Notes
