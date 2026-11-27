@@ -1310,6 +1310,9 @@ def test_archive_redraws_the_bay_when_done(page, projects_client, db_path):
     expect(crate.locator(".name")).to_have_text(PROJECT)
     form = page.locator("#order-form")
     assert PROJECT not in form.inner_text()
+    # only the section is swapped, not the whole page into it
+    for section in ("#projects-now", "#projects-order", "#projects-start", "#order-form"):
+        expect(page.locator(section)).to_have_count(1)
 
 
 def test_unarchive_redraws_the_plate_when_done(page, projects_client, db_path):
@@ -1341,6 +1344,25 @@ def test_unarchive_redraws_the_plate_when_done(page, projects_client, db_path):
     expect(plate.locator(".shelve")).to_be_enabled(timeout=15_000)
     bay = page.locator("#projects-archived")
     expect(bay).to_be_hidden(timeout=15_000)
+    for section in ("#projects-now", "#projects-order", "#projects-start", "#order-form"):
+        expect(page.locator(section)).to_have_count(1)
+    # the redrawn form is a new element: its places still light Send and post the new order
+    first, second = page.locator("#order-form li.proj").evaluate_all(
+        "rows => rows.slice(0, 2).map((row) => row.dataset.key)"
+    )
+    page.get_by_label(f"{first}'s place").fill("3")  # behind the second
+    send = page.locator(".send-order")
+    expect(send).to_be_enabled()
+    send.click()
+    expect(page.locator("#order-sent")).to_contain_text("On its way")
+    conn = metrics.open_db(db_path)
+    try:
+        (value,) = conn.execute(
+            "SELECT value FROM owner_requests WHERE kind = 'project_order' AND done IS NULL"
+        ).fetchone()
+    finally:
+        conn.close()
+    assert json.loads(value)[:2] == [second, first]
 
 
 def test_a_drafted_order_on_another_plate_survives_the_archive_redraw(

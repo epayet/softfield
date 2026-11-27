@@ -1014,6 +1014,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** a factory-wide view needs a check on every link it draws, including the ones the ticket didn't touch. 03 made `blocked_ids` cross-project, but the summary line's link was older markup, so neither the developer nor the checkpoint read it. 03's first two attempts stopped "no edit after 20 min" while still reading the card and its mock-up: a ticket that sends the developer to a large card should quote the lines it needs.
 - **Decisions affected:** none.
 
+### F262 (2026-11-27): archive a project, off the picker, its tickets wait ([review](../reviews/f262-i-want-ability-to-archive-a.md))
+
+- **Q1:** f262-01 (the request kinds and the runner's skip) on the lead. f262-02 (the Projects-page button and bay) and f262-03 (the stretch: the floor) each failed their local attempts, a 75-minute timeout after the direction among them, and Opus finished each in under 20 minutes. No checkpoint. Review round 1: one should-fix fixed by the review (unarchive kept the old place), one should-fix sent to the local model (f262-04, redraw when done), two nits reported. f262-04 passed on its first local attempt in 26 minutes. Round 2 found it blocking: with no `select`, the whole page was swapped into the section, and the order script kept the old form. The review fixed both. Score 7.
+- **Q3:** see the review's numbers.
+- **Q5:** see the review's numbers.
+- **Anything else:** a partial-redraw test that only looks inside the redrawn part can't see the page doubled around it. Redraw tests should check that the page's sections appear once (offered as a Factory idea). The sixth Projects-page button ticket to escalate this month.
+- **Decisions affected:** none.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.

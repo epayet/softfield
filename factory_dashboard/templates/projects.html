@@ -244,24 +244,27 @@
   // Send lights up only when the numbers say another order; it sends the names in that order,
   // and the numbers show dashed orange, on their way, until the runner takes it (owner, 2026-10-07)
   (() => {
-    const form = document.getElementById("order-form");
-    // read each time: a plate redrawn after its pause (f124-04) is a new element
-    const rows = () => [...form.querySelectorAll(".proj")];
-    const send = form.querySelector(".send-order");
+    // read each time, and listen on the document: a plate redrawn after its pause (f124-04)
+    // and the whole form redrawn after an archive (f262-04) are new elements
+    const form = () => document.getElementById("order-form");
+    const rows = () => [...form().querySelectorAll(".proj")];
+    const send = () => form().querySelector(".send-order");
     const order = () => rows()
       .map((row, i) => [Number(row.querySelector("input").value) || i + 1, i, row.dataset.name])
       .sort((a, b) => a[0] - b[0] || a[1] - b[1]).map((r) => r[2]);
     const sameAsShown = () => order().every((name, i) => name === rows()[i].dataset.name);
-    form.addEventListener("input", () => { send.disabled = sameAsShown(); });
+    document.addEventListener("input", (event) => {
+      if (event.target.closest("#order-form")) send().disabled = sameAsShown();
+    });
     // the app rows' buttons post from inside this form too: their events are theirs (f239-05)
-    form.addEventListener("htmx:configRequest", (event) => {
-      if (event.target !== form) return;
+    document.addEventListener("htmx:configRequest", (event) => {
+      if (event.target !== form()) return;
       event.detail.parameters.value = JSON.stringify(order());
     });
-    form.addEventListener("htmx:beforeRequest", (event) => {
-      if (event.target !== form) return;
-      for (const input of form.querySelectorAll("input[type=number]")) { input.classList.add("asked"); input.disabled = true; }
-      send.disabled = true;
+    document.addEventListener("htmx:beforeRequest", (event) => {
+      if (event.target !== form()) return;
+      for (const input of form().querySelectorAll("input[type=number]")) { input.classList.add("asked"); input.disabled = true; }
+      send().disabled = true;
       document.getElementById("order-sent").textContent = "On its way: the runner takes it at its next pick";
     });
   })();
@@ -335,13 +338,11 @@
       if (!(line instanceof Element) || !line.matches(".pause-sent p.request.done")) return;
       const id = line.parentElement.id;
       if (!id.startsWith("archive-sent-") && !id.startsWith("unarchive-sent-")) return;
-      const section = line.closest("section");
-      if (!section) return;
-      const send = document.querySelector("#order-form .send-order");
-      if (send && !send.disabled) return;
+      if (!document.querySelector("#order-form .send-order").disabled) return;
       htmx.ajax("GET", location.pathname + location.search, {
         target: "#projects-order",
         swap: "outerHTML",
+        select: "#projects-order",
       });
     });
   })();
