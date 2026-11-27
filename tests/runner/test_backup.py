@@ -3,7 +3,7 @@
 import os
 import sqlite3
 from dataclasses import replace
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -11,13 +11,11 @@ import pytest
 from runner import backup, loop, session
 from runner.config import Backup, Config, ConfigError, load_config
 from runner.report import TaskRecord
-from tests.runner.conftest import git, write_task
+from tests.runner.conftest import THURSDAY, git, write_task
 from tests.runner.test_config import MINIMAL_TOML, REPO
 
 # `_config` reads this repo's project.toml over the machine file (ADR 30 item 3)
 pytestmark = pytest.mark.usefixtures("machine")
-
-THURSDAY = datetime(2026, 10, 1, 12, 0, tzinfo=UTC)
 
 
 def _name(at: datetime) -> str:
@@ -169,18 +167,6 @@ def test_a_backup_that_keeps_nothing_or_never_waits_is_a_config_error(tmp_path, 
 
 
 # --- the run: at its start, at each pick and while it waits ---------------------------------
-
-
-@pytest.fixture
-def fake_clock(monkeypatch) -> list[datetime]:
-    clock = [THURSDAY]
-
-    def sleep(seconds: float) -> None:
-        clock[0] += timedelta(seconds=seconds)
-
-    monkeypatch.setattr(session, "now", lambda: clock[0])
-    monkeypatch.setattr("time.sleep", sleep)
-    return clock
 
 
 def _config(repo: Path, folder: Path) -> Config:
