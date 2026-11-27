@@ -25,3 +25,12 @@ tests:
 - `tests/runner/test_backup.py` defines neither `THURSDAY` nor `fake_clock`.
 - Every test in `tests/runner/test_backup.py` passes, with the same names as before.
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 367
+gate_failures: []
+tokens: 231634
+```
