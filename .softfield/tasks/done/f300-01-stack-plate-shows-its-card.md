@@ -30,3 +30,12 @@ The picture to build is the coaster-ranker and coucou plates on the Proposed sid
 - `test_the_projects_page_lays_out_at_phone_and_display_sizes` still passes at both sizes
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 2647
+gate_failures: []
+tokens: 4665530
+```
