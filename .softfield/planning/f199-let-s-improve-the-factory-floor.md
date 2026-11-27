@@ -40,3 +40,28 @@ The planning thread behind F199's plan, oldest first, as it was when the owner a
 > - F199: the floor as a strip and a map (plan)
 > - An Android widget showing what the factory is doing (seed)
 > - The factory strip on my website (seed)
+
+## The runner, 2026-11-26 16:11
+
+> f199-02-strip blocked: the escalation ended with no decision; its work is on escalation/f199-02-strip.
+> Its work is on escalation/f199-02-strip; its run's logs are in .softfield/var/runs/20261126-115035.
+> What went wrong, and what is the fix? Propose it as a replan: the ticket reworked, split or set aside.
+
+## The lead, 2026-11-26 16:13
+
+> The strip was built and passed every check, but it never reached main because of a runner bug. This replan brings the ticket back as a short lead ticket that copies that work onto main.
+>
+> 1. **What went wrong**: The local developer read files for three attempts and never edited one: the ticket spanned two page modules, a new partial, the live-refresh wiring and browser tests, which is too wide for it. The escalation then hit Claude's 5-hour limit and parked. When it resumed after the reset, it built the strip in about 6 minutes, ran `check-all` (all 4,079 tests passed) and decided 'implemented'. But it wrote that decision into the new run's folder (.softfield/var/runs/20261126-115035/) instead of the ticket's folder (20261126-001843/f199-02-strip/), which is the only place the runner reads. The runner found no decision, so it kept the work on escalation/f199-02-strip and blocked the ticket.
+>    Action: The fix for the ticket is point 2; the runner bug is point 3.
+> 2. **The fix: copy the finished work, don't rebuild it**: The work is one commit, 516a845c, on top of a main from a few hours ago. Pressing Try again would send the ticket back to the developer who already failed it three times. Instead, f199-02 comes back as a short lead ticket: read the commit with `git show`, write the same changes into main's current files, and pass the checks. That is difficulty 3 instead of 5, with nothing to rebuild. Its Done when is unchanged, so the tests still prove the strip works.
+>    Action: The replan below rewrites the ticket in the ready folder.
+> 3. **The runner bug behind it**: An escalation parked for a Claude limit and resumed in a later run isn't told the ticket's log folder: the first session's prompt named 20261126-001843/f199-02-strip, and the resumed one's didn't. So it guessed the folder. Any escalation that waits for a limit can lose its decision this way, and wasted work follows. It's runner code, so it's the lead's to fix, and it belongs on its own card, not in F199.
+>    Action: A seed for a runner fix: the resumed escalation gets the same log folder in its prompt, with a test that parks one and resumes it in a new run.
+> 4. **Pre-flight will pass only at Approve**: Run here, `softfield check-tickets` reports only 'already in .softfield/tasks/blocked/', because the blocked copy is still there; it found nothing wrong with the ticket itself. The runner removes that copy and carries its footers over when you approve. I can't run the check without it from here.
+>    Action: Nothing, unless Approve refuses it: then tell me here and I'll fix it.
+> 5. **Pause the factory before approving**: f199-03, Replay on the map, waits for this ticket and is already in the ready folder, and two other F199 tickets are queued. Pausing from the top bar before you approve keeps the line from picking anything mid-change. Approving lifts the pause.
+>    Action: Pause from the top bar, then Approve.
+>
+> Proposals:
+> - F199: bring the finished strip onto main (replan)
+> - A resumed escalation writes its decision where the runner reads it (seed)
