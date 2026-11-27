@@ -1,6 +1,7 @@
 # Milestone F291: The project picker's open list reads grey on white in the dark theme
 
-> **State:** ready · **Area:** factory
+> **State:** done · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-27. Base: git tag `f291-the-project-picker-list-textbox-is-start`. Report: [`.softfield/reviews/f291-the-project-picker-list-textbox-is.md`](../reviews/f291-the-project-picker-list-textbox-is.md).
 > Planted by the owner on 2026-11-24.
 
 ## Notes

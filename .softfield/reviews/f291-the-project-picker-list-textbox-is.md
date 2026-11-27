@@ -1,5 +1,7 @@
 # Review: F291, the project picker's open list reads in the theme
 
+- **Status:** done, signed off by the owner on 2026-11-27.
+
 **Status:** round 1 passed; the review tidied the milestone's tests itself. Ready for your sign-off.
 
 ### 1. What changed
