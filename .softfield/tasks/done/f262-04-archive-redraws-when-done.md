@@ -26,3 +26,12 @@ Once the runner takes an Archive or Unarchive, the Projects page moves the proje
 - with a place typed on another plate and not sent, the archive's done line shows and the typed place and the enabled Send new order stay
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 1659
+gate_failures: []
+tokens: 2253412
+```
