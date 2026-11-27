@@ -1,6 +1,7 @@
 # Milestone F297: Projects page plant buttons also ask the lead
 
-> **State:** ready · **Area:** factory
+> **State:** done · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-27. Base: git tag `f297-the-plant-a-card-for-a-start`. Report: [`.softfield/reviews/f297-the-plant-a-card-for-a.md`](../reviews/f297-the-plant-a-card-for-a.md).
 > Planted by the owner on 2026-11-25.
 
 ## Notes

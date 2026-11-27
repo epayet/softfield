@@ -1,5 +1,7 @@
 # Review: F297, the Projects page's plant buttons also ask the lead
 
+- **Status:** done, signed off by the owner on 2026-11-27.
+
 **Status:** round 1 passed; the review fixed three test checks itself. Ready for your sign-off.
 
 ### 1. What changed
