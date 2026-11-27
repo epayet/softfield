@@ -1,5 +1,7 @@
 # Review: F262, Archive a project: off the picker, its tickets wait, unarchive any time
 
+- **Status:** done, signed off by the owner on 2026-11-27.
+
 **Status:** review done after round 2: ready for your sign-off. The fix ticket f262-04 is merged, and the review fixed what it broke.
 
 ### 1. What changed

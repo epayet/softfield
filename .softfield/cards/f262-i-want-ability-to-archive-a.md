@@ -1,6 +1,7 @@
 # Milestone F262: Archive a project: off the picker, its tickets wait, unarchive any time
 
-> **State:** ready · **Area:** factory
+> **State:** done · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-27. Base: git tag `f262-i-want-ability-to-archive-a-start`. Report: [`.softfield/reviews/f262-i-want-ability-to-archive-a.md`](../reviews/f262-i-want-ability-to-archive-a.md).
 > Planted by the owner on 2026-11-17.
 
 ## Notes
