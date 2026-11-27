@@ -24,6 +24,7 @@ from factory_dashboard.requests import from_the_dashboard
 from runner import metrics, stacks
 from runner.config import ConfigError
 from runner.gitops import Git, GitError
+from runner.tasks import short_key
 
 router = APIRouter()
 
@@ -48,6 +49,77 @@ STATE_WORDS = {
 UP = (stacks.RUNNING, stacks.STARTING, stacks.UPDATE_FAILED)
 # The states that offer a card to fix them (D7)
 BROKEN = (stacks.CRASHED, stacks.UPDATE_FAILED)
+
+# The state's word on the plate, beside its colour (D4)
+LIVE_STATES = ("idea", "planning", "ready", "building")
+STATE_WORDS_ASKED = {
+    "idea": "being planned",
+    "planning": "being planned",
+    "ready": "ready",
+    "building": "building",
+}
+
+
+@dataclass(frozen=True)
+class AskedCard:
+    """A card the owner already asked for (D2)."""
+
+    key: str = ""
+    title: str | None = None
+    state: str = ""
+    href: str = ""
+    on_its_way: bool = False
+
+
+def asked_card(conn: sqlite3.Connection, project: str, text_start: str) -> AskedCard | None:
+    """D2: the project's latest plant request whose value's text starts with ``text_start``.
+
+    - not done and not dismissed → ``AskedCard(on_its_way=True)``, other fields empty;
+    - done with a result naming a card whose ``milestones`` row (same project, key = the path's
+      stem) is in a live state (``idea``, ``planning``, ``ready``, ``building``) → that card;
+    - anything else (refused, card done, removed or merged away) → None.
+    """
+    row = conn.execute(
+        "SELECT r.result, r.done FROM owner_requests r"
+        " JOIN projects p ON p.id = r.project_id"
+        " WHERE p.name = ?"
+        " AND r.kind = 'plant'"
+        " AND json_extract(r.value, '$.text') LIKE ?"
+        " ORDER BY r.id DESC LIMIT 1",
+        (project, text_start + "%"),
+    ).fetchone()
+    if row is None:
+        return None
+
+    # Not done: on its way
+    if row["done"] is None:
+        return AskedCard(on_its_way=True)
+
+    # Done: parse the result to find the card path
+    result = row["result"] or ""
+    if not result.startswith("planted "):
+        return None
+
+    # Extract the path from "planted <path>" or "planted <path>, queued for the lead"
+    path_str = result[8:].split(",")[0].strip()
+    stem = Path(path_str).stem  # e.g. "m13-give-coaster-ranker-a-docker-compose"
+
+    # Look up the milestone
+    milestone = conn.execute(
+        "SELECT m.state, m.title FROM milestones m JOIN projects p ON p.id = m.project_id"
+        " WHERE p.name = ? AND m.key = ?",
+        (project, stem),
+    ).fetchone()
+    if milestone is None or milestone["state"] not in LIVE_STATES:
+        return None
+
+    short = short_key(stem).upper()
+    return AskedCard(
+        key=short,
+        title=milestone["title"] or "",
+        state=STATE_WORDS_ASKED.get(milestone["state"], milestone["state"]),
+        href=f"/planning/{short_key(stem)}?project={project}",
+    )
 
 
 def plant_value(text: str) -> str:

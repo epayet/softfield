@@ -17,7 +17,15 @@ from fastapi.responses import HTMLResponse
 from factory_dashboard import queries
 from factory_dashboard.app import Db, Now, Project, render
 from factory_dashboard.overview import running_jobs
-from factory_dashboard.stacks_routes import STACK_PLANT, AppRow, plant_value, row_of, stack_of
+from factory_dashboard.stacks_routes import (
+    STACK_PLANT,
+    AppRow,
+    AskedCard,
+    asked_card,
+    plant_value,
+    row_of,
+    stack_of,
+)
 from runner import config, metrics, stacks
 from runner.requests import FORGET_PROJECT, NEW_PROJECT, PROJECT_ORDER, home_path
 
@@ -130,6 +138,7 @@ class ProjectCard:
     app: AppRow | None = None  # its app (F239 D6); None without `[run]`, and for Softfield
     softfield: bool = False  # Softfield's own repo: it runs from `live`, with no app row
     stack_plant: str = ""  # the "Plant and ask the lead for a stack" value, when it has none
+    stack_asked: AskedCard | None = None  # the card from a plant the owner already sent
     setup_job: bool = False  # an open `setup` job: "Set up by the lead" is lit (F122 D6)
     archived: bool = False  # `metrics.is_archived` says the project is archived
     forget_on_its_way: bool = False  # a `forget_project` waits for the runner (F273 D5)
@@ -183,6 +192,13 @@ def project_cards(conn: sqlite3.Connection, now: datetime) -> list[ProjectCard]:
         project_id = metrics.find_project(conn, row.name)
         paused_by_you = metrics.paused_by_you(row.paused)
         paused_its_way = paused_on_its_way(conn, project_id) if project_id else None
+        has_stack = stack is not None or softfield
+        stack_plant_val = (
+            "" if has_stack or not row.repo else plant_value(STACK_PLANT.format(name=row.name))
+        )
+        stack_asked = None
+        if not has_stack and row.repo:
+            stack_asked = asked_card(conn, row.name, STACK_PLANT.format(name=row.name))
         cards.append(
             ProjectCard(
                 name=row.name,
@@ -199,9 +215,8 @@ def project_cards(conn: sqlite3.Connection, now: datetime) -> list[ProjectCard]:
                 archive_on_its_way=archive_on_its_way(conn, project_id) if project_id else None,
                 app=row_of(row.name, stack) if stack else None,
                 softfield=softfield,
-                stack_plant=""
-                if stack or softfield or not row.repo
-                else plant_value(STACK_PLANT.format(name=row.name)),
+                stack_plant=stack_plant_val,
+                stack_asked=stack_asked,
                 setup_job=row.paused == metrics.SETTING_UP and _setup_job(conn, row.name),
                 archived=metrics.is_archived(row),
                 forget_on_its_way=project_id is not None and forget_on_its_way(conn, project_id),

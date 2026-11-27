@@ -124,6 +124,32 @@
           <div id="archive-sent-{{ card.name | lower }}" class="pause-sent"></div>
           {% endif %}
           {% if card.app %}{% with row = card.app %}{% include "_partials/app_row.html" %}{% endwith %}
+          {% elif card.stack_asked %}
+          {% if card.stack_asked.on_its_way %}
+          <div class="app-row none way-row">
+            <span class="app-tag">App</span><span class="muted">No stack yet.</span>
+            <span class="way-words">On its way: the runner plants it and asks the lead at its next pick</span>
+          </div>
+          {% elif card.stack_asked.key %}
+          <div class="app-row none">
+            <span class="app-tag">App</span><span class="muted">No stack yet.</span>
+            <a class="order" href="{{ card.stack_asked.href }}">
+              <span class="tab"></span>
+              <span class="body"><span class="lbl">You asked the lead</span>
+                <span class="line"><span class="key">{{ card.stack_asked.key }}</span><span class="t">{{ card.stack_asked.title }}</span><span class="st">{{ card.stack_asked.state }}</span></span></span>
+            </a>
+          </div>
+          {% else %}
+          <div class="app-row none">
+            <span class="app-tag">App</span><span class="muted">No stack yet: the factory can't run it.</span>
+            <div class="app-acts">
+              <button type="button" class="btn plain" hx-post="/requests" hx-target="next .app-sent" hx-swap="innerHTML"
+                hx-vals='{{ {"kind": "plant", "project": card.name, "value": card.stack_plant} | tojson }}'
+                hx-on::before-request="this.hidden = true; this.nextElementSibling.textContent = 'On its way: the runner plants it and asks the lead at its next pick'">Plant and ask the lead for a stack</button>
+              <div class="app-sent way"></div>
+            </div>
+          </div>
+          {% endif %}
           {% elif card.stack_plant %}
           <div class="app-row none">
             <span class="app-tag">App</span><span class="muted">No stack yet: the factory can't run it.</span>

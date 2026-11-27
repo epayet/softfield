@@ -1582,6 +1582,19 @@ body.has-order-bar main { padding-bottom: 120px; }
 .app-row.htmx-request { border: 1px dashed var(--hazard); }
 .app-row.htmx-request .app-wait { display: inline; }
 .app-row.htmx-request .app-acts > button { visibility: hidden; }
+/* The work order the plate already sent (F300 D6): on its way gets the dashed --opus edge */
+.app-row.way-row { border: 1px dashed var(--opus); }
+.app-row .way-words { font: 12px var(--mono); color: var(--opus-ink); margin-left: auto; }
+.order { display: flex; align-items: stretch; margin-left: auto; min-width: 0; max-width: 100%;
+  background: var(--bay); border: 1px solid var(--rule); clip-path: var(--notch); }
+.order .tab { flex: none; width: 8px; background: var(--stripe); }
+.order .body { display: grid; gap: 1px; padding: 5px 14px 6px 10px; min-width: 0; }
+.order .lbl { font: 600 10.5px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.order .line { display: flex; gap: 8px; align-items: baseline; min-width: 0; }
+.order .key { font: 700 15px var(--display); letter-spacing: .04em; }
+.order .t { color: var(--ink-2); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.order .st { flex: none; font: 600 10.5px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--fg);
+  border: 1px solid var(--rule); padding: 0 5px; }
 
 /* Mock-up gone message */
 .gone { background: var(--bay); border: 1px dashed var(--rule); padding: 10px 12px; font-size: 14px; color: var(--ink-2); }

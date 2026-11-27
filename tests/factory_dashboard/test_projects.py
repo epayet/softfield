@@ -1565,3 +1565,140 @@ def test_an_archived_project_whose_app_is_stopped_can_be_forgotten(
         r'<button type="button" class="forget"\s+hx-on:click="[^"]*">Forget</button>', crate
     )
     assert RUNNING_WHY not in crate
+
+
+def _asked_client(
+    db_path: Path,
+    tmp_path: Path,
+    card_state: str | None = None,
+    card_title: str = "Give Coaster a stack",
+) -> TestClient:
+    """A client over the fixture plus a done plant request pointing to a milestone."""
+    from factory_dashboard.app import create_app, get_now
+
+    conn = metrics.open_db(db_path)
+    try:
+        # Register a project without a stack
+        repo = _repo(tmp_path / "Coaster Ranker", run=False)
+        metrics.upsert_project(conn, APP, repo=str(repo))
+        # Create the milestone the plant points to
+        if card_state is not None:
+            metrics.upsert_milestone(
+                conn,
+                conn.execute("SELECT id FROM projects WHERE name = ?", (APP,)).fetchone()["id"],
+                "m13-give-coaster-ranker-a-docker-compose",
+                title=card_title,
+                state=card_state,
+            )
+        # Write a done plant request
+        project_id = conn.execute("SELECT id FROM projects WHERE name = ?", (APP,)).fetchone()["id"]
+        metrics.add_request(
+            conn,
+            project_id,
+            "plant",
+            "m13-give-coaster-ranker-a-docker-compose",
+            json.dumps({"text": stacks_routes.STACK_PLANT.format(name=APP), "ask": True}),
+            NOW.isoformat(),
+        )
+        # Update the request result
+        conn.execute(
+            "UPDATE owner_requests SET result = ?, done = ?"
+            " WHERE kind = 'plant' AND project_id = ?",
+            (
+                "planted .softfield/cards/m13-give-coaster-ranker-a-docker-compose.md",
+                NOW.isoformat(),
+                project_id,
+            ),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    app = create_app(db_path, APP)
+    app.dependency_overrides[get_now] = lambda: NOW
+    return TestClient(app, base_url="http://127.0.0.1:8765")
+
+
+def _unasked_client(db_path: Path, tmp_path: Path) -> TestClient:
+    """A client over the fixture plus a project without a stack and no plant request."""
+    from factory_dashboard.app import create_app, get_now
+
+    conn = metrics.open_db(db_path)
+    try:
+        repo = _repo(tmp_path / "Coaster Ranker", run=False)
+        metrics.upsert_project(conn, APP, repo=str(repo))
+    finally:
+        conn.close()
+
+    app = create_app(db_path, APP)
+    app.dependency_overrides[get_now] = lambda: NOW
+    return TestClient(app, base_url="http://127.0.0.1:8765")
+
+
+def test_a_done_stack_plant_its_card_is_ready_says_you_asked_the_lead(db_path, tmp_path):
+    """A project with a done stack plant whose card is ready shows "You asked the lead", the
+    card's key, title and "ready", linking to /planning/<short key>?project=<name>, and no plant
+    button (Done when 1)."""
+    client = _asked_client(db_path, tmp_path, card_state="ready", card_title="Give Coaster a stack")
+    html = client.get("/projects").text
+    assert "You asked the lead" in html
+    assert "M13" in html
+    assert "Give Coaster a stack" in html
+    assert "ready" in html
+    assert f'href="/planning/m13?project={APP}"' in html
+    assert "Plant and ask the lead for a stack" not in html
+
+
+def test_a_done_stack_plant_its_card_is_done_shows_the_button(db_path, tmp_path):
+    """A project whose stack card is done shows the button as today (Done when 3)."""
+    client = _asked_client(db_path, tmp_path, card_state="done", card_title="Give Coaster a stack")
+    html = client.get("/projects").text
+    assert "You asked the lead" not in html
+    assert '<button type="button"' in html and "Plant and ask the lead for a stack" in html
+
+
+def test_an_open_stack_plant_shows_on_its_way_and_no_button(db_path, tmp_path):
+    """A project with an open stack plant shows the on-its-way line and no button (Done when 2)."""
+    from runner import metrics as metrics_mod
+
+    conn = metrics.open_db(db_path)
+    try:
+        repo = _repo(tmp_path / "Coaster Ranker", run=False)
+        project_id = metrics.upsert_project(conn, APP, repo=str(repo))
+        # Write an open (undone) plant request
+        metrics_mod.add_request(
+            conn,
+            project_id,
+            "plant",
+            "m13-give-coaster-ranker-a-docker-compose",
+            json.dumps({"text": stacks_routes.STACK_PLANT.format(name=APP), "ask": True}),
+            NOW.isoformat(),
+        )
+    finally:
+        conn.close()
+
+    from factory_dashboard.app import create_app, get_now
+
+    app = create_app(db_path, APP)
+    app.dependency_overrides[get_now] = lambda: NOW
+    client = TestClient(app, base_url="http://127.0.0.1:8765")
+    html = client.get("/projects").text
+    assert "On its way: the runner plants it and asks the lead at its next pick" in html
+    assert "Plant and ask the lead for a stack" not in html
+
+
+def test_a_project_never_asked_shows_the_button(db_path, tmp_path):
+    """A project never asked shows the button as today (Done when 3)."""
+    client = _unasked_client(db_path, tmp_path)
+    html = client.get("/projects").text
+    assert "Plant and ask the lead for a stack" in html
+
+
+def test_a_done_stack_plant_its_card_is_removed_shows_the_button(db_path, tmp_path):
+    """A project whose stack card is removed shows the button as today (Done when 3)."""
+    client = _asked_client(
+        db_path, tmp_path, card_state="removed", card_title="Give Coaster a stack"
+    )
+    html = client.get("/projects").text
+    assert "You asked the lead" not in html
+    assert "Plant and ask the lead for a stack" in html
