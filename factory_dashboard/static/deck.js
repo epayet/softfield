@@ -22,12 +22,15 @@ const deckUp = (deck) => {
     next.disabled = at === points.length - 1;
     if (count) count.textContent = String(at + 1);
   };
-  const scrollNavIntoView = () => {
+  // F306 D3: a nav scrolled up under the sticky top bar comes back to just below it
+  const navBack = () => {
+    const bar = document.querySelector("header.bar");
+    const below = (bar ? bar.getBoundingClientRect().bottom : 0) + 8;
     const top = nav.getBoundingClientRect().top;
-    if (top < 60) window.scrollBy(0, top - 60);
+    if (top < below) window.scrollBy(0, top - below);
   };
-  previous.addEventListener("click", () => { at -= 1; show(); });
-  next.addEventListener("click", () => { at += 1; show(); scrollNavIntoView(); });
+  previous.addEventListener("click", () => { at -= 1; show(); navBack(); });
+  next.addEventListener("click", () => { at += 1; show(); navBack(); });
   // typing marks the dot; the review's Comment… button clears its box on a second tap
   deck.addEventListener("input", show);
   deck.addEventListener("click", show);

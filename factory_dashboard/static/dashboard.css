@@ -938,7 +938,8 @@ body:has(.map-page) > header.bar, body:has(.map-page) main > nav.crumbs { displa
 :is(.thread-page, .proposal-page) .in-short > p { margin: 0; font-size: 16px; line-height: 1.45; color: var(--fg); }
 
 /* The planning room on a phone (f6-10): deck.js shows one point of each .deck at a time; its
-   .deck-nav holds a dot per point (marked where there's a comment) and ◀ ▶. .dock keeps Send
+   .deck-nav above it (F306) holds "Point N of M", a dot per point (marked where there's a
+   comment) and ◀ ▶, so they stay put whatever the point's length. .dock keeps Send
    in view at the bottom; .dock-host lets the review's dock leave its aside, which a sticky
    element can't otherwise do. The points carry an inline display, hence the !important. */
 .deck-nav { display: none; }
@@ -956,7 +957,7 @@ body:has(.map-page) > header.bar, body:has(.map-page) main > nav.crumbs { displa
   .deck-arrows button { font: 600 15px var(--display); color: var(--fg); background: var(--bay);
     border-bottom: 2px solid var(--hazard); min-height: 44px; }
   .deck-arrows button:disabled { color: var(--muted); }
-  .point > div > b, .key-point > div > b { font: 700 18px/1.3 var(--display); letter-spacing: .01em; color: var(--fg); margin-bottom: 4px; }
+  :is(.thread-page, .proposal-page) :is(.point, .key-point) > div > b { font: 700 18px/1.3 var(--display); letter-spacing: .01em; color: var(--fg); margin-bottom: 4px; }
   .dock-host { display: contents !important; }
   .dock-host > * { flex: 1 1 100%; }
   .dock { position: sticky; bottom: 0; z-index: 5; box-shadow: 0 -6px 16px rgba(0,0,0,.25); }

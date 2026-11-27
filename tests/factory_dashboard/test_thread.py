@@ -993,6 +993,51 @@ def test_on_a_phone_one_point_shows_at_a_time(
     assert not previous.is_visible()
 
 
+@pytest.mark.parametrize(
+    ("path", "points"),
+    [("/planning/f6", "li.point"), ("/planning/f6/proposals/adr-20", ".key-point")],
+    ids=["thread", "review"],
+)
+def test_on_a_phone_the_arrows_come_back_under_the_top_bar(
+    page, planning, db_path, serve, path, points
+):
+    """F306 D3, D4: ◀ or ▶ pressed with the nav scrolled up under the sticky top bar brings it
+    back just below the bar; with the nav in view nothing scrolls. A point's headline is 18 px."""
+    if points == "li.point":
+        _write(db_path, lambda conn: _seven_points(conn, planning))
+    else:
+        _write(db_path, lambda conn: _review(conn, planning, "f6", _REVIEW_ADR))
+    page.set_viewport_size(PHONE)
+    _open(page, serve(), path)
+    page.add_style_tag(content="main { padding-bottom: 3000px; }")  # room to scroll the nav up
+    previous, following = page.locator(".deck-arrows button").all()
+    nav = page.locator(".deck-nav").first
+
+    def bar() -> float:
+        script = "() => document.querySelector('header.bar').getBoundingClientRect().bottom"
+        return float(page.evaluate(script))
+
+    def nav_top() -> float:
+        return float((nav.bounding_box() or {"y": -1})["y"])
+
+    def scroll_nav_to(y: float) -> None:
+        page.evaluate("(by) => window.scrollBy(0, by)", nav_top() - y)
+
+    headline = page.locator(f"{points}:visible > div > b").first
+    assert headline.evaluate("(b) => getComputedStyle(b).fontSize") == "18px"
+    # in view: a press doesn't scroll (a dispatched click, so the browser doesn't scroll to it)
+    scroll_nav_to(bar() + 80)
+    before = page.evaluate("() => window.scrollY")
+    following.dispatch_event("click")
+    assert page.evaluate("() => window.scrollY") == before
+    # under the top bar: ▶, then ◀, bring it back just below the bar
+    for button in (following, previous):
+        scroll_nav_to(bar() - 40)
+        assert nav_top() < bar()
+        button.dispatch_event("click")
+        assert bar() <= nav_top() <= bar() + 20
+
+
 def test_a_threads_button_archives_it_and_an_archived_ones_opens_it_again(planning, db_path, serve):
     """The archive row sits after the reply box, not in the card header."""
     client = serve()
