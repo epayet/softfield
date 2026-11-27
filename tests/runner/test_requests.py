@@ -2541,6 +2541,26 @@ def test_a_project_is_archived_and_unarchived_by_request(repo):
     assert _apply(repo) == ["unarchive_project: not archived"]
 
 
+def test_an_unarchived_project_comes_back_last_though_no_order_moved_it(repo):
+    """F262 D5: archived first, with no new order sent while archived, Unarchive still puts it
+    last, as its result says (live: waifu-gallery archived in place 3 kept it)."""
+    _ask(repo, "archive_project")
+    conn = metrics.open_db(_db(repo))
+    try:
+        metrics.upsert_project(conn, "coucou")
+        metrics.set_project_order(conn, [repo.name, "coucou"])
+    finally:
+        conn.close()
+    _apply(repo)
+    _ask(repo, "unarchive_project")
+    assert _apply(repo) == ["unarchive_project: unarchived: back in the list, last"]
+    conn = metrics.open_db(_db(repo))
+    try:
+        assert [p.name for p in metrics.projects_in_order(conn)] == ["coucou", repo.name]
+    finally:
+        conn.close()
+
+
 def test_a_project_being_set_up_is_not_archived_by_request(repo):
     _ask(repo, "archive_project")
     conn = metrics.open_db(_db(repo))

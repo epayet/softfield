@@ -2142,6 +2142,9 @@ def _archive_project(conn: sqlite3.Connection, project_id: int, kind: str) -> st
     if not archived:
         return "not archived"
     metrics.set_project_paused(conn, name, None)
+    # last, as it says (F262 D5): its old place stays until a new order moves it
+    others = [p.name for p in metrics.projects_in_order(conn) if p.name != name]
+    metrics.set_project_order(conn, [*others, name])
     return "unarchived: back in the list, last"
 
 
