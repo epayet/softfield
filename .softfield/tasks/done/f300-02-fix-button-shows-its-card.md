@@ -29,3 +29,12 @@ The picture to build is the wardrobe-teller plate and the missing Needs you pane
 - `test_the_projects_page_lays_out_at_phone_and_display_sizes` still passes at both sizes
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 2
+duration_s: 3068
+gate_failures: ['all-tests']
+tokens: 5641553
+```
