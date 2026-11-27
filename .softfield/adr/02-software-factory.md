@@ -1006,6 +1006,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** a runner change only takes effect at the runner's next start, so a ticket that changes where or how checks run is gated under the old behaviour. Here that let a red suite merge. A ticket like that needs one check on the new code inside its own job, not only the gate.
 - **Decisions affected:** none.
 
+### F132 (2026-11-27): one view of the whole factory: the bar, the Overview, Jobs, Runs, Timeline and the floor ([review](../reviews/f132-the-overview-shows-the-whole-factory.md))
+
+- **Q1:** two lead tickets on Opus (02 the Overview's live part, $4.49; 05 the floor, $6.58), each passed on attempt 1 after 02 was once parked for Claude's window. Eight developer tickets on the local model: 04, 06, 09 and 10 on the first attempt; 07 on the second; 03 and 08 on the last attempt after a direction; 01 escalated after two gate timeouts. Two checkpoints filed 09 and 10, both passed first time. Review round 1: two should-fix findings, fixed by the review (a blocked ticket in another project linked to the picked project's page, a 404; `away_every` copied each ticket field by field), one should-fix test fixture made real-shaped, and three nits (one fixed, two reported). Score 8.
+- **Q3:** most of the code by line count is the lead's (02, 05). The developers did the six smaller page tickets, at about 12 h of local-model time in all. See the review's numbers.
+- **Q5:** see the review's numbers.
+- **Anything else:** a factory-wide view needs a check on every link it draws, including the ones the ticket didn't touch. 03 made `blocked_ids` cross-project, but the summary line's link was older markup, so neither the developer nor the checkpoint read it. 03's first two attempts stopped "no edit after 20 min" while still reading the card and its mock-up: a ticket that sends the developer to a large card should quote the lines it needs.
+- **Decisions affected:** none.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.

@@ -8,7 +8,6 @@ from fastapi import APIRouter, Query, Request
 from fastapi.responses import HTMLResponse
 
 from factory_dashboard.app import Db, Now, Project, render
-from factory_dashboard.overview import every_project
 
 router = APIRouter()
 
@@ -152,8 +151,6 @@ def timeline_page(
     now: Now,
 ) -> HTMLResponse:
     filter_milestone = milestone
-
-    names = every_project(conn, project)
     data = timeline_data(conn, project, milestone=filter_milestone, run=run, now=now)
 
     milestones = conn.execute(
@@ -182,7 +179,6 @@ def timeline_page(
             "runs": runs,
             "filter_milestone": filter_milestone,
             "run_filter": run,
-            "many_projects": len(names) > 1,
         },
         is_factory_wide=True,
     )

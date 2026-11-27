@@ -1537,8 +1537,11 @@ def test_away_every_sums_across_projects_and_sorts_latest_first(tmp_path):
     try:
         softfield_id = metrics.upsert_project(conn, "softfield")
         travel_id = metrics.upsert_project(conn, "travel-companion")
-        m = metrics.upsert_milestone(conn, softfield_id, "f1")
-        m2 = metrics.upsert_milestone(conn, travel_id, "f1")
+        # card and ticket keys shaped as the live database's (F132's, travel-companion's M15)
+        m = metrics.upsert_milestone(
+            conn, softfield_id, "f132-the-overview-shows-the-whole-factory"
+        )
+        m2 = metrics.upsert_milestone(conn, travel_id, "m15-the-stampu-response-is-a-bit")
         run = metrics.upsert_run(
             conn, softfield_id, "20261002-040000", started="2026-10-02T04:00:00+00:00"
         )
@@ -1588,9 +1591,9 @@ def test_away_every_sums_across_projects_and_sorts_latest_first(tmp_path):
             )
 
         # softfield: 3 merged tickets, 1 failed, 1 escalation, 1 owner item
-        sf1 = ticket("f1", "done", OPUS, softfield_id, m)
-        sf2 = ticket("f2", "done", OPUS, softfield_id, m)
-        sf3 = ticket("f3", "done", OPUS, softfield_id, m)
+        sf1 = ticket("f132-02-overview-live-every-project", "done", OPUS, softfield_id, m)
+        sf2 = ticket("f132-03-away-every-project", "done", OPUS, softfield_id, m)
+        sf3 = ticket("f132-04-savings-on-project-page", "done", OPUS, softfield_id, m)
         job(sf1, "escalation", OPUS, 1, "10:00:00+00:00", "10:30:00+00:00", "passed", 10.0)
         job(sf2, "developer", OPUS, 1, "09:00:00+00:00", "09:30:00+00:00", "passed", 5.0)
         job(sf3, "developer", LOCAL, 1, "08:00:00+00:00", "08:30:00+00:00", "passed", 3.0)
@@ -1600,8 +1603,8 @@ def test_away_every_sums_across_projects_and_sorts_latest_first(tmp_path):
         )
 
         # travel-companion: 2 merged tickets, 1 failed, $20.39
-        tr1 = ticket("t1", "done", OPUS, travel_id, m2)
-        tr2 = ticket("t2", "done", OPUS, travel_id, m2)
+        tr1 = ticket("m15-01-reply-in-parts", "done", OPUS, travel_id, m2)
+        tr2 = ticket("m15-02-reply-parts-on-the-page", "done", OPUS, travel_id, m2)
         job2(tr1, "escalation", OPUS, 1, "11:00:00+00:00", "11:30:00+00:00", "passed", 20.0)
         job2(tr2, "developer", OPUS, 1, "10:00:00+00:00", "10:30:00+00:00", "passed", 14.39)
         job2(None, "developer", LOCAL, 1, "10:45:00+00:00", "11:00:00+00:00", "failed")
@@ -1623,12 +1626,11 @@ def test_away_every_sums_across_projects_and_sorts_latest_first(tmp_path):
     assert away.needs_you == 1
     assert round(away.claude_usd, 2) == 49.39
     assert len(away.merged) == 5
-    # latest finish first: softfield f1 (10:30), travel-companion t1 (11:30) → t1 first
-    # Actually t1 finishes at 11:30 which is later than f1 at 10:30
-    assert away.merged[0].ticket == "t1"
-    assert away.merged[0].project == "travel-companion"
-    assert away.merged[1].ticket == "f1"
-    assert away.merged[1].project == "softfield"
-    # all rows carry their project
-    for t in away.merged:
-        assert t.project in ("softfield", "travel-companion")
+    # one list, latest finish first, each ticket with its own project
+    assert [(t.project, t.ticket) for t in away.merged] == [
+        ("travel-companion", "m15-01-reply-in-parts"),  # 11:30
+        ("softfield", "f132-02-overview-live-every-project"),  # 10:30
+        ("travel-companion", "m15-02-reply-parts-on-the-page"),  # 10:30
+        ("softfield", "f132-03-away-every-project"),  # 09:30
+        ("softfield", "f132-04-savings-on-project-page"),  # 08:30
+    ]

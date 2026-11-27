@@ -6,7 +6,7 @@
   <p class="sub">
     {{ away.merged | length }} merged, {{ away.failed }} failed attempt{{ "" if away.failed == 1 else "s" }}, {{ away.escalations }} escalation{{ "" if away.escalations == 1 else "s" }}, {{ away.needs_you }} new for you,
     {% if away.blocked_ids %}blocked now:
-      {% for bid in away.blocked_ids %}<a href="/tickets/{{ bid }}">{{ bid }}</a>{% if not loop.last %}, {% endif %}{% endfor %}{% else %}{{ away.blocked }} blocked now{% endif %}, {{ "$%.2f" | format(away.claude_usd) }} on Claude
+      {% for owner, bid in away.blocked_ids %}{% with name=owner %}{% include "_partials/project_plate.html" %}{% endwith %} <a href="/tickets/{{ bid }}?project={{ owner | urlencode }}">{{ bid }}</a>{% if not loop.last %}, {% endif %}{% endfor %}{% else %}{{ away.blocked }} blocked now{% endif %}, {{ "$%.2f" | format(away.claude_usd) }} on Claude
   </p>
     {% if away.merged %}
     <ul class="steps">
@@ -14,14 +14,14 @@
       <li>
         <span class="what">
           {% if t.display_name %}<span class="agent">{{ t.display_name }}</span>{% endif %}
-          <a class="mono" href="/tickets/{{ t.ticket }}{% if t.project %}?project={{ t.project | urlencode }}{% endif %}">{{ t.ticket }}</a>
+          <a class="mono" href="/tickets/{{ t.ticket }}?project={{ t.project | urlencode }}">{{ t.ticket }}</a>
           {% if t.label or t.finished %}
           <span class="how">
             {% if t.label %}{{ t.label }} · {% endif %}
             {% if t.finished %}{% set ft = t.finished.astimezone() %}finished {% if ft.date() != now.astimezone().date() %}{{ ft.strftime('%-d %b ') }}{% endif %}{{ ft.strftime('%H:%M') }}{% if t.took %} · took {{ t.took | ago }}{% endif %}{% endif %}
           </span>
           {% endif %}
-          <span class="title">{{ t.title or "" }}</span>{% if t.project %}{% with name=t.project %}{% include "_partials/project_plate.html" %}{% endwith %}{% endif %}
+          <span class="title">{{ t.title or "" }}</span>{% with name=t.project %}{% include "_partials/project_plate.html" %}{% endwith %}
         </span>
       </li>
       {% endfor %}

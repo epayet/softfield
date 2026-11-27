@@ -2397,7 +2397,7 @@ def test_away_blocked_ids_links_in_summary(tmp_path):
         conn.close()
 
     assert away.blocked == 1
-    assert away.blocked_ids == ("f9-15-away-who-did-it",)
+    assert away.blocked_ids == ((PROJECT, "f9-15-away-who-did-it"),)  # its project: F132 D2
 
 
 def test_away_no_merged_by_shows_no_label(client, db_path):
@@ -5479,6 +5479,28 @@ def test_away_rows_one_list_latest_finish_first_each_with_own_link(tmp_path):
         assert f'?project={proj}"' in away_raw, f"missing ?project={proj} in away links"
 
 
+def test_away_links_a_blocked_ticket_to_its_own_project_with_its_plate(tmp_path):
+    """F132 D2 (review F1): a ticket blocked in travel-companion, seen from softfield's
+    Overview, links to travel-companion's ticket page, after its plate."""
+    path = _away_factory(tmp_path)
+    conn = metrics.open_db(path)
+    try:
+        travel = metrics.upsert_project(conn, TRAVEL)
+        m = metrics.upsert_milestone(conn, travel, "m8")
+        metrics.upsert_ticket(
+            conn, travel, "m8-14-journal-chapters", milestone_id=m, state="blocked"
+        )
+    finally:
+        conn.close()
+    since = datetime(2026, 10, 2, 8, 0, tzinfo=UTC)
+    client, _ = _away_client(path, since)
+    html = client.get(f"/?project={SOFTFIELD}&since={since.isoformat()}").text
+    summary = section_raw(html, "away").split("blocked now:", 1)[1].split("on Claude", 1)[0]
+    assert re.findall(r'<span class="proj">([^<]+)</span> <a href="([^"]+)">', summary) == [
+        (TRAVEL, "/tickets/m8-14-journal-chapters?project=travel-companion")
+    ]
+
+
 def test_away_choosing_another_span_gives_same_sums(tmp_path):
     """Choosing another span (/away) gives the same sums for any picked project."""
     path = _away_factory(tmp_path)
@@ -5526,6 +5548,7 @@ def test_away_one_project_no_plate_reads_as_today(tmp_path):
     away = section(html, "away")
     # no project plate when only one project
     assert "1 merged" in away
+    assert 'class="proj"' not in section_raw(html, "away")
     assert "1 thing" not in away  # no "things wait on its desk" in away panel
 
 
