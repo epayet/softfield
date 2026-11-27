@@ -1,6 +1,7 @@
 # Milestone F305: Find what writes terabytes to the SSD, and keep test temp files in memory
 
-> **State:** ready · **Area:** factory · **Fast lane:** yes
+> **State:** done · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-27. Base: git tag `f305-i-am-a-bit-concerned-looking-start`. Report: [`.softfield/reviews/f305-i-am-a-bit-concerned-looking.md`](../reviews/f305-i-am-a-bit-concerned-looking.md).
 > Planted by the owner on 2026-11-25.
 
 ## Notes

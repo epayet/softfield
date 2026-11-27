@@ -1,5 +1,7 @@
 # Review: F305, Find what writes terabytes to the SSD, and keep test temp files in memory
 
+- **Status:** done, signed off by the owner on 2026-11-27.
+
 **Status:** review done after round 1; ready for your sign-off.
 
 ### 1. What changed
