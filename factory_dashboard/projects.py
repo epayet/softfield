@@ -213,7 +213,7 @@ def project_cards(conn: sqlite3.Connection, now: datetime) -> list[ProjectCard]:
                 paused_by_you=paused_by_you,
                 paused_on_its_way=paused_its_way,
                 archive_on_its_way=archive_on_its_way(conn, project_id) if project_id else None,
-                app=row_of(row.name, stack) if stack else None,
+                app=row_of(conn, row.name, stack) if stack else None,
                 softfield=softfield,
                 stack_plant=stack_plant_val,
                 stack_asked=stack_asked,
@@ -371,8 +371,9 @@ def projects_page(request: Request, conn: Db, project: Project, now: Now) -> HTM
     asked = order_on_its_way(conn)
     if asked is not None:  # shown as sent, on its way (owner, 2026-10-07)
         cards.sort(key=lambda c: asked.index(c.name) if c.name in asked else len(asked))
-    # a broken app first, then the desks; a card with both has both lines
-    broken = [c for c in cards if c.app and c.app.needs_you]
+    # a broken app first, then the desks; a card with both has both lines;
+    # a broken app's line only when no fix is asked (D5)
+    broken = [c for c in cards if c.app and c.app.needs_you and not c.app.asked]
     for_you = [c for c in cards if c.for_you]
     needs_you = broken + [c for c in for_you if c not in broken]
     needs_you_count = len(broken) + sum(c.for_you for c in for_you)

@@ -3,13 +3,16 @@ first write that isn't a request row. It runs a fixed Compose command on a proje
 registry, behind the same guard as ``/requests``. No test runs Docker: ``_docker`` is replaced."""
 
 import json
+import re
 from pathlib import Path
 
 import pytest
+from fastapi.testclient import TestClient
 
+from factory_dashboard.app import create_app, get_now
 from runner import config, metrics, stacks
 from runner.stacks import Result
-from tests.factory_dashboard.conftest import PROJECT
+from tests.factory_dashboard.conftest import NOW, PROJECT
 
 SAME = "http://127.0.0.1:8765"  # the test client's own origin
 HTMX = {"HX-Request": "true", "Origin": SAME}
@@ -243,3 +246,135 @@ def test_the_logs_page_polls_itself_for_its_service_and_can_pause(client, docker
 def test_an_unknown_service_answers_404(client, docker, app_repo):
     docker.ps = _running()
     assert client.get(f"/projects/{APP}/logs?service=ghost").status_code == 404
+
+
+# --- F300: fix card shown in place of plant button ------------------------------------------
+
+
+def _section(html: str, name: str) -> str:
+    """The text of the page's ``<section id="name">``, tags stripped."""
+    match = re.search(rf'<section[^>]*\bid="{name}"[^>]*>(.*?)</section>', html, re.S)
+    assert match, f"no section {name}"
+    return " ".join(re.sub(r"<[^>]+>", " ", match.group(1)).split())
+
+
+def _fix_asked_client(
+    db_path: Path, tmp_path: Path, card_state: str | None = None, card_title: str = "Fix the crash"
+) -> TestClient:
+    """A client over the fixture plus a crashed app and a done plant request
+    pointing to a milestone."""
+    conn = metrics.open_db(db_path)
+    try:
+        repo = _repo(tmp_path / "Coaster Ranker")
+        metrics.upsert_project(conn, APP, repo=str(repo))
+        if card_state is not None:
+            metrics.upsert_milestone(
+                conn,
+                conn.execute("SELECT id FROM projects WHERE name = ?", (APP,)).fetchone()["id"],
+                "m7-fix-the-crash",
+                title=card_title,
+                state=card_state,
+            )
+        project_id = conn.execute("SELECT id FROM projects WHERE name = ?", (APP,)).fetchone()["id"]
+        metrics.add_request(
+            conn,
+            project_id,
+            "plant",
+            "m7-fix-the-crash",
+            json.dumps({"text": f"{APP}'s app crashed: find out why and fix it", "ask": True}),
+            NOW.isoformat(),
+        )
+        conn.execute(
+            "UPDATE owner_requests SET result = ?, done = ?"
+            " WHERE kind = 'plant' AND project_id = ?",
+            (
+                "planted .softfield/cards/m7-fix-the-crash.md",
+                NOW.isoformat(),
+                project_id,
+            ),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    app = create_app(db_path, APP)
+    app.dependency_overrides[get_now] = lambda: NOW
+    return TestClient(app, base_url="http://127.0.0.1:8765")
+
+
+def _fix_open_client(db_path: Path, tmp_path: Path) -> TestClient:
+    """A client over the fixture plus a crashed app and an open (undone) plant request."""
+    conn = metrics.open_db(db_path)
+    try:
+        repo = _repo(tmp_path / "Coaster Ranker")
+        metrics.upsert_project(conn, APP, repo=str(repo))
+        project_id = conn.execute("SELECT id FROM projects WHERE name = ?", (APP,)).fetchone()["id"]
+        metrics.add_request(
+            conn,
+            project_id,
+            "plant",
+            "m7-fix-the-crash",
+            json.dumps({"text": f"{APP}'s app crashed: find out why and fix it", "ask": True}),
+            NOW.isoformat(),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    app = create_app(db_path, APP)
+    app.dependency_overrides[get_now] = lambda: NOW
+    return TestClient(app, base_url="http://127.0.0.1:8765")
+
+
+def test_a_crashed_app_with_a_live_fix_card_shows_the_card_key_title_and_state(
+    db_path, tmp_path, docker
+):
+    """A crashed app with a live fix card shows the card's key, title and state in its row,
+    no fix button, and no line in Needs you (Done when 1)."""
+    client = _fix_asked_client(
+        db_path, tmp_path, card_state="ready", card_title="Give Coaster a stack"
+    )
+    docker.ps = _crashed()
+    html = client.get("/projects").text
+    assert "M7" in html
+    assert "Give Coaster a stack" in html
+    assert "ready" in html
+    assert f'href="/planning/m7?project={APP}"' in html
+    assert "Plant and ask the lead to fix it" not in html
+    needs_you = _section(html, "projects-needs-you")
+    assert APP not in needs_you
+
+
+def test_a_crashed_app_with_an_open_fix_plant_shows_on_its_way_and_no_fix_button(
+    db_path, tmp_path, docker
+):
+    """A crashed app with an open fix plant shows the on-its-way line and no fix button
+    (Done when 2)."""
+    client = _fix_open_client(db_path, tmp_path)
+    docker.ps = _crashed()
+    html = client.get("/projects").text
+    assert "On its way: the runner plants it and asks the lead at its next pick" in html
+    assert "Plant and ask the lead to fix it" not in html
+    needs_you = _section(html, "projects-needs-you")
+    assert APP not in needs_you
+
+
+def test_a_crashed_app_with_no_fix_shows_button_and_needs_you_line(db_path, tmp_path, docker):
+    """A crashed app with no fix asked, or whose fix card is done, shows the button and its
+    Needs you line as today (Done when 3)."""
+    repo = _repo(tmp_path / "Coaster Ranker")
+    conn = metrics.open_db(db_path)
+    try:
+        metrics.upsert_project(conn, APP, repo=str(repo))
+        conn.commit()
+    finally:
+        conn.close()
+
+    app = create_app(db_path, APP)
+    app.dependency_overrides[get_now] = lambda: NOW
+    client = TestClient(app, base_url="http://127.0.0.1:8765")
+    docker.ps = _crashed()
+    html = client.get("/projects").text
+    assert "Plant and ask the lead to fix it" in html
+    needs_you = _section(html, "projects-needs-you")
+    assert APP in needs_you

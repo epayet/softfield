@@ -137,6 +137,7 @@ class AppRow:
     commit: str = ""  # main's commit the app is on (an update failed: the one it failed on)
     fix: str = ""  # the "Plant and ask the lead to fix it" value, for a crash or a failed update
     error: str = ""  # why a press failed
+    asked: AskedCard | None = None  # a fix card the owner already asked for (F300 D2, D5)
 
     @property
     def word(self) -> str:
@@ -187,12 +188,21 @@ def fix_text(name: str, stack: stacks.Stack, app: stacks.StackState, commit: str
     return f"{head}: find out why and fix it\n\n{app.detail}\n\n```\n{lines}\n```"
 
 
-def row_of(name: str, stack: stacks.Stack, error: str = "") -> AppRow:
+def row_of(
+    conn: sqlite3.Connection,
+    name: str,
+    stack: stacks.Stack,
+    error: str = "",
+) -> AppRow:
     """The project's app row, from its state now."""
     app = stacks.state(stack)
     commit = app.commit or (_checkout_commit(stack) if app.word in BROKEN else "")
     fix = plant_value(fix_text(name, stack, app, commit)) if app.word in BROKEN else ""
-    return AppRow(name, app, stack.path, commit, fix, error)
+    asked: AskedCard | None = None
+    if app.word in BROKEN:
+        text_start = f"{name}'s app "
+        asked = asked_card(conn, name, text_start)
+    return AppRow(name, app, stack.path, commit, fix, error, asked)
 
 
 def stack_of(conn: sqlite3.Connection, name: str) -> stacks.Stack | None:
@@ -207,10 +217,12 @@ def stack_of(conn: sqlite3.Connection, name: str) -> stacks.Stack | None:
         return None
 
 
-def app_row(request: Request, name: str, stack: stacks.Stack, error: str = "") -> HTMLResponse:
+def app_row(
+    request: Request, conn: Db, name: str, stack: stacks.Stack, error: str = ""
+) -> HTMLResponse:
     """The project's app row, from its state now; ``error`` says why a press failed."""
     return templates.TemplateResponse(
-        request, "_partials/app_row.html", {"row": row_of(name, stack, error)}
+        request, "_partials/app_row.html", {"row": row_of(conn, name, stack, error)}
     )
 
 
@@ -230,8 +242,8 @@ def run_app(name: str, request: Request, conn: Db) -> HTMLResponse:
     try:
         stacks.start(stack)
     except stacks.StackError as exc:
-        return app_row(request, name, stack, str(exc))
-    return app_row(request, name, stack)
+        return app_row(request, conn, name, stack, str(exc))
+    return app_row(request, conn, name, stack)
 
 
 @router.post("/projects/{name}/stop", response_class=HTMLResponse)
@@ -241,8 +253,8 @@ def stop_app(name: str, request: Request, conn: Db) -> HTMLResponse:
     try:
         stacks.stop(stack)
     except stacks.StackError as exc:
-        return app_row(request, name, stack, str(exc))
-    return app_row(request, name, stack)
+        return app_row(request, conn, name, stack, str(exc))
+    return app_row(request, conn, name, stack)
 
 
 @router.get("/projects/{name}/logs")

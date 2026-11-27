@@ -4,10 +4,21 @@
    update a plant that asks for a fix. `row` is `stacks_routes.AppRow`. #}
 {% set broken = row.fix != "" %}
 {% set docker = row.app.word != "no docker" %}{# without Docker, its reason and nothing to press #}
-<div class="app-row{% if row.running %} running{% elif broken %} broken{% endif %}">
+<div class="app-row{% if row.running %} running{% elif broken %} broken{% endif %}{% if row.asked and row.asked.on_its_way %} way-row{% endif %}">
   <span class="app-tag">App</span>
   <span class="app-state" role="status"><span class="app-lamp" aria-hidden="true"></span>{{ row.word }}</span>
   <div class="app-acts">
+    {% if row.asked %}
+    {% if row.asked.on_its_way %}
+    <span class="way-words">On its way: the runner plants it and asks the lead at its next pick</span>
+    {% elif row.asked.key %}
+    <a class="order" href="{{ row.asked.href }}">
+      <span class="tab"></span>
+      <span class="body"><span class="lbl">You asked the lead</span>
+        <span class="line"><span class="key">{{ row.asked.key }}</span><span class="t">{{ row.asked.title }}</span><span class="st">{{ row.asked.state }}</span></span></span>
+    </a>
+    {% endif %}
+    {% else %}
     {% if row.running and row.app.url_port %}
     <a class="btn go" href="http://{{ request.url.hostname }}:{{ row.app.url_port }}{{ row.path }}" target="_blank" rel="noopener">Open ↗ :{{ row.app.url_port }}</a>
     {% endif %}
@@ -22,6 +33,7 @@
       hx-vals='{{ {"kind": "plant", "project": row.name, "value": row.fix} | tojson }}'
       hx-on::before-request="this.hidden = true; this.nextElementSibling.textContent = 'On its way: the runner plants it and asks the lead at its next pick'">Plant and ask the lead to fix it</button>
     <div class="app-sent way"></div>
+    {% endif %}
     {% endif %}
   </div>
   {% if docker %}<span class="app-wait way">{{ "stopping…" if row.up else "starting…" }}</span>{% endif %}
