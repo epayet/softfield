@@ -1,5 +1,7 @@
 # Review: F132, One view of the whole factory: the top bar, the Overview, Jobs and the floor
 
+- **Status:** done, signed off by the owner on 2026-11-27.
+
 **Status:** round 1 done, ready for your sign-off. Score 8/10. Two should-fix findings in While you were away (a broken link to another project's blocked ticket, a long copy loop) and one tidy test fixture, all fixed by the review.
 
 ### 1. What changed

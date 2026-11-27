@@ -1,6 +1,7 @@
 # Milestone F132: One view of the whole factory: the top bar, the Overview, Jobs and the floor
 
-> **State:** ready · **Area:** factory
+> **State:** done · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-27. Base: git tag `f132-the-overview-shows-the-whole-factory-start`. Report: [`.softfield/reviews/f132-the-overview-shows-the-whole-factory.md`](../reviews/f132-the-overview-shows-the-whole-factory.md).
 > Planted by the owner on 2026-10-15.
 
 ## Notes
