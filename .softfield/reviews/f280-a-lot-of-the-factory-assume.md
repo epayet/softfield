@@ -1,5 +1,7 @@
 # Review: F280, The factory's instructions name no project: no Mum, no Coucou paths
 
+- **Status:** done, signed off by the owner on 2026-11-27.
+
 **Status:** round 1 done, ready for your sign-off. Score 8/10. There were two small findings, and the review fixed both itself.
 
 ### 1. What changed

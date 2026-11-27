@@ -1,6 +1,7 @@
 # Milestone F280: The factory's instructions name no project: no Mum, no Coucou paths
 
-> **State:** ready · **Area:** factory
+> **State:** done · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-27. Base: git tag `f280-a-lot-of-the-factory-assume-start`. Report: [`.softfield/reviews/f280-a-lot-of-the-factory-assume.md`](../reviews/f280-a-lot-of-the-factory-assume.md).
 > Planted by the owner on 2026-11-20.
 
 ## Notes
