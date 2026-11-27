@@ -1,5 +1,7 @@
 # Review: F304, Backup tests use the shared fake clock and THURSDAY
 
+- **Status:** done, signed off by the owner on 2026-11-27.
+
 **Status:** review done after round 1, with no findings; ready for your sign-off.
 
 ### 1. What changed

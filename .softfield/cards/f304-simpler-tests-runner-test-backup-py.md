@@ -1,6 +1,7 @@
 # Milestone F304: Backup tests use the shared fake clock and THURSDAY
 
-> **State:** ready · **Area:** factory
+> **State:** done · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-27. Base: git tag `f304-simpler-tests-runner-test-backup-py-start`. Report: [`.softfield/reviews/f304-simpler-tests-runner-test-backup-py.md`](../reviews/f304-simpler-tests-runner-test-backup-py.md).
 > Planted by the owner on 2026-11-25.
 
 ## Notes
